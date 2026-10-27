@@ -8,6 +8,7 @@ using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
 using Janus.Authorization.Resources;
 using Janus.Authorization.Roles;
+using Janus.Authorization.Tests.Grants;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
 using Xunit;
@@ -41,12 +42,14 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     private readonly Janus.Hosting.Tests.Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment able to register a browser, administered by one organization.
+    /// A deployment able to register a browser, administered by one organization and
+    /// holding a branch.
     /// </summary>
     public GrantEndpointTests()
     {
         Flow.Prepare(_deployment);
         _deployment.Administers(Administration);
+        _deployment.Organizations.Seed(Branch);
     }
 
     /// <summary>
@@ -146,6 +149,80 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status403Forbidden, created.Status);
         Assert.Equal(ErrorCodes.Denied.ToString(), created.Text("code"));
         Assert.Empty(await HeldAsync(Branch));
+    }
+
+    /// <summary>
+    /// AUTHZ-SCOPE-001 (D-209): <c>POST /admin/grants</c> answers a grant on the whole of
+    /// an organization the deployment does not hold 403 <c>authz.denied</c>, in the shape
+    /// it answers a record no registration names, to a caller holding both permissions of
+    /// the admission, and writes nothing. What the refusal records is decided against the
+    /// database, where the gate's own refusal answers it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_SCOPE_001_AnOrganizationWideGrantNamingNoOrganizationIsRefusedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(
+            Administration,
+            Permissions.SystemAdminister,
+            Permissions.GrantManage);
+        var unheld = new OrganizationId(Guid.Parse("66666666-6666-4666-8666-666666666666"));
+
+        Answer refused = await GrantedAsync(administrator, "organization", unheld.ToString());
+        Answer unregistered = await GrantedAsync(administrator, "document", "d-2");
+
+        Denied(refused);
+        Assert.Equal(Shape(unregistered), Shape(refused));
+        Assert.Empty(await HeldAsync(unheld));
+    }
+
+    /// <summary>
+    /// AUTHZ-SCOPE-001, IDN-ORG-003 (D-207, D-208): the endpoints carry the grant
+    /// admission to an organization <c>POST /admin/organizations</c> created: a holder of
+    /// <c>system:administer</c> in the administrative organization writes its first grant
+    /// and revokes it, a second revocation told the grant is not found (09 section 8), and
+    /// a holder of <c>grant:manage</c> in the administrative organization alone is refused
+    /// once. The admission here is the test deployment's, so this proves the wiring
+    /// only; the criterion is decided on the gate's own admission, against the database
+    /// (<c>TruthTableTests</c>).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_SCOPE_001_TheEndpointsCarryTheAdmissionToACreatedOrganizationAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(
+            Administration,
+            Permissions.SystemAdminister,
+            Permissions.OrganizationManage);
+        Answer opened = await administrator.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "Eastern branch"),
+            ("reason", "Opening a branch."));
+        var created = new OrganizationId(Guid.Parse(opened.Text("id")));
+
+        Assert.Empty(await HeldAsync(created));
+
+        int refusals = _deployment.Gate.Refusals.Count;
+        Answer first = await GrantedAsync(administrator, "organization", created.ToString());
+        Answer revoked = await RevokedAsync(administrator, first.Text("id"));
+        Answer again = await RevokedAsync(administrator, first.Text("id"));
+
+        Assert.Equal(StatusCodes.Status201Created, first.Status);
+        Assert.Equal(created, (await StoredAsync(first)).Organization);
+        Assert.Equal(StatusCodes.Status204NoContent, revoked.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(ErrorCodes.GrantNotFound.ToString(), again.Text("code"));
+        Assert.Equal(refusals, _deployment.Gate.Refusals.Count);
+
+        _deployment.Gate.Revoke(actor, Administration, Permissions.SystemAdminister);
+        _deployment.Gate.Grant(actor, Administration, Permissions.GrantManage);
+
+        Answer refused = await GrantedAsync(administrator, "organization", created.ToString());
+
+        Denied(refused);
+        Assert.Equal(refusals + 1, _deployment.Gate.Refusals.Count);
+        Assert.Empty(await HeldAsync(created));
     }
 
     /// <summary>
@@ -298,6 +375,39 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-003 AC6: a grant a person writes is recorded as
+    /// <c>authz.grant.created</c>, and a revocation a person makes as
+    /// <c>authz.grant.revoked</c>, each naming the person as actor and the grant's
+    /// holder, with its reason; a revocation refused records nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC6_APersonsGrantAndRevocationAreEachRecordedAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        Answer created = await GrantedAsync(administrator, "document", "d-1");
+        Answer revoked = await RevokedAsync(administrator, created.Text("id"));
+        Answer again = await RevokedAsync(administrator, created.Text("id"));
+
+        Grant grant = await StoredAsync(created);
+
+        Assert.Equal(StatusCodes.Status204NoContent, revoked.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(
+            [
+                new GrantAuditInMemory.GrantChange(AuditActions.GrantCreated, grant.Id, grant.Subject, actor, grant.Reason),
+                new GrantAuditInMemory.GrantChange(
+                    AuditActions.GrantRevoked,
+                    grant.Id,
+                    grant.Subject,
+                    actor,
+                    grant.RevocationReason!),
+            ],
+            _deployment.GrantChanges.Changes);
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-001: a revocation names a stored grant that stands unrevoked; a
     /// revoked or materialised grant is no such grant to a caller holding
     /// <c>grant:manage</c> where it is. An identifier naming no row is refused
@@ -418,6 +528,7 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Administration, Permissions.GrantManage);
         _deployment.Gate.Grant(actor, Branch, Permissions.GrantManage);
+        _deployment.HandOuts.HandsOut(actor, Branch, Reader);
 
         Answer denied = await GrantedAsync(
             administrator,
@@ -1052,6 +1163,14 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         foreach (Permission permission in permissions)
         {
             _deployment.Gate.Grant(subject, organization, permission);
+        }
+
+        // AUTHZ-GRANT-005 (D-212): one who manages grants here holds a role listing the
+        // roles the tests hand out.
+        if (permissions.Contains(Permissions.GrantManage))
+        {
+            _deployment.HandOuts.HandsOut(subject, organization, Reader);
+            _deployment.HandOuts.HandsOut(subject, organization, SystemAdministrator);
         }
 
         return (browser, subject);

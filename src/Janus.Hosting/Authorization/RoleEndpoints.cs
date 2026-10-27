@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Authorization;
@@ -45,15 +45,18 @@ internal static class RoleEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired))
+                    ErrorCodes.StepUpRequired, ErrorCodes.GrantUnresolved, ErrorCodes.RoleNotAssignable))
+            .Accepts<RoleBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapDelete("/admin/roles/{name}", RemoveAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired, ErrorCodes.RoleNotFound, ErrorCodes.RoleInUse)
+                    ErrorCodes.StepUpRequired, ErrorCodes.RoleNotFound, ErrorCodes.RoleInUse,
+                    ErrorCodes.RoleNotAssignable)
                 .Binding<RoleName>("name"))
+            .Accepts<RoleRemovalBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
@@ -81,14 +84,18 @@ internal static class RoleEndpoints
     // A role that is new is answered as created, and a change to one that stood is
     // answered with nothing.
     private static async Task<IResult> DefineAsync(
-        RoleBody body,
         IRoles roles,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(roles);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        RoleBody body = await JsonBody
+            .ReadAsync<RoleBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         (DefinedRole? role, string member) = body.Read();
 
@@ -119,15 +126,19 @@ internal static class RoleEndpoints
     // A removal carries its reason, which is free text and goes in the body rather
     // than in an address a log keeps.
     private static async Task<IResult> RemoveAsync(
-        [FromBody] RoleRemovalBody body,
         IRoles roles,
         RequestSession browser,
         RoleName name,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(roles);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        RoleRemovalBody body = await JsonBody
+            .ReadAsync<RoleRemovalBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         // API-CONV-002, X4: the reason is free text, 1 to 1024 characters after
         // trimming, refused before the service is called (CONV-CODE-006 AC2).

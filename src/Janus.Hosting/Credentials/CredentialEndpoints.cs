@@ -1,4 +1,5 @@
 using System;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sessions;
@@ -43,6 +44,7 @@ internal static class CredentialEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.PasswordBlocklisted, ErrorCodes.PasswordTooShort,
                     ErrorCodes.PasswordTooLong))
+            .Accepts<SetPasswordRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(account.MapDelete("/credentials/{id}", RemoveAsync))
             .Declares(EndpointDeclaration
@@ -63,12 +65,14 @@ internal static class CredentialEndpoints
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired))
+            .Accepts<GeneratorRequest>(MediaTypeNames.Application.Json)
             .Produces<GeneratorEnrolmentView>();
         _ = EnrolmentRoute.On(account.MapPost("/factors/totp/confirm", ConfirmGeneratorAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired))
+            .Accepts<ConfirmGeneratorRequest>(MediaTypeNames.Application.Json)
             .Produces<EnrolledCredentialView>();
         _ = SessionRequired.On(account.MapPost("/factors/phonecode/begin", BeginTextCodeAsync))
             .Declares(EndpointDeclaration
@@ -77,6 +81,7 @@ internal static class CredentialEndpoints
                     ErrorCodes.FactorPasswordRequired, ErrorCodes.FactorNotPermitted,
                     ErrorCodes.IdentifierInvalid, ErrorCodes.CredentialLabelInvalid,
                     ErrorCodes.RestrictionExceeded))
+            .Accepts<TextCodeRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status202Accepted);
         _ = SessionRequired.On(account.MapPost("/factors/phonecode/confirm", ConfirmTextCodeAsync))
             .Declares(EndpointDeclaration
@@ -84,6 +89,7 @@ internal static class CredentialEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
                     ErrorCodes.FactorPasswordRequired, ErrorCodes.FactorNotPermitted,
                     ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired))
+            .Accepts<ConfirmTextCodeRequest>(MediaTypeNames.Application.Json)
             .Produces<TextCodeEnrolmentView>();
         _ = SessionRequired.On(account.MapPost("/recoverycodes", GenerateRecoveryCodesAsync))
             .Declares(EndpointDeclaration
@@ -107,6 +113,7 @@ internal static class CredentialEndpoints
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired,
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnUserVerificationRequired,
                     ErrorCodes.CredentialLabelInvalid, ErrorCodes.FactorRejected))
+            .Accepts<BeginKeyRequest>(MediaTypeNames.Application.Json)
             .Produces<CredentialCeremonyView>();
         _ = EnrolmentRoute.On(ceremonies.MapPost("/complete", CompleteKeyAsync))
             .Declares(EndpointDeclaration
@@ -115,6 +122,7 @@ internal static class CredentialEndpoints
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired,
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnUserVerificationRequired,
                     ErrorCodes.CredentialLabelInvalid, ErrorCodes.FactorRejected))
+            .Accepts<CompleteKeyRequest>(MediaTypeNames.Application.Json)
             .Produces<EnrolledCredentialView>();
 
         return endpoints;
@@ -123,15 +131,17 @@ internal static class CredentialEndpoints
     // AUTH-PASS-001a, AUTH-RECOV-007a: the floor follows what the account reaches
     // now, and a password set here clears the mark an invalidation left.
     private static async Task<IResult> SetPasswordAsync(
-        SetPasswordRequest request,
         ICredentials credentials,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(context);
+
+        SetPasswordRequest request = await JsonBody
+            .ReadAsync<SetPasswordRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Asking(browser) is not CredentialAuthority authority)
         {
@@ -154,13 +164,17 @@ internal static class CredentialEndpoints
     // AUTH-FACT-002b: the kind decides what the browser is asked for, and a second
     // step is refused on an account that holds no password.
     private static async Task<IResult> BeginKeyAsync(
-        BeginKeyRequest request,
         ICredentials credentials,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(context);
+
+        BeginKeyRequest request = await JsonBody
+            .ReadAsync<BeginKeyRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Enrolling(browser) is not CredentialAuthority authority)
         {
@@ -178,15 +192,17 @@ internal static class CredentialEndpoints
     // AUTH-FACT-014: what the browser sends back is judged against the challenge the
     // ceremony was opened with, which the request never carries.
     private static async Task<IResult> CompleteKeyAsync(
-        CompleteKeyRequest request,
         ICredentials credentials,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(context);
+
+        CompleteKeyRequest request = await JsonBody
+            .ReadAsync<CompleteKeyRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Enrolling(browser) is not CredentialAuthority authority)
         {
@@ -240,13 +256,17 @@ internal static class CredentialEndpoints
     // AUTH-FACT-007: the secret leaves the library once, here, and the enrolment is
     // not usable until a code of it is presented.
     private static async Task<IResult> BeginGeneratorAsync(
-        GeneratorRequest request,
         ICredentials credentials,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(context);
+
+        GeneratorRequest request = await JsonBody
+            .ReadAsync<GeneratorRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Enrolling(browser) is not CredentialAuthority authority)
         {
@@ -268,15 +288,17 @@ internal static class CredentialEndpoints
     // AUTH-RECOV-006: the codes a second step beside a password brings with it come
     // back with the confirmation and are never read back.
     private static async Task<IResult> ConfirmGeneratorAsync(
-        ConfirmGeneratorRequest request,
         ICredentials credentials,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(context);
+
+        ConfirmGeneratorRequest request = await JsonBody
+            .ReadAsync<ConfirmGeneratorRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Enrolling(browser) is not CredentialAuthority authority)
         {
@@ -309,15 +331,17 @@ internal static class CredentialEndpoints
     // lists it under, and a holder of a session alone asks: the enrolment session an
     // approved recovery opened does not reach it (chapter 09 POST /enrol/begin).
     private static async Task<IResult> BeginTextCodeAsync(
-        TextCodeRequest request,
         ICredentials credentials,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(context);
+
+        TextCodeRequest request = await JsonBody
+            .ReadAsync<TextCodeRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Holding(browser) is not CredentialAuthority authority)
         {
@@ -353,15 +377,17 @@ internal static class CredentialEndpoints
     // AUTH-RECOV-006: the codes a second step beside a password brings with it come
     // back with the confirmation and are never read back.
     private static async Task<IResult> ConfirmTextCodeAsync(
-        ConfirmTextCodeRequest request,
         ICredentials credentials,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(context);
+
+        ConfirmTextCodeRequest request = await JsonBody
+            .ReadAsync<ConfirmTextCodeRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Holding(browser) is not CredentialAuthority authority)
         {

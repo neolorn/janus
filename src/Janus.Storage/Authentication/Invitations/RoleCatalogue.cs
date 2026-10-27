@@ -22,9 +22,14 @@ internal sealed class RoleCatalogue(StoreContext context) : IRoleCatalogue
     /// <inheritdoc/>
     public async ValueTask<DefinedRole?> FindAsync(RoleName name, CancellationToken cancellationToken)
     {
-        if (!await context.Roles
-                .AnyAsync(row => row.Name == name, cancellationToken)
-                .ConfigureAwait(false))
+        string[]? handsOut = await context.Roles
+            .AsNoTracking()
+            .Where(row => row.Name == name)
+            .Select(row => row.HandsOut)
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (handsOut is null)
         {
             return null;
         }
@@ -35,7 +40,7 @@ internal sealed class RoleCatalogue(StoreContext context) : IRoleCatalogue
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return new DefinedRole(name, permissions);
+        return new DefinedRole(name, permissions, [.. handsOut.Select(RoleName.Parse)]);
     }
 
     /// <inheritdoc/>

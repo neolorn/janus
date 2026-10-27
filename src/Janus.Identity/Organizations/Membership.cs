@@ -63,6 +63,11 @@ internal sealed class Membership
     public MembershipAcknowledgement? Acknowledgement { get; private init; }
 
     /// <summary>
+    /// The later instant an administrator set the membership to end at, where one is set.
+    /// </summary>
+    public MembershipEndSet? EndSet { get; private set; }
+
+    /// <summary>
     /// Whether the membership is running: it began and has not ended.
     /// </summary>
     public bool IsCurrent => EndedAt is null;
@@ -164,6 +169,7 @@ internal sealed class Membership
     /// <param name="createdAt">When it began.</param>
     /// <param name="endedAt">When it ended, where it has.</param>
     /// <param name="acknowledgement">What the person acknowledged, where an invitation attached it.</param>
+    /// <param name="endSet">The end set in advance, where one is.</param>
     /// <returns>The membership.</returns>
     public static Membership Existing(
         MembershipId id,
@@ -171,8 +177,14 @@ internal sealed class Membership
         OrganizationId organization,
         DateTimeOffset createdAt,
         DateTimeOffset? endedAt,
-        MembershipAcknowledgement? acknowledgement) =>
-        new(id, subject, organization, createdAt) { EndedAt = endedAt, Acknowledgement = acknowledgement };
+        MembershipAcknowledgement? acknowledgement,
+        MembershipEndSet? endSet) =>
+        new(id, subject, organization, createdAt)
+        {
+            EndedAt = endedAt,
+            Acknowledgement = acknowledgement,
+            EndSet = endSet,
+        };
 
     /// <summary>
     /// Ends the membership. The account and the organization persist, and the record
@@ -188,5 +200,43 @@ internal sealed class Membership
         }
 
         EndedAt = at;
+    }
+
+    /// <summary>
+    /// Sets the membership to end at a later instant, or moves the instant set. The
+    /// instant is the caller's to judge against the present.
+    /// </summary>
+    /// <param name="end">The instant, the administrator setting it and why.</param>
+    /// <exception cref="ArgumentNullException">The end is absent.</exception>
+    /// <exception cref="InvalidOperationException">The membership has already ended.</exception>
+    public void SetEnd(MembershipEndSet end)
+    {
+        ArgumentNullException.ThrowIfNull(end);
+
+        if (EndedAt is not null)
+        {
+            throw new InvalidOperationException("The membership has already ended.");
+        }
+
+        EndSet = end;
+    }
+
+    /// <summary>
+    /// Cancels the end set in advance, so that the membership runs on.
+    /// </summary>
+    /// <returns>Whether an end was set.</returns>
+    /// <exception cref="InvalidOperationException">The membership has already ended.</exception>
+    public bool CancelEnd()
+    {
+        if (EndedAt is not null)
+        {
+            throw new InvalidOperationException("The membership has already ended.");
+        }
+
+        bool set = EndSet is not null;
+
+        EndSet = null;
+
+        return set;
     }
 }

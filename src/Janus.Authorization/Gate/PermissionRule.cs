@@ -43,6 +43,9 @@ internal sealed class PermissionRule
 
     private const string Prefix = "identity_authz_";
 
+    // The parameter every rendering but the organization page names its organization by.
+    private const string Scoped = "@" + Prefix + "organization";
+
     // The kind column of a written consent, as the consent records spell it.
     private const string WrittenKind = "written";
 
@@ -53,6 +56,7 @@ internal sealed class PermissionRule
     private readonly SubjectSet _subjects;
     private readonly DateTimeOffset _at;
     private readonly RequiredConsent? _consent;
+    private readonly bool _exercised;
 
     /// <summary>
     /// The rule one principal's evaluation of a set of permissions over one resource
@@ -115,6 +119,42 @@ internal sealed class PermissionRule
         _derivations = [];
     }
 
+    private PermissionRule(
+        IReadOnlyList<Permission> permissions,
+        ResourceType type,
+        OrganizationId organization,
+        DateTimeOffset at,
+        RequiredConsent? consent)
+        : this(permissions, type, organization, SubjectSet.None(), at, derivations: null, consent) =>
+        _exercised = true;
+
+    /// <summary>
+    /// The rule a host's declared job is admitted under: every record of the type its
+    /// organization holds, with the consent the permission asks of each record's data
+    /// subject.
+    /// </summary>
+    /// <param name="permissions">What is being asked for, each one the job's declaration names.</param>
+    /// <param name="type">The kind of thing the rows are.</param>
+    /// <param name="organization">The job's own organization.</param>
+    /// <param name="at">The instant the rule is rendered at.</param>
+    /// <param name="consent">
+    /// The consent the permission asks of a record's data subject, where it is bound to a
+    /// consent-based purpose (AUTHZ-GATE-002 AC4).
+    /// </param>
+    /// <returns>The rule.</returns>
+    /// <remarks>
+    /// Implements IDN-PRIN-001 (D-202, D-207): a job's declaration reaches every record of
+    /// its organization as an organization-wide grant reaches a person, and a job holds no
+    /// grant, so no grant and no derivation is rendered for it.
+    /// </remarks>
+    public static PermissionRule Exercised(
+        IReadOnlyList<Permission> permissions,
+        ResourceType type,
+        OrganizationId organization,
+        DateTimeOffset at,
+        RequiredConsent? consent) =>
+        new(permissions, type, organization, at, consent);
+
     // Every rendering but the organization-wide one is about records of one type, and
     // the type is what the ancestry is read by.
     private ResourceType Type => _type
@@ -137,6 +177,166 @@ internal sealed class PermissionRule
     }
 
     /// <summary>
+    /// What each organization of a page confers across the whole of it, for every
+    /// permission asked, in one query rather than one per organization or permission.
+    /// </summary>
+    /// <param name="permissions">What is being asked for.</param>
+    /// <param name="subjects">Who holds grants for the principal.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <returns>
+    /// The statement and its parameters, naming the page of organizations, each an
+    /// identifier, by parameter.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The permissions or the subjects are absent.</exception>
+    /// <remarks>
+    /// Implements BFF-CAP-002 and AUTHZ-GATE-005 AC1 (D-202, D-211). An organization is
+    /// reached as <see cref="ToOrganizationCandidates"/> reaches it: only by a grant naming
+    /// no record, a deny defeating every allow, and nothing confers in the organization
+    /// the principal holds no current membership of (IDN-LIFE-009a).
+    /// </remarks>
+    public static SqlFilter ToOrganizationPage(
+        IReadOnlyList<Permission> permissions,
+        SubjectSet subjects,
+        DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(permissions);
+        ArgumentNullException.ThrowIfNull(subjects);
+
+        var parameters = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [Prefix + "permissions"] = permissions.Select(permission => permission.ToString()).ToArray(),
+            [Prefix + "accounts"] = subjects.Accounts,
+            [Prefix + "groups"] = subjects.Groups,
+            [Prefix + "at"] = at,
+        };
+
+        string unheld = string.Empty;
+
+        if (subjects.WithoutMembership is OrganizationId without)
+        {
+            parameters[Prefix + "without"] = without.Value;
+            unheld = "\n AND " + Prefix + "grant.organization <> @" + Prefix + "without";
+        }
+
+        return new SqlFilter(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                SELECT {PageAlias}.{PageColumn} AS "{nameof(PageCapability.Resource)}",
+                       {Prefix}grant.permission AS "{nameof(PageCapability.Permission)}",
+                       bool_or({Prefix}grant.deny) AS "{nameof(PageCapability.Denied)}"
+                FROM unnest(CAST(@{PageParameter} AS text[])) AS {PageAlias}({PageColumn})
+                JOIN identity.effective_grants AS {Prefix}grant
+                  ON {Live(Prefix + "grant", "CAST(" + PageAlias + "." + PageColumn + " AS uuid)")}
+                 AND {Prefix}grant.resource_type IS NULL{unheld}
+                GROUP BY {PageAlias}.{PageColumn}, {Prefix}grant.permission;
+                """),
+            parameters);
+    }
+
+    /// <summary>
+    /// The roles the principal may hand out by what it holds: every role named in the
+    /// <c>handsOut</c> of a role it holds through a live allow grant in the organization,
+    /// across the organization or, for a change scoped to a record, on the record or a
+    /// container above it, where no live deny of that role to the principal covers the
+    /// change.
+    /// </summary>
+    /// <param name="organization">The organization the change is made in.</param>
+    /// <param name="resource">The record the change is scoped to, or nothing for the whole organization.</param>
+    /// <param name="subjects">Who holds grants for the principal.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <returns>The statement and its parameters, one row per role handed out.</returns>
+    /// <exception cref="ArgumentNullException">The subjects are absent.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-005 (D-212, D-217). A deny of a role defeats its list as it
+    /// defeats its permissions (AUTHZ-GRANT-002), where the deny covers the change: across
+    /// the organization, or on the change's record or a container above it. A grant of an
+    /// organization whose deletion was requested confers nothing, as the view the gate
+    /// reads holds (IDN-ORG-003).
+    /// In the administrative organization nothing is held by an account with no current
+    /// membership of it (IDN-LIFE-009a).
+    /// </remarks>
+    public static SqlFilter ToHandedOut(
+        OrganizationId organization,
+        ResourceReference? resource,
+        SubjectSet subjects,
+        DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(subjects);
+
+        SubjectSet holding = subjects.WithoutMembership == organization ? SubjectSet.None() : subjects;
+
+        var parameters = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [Prefix + "organization"] = organization.Value,
+            [Prefix + "accounts"] = holding.Accounts,
+            [Prefix + "groups"] = holding.Groups,
+            [Prefix + "at"] = at,
+        };
+
+        if (resource is ResourceReference scoped)
+        {
+            parameters[Prefix + "type"] = scoped.Type.ToString();
+            parameters[RecordParameter] = scoped.Id.ToString();
+        }
+
+        return new SqlFilter(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                SELECT DISTINCT {Prefix}handed.name
+                FROM identity.grants AS {Prefix}grant
+                JOIN identity.roles AS {Prefix}role ON {Prefix}role.name = {Prefix}grant.role
+                JOIN identity.organizations AS {Prefix}scope ON {Prefix}scope.id = {Prefix}grant.organization
+                CROSS JOIN LATERAL unnest({Prefix}role.hands_out) AS {Prefix}handed(name)
+                WHERE NOT {Prefix}grant.deny
+                  AND {Prefix}scope.deletion_requested_at IS NULL
+                  AND {HeldCovering(Prefix + "grant", resource)}
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM identity.grants AS {Prefix}deny
+                      WHERE {Prefix}deny.deny
+                        AND {Prefix}deny.role = {Prefix}grant.role
+                        AND {HeldCovering(Prefix + "deny", resource)});
+                """),
+            parameters);
+    }
+
+    // AUTHZ-GRANT-005: a live grant to the principal in the change's organization that
+    // covers the change, across the organization or on its record or a container above
+    // it (an ancestry row of depth 0 is the record itself).
+    private static string HeldCovering(string grant, ResourceReference? resource)
+    {
+        string covering = resource is null
+            ? string.Empty
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+
+                     OR EXISTS (
+                          SELECT 1
+                          FROM identity.ancestry AS {grant}_above
+                          WHERE {grant}_above.resource_type = @{Prefix}type
+                            AND {grant}_above.resource_id = @{RecordParameter}
+                            AND {grant}_above.ancestor_type = {grant}.resource_type
+                            AND {grant}_above.ancestor_id = {grant}.resource_id)
+                """);
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"""
+            {grant}.organization = @{Prefix}organization
+                  AND {grant}.revoked_at IS NULL
+                  AND ({grant}.expires_at IS NULL OR {grant}.expires_at > @{Prefix}at)
+                  AND (({grant}.subject_type = 'user'
+                          AND {grant}.subject_id = ANY(@{Prefix}accounts))
+                    OR ({grant}.subject_type = 'group'
+                          AND {grant}.subject_id = ANY(@{Prefix}groups)))
+                  AND ({grant}.resource_type IS NULL{covering})
+            """);
+    }
+
+    /// <summary>
     /// The rule as a predicate over the host's own rows, for the host to apply to its
     /// own query.
     /// </summary>
@@ -148,24 +348,7 @@ internal sealed class PermissionRule
     {
         ArgumentNullException.ThrowIfNull(sources);
 
-        IQueryable<AncestryEntry> ancestry = sources.Ancestry;
-        Expression<Func<string, bool>> allowed = Stored(sources, _permissions, deny: false);
-        Expression<Func<string, bool>> denied = Stored(sources, _permissions, deny: true);
-
-        ParameterExpression named = allowed.Parameters[0];
-        Expression reaches = allowed.Body;
-
-        // AUTHZ-DERIVE-001, AUTHZ-DERIVE-002 (D-160): a grant or a relationship row for
-        // one of the principal's subjects, on the record or on something above it, and
-        // a deny defeats either.
-        foreach (RelationshipDeclaration relationship in _derivations)
-        {
-            reaches = Expression.OrElse(reaches, Derived(relationship, sources, ancestry, named));
-        }
-
-        Expression body = Expression.AndAlso(
-            reaches,
-            Expression.Not(new Substitution(denied.Parameters[0], named).Visit(denied.Body)));
+        (ParameterExpression named, Expression body) = _exercised ? Held(sources.Ancestry) : Granted(sources);
 
         // AUTHZ-GATE-002 AC4: a permission bound to a consent-based purpose reaches only
         // the records whose data subject consented to it.
@@ -386,6 +569,26 @@ internal sealed class PermissionRule
     {
         string row = Identifier(rowAlias, nameof(rowAlias)) + "." + Identifier(column, nameof(column));
 
+        // IDN-PRIN-001 (D-207): a job's declaration reaches the records its organization
+        // holds, as the expression's rendering of the same rule does.
+        if (_exercised)
+        {
+            return new SqlFilter(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"""
+                    (EXISTS (
+                        SELECT 1
+                        FROM identity.ancestry AS {Prefix}held
+                        WHERE {Prefix}held.resource_type = @{Prefix}type
+                          AND {Prefix}held.resource_id = {row}
+                          AND {Prefix}held.depth = 0
+                          AND {Prefix}held.organization = @{Prefix}organization
+                    ){Consented(row)})
+                    """),
+                ExercisedParameters());
+        }
+
         string text = string.Create(
             CultureInfo.InvariantCulture,
             $"""
@@ -477,6 +680,46 @@ internal sealed class PermissionRule
             GROUP BY {PageAlias}.{PageColumn}, {Prefix}grant.permission;
             """),
         Parameters());
+
+    // AUTHZ-DERIVE-001, AUTHZ-DERIVE-002 (D-160): a grant or a relationship row for one of
+    // the principal's subjects, on the record or on something above it, and a deny
+    // defeats either.
+    private (ParameterExpression Named, Expression Body) Granted<TResource>(FilterSources<TResource> sources)
+    {
+        IQueryable<AncestryEntry> ancestry = sources.Ancestry;
+        Expression<Func<string, bool>> allowed = Stored(sources, _permissions, deny: false);
+        Expression<Func<string, bool>> denied = Stored(sources, _permissions, deny: true);
+
+        ParameterExpression named = allowed.Parameters[0];
+        Expression reaches = allowed.Body;
+
+        foreach (RelationshipDeclaration relationship in _derivations)
+        {
+            reaches = Expression.OrElse(reaches, Derived(relationship, sources, ancestry, named));
+        }
+
+        return (
+            named,
+            Expression.AndAlso(
+                reaches,
+                Expression.Not(new Substitution(denied.Parameters[0], named).Visit(denied.Body))));
+    }
+
+    // IDN-PRIN-001 (D-207): what a job's declaration reaches, a record of the type the
+    // organization holds, read from the record's own row of the ancestry.
+    private (ParameterExpression Named, Expression Body) Held(IQueryable<AncestryEntry> ancestry)
+    {
+        string type = Type.ToString();
+        Guid organization = _organization.Value;
+
+        Expression<Func<string, bool>> held = identifier => ancestry.Any(entry =>
+            entry.ResourceType == type
+            && entry.ResourceId == identifier
+            && entry.Depth == 0
+            && entry.Organization == organization);
+
+        return (held.Parameters[0], held.Body);
+    }
 
     // AUTHZ-GATE-002 AC1: the one predicate every rendering over the host's rows is
     // built from: a live grant for one of the permissions, held by one of the
@@ -773,7 +1016,7 @@ internal sealed class PermissionRule
     private static string Matches(string grant, string row) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
-        {Live(grant)}
+        {Live(grant, Scoped)}
                   AND ({grant}.resource_type IS NULL OR EXISTS (
                       SELECT 1
                       FROM identity.ancestry AS {grant}_above
@@ -789,16 +1032,17 @@ internal sealed class PermissionRule
     private static string MatchesOrganization(string grant) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
-        {Live(grant)}
+        {Live(grant, Scoped)}
                   AND {grant}.resource_type IS NULL
         """);
 
-    // What every rendering asks of a grant before it asks what the grant reaches.
-    private static string Live(string grant) => string.Create(
+    // What every rendering asks of a grant before it asks what the grant reaches, within
+    // the organization the rendering names as SQL.
+    private static string Live(string grant, string within) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
         {grant}.permission = ANY(@{Prefix}permissions)
-                  AND {grant}.organization = @{Prefix}organization
+                  AND {grant}.organization = {within}
                   AND {grant}.revoked_at IS NULL
                   AND ({grant}.expires_at IS NULL OR {grant}.expires_at > @{Prefix}at)
                   AND (({grant}.subject_type = 'user'
@@ -828,6 +1072,20 @@ internal sealed class PermissionRule
             parameters[Alias(index) + "_on"] = _derivations[index].On.ToString();
         }
 
+        return WithConsent(parameters);
+    }
+
+    // A job's fragment reads no grant, so it carries the type, the organization and the
+    // consent alone: the statement would hold parameters it never names.
+    private Dictionary<string, object> ExercisedParameters() =>
+        WithConsent(new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [Prefix + "type"] = Type.ToString(),
+            [Prefix + "organization"] = _organization.Value,
+        });
+
+    private Dictionary<string, object> WithConsent(Dictionary<string, object> parameters)
+    {
         if (_consent is RequiredConsent consent)
         {
             parameters[Prefix + "purpose"] = consent.Purpose;

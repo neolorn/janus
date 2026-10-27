@@ -311,6 +311,62 @@ public sealed class StepUpGatesTests
         Assert.Equal(0, provider.Asked);
     }
 
+    /// <summary>
+    /// AUTH-STEP-002 AC10 (D-210): a gate the host's report meets at its first ask in a
+    /// request is met at a second ask in the same request after the reported proof passed
+    /// the gate's maximum age, the provider not asked again; the next request is judged
+    /// afresh and refused.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_002_AC10_AReportedGateMetAtItsFirstAskIsMetAtASecondAfterItsMaximumAgeAsync()
+    {
+        var clock = new FixedClock(TimeProvider.System.GetUtcNow());
+        var sessions = new SessionGatesInMemory(Identifiers.Subject());
+
+        sessions.Costs(Gate, new Core.Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        var provider = new AssuranceProviderInMemory(
+            Reported(AssuranceLevel.Aal2, clock.GetUtcNow() - TimeSpan.FromMinutes(1)));
+        var request = new StepUpGates(sessions, provider, clock);
+
+        Assert.Null(await OutstandingAsync(request, Bound));
+
+        clock.Advance(TimeSpan.FromMinutes(10));
+
+        Assert.Null(await OutstandingAsync(request, Bound));
+        Assert.Equal(1, provider.Asked);
+        Assert.Equal(ErrorCodes.StepUpRequired, await OutstandingAsync(new StepUpGates(sessions, provider, clock), Bound));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC10 (D-210): a gate the host's report does not meet at its first
+    /// ask in a request is unmet at a second ask in the same request though the
+    /// provider's report changed to meet it between the two, the provider not asked
+    /// again; the next request is judged afresh and admitted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_002_AC10_AReportedGateUnmetAtItsFirstAskIsUnmetAtASecondAfterTheReportMeetsItAsync()
+    {
+        var clock = new FixedClock(TimeProvider.System.GetUtcNow());
+        var sessions = new SessionGatesInMemory(Identifiers.Subject());
+
+        sessions.Costs(Gate, new Core.Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        var provider = new AssuranceProviderInMemory(
+            Reported(AssuranceLevel.Aal2, clock.GetUtcNow() - TimeSpan.FromMinutes(10)));
+        var request = new StepUpGates(sessions, provider, clock);
+
+        Assert.Equal(ErrorCodes.StepUpRequired, await OutstandingAsync(request, Bound));
+
+        provider.Reports(Reported(AssuranceLevel.Aal2, clock.GetUtcNow()));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, await OutstandingAsync(request, Bound));
+        Assert.Equal(1, provider.Asked);
+        Assert.Null(await OutstandingAsync(new StepUpGates(sessions, provider, clock), Bound));
+    }
+
     // What a host reports of a proof made a minute ago, reaching no further than it.
     private static AttainedAssurance Reported(AssuranceLevel level) =>
         Reported(level, TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(1));

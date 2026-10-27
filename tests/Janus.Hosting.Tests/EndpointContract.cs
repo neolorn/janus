@@ -37,13 +37,11 @@ internal static partial class EndpointContract
     /// profile's stages in order with the pipeline's own answers.
     /// </summary>
     /// <param name="endpoints">Every endpoint the host mounted.</param>
-    /// <param name="json">The options a request body is read through.</param>
     /// <returns>The lines.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public static IReadOnlyList<string> Lines(IReadOnlyList<Endpoint> endpoints, JsonSerializerOptions json)
+    public static IReadOnlyList<string> Lines(IReadOnlyList<Endpoint> endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
-        ArgumentNullException.ThrowIfNull(json);
 
         var lines = new List<string>();
 
@@ -55,8 +53,8 @@ internal static partial class EndpointContract
             .ThenBy(named => named.Method, StringComparer.Ordinal))
         {
             lines.Add(method + " " + route);
-            lines.AddRange(Request(endpoint, json));
-            lines.AddRange(Answers(endpoint, json));
+            lines.AddRange(Request(endpoint));
+            lines.AddRange(Answers(endpoint));
         }
 
         lines.Add("pipeline");
@@ -73,7 +71,7 @@ internal static partial class EndpointContract
         endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods
             .Select(method => (endpoint.RoutePattern.RawText!.TrimEnd('/'), method, endpoint));
 
-    private static IEnumerable<string> Request(RouteEndpoint endpoint, JsonSerializerOptions json)
+    private static IEnumerable<string> Request(RouteEndpoint endpoint)
     {
         if (endpoint.Metadata.GetMetadata<IAcceptsMetadata>() is not { RequestType: Type body } accepted)
         {
@@ -82,7 +80,7 @@ internal static partial class EndpointContract
 
         yield return Line + "request " + string.Join(' ', accepted.ContentTypes);
 
-        foreach (string member in Members(body, string.Empty, json, []))
+        foreach (string member in Members(body, string.Empty, []))
         {
             yield return Member + member;
         }
@@ -92,7 +90,7 @@ internal static partial class EndpointContract
     // its mounting answers and nothing else, each code under the status the status map
     // gives it. The codes a navigation route carries in the query member of its
     // redirect go under that redirect, since no status of the map is sent with them.
-    private static IEnumerable<string> Answers(RouteEndpoint endpoint, JsonSerializerOptions json)
+    private static IEnumerable<string> Answers(RouteEndpoint endpoint)
     {
         IProducesResponseTypeMetadata[] produced = [.. endpoint.Metadata.GetOrderedMetadata<IProducesResponseTypeMetadata>()];
         SortedDictionary<int, SortedSet<string>> refused = Statuses(
@@ -122,7 +120,7 @@ internal static partial class EndpointContract
 
                 yield return Line + Line + string.Join(' ', result.ContentTypes);
 
-                foreach (string member in Members(body, string.Empty, json, []))
+                foreach (string member in Members(body, string.Empty, []))
                 {
                     yield return Member + Line + member;
                 }
@@ -161,24 +159,23 @@ internal static partial class EndpointContract
     // The members of a body by their JSON names, a member of a member after a full stop
     // and the elements of a list or a map after brackets or braces, each with the type
     // it is written as.
-    private static IEnumerable<string> Members(Type type, string name, JsonSerializerOptions json, Type[] within)
+    private static IEnumerable<string> Members(Type type, string name, Type[] within)
     {
         Type read = Nullable.GetUnderlyingType(type) ?? type;
         string optional = read == type ? string.Empty : "?";
 
-        if (within.Contains(read) || !json.TryGetTypeInfo(read, out JsonTypeInfo? shape))
+        if (within.Contains(read) || LibraryContexts.Declaring(read)?.GetTypeInfo(read) is not JsonTypeInfo shape)
         {
             return [name + ": " + Leaf(read) + optional];
         }
 
         return shape.Kind switch
         {
-            JsonTypeInfoKind.Enumerable => Members(shape.ElementType!, name + "[]", json, within),
-            JsonTypeInfoKind.Dictionary => Members(shape.ElementType!, name + "{}", json, within),
+            JsonTypeInfoKind.Enumerable => Members(shape.ElementType!, name + "[]", within),
+            JsonTypeInfoKind.Dictionary => Members(shape.ElementType!, name + "{}", within),
             JsonTypeInfoKind.Object when shape.Properties.Count > 0 => shape.Properties.SelectMany(property => Members(
                 property.PropertyType,
                 name.Length is 0 ? property.Name : name + "." + property.Name,
-                json,
                 [.. within, read])),
             _ => [name + ": " + Leaf(read) + optional],
         };

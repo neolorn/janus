@@ -160,9 +160,10 @@ public sealed class FactorCatalogueTests
 
     /// <summary>
     /// AUTH-PRIN-002 AC1: no enum, flag or claim of the library tells a member of
-    /// staff from a customer. The one file that names either is the takedown
+    /// staff from a customer. The two files that name either are the takedown
     /// trigger, whose values are chapter 10 section 5.12d's vocabulary for what
-    /// raised a report, which is not a property of a principal.
+    /// raised a report, and the testing package's people, whose ways of signing a
+    /// test's person in are LIB-TEST-003's; neither is a property of a principal.
     /// </summary>
     [Fact]
     public void AUTH_PRIN_002_AC1_NoEnumFlagOrClaimDistinguishesStaffFromCustomers()
@@ -175,7 +176,9 @@ public sealed class FactorCatalogueTests
                 .Order(StringComparer.Ordinal),
         ];
 
-        Assert.Equal([Path.Combine("Janus.Core", "TakedownTrigger.cs")], naming);
+        Assert.Equal(
+            [Path.Combine("Janus.Core", "TakedownTrigger.cs"), Path.Combine("Janus.Testing", "TestPeople.cs")],
+            naming);
     }
 
     // A line of code, comments aside, that names one kind of person.

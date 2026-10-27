@@ -158,6 +158,11 @@ internal static class StorageRegistration
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IPersonalFields>(provider => new PersonalFields(
+            provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<IKeyRing>(),
+            provider.GetRequiredService<RandomNumberGenerator>(),
+            provider.GetRequiredService<AuthorizationDeclaration>()));
         services.AddScoped<IErasureStore, ErasureStore>();
         services.AddScoped<ISubjectEraser, SubjectEraser>();
         services.AddScoped<Janus.Privacy.Outbox.IOutboxStore, OutboxStore>();
@@ -269,6 +274,7 @@ internal static class StorageRegistration
         services.AddScoped<IOpenIddictAuthorizationStore<OidcAuthorizationRecord>, OidcAuthorizationStore>();
         services.AddScoped<IOpenIddictScopeStore<OidcScopeRecord>, OidcScopeStore>();
         services.AddScoped<IOpenIddictTokenStore<OidcTokenRecord>, OidcTokenStore>();
+        services.AddScoped<IOidcGrantStore, OidcGrantStore>();
         services.AddScoped<ISigningKeyStore>(provider => new SigningKeyStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
@@ -286,7 +292,9 @@ internal static class StorageRegistration
         services.AddScoped<IRoleStore, RoleStore>();
         services.AddScoped<IRoleReferences, RoleReferences>();
         services.AddScoped<IRoleAudit, RoleAudit>();
+        services.AddScoped<ISeededRoles, SeededRoles>();
         services.AddScoped<IGrantStore, GrantStore>();
+        services.AddScoped<IGrantAudit, GrantAudit>();
         services.AddScoped<IGroupStore, GroupStore>();
         services.AddScoped<IGroupAudit, GroupAudit>();
         services.AddScoped<IOrganizationDirectory, OrganizationDirectory>();
@@ -303,7 +311,9 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IMembershipAttachment, MembershipAttachment>();
         services.AddScoped<IMembershipEnding, MembershipEnding>();
+        services.AddScoped<IMembershipRevocations, MembershipRevocations>();
         services.AddScoped<IRoleCatalogue, RoleCatalogue>();
+        services.AddScoped<IRoleHandOut, RoleHandOut>();
         services.AddScoped<IResourceStore, ResourceStore>();
         services.AddScoped<IAccountHolders, AccountHolders>();
 

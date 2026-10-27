@@ -24,6 +24,8 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 {
     private const string Personal = """{"email":"invited@elsewhere.test"}""";
 
+    private const string Ended = """{"reason":"The contract ended."}""";
+
     private static readonly OrganizationId Administration =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
@@ -403,12 +405,12 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         _deployment.Memberships.Place(member, Branch);
 
         Browser browser = await Flow.SignedInAsync(_deployment);
-        Answer withheld = await browser.SendAsync("DELETE", MembershipOf(Branch, member));
+        Answer withheld = await browser.SendAsync("DELETE", MembershipOf(Branch, member), Ended);
 
         _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Branch, Permissions.MembershipManage);
 
-        Answer ended = await browser.SendAsync("DELETE", MembershipOf(Branch, member));
-        Answer again = await browser.SendAsync("DELETE", MembershipOf(Branch, member));
+        Answer ended = await browser.SendAsync("DELETE", MembershipOf(Branch, member), Ended);
+        Answer again = await browser.SendAsync("DELETE", MembershipOf(Branch, member), Ended);
 
         Assert.Equal(StatusCodes.Status403Forbidden, withheld.Status);
         Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
@@ -416,6 +418,114 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.MembershipNotFound.ToString(), again.Text("code"));
         Assert.Equal((member, Branch), (Assert.Single(_deployment.Endings.Ended).Subject, _deployment.Endings.Ended[0].Organization));
         Assert.Equal(AuditActions.MembershipEnded, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC9 (D-216): ending a membership now with no <c>reason</c>, a blank
+    /// one or one longer than 1024 characters after trimming is <c>400</c>
+    /// <c>api.request.malformed</c> naming <c>reason</c>, and it stays current; with one,
+    /// its <c>identity.membership.ended</c> carries it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AC9_AnEndWithoutAReasonIsMalformedAsync()
+    {
+        var member = new SubjectId(Guid.NewGuid());
+
+        _deployment.Memberships.Place(member, Branch);
+
+        Browser administrator = await AuthorisedAsync();
+
+        Answer[] refused =
+        [
+            await administrator.SendAsync("DELETE", MembershipOf(Branch, member), "{}"),
+            await administrator.SendAsync("DELETE", MembershipOf(Branch, member), """{"reason":"   "}"""),
+            await administrator.SendAsync("DELETE", MembershipOf(Branch, member), ("reason", new string('a', 1025))),
+        ];
+
+        Assert.All(refused, answer => Assert.Equal(StatusCodes.Status400BadRequest, answer.Status));
+        Assert.All(refused, answer => Assert.Equal(ErrorCodes.RequestMalformed.ToString(), answer.Text("code")));
+        Assert.All(refused, answer => Assert.Equal(
+            "reason",
+            answer.Json().GetProperty("details").GetProperty("member").GetString()));
+        Assert.Empty(_deployment.Endings.Ended);
+
+        Answer ended = await administrator.SendAsync("DELETE", MembershipOf(Branch, member), Ended);
+
+        Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
+        Assert.Equal("The contract ended.", Assert.Single(_deployment.OrganizationChanges.Changes).Reason);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC7 and 09 section 8a (D-213): <c>PUT</c> of a membership's end sets it
+    /// and answers <c>204</c>; an <c>endsAt</c> absent is <c>400</c>
+    /// <c>api.request.malformed</c> and one not after the present <c>422</c>
+    /// <c>api.request.invalid</c>, each naming <c>endsAt</c>; <c>DELETE</c> cancels it,
+    /// and again finds none, <c>404</c> <c>identity.membership.notfound</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AC7_AnEndIsSetAndCancelledAsync()
+    {
+        var member = new SubjectId(Guid.NewGuid());
+
+        _deployment.Memberships.Place(member, Branch);
+
+        Browser administrator = await AuthorisedAsync();
+        DateTimeOffset later = _deployment.Clock.GetUtcNow().AddDays(30);
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        Answer absent = await administrator.SendAsync("PUT", EndOf(Branch, member), Ended);
+        Answer past = await administrator.SendAsync("PUT", EndOf(Branch, member), ("endsAt", now), ("reason", "The contract ends."));
+        Answer set = await administrator.SendAsync("PUT", EndOf(Branch, member), ("endsAt", later), ("reason", "The contract ends."));
+        Answer cancelled = await administrator.SendAsync("DELETE", EndOf(Branch, member), Ended);
+        Answer again = await administrator.SendAsync("DELETE", EndOf(Branch, member), Ended);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, absent.Status);
+        Assert.Equal("endsAt", absent.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, past.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), past.Text("code"));
+        Assert.Equal("endsAt", past.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status204NoContent, set.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(ErrorCodes.MembershipNotFound.ToString(), again.Text("code"));
+        Assert.Empty(_deployment.Endings.Ended);
+        Assert.Equal(
+            [AuditActions.MembershipEndSet, AuditActions.MembershipEndSet],
+            _deployment.OrganizationChanges.Changes.Select(change => change.Action));
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC7, IDN-MEM-001 AC6 and 09 section 8a (D-202): ending the reserved
+    /// account's membership of the administrative organization is <c>403</c>
+    /// <c>authz.denied</c> for an administrator holding <c>membership:manage</c> there,
+    /// before the step-up, so a session whose proof has aged meets the refusal and not
+    /// the challenge it meets ending the account's membership of another organization;
+    /// nothing is ended.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC7_TheReservedAccountsMembershipOfTheAdministrativeOrganizationIsKeptAsync()
+    {
+        var reserved = new SubjectId(Guid.NewGuid());
+
+        _deployment.Reserves(reserved);
+        _deployment.Memberships.Place(reserved, Administration);
+        _deployment.Memberships.Place(reserved, Branch);
+
+        Browser administrator = await AuthorisedAsync();
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(1));
+
+        Answer kept = await administrator.SendAsync("DELETE", MembershipOf(Administration, reserved), Ended);
+        Answer challenged = await administrator.SendAsync("DELETE", MembershipOf(Branch, reserved), Ended);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, kept.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), kept.Text("code"));
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), challenged.Text("code"));
+        Assert.Empty(_deployment.Endings.Ended);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
     }
 
     /// <summary>
@@ -440,7 +550,7 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         [
             await administrator.SendAsync("POST", PathOf(unheld), Personal),
             await administrator.SendAsync("DELETE", PathOf(unheld) + "/" + id),
-            await administrator.SendAsync("DELETE", MembershipOf(unheld, member)),
+            await administrator.SendAsync("DELETE", MembershipOf(unheld, member), Ended),
         ];
 
         Assert.All(answers, answer => Assert.Equal(StatusCodes.Status404NotFound, answer.Status));
@@ -514,10 +624,10 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
             () => administrator.SendAsync("DELETE", PathOf(Branch) + "/" + id));
         await RestrictedSinceTheGateStep.RefusesAsync(
             _deployment,
-            () => administrator.SendAsync("DELETE", MembershipOf(Branch, member)));
+            () => administrator.SendAsync("DELETE", MembershipOf(Branch, member), Ended));
         await RestrictedSinceTheGateStep.RefusesAsync(
             _deployment,
-            () => administrator.SendAsync("DELETE", MembershipOf(Branch, acting)));
+            () => administrator.SendAsync("DELETE", MembershipOf(Branch, acting), Ended));
 
         Assert.False(Assert.Single(_deployment.Invitations.Held).IsRevoked);
         Assert.Empty(_deployment.Endings.Ended);
@@ -526,6 +636,9 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
     private static string MembershipOf(OrganizationId organization, SubjectId member) =>
         "/admin/organizations/" + organization + "/memberships/" + member;
+
+    private static string EndOf(OrganizationId organization, SubjectId member) =>
+        MembershipOf(organization, member) + "/end";
 
     private static string PathOf(OrganizationId organization) =>
         "/admin/organizations/" + organization + "/invitations";

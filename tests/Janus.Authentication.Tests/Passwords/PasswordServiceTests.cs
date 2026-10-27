@@ -242,7 +242,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
     public async Task AUTHZ_IMP_001_AC5_ASetPasswordCarriesBothIdentitiesOfItsContextAsync()
     {
         SubjectId subject = Subject();
-        var context = AccessContext.Of(Subject(), subject);
+        var context = AccessContext.Of(subject);
 
         await SetAsync(subject, Chosen, AssuranceLevel.Aal1);
 

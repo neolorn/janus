@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -33,7 +34,7 @@ internal interface IMembershipStore
     /// <param name="subject">Whose memberships to read.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The memberships as committed when the locks were taken, oldest first.</returns>
-    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
     ValueTask<IReadOnlyList<Membership>> FindBySubjectForUpdateAsync(
         SubjectId subject,
         CancellationToken cancellationToken);
@@ -45,7 +46,7 @@ internal interface IMembershipStore
     /// <param name="organization">Which organization.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The memberships as committed when the locks were taken, oldest first.</returns>
-    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
     ValueTask<IReadOnlyList<Membership>> FindByOrganizationForUpdateAsync(
         OrganizationId organization,
         CancellationToken cancellationToken);
@@ -58,6 +59,17 @@ internal interface IMembershipStore
     /// <returns>The memberships, oldest first.</returns>
     ValueTask<IReadOnlyList<Membership>> FindByOrganizationAsync(
         OrganizationId organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the current memberships whose end, set in advance, falls at or before an
+    /// instant (IDN-MEM-001, D-213).
+    /// </summary>
+    /// <param name="at">The instant the ends are due by.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The memberships, the earliest end first.</returns>
+    ValueTask<IReadOnlyList<Membership>> FindEndsDueAsync(
+        DateTimeOffset at,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -74,6 +86,6 @@ internal interface IMembershipStore
     /// <param name="membership">The membership as it now stands.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
-    /// <exception cref="System.InvalidOperationException">No such row exists.</exception>
+    /// <exception cref="InvalidOperationException">No such row exists.</exception>
     ValueTask RecordAsync(Membership membership, CancellationToken cancellationToken);
 }

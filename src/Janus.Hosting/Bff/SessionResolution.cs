@@ -24,7 +24,8 @@ namespace Janus.Hosting.Bff;
 /// is the one place that refuses on account of there being none. An enrolment session
 /// is resolved only on the routes chapter 09 lists for it at <c>POST /enrol/begin</c>:
 /// elsewhere the request goes on as one that carried none, and the browser keeps what
-/// it carries (D-189).
+/// it carries (D-189). Where the host's routing comes after the profile, no route is
+/// known here, so an enrolment session is resolved on none, which fails closed (D-210).
 /// </remarks>
 internal sealed class SessionResolution(
     SessionService sessions,

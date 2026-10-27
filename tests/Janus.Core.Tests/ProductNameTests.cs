@@ -120,8 +120,13 @@ public sealed class ProductNameTests
             .Where(file => !Generated(file) && !Vendored(file))
             .Concat(Directory
                 .EnumerateFiles(Repository.Root)
-                .Where(file => !Documents.Any(document =>
+                .Where(file => !GitMetadata(file) && !Documents.Any(document =>
                     FileSystemName.MatchesSimpleExpression(document, Path.GetFileName(file)))));
+
+    // In a linked checkout `.git` is a file naming the clone's path: git's own metadata,
+    // not a source.
+    private static bool GitMetadata(string file) =>
+        string.Equals(Path.GetFileName(file), ".git", StringComparison.Ordinal);
 
     private static bool Generated(string file) =>
         file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)

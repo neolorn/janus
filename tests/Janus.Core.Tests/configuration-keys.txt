@@ -31,6 +31,7 @@ alerting.sessions.distance integer R
 alerting.sessions.window duration R
 alerting.sms.destinations text-list R minimum=1
 alerting.sms.severitythreshold choice R allowed=high,normal
+authz.handout.byholding flag R
 authz.reverselookup.budget duration R
 backup.restoretest.canary text R
 backup.restoretest.interval duration R ceiling=P90D

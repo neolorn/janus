@@ -35,6 +35,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     private readonly OutboxStoreInMemory _outbox = new();
     private readonly ErasureStoreInMemory _erasures = new();
     private readonly List<ISubjectEventSubscriber> _subscribers = [];
+    private readonly List<IPurposeHandler> _handlers = [];
     private readonly ConfigurationInMemory _configuration = new();
     private readonly PrivacyAlertsInMemory _alerts = new();
     private readonly UnitOfWorkInMemory _work = new();
@@ -270,6 +271,106 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Assert.Equal(AlertCondition.ErasureDeliveryExhausted, raised.Condition);
         Assert.Equal(
             ["host"],
+            raised.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC3, PRIV-CONS-008 AC4: a consent change is delivered to every
+    /// purpose handler naming its purpose and to no other, each offered the change under
+    /// the delivery's own key, and the delivery closes when each has confirmed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC3_AConsentChangeReachesEveryHandlerNamingItsPurposeAsync()
+    {
+        var mail = new PurposeHandlerInMemory("mail", "marketing", "newsletter");
+        var shop = new PurposeHandlerInMemory("shop", "marketing");
+        var security = new PurposeHandlerInMemory("security", "security");
+
+        _handlers.AddRange([mail, shop, security]);
+        _subscribers.Add(new SubscriberInMemory("host", required: true));
+
+        var delivery = Delivery.OfConsent(Ahmed, "marketing", ConsentChange.Withdrawn, Noon);
+
+        await _outbox.AddAsync(delivery, CancellationToken.None);
+
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+
+        ConsentChanged offered = Assert.IsType<ConsentChanged>(Assert.Single(mail.Offered));
+
+        Assert.Equal(
+            (Ahmed, "marketing", ConsentChange.Withdrawn, delivery.IdempotencyKey, Noon),
+            (offered.Subject, offered.Purpose, offered.Change, offered.IdempotencyKey, offered.RaisedAt));
+        Assert.Equal(offered, Assert.Single(shop.Offered));
+        Assert.Empty(security.Offered);
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(delivery.Id).Status);
+        Assert.Equal(["mail", "shop"], _outbox.Held(delivery.Id).Confirmed.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC3: an objection change is delivered to the handlers naming its
+    /// purpose as a consent change is, a recorded objection and a withdrawn one each
+    /// offered as the change it is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC3_AnObjectionChangeReachesEveryHandlerNamingItsPurposeAsync()
+    {
+        var security = new PurposeHandlerInMemory("security", "security");
+
+        _handlers.Add(security);
+
+        await _outbox.AddAsync(Delivery.OfObjection(Ahmed, "security", objecting: true, Noon), CancellationToken.None);
+        await _outbox.AddAsync(
+            Delivery.OfObjection(Ahmed, "security", objecting: false, Noon.AddMinutes(1)),
+            CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Equal(2, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Equal(
+            [(Ahmed, "security", true), (Ahmed, "security", false)],
+            security.Offered
+                .Cast<ObjectionChanged>()
+                .Select(offered => (offered.Subject, offered.Purpose, offered.Objecting)));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC3, IDN-LIFE-003a AC4, AC8: every purpose handler is required, so
+    /// one that answers failure, or faults, leaves the delivery open and is offered it
+    /// again under <c>outbox.retry.*</c>; once the attempts are spent the delivery
+    /// fails and <c>erasure-delivery-exhausted</c> is raised, naming the change's event
+    /// and the handlers outstanding.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC3_AHandlerThatDoesNotConfirmIsRetriedUntilTheAttemptsAreSpentAsync()
+    {
+        var mail = new PurposeHandlerInMemory("mail", "marketing") { Confirms = false };
+        var shop = new PurposeHandlerInMemory("shop", "marketing") { Faults = true };
+
+        _handlers.AddRange([mail, shop]);
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
+
+        var delivery = Delivery.OfConsent(Ahmed, "marketing", ConsentChange.Granted, Noon);
+
+        await _outbox.AddAsync(delivery, CancellationToken.None);
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Equal(ErasureStatus.AwaitingSubscribers, _outbox.Held(delivery.Id).Status);
+        Assert.Equal(1, _outbox.Held(delivery.Id).Attempts);
+        Assert.Empty(_alerts.Raised);
+
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Equal(ErasureStatus.Failed, _outbox.Held(delivery.Id).Status);
+        Assert.Equal((2, 2), (mail.Offered.Count, shop.Offered.Count));
+
+        PrivacyAlertRaised raised = Assert.Single(_alerts.Raised);
+
+        Assert.Equal(AlertCondition.ErasureDeliveryExhausted, raised.Condition);
+        Assert.Equal("ConsentChanged", raised.Details["kind"].GetString());
+        Assert.Equal(
+            ["mail", "shop"],
             raised.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
     }
 
@@ -732,6 +833,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
             _outbox,
             _erasures,
             _subscribers,
+            _handlers,
             _ledger,
             _configuration,
             _alerts,

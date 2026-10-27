@@ -2,9 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Janus.Privacy.Outbox;
+using Janus.Storage.Migrations;
 using Janus.Storage.Privacy.Outbox;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Privacy;
@@ -89,12 +94,12 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// IDN-LIFE-003b AC2, chapter 09 section 8a: every erasure whose delivery is
-    /// outstanding, awaiting subscribers or failed, is read in one query with its
-    /// confirmations, and a completed erasure or a delivery of another kind is not.
+    /// IDN-LIFE-003b AC2, IDN-LIFE-003a AC9, chapter 09 section 8a (D-203): every
+    /// delivery that is not complete, awaiting subscribers or failed and of whichever
+    /// kind, is read in one query with its confirmations, and a completed one is not.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_003b_AC2_EveryOutstandingErasureIsReadInOneQueryAsync()
+    public async Task IDN_LIFE_003a_AC9_EveryIncompleteDeliveryOfEveryKindIsReadInOneQueryAsync()
     {
         SubjectId awaiting = await _deployment.AccountAsync(Noon);
         SubjectId failed = await _deployment.AccountAsync(Noon);
@@ -131,7 +136,6 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
 
         await using StoreContext reading = database.Context();
         IReadOnlyList<DeliveryProgress> outstanding = await Store(reading, Noon).OutstandingAsync(
-            SubjectEventKind.ErasureRequested,
             TestContext.Current.CancellationToken);
 
         DeliveryProgress first = Assert.Single(outstanding, progress => progress.Delivery.Id == waiting.Id);
@@ -141,7 +145,9 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
         Assert.Equal(ErasureStatus.Failed, second.Delivery.Status);
         Assert.Equal(ErasureReason.MinorTakedown, second.Delivery.Reason);
         Assert.DoesNotContain(outstanding, progress => progress.Delivery.Id == done.Id);
-        Assert.DoesNotContain(outstanding, progress => progress.Delivery.Kind is not SubjectEventKind.ErasureRequested);
+        Assert.Equal(
+            SubjectEventKind.TakedownExecuted,
+            Assert.Single(outstanding, progress => progress.Delivery.Id == takedown.Id).Delivery.Kind);
     }
 
     /// <summary>
@@ -424,6 +430,76 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
             (await Store(reading, Noon).FindAsync(delivery.Id, TestContext.Current.CancellationToken))?.Status);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-001a AC3, PRIV-CONS-008: a consent and an objection change are held on
+    /// the outbox with the purpose and the change their handlers are offered, and read
+    /// back as written.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC3_AConsentAndAnObjectionChangeKeepTheirPurposeAndChangeAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var consent = Delivery.OfConsent(subject, "marketing", ConsentChange.Superseded, Noon);
+        var objection = Delivery.OfObjection(subject, "security", objecting: true, Noon);
+
+        await AddedAsync(consent);
+        await AddedAsync(objection);
+
+        await using StoreContext reading = database.Context();
+        OutboxStore outbox = Store(reading, Noon);
+
+        Delivery consented = Assert.IsType<Delivery>(
+            await outbox.FindAsync(consent.Id, TestContext.Current.CancellationToken));
+        Delivery objected = Assert.IsType<Delivery>(
+            await outbox.FindAsync(objection.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (SubjectEventKind.ConsentChanged, "marketing", DeliveryChange.Superseded),
+            (consented.Kind, consented.Purpose, consented.Change));
+        Assert.Equal(
+            (SubjectEventKind.ObjectionChanged, "security", DeliveryChange.Recorded),
+            (objected.Kind, objected.Purpose, objected.Change));
+        Assert.Equal(ConsentChange.Superseded, consented.RaisedConsent().Change);
+        Assert.True(objected.RaisedObjection().Objecting);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a, CONV-ENUM-001: a consent or an objection change names its
+    /// purpose and its change and no other fact names either, so a row that breaks
+    /// that is refused by the database.
+    /// </summary>
+    /// <param name="kind">The fact the row carries.</param>
+    /// <param name="purpose">The purpose it names.</param>
+    /// <param name="change">The change it names.</param>
+    [Theory]
+    [InlineData("consent-changed", null, "granted")]
+    [InlineData("objection-changed", "security", null)]
+    [InlineData("consent-changed", " ", "granted")]
+    [InlineData("restriction-changed", "security", null)]
+    [InlineData("erasure-requested", null, "withdrawn")]
+    public async Task PRIV_RIGHT_001a_ADeliveryNamingThePurposeOrChangeOfAnotherFactIsRefusedAsync(
+        string kind,
+        string? purpose,
+        string? change)
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO identity.outbox
+                    (id, subject, kind, raised_at, restricted, reason, status, attempts, next_attempt_at, purpose, change)
+                VALUES
+                    (gen_random_uuid(), @subject, @kind, now(), false, 'erasure-request', 'awaiting-subscribers', 0, now(), @purpose, @change);
+                """,
+                new { subject = subject.Value, kind, purpose, change }));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
+        Assert.Equal("ck_outbox_purpose", refused.ConstraintName);
+    }
+
     private static OutboxStore Store(StoreContext context, DateTimeOffset now) =>
         new(context, new FixedTime(now));
 
@@ -463,6 +539,72 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
         Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
 
         return confirmed;
+    }
+
+    /// <summary>
+    /// OPS-MIG-001 (D-203): the migration that retires the export-requested event applies
+    /// to a database that served an export before it: each export-requested delivery and
+    /// its confirmations are removed before the event kinds are narrowed, and every
+    /// delivery of another kind stays with its confirmations.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_MIG_001_AnExportRequestedDeliveryIsRemovedBeforeItsKindIsRetiredAsync()
+    {
+        string served = await database.CreateDatabaseAsync("outbox_export_requested");
+        string retiring;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(served))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            retiring = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(OweNothingAfterAnExport), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, retiring) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        await using var connection = new NpgsqlConnection(served);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        var values = new
+        {
+            subject = Subjects.New().Value,
+            exported = Guid.NewGuid(),
+            erased = Guid.NewGuid(),
+            at = Noon,
+        };
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.accounts (subject, state, created_at)
+            VALUES (@subject, 'active', @at);
+            INSERT INTO identity.outbox
+                (id, subject, kind, raised_at, restricted, reason, status, attempts, next_attempt_at)
+            VALUES
+                (@exported, @subject, 'export-requested', @at, false, 'erasure-request', 'awaiting-subscribers', 1, @at),
+                (@erased, @subject, 'erasure-requested', @at, false, 'erasure-request', 'awaiting-subscribers', 1, @at);
+            INSERT INTO identity.outbox_confirmations (delivery, subscriber, confirmed_at)
+            VALUES
+                (@exported, 'records', @at),
+                (@exported, 'orders', @at),
+                (@erased, 'records', @at);
+            """,
+            values);
+
+        await using (StoreContext migrating = DatabaseFixture.Context(served))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(retiring, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            [values.erased],
+            await connection.QueryAsync<Guid>("SELECT id FROM identity.outbox"));
+        Assert.Equal(
+            [(values.erased, "records")],
+            await connection.QueryAsync<(Guid, string)>("SELECT delivery, subscriber FROM identity.outbox_confirmations"));
     }
 
     // A completion as the service makes one: the delivery read before, then again under

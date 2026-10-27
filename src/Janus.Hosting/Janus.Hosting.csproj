@@ -14,20 +14,53 @@
     <PackageReference Include="OpenIddict.Validation" />
   </ItemGroup>
 
+  <!-- LIB-PKG-001, CONV-LAYOUT-001 (D-205): this project packs as the main package. The
+       areas are no packages of their own: their assemblies travel in this one, and the
+       packages they reference at run time are referenced here, so that the main package
+       declares each as a dependency. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);AreaAssemblies</TargetsForTfmSpecificBuildOutput>
+    <!-- A pack that builds nothing reads the areas' output where their build left it. -->
+    <BuildProjectReferences Condition="'$(NoBuild)' == 'true'">false</BuildProjectReferences>
+  </PropertyGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" />
-    <ProjectReference Include="..\Janus.Identity\Janus.Identity.csproj" />
-    <ProjectReference Include="..\Janus.Authentication\Janus.Authentication.csproj" />
-    <ProjectReference Include="..\Janus.Authorization\Janus.Authorization.csproj" />
-    <ProjectReference Include="..\Janus.Privacy\Janus.Privacy.csproj" />
-    <ProjectReference Include="..\Janus.Storage\Janus.Storage.csproj" />
+    <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\Janus.Identity\Janus.Identity.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\Janus.Authentication\Janus.Authentication.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\Janus.Authorization\Janus.Authorization.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\Janus.Privacy\Janus.Privacy.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\Janus.Storage\Janus.Storage.csproj" PrivateAssets="all" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Fido2" />
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Otp.NET" />
+  </ItemGroup>
+
+  <!-- The assemblies of the areas, and the documentation of the contracts beside this
+       project's own. -->
+  <Target Name="AreaAssemblies" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths)"
+                            Condition="'%(ReferenceCopyLocalPaths.ReferenceSourceTarget)' == 'ProjectReference' and '%(ReferenceCopyLocalPaths.Extension)' == '.dll'" />
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths->'%(RootDir)%(Directory)%(Filename).xml')"
+                            Condition="'%(ReferenceCopyLocalPaths.ReferenceSourceTarget)' == 'ProjectReference' and '%(ReferenceCopyLocalPaths.Filename)%(ReferenceCopyLocalPaths.Extension)' == 'Janus.Core.dll'" />
+    </ItemGroup>
+  </Target>
 
   <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
                       OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
 
   <!-- AUTH-PASS-004, INT-PWD-002: the offline list travels in the package, so the

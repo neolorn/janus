@@ -33,7 +33,9 @@ internal static class WellKnownEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        RouteGroupBuilder group = endpoints.MapGroup("/.well-known");
+        // BFF-HOST-002: a password manager and an authenticator read these with no
+        // session, wherever the host mounts them.
+        RouteGroupBuilder group = SessionRequired.Off(endpoints.MapGroup("/.well-known"));
 
         _ = group.MapGet("/change-password", ChangePassword)
             .Declares(EndpointDeclaration.Answering())

@@ -345,12 +345,24 @@ response of `09` carries a marker field.
 **Values (D-186).** The callback is the host's and may call across the network, so it is
 asked before the operation's unit of work begins, never inside an open transaction; the
 consideration is recorded in the unit of work that follows, a kept write
-(CONV-DESIGN-003). A send of a `phoneCode` with a signal callback declared and no signal
-asked for the number beforehand is a fault (CONV-ERR-001), never a send: the other
-course would let a restricted factor go unconsidered (D-188).
+(CONV-DESIGN-003). Where the signal is asked by a step-up an operation asks, the step-up
+is judged before the operation's unit of work begins, and the consideration commits in a
+unit of work of its own, before the operation's, standing whatever the step-up answers
+(D-207). A step-up judged while a unit of work is open (where a host first asks a bound
+action's gate inside its own unit of work, or calls inside one a library operation that
+asks a step-up) asks no signal and records no consideration: it offers as where no
+callback is declared, and the signal is asked when the step-up is carried out (`09`
+`POST /auth/step-up`), with no unit of work open, before any text is sent. The unit of
+work that records a consideration begins as the outermost, so the signal asked inside an
+open unit of work is a fault (CONV-ERR-001, D-209). A bound action's step-up gate asked
+again in the same request, under a host's lock or otherwise, answers as at its first ask
+and asks no phone signal (AUTH-STEP-002, D-210). A send of a `phoneCode` with a signal
+callback declared and no signal asked for the number beforehand is a fault
+(CONV-ERR-001), never a send: the other course would let a restricted factor go
+unconsidered (D-188).
 
 *Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166,
-D-183, D-186, D-188, D-190, D-197, D-198, D-199, D-200*
+D-183, D-186, D-188, D-190, D-197, D-198, D-199, D-200, D-207, D-209, D-210*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The
@@ -1442,12 +1454,13 @@ provider for sign-in itself is the federation model, not a departure from it
 assurance floor of AAL2** — the policy's `requiredAssurance` field (AUTH-PRIN-002,
 `10` §4.1a), set to `aal2` at bootstrap — independent of factor arithmetic.
 
-No change of the administrative organization's policy SHALL leave its members
-resolving `requiredAssurance` below `aal2`; a replacement that would is refused with
-`config.value.belowfloor`, `details.field` `requiredAssurance`, before any step-up, and
-changes nothing.
+No change of the administrative organization's policy SHALL leave its members resolving
+`requiredAssurance` below `aal2`; a replacement that would is refused with
+`config.value.belowfloor`, `details.field` `requiredAssurance`, before any step-up and
+again under the policy's lock inside the replacement's unit of work, and changes nothing
+(`08` CONV-DESIGN-003, D-207).
 
-*Source: D-089, D-143, D-166, D-197*
+*Source: D-089, D-143, D-166, D-197, D-207*
 
 AUTH-SESS-005's guard — that the configured values SHALL NOT exceed the table — does not
 catch this on its own: for an AAL1 session "the table" permits 365 days, and nothing
@@ -1556,7 +1569,12 @@ rejected at validation, not silently clamped.
 **AUTH-SESS-006** — A new session identifier SHALL be issued on authentication, on
 step-up, and on any privilege change.
 
-*Source: D-033.4*
+On a step-up and on a privilege change the identifier rotated is the one the session's
+cookie carries: the old one stops resolving, while the session record and its
+`SessionId`, which names it to the operations, are kept. On authentication the
+pre-authentication session rotates into the sign-in session (`17` BFF-CSRF-005a, D-206).
+
+*Source: D-033.4, D-206*
 
 Without this, an identifier planted in a victim's browser before sign-in remains
 valid afterwards.
@@ -1752,7 +1770,7 @@ split across two apps or folded into another.
 NOT read the account's list of enrolled factors, and no rule text SHALL name a factor.
 
 *Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183, D-190, D-191,
-D-192, D-197, D-198*
+D-192, D-197, D-198, D-207, D-210*
 
 **Evaluation order:**
 1. **Check what the session already proved.** If a level at or above the gate's, and
@@ -1817,16 +1835,29 @@ field. Where no session of the library carries the request, the host's assurance
 provider (LIB-HOST-004) reports the instant each level was last reached, the instant
 phishing resistance was last reached and the account's reachable assurance, and the
 gate, its values resolved as for a session, is judged from those as step 1 judges a
-session (D-191). The gate SHALL be met only where the provider answers, its report reads
-(no instant after now), a level at or above the gate's (the reachable assurance read
-from the report, floor `aal1`) was last reached within the maximum age before now, and
-phishing resistance was too where the gate requires it; anything else, a provider
-failure included, is refused with `auth.stepup.required` carrying `required`, `outcome`
-`present`, empty `options` and a null `pendingUntil`: the proof is the host's to obtain
-through its own sign-in, so the answer offers no factor of the library's (LIB-HOST-004).
-Where no assurance provider is registered, no report is asked and the action is refused
-with `auth.stepup.unavailable` (AUTH-STEP-003). A session of the library that is the
-acting person's own is judged in place of the provider.
+session (D-191). At its first ask in a request (below), the gate SHALL be met only where
+the provider answers, its report reads (no instant after now), a level at or above the
+gate's (the reachable assurance read from the report, floor `aal1`) was last reached
+within the maximum age before now, and phishing resistance was too where the gate
+requires it; anything else, a provider failure included, is refused with
+`auth.stepup.required` carrying `required`, `outcome` `present`, empty `options` and a
+null `pendingUntil`: the proof is the host's to obtain through its own sign-in, so the
+answer offers no factor of the library's (LIB-HOST-004). Where no assurance provider is
+registered, no report is asked and the action is refused with `auth.stepup.unavailable`
+(AUTH-STEP-003). A session of the library that is the acting person's own is judged in
+place of the provider. A host asks such a gate before it begins the unit of work it
+joins, as a library operation judges its step-up before its own (`08` CONV-DESIGN-003,
+D-207).
+
+**A bound action's step-up gate is judged once a request (D-210).** The step-up gate
+bound to a host's action (AUTHZ-GATE-005) is judged at the first ask of that action's
+permission in a request, from the library's session or from the host's assurance
+provider, and every later ask in the same request answers as the first did, the second
+ask inside a unit of work under its lock included (`03` AUTHZ-GATE-006): the request is
+answered on one judgement, not on the time that passed between two asks of one gate. A
+library operation judges its own step-up before its unit of work begins, as `08`
+CONV-DESIGN-003 gives, and the step-up `POST /auth/step-up` carries out judges the gates
+it raises the session for as that route gives (`09`).
 
 **Why "reaches the level", not "strongest held".** A person who enrolled a second
 factor did so to protect exactly these actions. That protection is expressed by the
@@ -1883,6 +1914,12 @@ this design's own extension, recorded as a choice (D-125).
 9. A factor the policy's `loginFactors` does not permit is not offered at a gate, and
    presenting it at a gate is refused with `auth.factor.notpermitted`, whether the
    factor is right or wrong, and counted.
+10. A bound action's step-up gate met at its first ask in a request is met at a second
+    ask in the same request after the evidence it was judged on passed the gate's
+    maximum age between the two, whether it was judged from the library's session or
+    from the host's assurance provider; one unmet at its first ask is unmet at the
+    second, though between the two a step-up of another request lifted the session to
+    the gate, or the provider's report changed to meet it (D-210).
 
 ---
 
@@ -2339,7 +2376,8 @@ the account holds (AUTH-FACT-002); and where the policy in force does not permit
 `phoneCode`, the policy is judged first: the ask sends nothing and is answered 202,
 whatever the number's state (IDN-LIFE-009b, D-191).
 
-*Source: D-009, D-022, D-141, D-166, D-186, D-190, D-191, D-197, D-198, D-199, D-200*
+*Source: D-009, D-022, D-141, D-166, D-186, D-190, D-191, D-197, D-198, D-199, D-200,
+D-207*
 
 **The waiting period is the control** — long enough that a real owner notices, short
 enough that a locked-out customer does not give up. During it the account still
@@ -2349,11 +2387,14 @@ cancel with one click, and to whoever stole a mailbox and reset the password. Ad
 assisted recovery (AUTH-RECOV-002) remains the fast path when a human can confirm
 the person.
 
-**Reporting is not removal.** Removing an `active` authenticator the person still
-holds is an ordinary gated action (`10` section 5a) that completes as soon as the gate is passed
-— *unless* it would lower the account's reachable assurance, in which case it takes
-this path: suspended now, invalidated after the window, notified throughout
-(`auth.credential.lastsecondfactor`). Assurance never drops silently or fast.
+**Reporting is not removal.** Removing an `active` authenticator the person still holds
+is an ordinary gated action (`10` section 5a) that completes as soon as the gate is
+passed, *unless* it would lower the account's reachable assurance, in which case it
+takes this path: suspended now, invalidated after the window, notified throughout
+(`auth.credential.lastsecondfactor`). That suspension is the removal's success, a 202
+status and not a refusal (`10` section 1), committed in the removal's own unit of work
+under the lock its decision read (`08` CONV-DESIGN-003, D-207). Assurance never drops
+silently or fast.
 
 **Recovery codes** are invalidated when the last second factor is invalidated; they
 have nothing left to stand in for.
@@ -2375,9 +2416,12 @@ have nothing left to stand in for.
    left the account apart (AUTH-FACT-002); with no notification taken by its immediate
    attempt, invalidation is held and flagged.
 4. Reachable assurance is unchanged while suspended and recomputed on invalidation.
-5. Removing an active authenticator that leaves reachable assurance unchanged
-   completes immediately after the gate; one that would lower it is suspended and
-   follows the window.
+5. Removing an active authenticator that leaves reachable assurance unchanged completes
+   immediately after the gate; one that would lower it is answered 202
+   `auth.credential.lastsecondfactor` and suspended in the removal's own unit of work,
+   under the lock its decision read, and follows the window; a sign-in's write to the
+   credential committed while the removal runs is not overwritten by the suspension
+   (D-207).
 6. Invalidating the last second factor invalidates the recovery code set.
 7. A customer whose only passkey is lost and who has recovered a password can report
    the passkey with that password, and after the window enrol a new one with it.
@@ -3083,17 +3127,38 @@ refresh token SHALL revoke the entire session family. A refresh token's lifetime
 SHALL be bounded by the session it derives from: it never outlives the record's idle or
 absolute expiry, and no separate lifetime exists to set.
 
-*Source: D-007, D-147*
+*Source: D-007, D-147, D-207, D-208*
 
 How a stolen token is caught. A refresh token is a handle on the session record
 (AUTH-SESS-001), not a credential of its own: it cannot outlive the record's idle or
 absolute expiry, and revoking the record consumes it.
+
+**Values (D-207).** The family a reuse revokes is the session record's spine, the
+provider's grant and every token of that grant. Their revocation and its audit record
+are one kept write, committed together in one unit of work (`08` CONV-DESIGN-003), the
+grant's and tokens' rows revoked by the library's own statements, never by a provider
+call that answers a failure as a refusal to revoke; a fault leaves none of them revoked,
+and the next presentation of a redeemed copy revokes them again. Every reuse takes this
+one path, whatever the redeemed token carries (D-208): one that names no session revokes
+no spine, and one issued under no grant revokes no grant, the rest of its family revoked
+as always; the audit record's acting identity and `subject` are the account the token
+names, or else the one its grant records, or else the account of the session it names,
+the acting identity the nil subject and `subject` absent where none names one, and its
+`details.session` is the session the token names, absent where it names none (`10`
+section 5.24).
 
 **Acceptance criteria**
 1. A refresh token presented twice revokes all derived sessions.
 2. The revocation is audited.
 3. A refresh token presented after the session's idle or absolute expiry, or after the
    record is revoked, is refused; no refresh token is valid longer than the session.
+4. A reuse revokes the spine's sessions, the grant and its tokens and writes the
+   revocation's audit record in one commit; where the commit fails, none of them is
+   revoked (D-207). A reuse of a redeemed token that names no session and no subject
+   revokes its grant and every token of the grant and writes the record with the grant's
+   subject as acting identity and `subject` and no `details.session`, in one commit; one
+   issued under no grant and naming no session and no subject revokes no grant and
+   writes the record with the nil subject as acting identity and no `subject` (D-208).
 
 ---
 
@@ -3310,7 +3375,8 @@ server serves: the versions of the key-encryption key, the versions of the finge
 key, the maintenance credential (OPS-MIG-003a), the mail server's secret where the
 shipped adapter is the mail server in use (CONV-DESIGN-007), and each social provider's
 credential by provider name. No secret is an argument of `AddJanus`. A `Janus.Cli`
-command reads the same values from one JSON document on standard input (OPS-SEC-001). A
+command reads the same values from one JSON document on standard input (OPS-SEC-001),
+save `migrate`, which reads no key (OPS-MIG-001, D-204). A
 secret that cannot be read stops startup with `model.startup.secretunavailable`,
 `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`,
 `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`, and `input`
@@ -3325,7 +3391,7 @@ string `identity:oidc:token-protection:v1`, the current version encrypting; no k
 its own SHALL be created or stored. A code or refresh token encrypted under a version
 that has been retired (OPS-SEC-003) is refused.
 
-*Source: D-026.3, D-105, D-166, D-176, D-180, D-183*
+*Source: D-026.3, D-105, D-166, D-176, D-180, D-183, D-204*
 
 **Acceptance criteria**
 1. No secret value appears in any configuration file in the repository.

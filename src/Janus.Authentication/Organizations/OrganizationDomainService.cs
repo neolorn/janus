@@ -91,27 +91,20 @@ internal sealed class OrganizationDomainService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (await ReadAsync(context, organization, domain, reason, holding: true, cancellationToken)
-                .ConfigureAwait(false)
-            is not { } read)
+        if (await ReadAsync(context, organization, domain, reason, cancellationToken).ConfigureAwait(false)
+            is not { } unlocked)
         {
             return Result.Failure<OrganizationDomain>(Error.From(ErrorCodes.Denied));
         }
 
-        if (read.Refusal is Error refused)
+        if (unlocked.Refusal is Error refused)
         {
             return Result.Failure<OrganizationDomain>(refused);
         }
 
-        if (read.Listed is LockedDomain listed)
+        if (unlocked.Listed is LockedDomain standing)
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure<OrganizationDomain>(notCommittedAgain);
-            }
-
-            return Result.Success(listed.Answered());
+            return Result.Success(standing.Answered());
         }
 
         // REG-DOM-001, X6 of D-166: a listed domain is verified and re-verified by its
@@ -119,20 +112,52 @@ internal sealed class OrganizationDomainService(
         // declares, so without one no domain is listed.
         if (dns is null)
         {
-            await work.RollbackAsync().ConfigureAwait(false);
-
             return Result.Failure<OrganizationDomain>(Unresolvable);
         }
 
         // 10 section 4.1a: adding a domain is a loosening, which also asks the
-        // permission to loosen the deployment (OPS-CFG-002, entry 201).
-        if (await RefusedAsync(context, session, read.Acting, loosening: true, cancellationToken)
+        // permission to loosen the deployment (OPS-CFG-002, entry 201). CONV-DESIGN-002,
+        // D-207: the step-up, which may ask the carrier's signal, is judged before the
+        // unit of work begins, after every refusal it must follow.
+        if (await RefusedAsync(context, session, unlocked.Acting, loosening: true, cancellationToken)
                 .ConfigureAwait(false)
             is Error withheld)
         {
+            return Result.Failure<OrganizationDomain>(withheld);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<OrganizationDomain>(notBegun);
+        }
+
+        Change read = await HeldAsync(context, unlocked, cancellationToken).ConfigureAwait(false);
+
+        if (read.Refusal is Error since)
+        {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure<OrganizationDomain>(withheld);
+            return Result.Failure<OrganizationDomain>(since);
+        }
+
+        // CONV-DESIGN-003: a domain listed meanwhile is added having written nothing, so
+        // the unit of work is rolled back.
+        if (read.Listed is LockedDomain listed)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success(listed.Answered());
+        }
+
+        // The loosening is judged again under the list's lock, as every refusal the
+        // step-up follows is.
+        if (await LooseningRefusedAsync(context, loosening: true, cancellationToken).ConfigureAwait(false)
+            is Error unloosened)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<OrganizationDomain>(unloosened);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -183,8 +208,7 @@ internal sealed class OrganizationDomainService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (await ReadAsync(context, organization, domain, reason, holding: false, cancellationToken)
-                .ConfigureAwait(false)
+        if (await ReadAsync(context, organization, domain, reason, cancellationToken).ConfigureAwait(false)
             is not { } read)
         {
             return Result.Failure<OrganizationDomain>(Error.From(ErrorCodes.Denied));
@@ -281,43 +305,68 @@ internal sealed class OrganizationDomainService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (await ReadAsync(context, organization, domain, reason, holding: true, cancellationToken)
-                .ConfigureAwait(false)
-            is not { } read)
+        if (await ReadAsync(context, organization, domain, reason, cancellationToken).ConfigureAwait(false)
+            is not { } unlocked)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
-        if (read.Refusal is Error refused)
+        if (unlocked.Refusal is Error refused)
         {
             return Result.Failure(refused);
         }
 
+        if (unlocked.Listed is null)
+        {
+            return Result.Success();
+        }
+
+        // CONV-DESIGN-002, D-207: the step-up, which may ask the carrier's signal, is
+        // judged before the unit of work begins, after every refusal it must follow.
+        if (await RefusedAsync(context, session, unlocked.Acting, Loosens(unlocked), cancellationToken)
+                .ConfigureAwait(false)
+            is Error withheld)
+        {
+            return Result.Failure(withheld);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        Change read = await HeldAsync(context, unlocked, cancellationToken).ConfigureAwait(false);
+
+        if (read.Refusal is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // CONV-DESIGN-003: a domain removed meanwhile is removed having written nothing,
+        // so the unit of work is rolled back.
         if (read.Listed is not LockedDomain listed)
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure(notCommittedAgain);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Success();
         }
 
-        List<string> after = [.. (read.Stated.EmailDomains ?? [])
-            .Where(named => !string.Equals(named, read.Domain, StringComparison.Ordinal))];
+        // The loosening is judged again under the list's lock, as every refusal the
+        // step-up follows is.
+        bool loosening = Loosens(read);
 
-        // Removing the last domain turns the lock off for every other address, which
-        // admits more than the lock did.
-        bool loosening = after.Count is 0;
-
-        if (await RefusedAsync(context, session, read.Acting, loosening, cancellationToken).ConfigureAwait(false)
-            is Error withheld)
+        if (await LooseningRefusedAsync(context, loosening, cancellationToken).ConfigureAwait(false)
+            is Error unloosened)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure(withheld);
+            return Result.Failure(unloosened);
         }
+
+        List<string> after = Remaining(read);
 
         DateTimeOffset now = time.GetUtcNow();
 
@@ -404,17 +453,12 @@ internal sealed class OrganizationDomainService(
     }
 
     // The part every change shares: the gate, the reason, the domain, the organization,
-    // its list and the domain's row, in that order. A change that writes the list
-    // begins its unit of work and takes the list's row under a lock before it reads the
-    // list, so what it decides is decided on the list in force (X3, OPS-CFG-002 AC6),
-    // and ends that unit of work on every return from then on, a refusal by rolling it
-    // back (CONV-DESIGN-003).
+    // its list and the domain's row, in that order, read without a lock.
     private async ValueTask<Change?> ReadAsync(
         AccessContext context,
         OrganizationId organization,
         string domain,
         string reason,
-        bool holding,
         CancellationToken cancellationToken)
     {
         // A change is made by a person, whose identity the record carries.
@@ -443,63 +487,76 @@ internal sealed class OrganizationDomainService(
             return Change.Refused(acting, unexplained);
         }
 
-        string stated = reason.Trim();
-
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
             return Change.Refused(acting, Error.From(ErrorCodes.OrganizationNotFound));
         }
 
-        if (holding)
+        return await ListedAsync(
+                new Change(acting, organization, named, reason.Trim(), PolicyOverride.None, null, Refusal: null),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // A change that writes the list reads it again inside its unit of work, with the
+    // list's row under a lock, so what it decides is decided on the list in force (X3,
+    // OPS-CFG-002 AC6). The caller has begun the unit of work and ends it on every
+    // return, a refusal by rolling it back (CONV-DESIGN-003).
+    private async ValueTask<Change> HeldAsync(
+        AccessContext context,
+        Change unlocked,
+        CancellationToken cancellationToken)
+    {
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed
+        // since the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.DomainManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
         {
-            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
-
-            // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with
-            // the acting account's row held before any other lock, so a restriction
-            // committed since the gate step refuses the change before anything is written.
-            if (await scope.RefusedAsync(context, Permissions.DomainManage, cancellationToken).ConfigureAwait(false)
-                is Error since)
-            {
-                await work.RollbackAsync().ConfigureAwait(false);
-
-                return Change.Refused(acting, since);
-            }
-
-            await administration
-                .HoldAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
-                .ConfigureAwait(false);
+            return Change.Refused(unlocked.Acting, since);
         }
 
+        await administration
+            .HoldAsync(Settings.OrganizationPolicy, unlocked.Organization.ToString(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return await ListedAsync(unlocked, cancellationToken).ConfigureAwait(false);
+    }
+
+    // The organization's list as it stands, and the domain's row where it is listed.
+    private async ValueTask<Change> ListedAsync(Change change, CancellationToken cancellationToken)
+    {
         Error? failure = null;
 
         PolicyOverride held = (await configuration
-                .ReadAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+                .ReadAsync(Settings.OrganizationPolicy, change.Organization.ToString(), cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<PolicyOverride>(error, ref failure));
 
         if (failure is not null)
         {
-            if (holding)
-            {
-                await work.RollbackAsync().ConfigureAwait(false);
-            }
-
-            return Change.Refused(acting, failure);
+            return Change.Refused(change.Acting, failure);
         }
 
-        IReadOnlyList<LockedDomain> rows = await domains.OfAsync(organization, cancellationToken)
+        IReadOnlyList<LockedDomain> rows = await domains.OfAsync(change.Organization, cancellationToken)
             .ConfigureAwait(false);
 
-        return new Change(
-            acting,
-            organization,
-            named,
-            stated,
-            held,
-            rows.FirstOrDefault(row => row.IsListed && string.Equals(row.Domain, named, StringComparison.Ordinal)),
-            Refusal: null);
+        return change with
+        {
+            Stated = held,
+            Listed = rows.FirstOrDefault(
+                row => row.IsListed && string.Equals(row.Domain, change.Domain, StringComparison.Ordinal)),
+        };
     }
+
+    // What the list holds once the domain is taken off it.
+    private static List<string> Remaining(Change read) =>
+        [.. (read.Stated.EmailDomains ?? [])
+            .Where(named => !string.Equals(named, read.Domain, StringComparison.Ordinal))];
+
+    // Removing the last domain turns the lock off for every other address, which admits
+    // more than the lock did.
+    private static bool Loosens(Change read) => Remaining(read).Count is 0;
 
     // A loosening also needs the permission to loosen the deployment; every change is
     // the domain:manage step-up action, judged last.
@@ -508,19 +565,21 @@ internal sealed class OrganizationDomainService(
         SessionId session,
         SubjectId acting,
         bool loosening,
-        CancellationToken cancellationToken)
-    {
-        if (loosening
-            && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
-                is Error withheld)
-        {
-            return withheld;
-        }
+        CancellationToken cancellationToken) =>
+        await LooseningRefusedAsync(context, loosening, cancellationToken).ConfigureAwait(false)
+            ?? await stepUp
+                .PassedAsync(acting, session, StepUpAction.DomainManage, cancellationToken)
+                .ConfigureAwait(false);
 
-        return await stepUp
-            .PassedAsync(acting, session, StepUpAction.DomainManage, cancellationToken)
-            .ConfigureAwait(false);
-    }
+    // OPS-CFG-002 and chapter 10 section 2.1: a loosening of runtime configuration also
+    // needs the permission to loosen the deployment.
+    private async ValueTask<Error?> LooseningRefusedAsync(
+        AccessContext context,
+        bool loosening,
+        CancellationToken cancellationToken) =>
+        loosening
+            ? await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
+            : null;
 
     // The list goes through the one operation that writes runtime configuration, which
     // records the change beside the domain's own row (OPS-CFG-005).

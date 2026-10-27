@@ -27,7 +27,7 @@ public sealed class SendingValidationTests
 
     private RestrictionKeySuppliers _suppliers = RestrictionKeySuppliers.None;
 
-    private MessagePlaceholders _places = new([], [], Landing.Origins);
+    private MessagePlaceholders _places = new([], [], [], Landing.Origins);
 
     /// <summary>
     /// A deployment answering in two languages.
@@ -207,13 +207,13 @@ public sealed class SendingValidationTests
         string[] longer = [new('x', 10), new('y', 10)];
 
         _templates.Set(MessageKind.Alert, SendKind.Sms, "en", new MessageTemplate(null, written));
-        _places = new MessagePlaceholders(["a", "b"], [], Landing.Origins);
+        _places = new MessagePlaceholders(["a", "b"], [], [], Landing.Origins);
 
         Assert.Equal("[\"a\",\"b\"]".Length, _places.Widths["outstanding"]);
 
         await PassedAsync();
 
-        _places = new MessagePlaceholders(longer, [], Landing.Origins);
+        _places = new MessagePlaceholders(longer, [], [], Landing.Origins);
 
         Assert.Equal(("[\"" + longer[0] + "\",\"" + longer[1] + "\"]").Length, _places.Widths["outstanding"]);
 

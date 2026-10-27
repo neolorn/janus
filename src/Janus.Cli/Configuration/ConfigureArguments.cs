@@ -24,6 +24,21 @@ internal static class ConfigureArguments
     private const string Reason = "reason";
 
     /// <summary>
+    /// The arguments the command takes (LIB-API-001): each protected key, at least one
+    /// of them, in the written form its key admits, and the reason, without which the
+    /// change is refused (OPS-CFG-004).
+    /// </summary>
+    public static IReadOnlyList<CommandArgument> Declared { get; } =
+    [
+        .. Settings.All
+            .Where(setting => setting.Scope is SettingScope.Protected)
+            .Select(setting => setting.Key.ToString())
+            .Order(StringComparer.Ordinal)
+            .Select(key => new CommandArgument(Prefix + key, Required: false, "setting")),
+        new(Prefix + Reason, Required: true, "text"),
+    ];
+
+    /// <summary>
     /// Reads the arguments that follow the command's name.
     /// </summary>
     /// <param name="arguments">The arguments.</param>

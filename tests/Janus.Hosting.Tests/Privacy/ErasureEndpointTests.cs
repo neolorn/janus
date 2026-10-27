@@ -10,9 +10,9 @@ using Xunit;
 namespace Janus.Hosting.Tests.Privacy;
 
 /// <summary>
-/// The erasure endpoints of chapter 09 section 8a: every outstanding erasure, one
-/// erasure's per-subscriber state, and the manual completion of one whose retries were
-/// spent (IDN-LIFE-003a, IDN-LIFE-003b).
+/// The erasure endpoints of chapter 09 section 8a: every incomplete delivery of
+/// host-side work, one delivery's per-subscriber state, and the manual completion of
+/// one whose retries were spent (IDN-LIFE-003a, IDN-LIFE-003b).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class ErasureEndpointTests : IAsyncDisposable
@@ -57,6 +57,7 @@ public sealed class ErasureEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, listed.Status);
         Assert.Equal(1, listed.Json().GetArrayLength());
         Assert.Equal(delivery.Id.Value, erasure.GetProperty("id").GetGuid());
+        Assert.Equal("erasure", erasure.GetProperty("kind").GetString());
         Assert.Equal(StatusCodes.Status200OK, read.Status);
         Assert.Equal(delivery.Id.Value, one.GetProperty("id").GetGuid());
         Assert.Equal(Ahmed.Value, one.GetProperty("subject").GetGuid());
@@ -66,6 +67,47 @@ public sealed class ErasureEndpointTests : IAsyncDisposable
         Assert.True(one.GetProperty("subscribers")[0].GetProperty("required").GetBoolean());
         Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
         Assert.Equal(ErrorCodes.ErasureNotFound.ToString(), unknown.Text("code"));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a AC9, 09 section 8a (D-203): a consent change's delivery is listed
+    /// beside an erasure's, each with its kind, purpose and change as chapter 10 section
+    /// 5.50 spells them, and a reason only where it is an erasure's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AC9_EveryKindIsListedWithItsKindPurposeAndChangeAsync()
+    {
+        Delivery erasure = await FailedAsync();
+        var consent = Delivery.OfConsent(
+            Ahmed,
+            "marketing",
+            ConsentChange.Superseded,
+            _deployment.Clock.GetUtcNow().AddMinutes(1));
+
+        await _deployment.Outbox.AddAsync(consent, TestContext.Current.CancellationToken);
+
+        Browser browser = await AuthorisedAsync();
+
+        Answer listed = await browser.SendAsync("GET", Path);
+        Answer read = await browser.SendAsync("GET", $"{Path}/{consent.Id.Value}");
+
+        JsonElement first = listed.Json()[0];
+        JsonElement second = listed.Json()[1];
+
+        Assert.Equal(StatusCodes.Status200OK, listed.Status);
+        Assert.Equal(erasure.Id.Value, first.GetProperty("id").GetGuid());
+        Assert.Equal("erasure", first.GetProperty("kind").GetString());
+        Assert.Equal(JsonValueKind.Null, first.GetProperty("purpose").ValueKind);
+        Assert.Equal(JsonValueKind.Null, first.GetProperty("change").ValueKind);
+        Assert.Equal(consent.Id.Value, second.GetProperty("id").GetGuid());
+        Assert.Equal("consent", second.GetProperty("kind").GetString());
+        Assert.Equal("marketing", second.GetProperty("purpose").GetString());
+        Assert.Equal("superseded", second.GetProperty("change").GetString());
+        Assert.Equal(JsonValueKind.Null, second.GetProperty("reason").ValueKind);
+        Assert.Equal("awaiting-subscribers", second.GetProperty("status").GetString());
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal("consent", read.Json().GetProperty("kind").GetString());
     }
 
     /// <summary>

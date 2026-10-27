@@ -11,9 +11,9 @@ namespace Janus.Storage.Privacy.Outbox;
 /// How a delivery is stored.
 /// </summary>
 /// <remarks>
-/// Implements IDN-LIFE-003a, CONV-ENUM-001 and CONV-DESIGN-003. The kind and the
-/// status are constrained columns because the code branches on each value, and one
-/// the code does not branch on is refused by the database.
+/// Implements IDN-LIFE-003a, PRIV-RIGHT-001a, CONV-ENUM-001 and CONV-DESIGN-003. The
+/// kind, the status and the change are constrained columns because the code branches on
+/// each value, and one the code does not branch on is refused by the database.
 /// </remarks>
 internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<DeliveryRecord>
 {
@@ -33,6 +33,19 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<DeliveryR
             table.HasCheckConstraint(
                 "ck_outbox_reason",
                 Vocabulary.Admits<ErasureReason>("reason"));
+            table.HasCheckConstraint(
+                "ck_outbox_change",
+                Vocabulary.Admits<DeliveryChange>("change"));
+
+            // PRIV-RIGHT-001a, D-203: a consent or an objection change names its purpose and
+            // its change, and no other fact names either.
+            table.HasCheckConstraint(
+                "ck_outbox_purpose",
+                "(kind IN ('consent-changed', 'objection-changed')"
+                    + " AND purpose IS NOT NULL AND length(trim(purpose)) > 0 AND change IS NOT NULL)"
+                    + " OR (kind NOT IN ('consent-changed', 'objection-changed')"
+                    + " AND purpose IS NULL AND change IS NULL)");
+
             table.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
 
             table.HasCheckConstraint(
@@ -61,6 +74,12 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<DeliveryR
         builder.Property(delivery => delivery.Reason)
             .HasColumnName("reason")
             .HasConversion(new VocabularyConverter<ErasureReason>());
+
+        builder.Property(delivery => delivery.Purpose).HasColumnName("purpose");
+
+        builder.Property(delivery => delivery.Change)
+            .HasColumnName("change")
+            .HasConversion(new VocabularyConverter<DeliveryChange>());
 
         builder.Property(delivery => delivery.Status)
             .HasColumnName("status")

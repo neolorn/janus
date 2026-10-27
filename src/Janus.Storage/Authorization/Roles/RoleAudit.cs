@@ -16,10 +16,11 @@ namespace Janus.Storage.Authorization.Roles;
 /// <param name="records">Where the trail is appended to.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements AUTHZ-GRANT-004, OPS-CFG-007, IDN-AUD-001 and IDN-PRIN-001. The record
-/// carries the role, what it permitted before, what it permits after and why; a role is
-/// the deployment's, so no organization is recorded. A role a system principal created
-/// is recorded under the principal, and the reason it states is the record's reason.
+/// Implements AUTHZ-GRANT-004, AUTHZ-GRANT-005, OPS-CFG-007, IDN-AUD-001 and
+/// IDN-PRIN-001. The record carries the role, what it permitted and handed out before,
+/// what it permits and hands out after, and why; a role is the deployment's, so no
+/// organization is recorded. A role a system principal created is recorded under the
+/// principal, and the reason it states is the record's reason.
 /// </remarks>
 internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleAudit
 {
@@ -29,25 +30,28 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
 
     /// <inheritdoc/>
     public async ValueTask DefinedAsync(
-        RoleName role,
-        IReadOnlyList<Permission>? before,
-        IReadOnlyList<Permission> after,
+        DefinedRole? before,
+        DefinedRole after,
         string reason,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,
-        CancellationToken cancellationToken) =>
-        await AppendAsync(Defined, role, before, after, reason, actor, breakGlassReason, at, cancellationToken)
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(after);
+
+        await AppendAsync(Defined, after.Name, before, after, reason, actor, breakGlassReason, at, cancellationToken)
             .ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public async ValueTask DefinedAsync(
-        RoleName role,
-        IReadOnlyList<Permission> after,
+        DefinedRole after,
         SystemPrincipal principal,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(after);
         ArgumentNullException.ThrowIfNull(principal);
 
         await records
@@ -60,30 +64,41 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
                     principal,
                     subject: null,
                     organization: null,
-                    Details(role, before: null, after, principal.Reason)),
+                    Details(after.Name, before: null, after, principal.Reason)),
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
     public async ValueTask RemovedAsync(
-        RoleName role,
-        IReadOnlyList<Permission> before,
+        DefinedRole before,
         string reason,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,
-        CancellationToken cancellationToken) =>
-        await AppendAsync(Removed, role, before, after: null, reason, actor, breakGlassReason, at, cancellationToken)
-            .ConfigureAwait(false);
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(before);
 
-    private static JsonElement Written(IReadOnlyList<Permission>? permissions) =>
-        JsonSerializer.SerializeToElement(permissions?.Select(permission => permission.ToString()).ToArray());
+        await AppendAsync(Removed, before.Name, before, after: null, reason, actor, breakGlassReason, at, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // 10 section 5.24 (D-212): each side is the role's permissions and the roles it
+    // hands out, written in the order the role's reading answers them.
+    private static JsonElement Written(DefinedRole? role) =>
+        role is null
+            ? JsonSerializer.SerializeToElement<object?>(null)
+            : JsonSerializer.SerializeToElement(new Dictionary<string, string[]>(capacity: 2, StringComparer.Ordinal)
+            {
+                ["permissions"] = [.. role.Permissions.Select(permission => permission.ToString())],
+                ["handsOut"] = [.. role.HandsOut.Select(handed => handed.ToString())],
+            });
 
     private static Dictionary<string, JsonElement> Details(
         RoleName role,
-        IReadOnlyList<Permission>? before,
-        IReadOnlyList<Permission>? after,
+        DefinedRole? before,
+        DefinedRole? after,
         string reason) =>
         new(capacity: 4, StringComparer.Ordinal)
         {
@@ -96,8 +111,8 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
     private async ValueTask AppendAsync(
         AuditAction action,
         RoleName role,
-        IReadOnlyList<Permission>? before,
-        IReadOnlyList<Permission>? after,
+        DefinedRole? before,
+        DefinedRole? after,
         string reason,
         SubjectId actor,
         string? breakGlassReason,

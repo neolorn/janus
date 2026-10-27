@@ -39,6 +39,34 @@ internal static class BootstrapArguments
     // The form the age screen takes the date in (09, PUT /register/age).
     private const string DateForm = "yyyy-MM-dd";
 
+    // The keys named only where their condition holds (Settings.ThrowIfIncomplete):
+    // bootstrap leaves the blocklist at its defaults, under which the two blocklist
+    // keys are never owed, and the basis is owed only where the deployment hosts outside.
+    private static readonly ConfigurationKey[] Conditional =
+    [
+        Settings.HostingCrossBorderBasis.Key,
+        Settings.PasswordBlocklistSelfHostedAddress.Key,
+        Settings.ServiceName.Key,
+    ];
+
+    /// <summary>
+    /// The arguments the command takes (LIB-API-001): the organization and the first
+    /// administrator, then every key the deployment names, each under its own name and
+    /// in the written form its key admits.
+    /// </summary>
+    public static IReadOnlyList<CommandArgument> Declared { get; } =
+    [
+        new(Prefix + Organization, Required: true, "text"),
+        new(Prefix + Email, Required: true, "email"),
+        new(Prefix + Phone, Required: true, "phone"),
+        new(Prefix + DateOfBirth, Required: true, "date " + DateForm),
+        new(Prefix + Mailbox, Required: false, "email"),
+        .. Settings.Required
+            .Select(setting => setting.Key)
+            .OrderBy(key => key.ToString(), StringComparer.Ordinal)
+            .Select(key => new CommandArgument(Prefix + key, !Conditional.Contains(key), "setting")),
+    ];
+
     /// <summary>
     /// Reads the arguments that follow the command's name.
     /// </summary>

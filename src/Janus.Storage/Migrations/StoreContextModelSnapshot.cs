@@ -19,7 +19,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
         modelBuilder
             .HasDefaultSchema("identity")
             .HasAnnotation("Npgsql:CollationDefinition:identity.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
-            .HasAnnotation("ProductVersion", "10.0.12")
+            .HasAnnotation("ProductVersion", "10.0.14")
             .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
         NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -2933,10 +2933,29 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("name");
 
+                b.PrimitiveCollection<string[]>("HandsOut")
+                    .IsRequired()
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("text[]")
+                    .HasColumnName("hands_out")
+                    .HasDefaultValueSql("'{}'");
+
                 b.HasKey("Name")
                     .HasName("pk_roles");
 
                 b.ToTable("roles", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Roles.SeededRoleRecord", b =>
+            {
+                b.Property<string>("Name")
+                    .HasColumnType("text")
+                    .HasColumnName("name");
+
+                b.HasKey("Name")
+                    .HasName("pk_seeded_roles");
+
+                b.ToTable("seeded_roles", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Accounts.AccountRecord", b =>
@@ -3390,9 +3409,21 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
 
+                b.Property<string>("EndReason")
+                    .HasColumnType("text")
+                    .HasColumnName("end_reason");
+
+                b.Property<Guid?>("EndSetBy")
+                    .HasColumnType("uuid")
+                    .HasColumnName("end_set_by");
+
                 b.Property<DateTimeOffset?>("EndedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("ended_at");
+
+                b.Property<DateTimeOffset?>("EndsAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("ends_at");
 
                 b.Property<Guid>("Organization")
                     .HasColumnType("uuid")
@@ -3419,6 +3450,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_acknowledged", "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
+
+                        t.HasCheckConstraint("ck_memberships_end_set", "(ends_at IS NULL AND end_set_by IS NULL AND end_reason IS NULL)\nOR (ends_at IS NOT NULL AND end_set_by IS NOT NULL\n    AND length(btrim(end_reason)) BETWEEN 1 AND 1024)");
+
+                        t.HasCheckConstraint("ck_memberships_end_set_by_not_max_uuid", "end_set_by <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
 
@@ -3723,6 +3758,45 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentCookieRecord", b =>
+            {
+                b.Property<string>("Name")
+                    .HasColumnType("text")
+                    .HasColumnName("document");
+
+                b.Property<string>("Version")
+                    .HasColumnType("text")
+                    .HasColumnName("version");
+
+                b.Property<string>("Cookie")
+                    .HasColumnType("text")
+                    .HasColumnName("cookie");
+
+                b.Property<TimeSpan?>("Lifetime")
+                    .HasColumnType("interval")
+                    .HasColumnName("lifetime");
+
+                b.Property<string>("Purpose")
+                    .HasColumnType("text")
+                    .HasColumnName("purpose");
+
+                b.Property<bool>("ThirdParty")
+                    .HasColumnType("boolean")
+                    .HasColumnName("third_party");
+
+                b.HasKey("Name", "Version", "Cookie")
+                    .HasName("pk_legal_document_cookies");
+
+                b.ToTable("legal_document_cookies", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_legal_document_cookies_cookie", "length(trim(cookie)) > 0");
+
+                        t.HasCheckConstraint("ck_legal_document_cookies_lifetime", "lifetime IS NULL OR lifetime > interval '0'");
+
+                        t.HasCheckConstraint("ck_legal_document_cookies_purpose", "purpose IS NULL OR length(trim(purpose)) > 0");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentTranslationRecord", b =>
             {
                 b.Property<string>("Name")
@@ -3892,6 +3966,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("integer")
                     .HasColumnName("attempts");
 
+                b.Property<string>("Change")
+                    .HasColumnType("text")
+                    .HasColumnName("change");
+
                 b.Property<DateTimeOffset?>("ClaimedUntil")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("claimed_until");
@@ -3904,6 +3982,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("NextAttemptAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("next_attempt_at");
+
+                b.Property<string>("Purpose")
+                    .HasColumnType("text")
+                    .HasColumnName("purpose");
 
                 b.Property<DateTimeOffset>("RaisedAt")
                     .HasColumnType("timestamp with time zone")
@@ -3941,7 +4023,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'export-requested', 'restriction-changed', 'takedown-executed')");
+                        t.HasCheckConstraint("ck_outbox_change", "change IN ('granted', 'lifted', 'recorded', 'set', 'superseded', 'withdrawn')");
+
+                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('consent-changed', 'erasure-requested', 'objection-changed', 'restriction-changed', 'takedown-executed')");
+
+                        t.HasCheckConstraint("ck_outbox_purpose", "(kind IN ('consent-changed', 'objection-changed') AND purpose IS NOT NULL AND length(trim(purpose)) > 0 AND change IS NOT NULL) OR (kind NOT IN ('consent-changed', 'objection-changed') AND purpose IS NULL AND change IS NULL)");
 
                         t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
 
@@ -4665,6 +4751,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasConstraintName("fk_objections_subject");
             });
 
+        modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentCookieRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Privacy.Documents.DocumentVersionRecord", null)
+                    .WithMany("Cookies")
+                    .HasForeignKey("Name", "Version")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_legal_document_cookies_version");
+            });
+
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentTranslationRecord", b =>
             {
                 b.HasOne("Janus.Storage.Privacy.Documents.DocumentVersionRecord", null)
@@ -4727,6 +4823,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentVersionRecord", b =>
             {
+                b.Navigation("Cookies");
+
                 b.Navigation("Translations");
             });
 

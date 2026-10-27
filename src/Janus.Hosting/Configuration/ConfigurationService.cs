@@ -12,6 +12,7 @@ using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
+using Janus.Hosting.Privacy;
 using Janus.Privacy;
 
 namespace Janus.Hosting.Configuration;
@@ -29,10 +30,13 @@ namespace Janus.Hosting.Configuration;
 /// <param name="codec">
 /// What the deployment reads uploaded images with, or nothing where it declared none.
 /// </param>
+/// <param name="notice">
+/// Whether the cookies the deployment sets are those the current privacy notice lists.
+/// </param>
 /// <param name="work">The one transaction a change runs in.</param>
 /// <remarks>
 /// Implements LIB-API-005, OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, OPS-CFG-005,
-/// OPS-ALERT-004a, PRIV-RET-001 and chapter 09 section 8. The keys served are the
+/// OPS-ALERT-004a, PRIV-RET-001, PRIV-CONS-006a and chapter 09 section 8. The keys served are the
 /// deployment's own and the retention of every category the host declared; the named
 /// restriction set has its own operations and its own permission, and a key that
 /// exists once per organization is changed where that organization is.
@@ -46,6 +50,7 @@ internal sealed class ConfigurationService(
     AuthorizationDeclaration declaration,
     CategoryRetention retention,
     ImageCodec? codec,
+    NoticeCookieCheck notice,
     IUnitOfWork work) : IConfigurationAdministration
 {
     private static readonly FrozenDictionary<ConfigurationKey, Setting> Served = Settings.All
@@ -184,6 +189,18 @@ internal sealed class ConfigurationService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure(unchanged);
+        }
+
+        // PRIV-CONS-006a AC4 (D-203): a key that gives a library cookie's lifetime is
+        // compared with the current notice inside the change, so the degradation is
+        // raised with the change and not without it.
+        if (DeploymentCookies.Lifetimes.Contains(key)
+            && (await notice.ComparedAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error uncompared)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(uncompared);
         }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))

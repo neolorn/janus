@@ -21,6 +21,9 @@ internal static class PersonalFieldCipher
     private const int SubjectLength = 16;
     private const int LengthPrefix = 2;
 
+    // D-203: the mark that stands first among a host field's named parts.
+    private const string HostMark = "host";
+
     /// <summary>
     /// Draws a data key for a subject who has none.
     /// </summary>
@@ -199,6 +202,63 @@ internal static class PersonalFieldCipher
         ReadOnlySpan<byte> dataKey,
         in PersonalFieldLocation location,
         ReadOnlySpan<byte> plaintext,
+        RandomNumberGenerator randomness) =>
+        Sealed(dataKey, AssociatedData(location.Subject, location.Table, location.Column), plaintext, randomness);
+
+    /// <summary>
+    /// Encrypts the value of one of a host's own declared fields under its subject's
+    /// data key.
+    /// </summary>
+    /// <param name="dataKey">The subject's data key.</param>
+    /// <param name="location">The subject and the declared names the value is bound to.</param>
+    /// <param name="plaintext">The value.</param>
+    /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
+    /// <returns>The marker, the initialisation vector, the ciphertext and the tag.</returns>
+    public static byte[] Encrypt(
+        ReadOnlySpan<byte> dataKey,
+        in HostFieldLocation location,
+        ReadOnlySpan<byte> plaintext,
+        RandomNumberGenerator randomness) =>
+        Sealed(dataKey, AssociatedData(location), plaintext, randomness);
+
+    /// <summary>
+    /// Decrypts one personal value.
+    /// </summary>
+    /// <param name="dataKey">The subject's data key.</param>
+    /// <param name="location">Where the value is stored.</param>
+    /// <param name="stored">The stored value.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="CryptographicException">
+    /// The value is shorter than the format allows, names a scheme this version does
+    /// not read, or fails its authentication tag because it was altered or moved.
+    /// </exception>
+    public static byte[] Decrypt(
+        ReadOnlySpan<byte> dataKey,
+        in PersonalFieldLocation location,
+        ReadOnlySpan<byte> stored) =>
+        Opened(dataKey, AssociatedData(location.Subject, location.Table, location.Column), stored);
+
+    /// <summary>
+    /// Decrypts the value of one of a host's own declared fields.
+    /// </summary>
+    /// <param name="dataKey">The subject's data key.</param>
+    /// <param name="location">The subject and the declared names the value is bound to.</param>
+    /// <param name="stored">The stored value.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="CryptographicException">
+    /// The value is shorter than the format allows, names a scheme this version does
+    /// not read, or fails its authentication tag because it was altered or moved.
+    /// </exception>
+    public static byte[] Decrypt(
+        ReadOnlySpan<byte> dataKey,
+        in HostFieldLocation location,
+        ReadOnlySpan<byte> stored) =>
+        Opened(dataKey, AssociatedData(location), stored);
+
+    private static byte[] Sealed(
+        ReadOnlySpan<byte> dataKey,
+        ReadOnlySpan<byte> associated,
+        ReadOnlySpan<byte> plaintext,
         RandomNumberGenerator randomness)
     {
         ArgumentNullException.ThrowIfNull(randomness);
@@ -216,25 +276,14 @@ internal static class PersonalFieldCipher
             plaintext,
             stored.AsSpan(MarkerLength + PersonalDataFormat.NonceLength, plaintext.Length),
             stored.AsSpan(stored.Length - PersonalDataFormat.TagLength),
-            AssociatedData(location));
+            associated);
 
         return stored;
     }
 
-    /// <summary>
-    /// Decrypts one personal value.
-    /// </summary>
-    /// <param name="dataKey">The subject's data key.</param>
-    /// <param name="location">Where the value is stored.</param>
-    /// <param name="stored">The stored value.</param>
-    /// <returns>The value.</returns>
-    /// <exception cref="CryptographicException">
-    /// The value is shorter than the format allows, names a scheme this version does
-    /// not read, or fails its authentication tag because it was altered or moved.
-    /// </exception>
-    public static byte[] Decrypt(
+    private static byte[] Opened(
         ReadOnlySpan<byte> dataKey,
-        in PersonalFieldLocation location,
+        ReadOnlySpan<byte> associated,
         ReadOnlySpan<byte> stored)
     {
         int overhead = MarkerLength + PersonalDataFormat.NonceLength + PersonalDataFormat.TagLength;
@@ -257,32 +306,43 @@ internal static class PersonalFieldCipher
             stored.Slice(MarkerLength + PersonalDataFormat.NonceLength, plaintext.Length),
             stored[^PersonalDataFormat.TagLength..],
             plaintext,
-            AssociatedData(location));
+            associated);
 
         return plaintext;
     }
 
+    // D-203: a host's field carries the fixed mark and its two declared names where a
+    // library value carries its table and its column, so a host's value has three named
+    // parts and a library's two, and neither ever authenticates as the other.
+    private static byte[] AssociatedData(in HostFieldLocation location) =>
+        AssociatedData(location.Subject, HostMark, location.Type.ToString(), location.Field);
+
     // The marker is authenticated along with the location: unauthenticated it would be
     // a downgrade vector, an adversary editing it to force a weaker scheme. Each part
     // carries its length, so that no two locations produce the same bytes.
-    private static byte[] AssociatedData(in PersonalFieldLocation location)
+    private static byte[] AssociatedData(SubjectId subject, params ReadOnlySpan<string> parts)
     {
-        int table = Encoding.UTF8.GetByteCount(location.Table);
-        int column = Encoding.UTF8.GetByteCount(location.Column);
+        int length = MarkerLength + SubjectLength;
 
-        byte[] associated = new byte[
-            MarkerLength + SubjectLength + LengthPrefix + table + LengthPrefix + column];
+        foreach (string part in parts)
+        {
+            length += LengthPrefix + Encoding.UTF8.GetByteCount(part);
+        }
+
+        byte[] associated = new byte[length];
 
         associated[0] = PersonalDataFormat.Marker;
-        location.Subject.Value.TryWriteBytes(associated.AsSpan(MarkerLength), bigEndian: true, out _);
+        subject.Value.TryWriteBytes(associated.AsSpan(MarkerLength), bigEndian: true, out _);
 
         int at = MarkerLength + SubjectLength;
-        BinaryPrimitives.WriteUInt16BigEndian(associated.AsSpan(at), checked((ushort)table));
-        Encoding.UTF8.GetBytes(location.Table, associated.AsSpan(at + LengthPrefix));
 
-        at += LengthPrefix + table;
-        BinaryPrimitives.WriteUInt16BigEndian(associated.AsSpan(at), checked((ushort)column));
-        Encoding.UTF8.GetBytes(location.Column, associated.AsSpan(at + LengthPrefix));
+        foreach (string part in parts)
+        {
+            int written = Encoding.UTF8.GetBytes(part, associated.AsSpan(at + LengthPrefix));
+
+            BinaryPrimitives.WriteUInt16BigEndian(associated.AsSpan(at), checked((ushort)written));
+            at += LengthPrefix + written;
+        }
 
         return associated;
     }

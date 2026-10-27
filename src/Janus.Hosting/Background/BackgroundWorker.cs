@@ -40,6 +40,10 @@ internal sealed class BackgroundWorker(
 {
     private const string Fault = "fault";
 
+    // INF-BG-001 (D-209): the longest single delay the runtime's timer accepts, which is
+    // the timer's own limit and no deployment's choice.
+    private static readonly TimeSpan Longest = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
     private readonly Lock _gate = new();
 
     private readonly Dictionary<string, DateTimeOffset> _due = new(StringComparer.Ordinal);
@@ -139,10 +143,14 @@ internal sealed class BackgroundWorker(
                 }
 
                 // The next round comes when the next job is due or a run ends, whichever
-                // is first, since a run that ends is what makes its job's turn known.
+                // is first, since a run that ends is what makes its job's turn known. A job
+                // due further ahead than the timer reaches is looked at again after the
+                // longest delay it takes, and run when it is due.
                 using var round = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
 
-                _ = await Task.WhenAny(Task.Delay(wait, time, round.Token), ended).ConfigureAwait(false);
+                TimeSpan delay = wait > Longest ? Longest : wait;
+
+                _ = await Task.WhenAny(Task.Delay(delay, time, round.Token), ended).ConfigureAwait(false);
 
                 await round.CancelAsync().ConfigureAwait(false);
             }

@@ -14,9 +14,10 @@ using Xunit;
 namespace Janus.Privacy.Tests.Erasures;
 
 /// <summary>
-/// The erasures an operator works: every one still outstanding, how far each
-/// subscriber has got with one, and the manual completion of one whose retries were
-/// spent (IDN-LIFE-003a, IDN-LIFE-003b, chapter 09 section 8a).
+/// The deliveries of host-side work an operator works, of every kind: every one still
+/// outstanding, how far each subscriber or purpose handler has got with one, and the
+/// manual completion of one whose retries were spent (IDN-LIFE-003a, IDN-LIFE-003b,
+/// chapter 09 section 8a).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class ErasureServiceTests : IAsyncDisposable
@@ -48,6 +49,9 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     private readonly ErasureStoreInMemory _erasures = new();
     private readonly SubscriberInMemory _records = new("records", required: true);
     private readonly SubscriberInMemory _newsletter = new("newsletter", required: false);
+    private readonly PurposeHandlerInMemory _mail = new("mail", "marketing", "newsletter");
+    private readonly PurposeHandlerInMemory _shop = new("shop", "marketing", "security");
+    private readonly List<IPurposeHandler> _handlers = [];
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
@@ -69,6 +73,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
             _outbox,
             _erasures,
             [_records, _newsletter],
+            _handlers,
             _ledger,
             _audit,
             _work,
@@ -78,28 +83,68 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     public async ValueTask DisposeAsync() => await _work.DisposeAsync();
 
     /// <summary>
-    /// IDN-LIFE-003b AC2: every erasure whose host-side work is outstanding is listed,
-    /// awaiting subscribers or failed, oldest first, and one every required subscriber
-    /// confirmed is not; a takedown's delivery is not an erasure.
+    /// IDN-LIFE-003a AC9, IDN-LIFE-003b AC2 (D-203): every delivery of host-side work
+    /// that is not complete is listed in one read, of every kind, oldest first, each
+    /// with its kind, the purpose and change a consent or an objection delivery carries,
+    /// the change a restriction's announces, an erasure's reason alone, and those it is
+    /// owed to: the subscribers, or every purpose handler naming its purpose, each of
+    /// them required.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003b_AC2_EveryIncompleteErasureIsListedAsync()
+    public async Task IDN_LIFE_003a_AC9_EveryIncompleteDeliveryOfEveryKindIsListedAsync()
     {
-        Delivery failed = await ErasedAsync(Sara, Noon.AddHours(-2), ErasureStatus.Failed);
-        Delivery awaiting = await ErasedAsync(Ahmed, Noon.AddHours(-1), ErasureStatus.AwaitingSubscribers);
-        _ = await ErasedAsync(Omar, Noon.AddHours(-3), ErasureStatus.Complete);
-        await _outbox.AddAsync(
-            Delivery.Of(Mona, SubjectEventKind.TakedownExecuted, Noon),
-            TestContext.Current.CancellationToken);
+        _handlers.AddRange([_mail, _shop]);
+
+        Delivery erasure = await ErasedAsync(Sara, Noon.AddHours(-5), ErasureStatus.Failed);
+        _ = await ErasedAsync(Omar, Noon.AddHours(-6), ErasureStatus.Complete);
+        Delivery takedown = await FailedAsync(
+            Delivery.Of(Ahmed, SubjectEventKind.TakedownExecuted, Noon.AddHours(-4)));
+        Delivery restriction = await FailedAsync(
+            Delivery.Of(Ahmed, SubjectEventKind.RestrictionChanged, Noon.AddHours(-3), restricted: false));
+        Delivery consent = await FailedAsync(
+            Delivery.OfConsent(Ahmed, "marketing", ConsentChange.Withdrawn, Noon.AddHours(-2)));
+        var objection = Delivery.OfObjection(Ahmed, "security", objecting: true, Noon.AddHours(-1));
+
+        await _outbox.AddAsync(objection, TestContext.Current.CancellationToken);
 
         IReadOnlyList<ErasureProgress> listed = Held(await Erasures.ListAsync(
             AccessContext.Of(Mona),
             TestContext.Current.CancellationToken));
 
-        Assert.Equal([failed.Id.Value, awaiting.Id.Value], listed.Select(erasure => erasure.Id.Value));
-        Assert.Equal([Sara, Ahmed], listed.Select(erasure => erasure.Subject));
-        Assert.All(listed, erasure => Assert.Equal(["records", "newsletter"], erasure.Subscribers.Select(subscriber => subscriber.Name)));
+        Assert.Equal(
+            [erasure.Id.Value, takedown.Id.Value, restriction.Id.Value, consent.Id.Value, objection.Id.Value],
+            listed.Select(one => one.Id.Value));
+        Assert.Equal(
+            [
+                (DeliveryKind.Erasure, null, null, ErasureReason.MinorTakedown),
+                (DeliveryKind.Takedown, null, null, null),
+                (DeliveryKind.Restriction, null, DeliveryChange.Lifted, null),
+                (DeliveryKind.Consent, "marketing", DeliveryChange.Withdrawn, null),
+                (DeliveryKind.Objection, "security", (DeliveryChange?)DeliveryChange.Recorded, (ErasureReason?)null),
+            ],
+            listed.Select(one => (one.Kind, one.Purpose, one.Change, one.Reason)));
+        Assert.Equal(
+            [
+                ErasureStatus.Failed,
+                ErasureStatus.Failed,
+                ErasureStatus.Failed,
+                ErasureStatus.Failed,
+                ErasureStatus.AwaitingSubscribers,
+            ],
+            listed.Select(one => one.Status));
+        Assert.Equal(
+            [
+                ["records", "newsletter"],
+                ["records", "newsletter"],
+                ["records", "newsletter"],
+                ["mail", "shop"],
+                ["shop"],
+            ],
+            listed.Select(one => one.Subscribers.Select(owed => owed.Name)));
+        Assert.All(
+            listed.Skip(3).SelectMany(one => one.Subscribers),
+            owed => Assert.True(owed.Required));
     }
 
     /// <summary>
@@ -131,23 +176,34 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-003b: an identifier that names no erasure, including the identifier of
-    /// a takedown's delivery, reads as no erasure.
+    /// IDN-LIFE-003a AC9, chapter 09 section 8a (D-203): a delivery of any kind is read
+    /// by the identifier of the outbox record it travels on, a takedown's by its
+    /// <c>takedownId</c> among them, and an identifier naming none is not found.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003b_AnIdentifierThatNamesNoErasureIsNotFoundAsync()
+    public async Task IDN_LIFE_003a_AC9_ADeliveryOfAnyKindIsReadByItsIdentifierAsync()
     {
+        _handlers.Add(_shop);
+
         var takedown = Delivery.Of(Ahmed, SubjectEventKind.TakedownExecuted, Noon);
+        var objection = Delivery.OfObjection(Ahmed, "security", objecting: false, Noon);
 
         await _outbox.AddAsync(takedown, TestContext.Current.CancellationToken);
+        await _outbox.AddAsync(objection, TestContext.Current.CancellationToken);
+        _outbox.Confirms(objection, "shop", Noon.AddMinutes(5));
 
+        ErasureProgress takenDown = Held(await ReadAsync(Mona, new ErasureId(takedown.Id.Value)));
+        ErasureProgress objected = Held(await ReadAsync(Mona, new ErasureId(objection.Id.Value)));
+
+        Assert.Equal((DeliveryKind.Takedown, Ahmed), (takenDown.Kind, takenDown.Subject));
+        Assert.Equal(
+            (DeliveryKind.Objection, "security", DeliveryChange.Withdrawn),
+            (objected.Kind, objected.Purpose, objected.Change));
+        Assert.Equal([new SubscriberConfirmation("shop", Required: true, Noon.AddMinutes(5))], objected.Subscribers);
         Assert.Equal(
             ErrorCodes.ErasureNotFound,
             Refused(await ReadAsync(Mona, new ErasureId(Guid.NewGuid()))).Code);
-        Assert.Equal(
-            ErrorCodes.ErasureNotFound,
-            Refused(await ReadAsync(Mona, new ErasureId(takedown.Id.Value))).Code);
     }
 
     /// <summary>
@@ -173,7 +229,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
         Assert.Equal(Ahmed, entry.Subject);
         Assert.Equal(Noon, entry.At);
         Assert.Equal(erasure.ToString(), entry.Details["erasure"].GetString());
-        Assert.Equal("erasure-requested", entry.Details["kind"].GetString());
+        Assert.Equal("erasure", entry.Details["kind"].GetString());
         Assert.Equal(
             ["records"],
             entry.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
@@ -258,7 +314,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
         Assert.Equal(AuditActions.ErasureCompleted, entry.Action);
         Assert.Equal(Ahmed, entry.Subject);
         Assert.Equal(new ErasureId(takedown.Id.Value).ToString(), entry.Details["erasure"].GetString());
-        Assert.Equal("takedown-executed", entry.Details["kind"].GetString());
+        Assert.Equal("takedown", entry.Details["kind"].GetString());
         Assert.Equal(
             ["records"],
             entry.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
@@ -287,28 +343,80 @@ public sealed class ErasureServiceTests : IAsyncDisposable
         Assert.Equal(ErasureStatus.Failed, erasure.Status);
         Assert.Equal(ErasureStatus.Failed, Assert.Single(_erasures.Erasures).Status);
         Assert.Empty(_ledger.Lines);
-        Assert.Equal("restriction-changed", entry.Details["kind"].GetString());
+        Assert.Equal("restriction", entry.Details["kind"].GetString());
         Assert.Equal(Ahmed, entry.Subject);
     }
 
     /// <summary>
-    /// IDN-LIFE-003a: an export's delivery is none of the three kinds the manual path
-    /// closes, so it is not found there, and an identifier naming nothing is not found
-    /// either; the step-up is not asked for either (X8).
+    /// IDN-LIFE-003a AC9 (D-203): a consent or an objection delivery whose retries were
+    /// spent is closed by hand like any other, recorded with its kind as chapter 10
+    /// section 5.50 spells it and the purpose handlers that had not confirmed; no
+    /// erasures row or ledger line is touched.
+    /// </summary>
+    /// <param name="objecting">Whether the delivery is an objection change rather than a consent change.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IDN_LIFE_003a_AC9_AFailedConsentOrObjectionDeliveryIsCompletedByHandAsync(bool objecting)
+    {
+        _ledger = new ErasureLedgerInMemory();
+        _handlers.AddRange([_mail, _shop]);
+
+        Delivery delivery = await FailedAsync(objecting
+            ? Delivery.OfObjection(Ahmed, "marketing", objecting: true, Noon.AddHours(-2))
+            : Delivery.OfConsent(Ahmed, "marketing", ConsentChange.Withdrawn, Noon.AddHours(-2)));
+
+        _outbox.Confirms(delivery, "mail", Noon.AddHours(-1));
+
+        Held(await CompletedAsync(Mona, new ErasureId(delivery.Id.Value)));
+
+        PrivacyAuditEntry entry = Assert.Single(_audit.Entries);
+
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Empty(_erasures.Erasures);
+        Assert.Empty(_ledger.Lines);
+        Assert.Equal(AuditActions.ErasureCompleted, entry.Action);
+        Assert.Equal(Ahmed, entry.Subject);
+        Assert.Equal(new ErasureId(delivery.Id.Value).ToString(), entry.Details["erasure"].GetString());
+        Assert.Equal(objecting ? "objection" : "consent", entry.Details["kind"].GetString());
+        Assert.Equal(
+            ["shop"],
+            entry.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
+        Assert.Contains((Mona, Browser, StepUpAction.ErasureComplete), _stepUp.Asked);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a AC9, chapter 09 section 8a: a consent delivery still within its
+    /// retries is not completed by hand, and nothing is recorded.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003a_ADeliveryOfAnotherKindIsNotFoundAsync()
+    public async Task IDN_LIFE_003a_AC9_AConsentDeliveryThatNeverFailedIsNotCompletedAsync()
     {
-        Delivery export = await FailedAsync(SubjectEventKind.ExportRequested);
+        _handlers.Add(_mail);
+
+        var delivery = Delivery.OfConsent(Ahmed, "marketing", ConsentChange.Granted, Noon);
+
+        await _outbox.AddAsync(delivery, TestContext.Current.CancellationToken);
 
         Assert.Equal(
-            ErrorCodes.ErasureNotFound,
-            Refused(await CompletedAsync(Mona, new ErasureId(export.Id.Value))).Code);
+            ErrorCodes.ErasureNotFailed,
+            Refused(await CompletedAsync(Mona, new ErasureId(delivery.Id.Value))).Code);
+        Assert.Empty(_audit.Entries);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a: an identifier naming no delivery is not found, and the step-up is
+    /// not asked for (X8).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AnIdentifierNamingNoDeliveryIsNotFoundAsync()
+    {
         Assert.Equal(
             ErrorCodes.ErasureNotFound,
             Refused(await CompletedAsync(Mona, new ErasureId(Guid.NewGuid()))).Code);
-        Assert.Equal(ErasureStatus.Failed, export.Status);
         Assert.Empty(_audit.Entries);
         Assert.Empty(_stepUp.Asked);
     }
@@ -539,11 +647,13 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     }
 
     // A delivery of another kind whose retries were spent.
-    private async ValueTask<Delivery> FailedAsync(SubjectEventKind kind)
-    {
-        var delivery = Delivery.Of(Ahmed, kind, Noon.AddHours(-2));
+    private ValueTask<Delivery> FailedAsync(SubjectEventKind kind) =>
+        FailedAsync(Delivery.Of(Ahmed, kind, Noon.AddHours(-2)));
 
-        delivery.Attempted(Noon.AddHours(-2), TimeSpan.FromSeconds(30), 2.0m, 1.0);
+    // The delivery given, its retries spent.
+    private async ValueTask<Delivery> FailedAsync(Delivery delivery)
+    {
+        delivery.Attempted(delivery.RaisedAt, TimeSpan.FromSeconds(30), 2.0m, 1.0);
         delivery.Fail();
         await _outbox.AddAsync(delivery, TestContext.Current.CancellationToken);
 

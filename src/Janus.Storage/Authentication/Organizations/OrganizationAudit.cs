@@ -148,6 +148,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         OrganizationId organization,
         MembershipId membership,
         SubjectId member,
+        string reason,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,
@@ -163,10 +164,81 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     member,
                     breakGlassReason,
                     organization,
-                    new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
+                    new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {
                         ["membership"] = JsonSerializer.SerializeToElement(membership.Value),
+                        ["reason"] = JsonSerializer.SerializeToElement(reason),
                     }),
                 cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask MembershipEndedAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        string reason,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    AuditActions.MembershipEnded,
+                    at,
+                    principal,
+                    member,
+                    organization,
+                    new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
+                    {
+                        ["membership"] = JsonSerializer.SerializeToElement(membership.Value),
+                        ["reason"] = JsonSerializer.SerializeToElement(reason),
+                        ["endSetBy"] = JsonSerializer.SerializeToElement(endSetBy.ToString()),
+                    }),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask MembershipEndSetAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        DateTimeOffset? endsAt,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        var details = new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
+        {
+            ["membership"] = JsonSerializer.SerializeToElement(membership.Value),
+            ["reason"] = JsonSerializer.SerializeToElement(reason),
+        };
+
+        // Chapter 10 section 5.24 (D-213): the instant set, absent where the end was
+        // cancelled.
+        if (endsAt is DateTimeOffset set)
+        {
+            details["endsAt"] = JsonSerializer.SerializeToElement(set);
+        }
+
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    AuditActions.MembershipEndSet,
+                    at,
+                    actor,
+                    member,
+                    breakGlassReason,
+                    organization,
+                    details),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
 }

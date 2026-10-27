@@ -19,7 +19,8 @@ namespace Janus.Storage.Identity.Organizations;
 /// Implements IDN-MEM-001, IDN-MEM-002 and CONV-DESIGN-003. A read returns the
 /// memberships that ended beside the ones that have not, because a membership is a
 /// record of something that happened (IDN-PRIN-003). The acknowledgement an invitation
-/// attached is written with the membership and never changed (REG-INV-001).
+/// attached is written with the membership and never changed (REG-INV-001); an end set in
+/// advance is carried with its administrator and reason (D-213).
 /// </remarks>
 internal sealed class MembershipStore(StoreContext context) : IMembershipStore
 {
@@ -74,6 +75,21 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Membership>> FindEndsDueAsync(
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        List<MembershipRecord> records = await context.Memberships
+            .Where(membership => membership.EndedAt == null && membership.EndsAt <= at)
+            .OrderBy(membership => membership.EndsAt)
+            .ThenBy(membership => membership.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return Read(records);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask CreateAsync(Membership membership, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(membership);
@@ -97,6 +113,9 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
                             InvitationJson.Default.IReadOnlyListInvitedDocument)
                         : null,
                     AcknowledgedAt = membership.Acknowledgement?.At,
+                    EndsAt = membership.EndSet?.At,
+                    EndSetBy = membership.EndSet?.SetBy,
+                    EndReason = membership.EndSet?.Reason,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -113,6 +132,9 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
             ?? throw new InvalidOperationException("The membership has no row to carry the change.");
 
         record.EndedAt = membership.EndedAt;
+        record.EndsAt = membership.EndSet?.At;
+        record.EndSetBy = membership.EndSet?.SetBy;
+        record.EndReason = membership.EndSet?.Reason;
     }
 
     // The rows are locked in one order, so two transactions locking overlapping sets
@@ -151,11 +173,17 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
                 record.Organization,
                 record.CreatedAt,
                 record.EndedAt,
-                Acknowledged(record)));
+                Acknowledged(record),
+                EndSet(record)));
         }
 
         return memberships;
     }
+
+    private static MembershipEndSet? EndSet(MembershipRecord record) =>
+        record is { EndsAt: DateTimeOffset at, EndSetBy: SubjectId setBy, EndReason: string reason }
+            ? new MembershipEndSet(at, setBy, reason)
+            : null;
 
     private static MembershipAcknowledgement? Acknowledged(MembershipRecord record)
     {

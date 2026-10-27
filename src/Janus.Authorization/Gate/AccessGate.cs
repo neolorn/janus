@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Janus.Authorization.Model;
 using Janus.Authorization.Resources;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Authorization.Gate;
@@ -26,16 +27,20 @@ namespace Janus.Authorization.Gate;
 /// <param name="scopes">Where the scope a refusal is recorded and counted in comes from.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
+/// <param name="sessions">Whether a request is served on the calling flow, which a host's job is refused in.</param>
 /// <param name="exports">What an export operation asks beyond what the grants allow.</param>
 /// <param name="derived">Which of the host's relationships confer what is being asked.</param>
 /// <param name="lookup">Who can access a record, for the view that asks.</param>
 /// <param name="consents">What a record's data subject consented to, for the purpose the action serves.</param>
 /// <param name="administrative">Which organization a support role resolves a refusal in.</param>
+/// <param name="suspensions">Whether an organization a job acts for has its deletion requested or is erased.</param>
+/// <param name="configuration">Whether a role is handed out by holding what it carries.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
 /// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-004,
-/// AUTHZ-DERIVE-007, PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006 and LIB-SEAM-001.
+/// AUTHZ-DERIVE-007, AUTHZ-GRANT-005, PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006,
+/// IDN-PRIN-001 and LIB-SEAM-001.
 /// A check and a filter are the one rule rendered two ways, so neither can come to
 /// answer what the other would refuse. Every path that cannot resolve what it needs
 /// denies.
@@ -49,12 +54,15 @@ internal sealed class AccessGate(
     IServiceScopeFactory scopes,
     SubjectSets subjects,
     StepUpGates gates,
+    ISessionGates sessions,
     ExportOperations exports,
     Derivations derived,
     ReverseLookup lookup,
     IRecordedConsents consents,
     IAdministrativeOrganization administrative,
-    TimeProvider time) : IAccessGate, ISettingsChangeGate, IUnscopedRefusal
+    IOrganizationSuspensions suspensions,
+    IConfigurationStore configuration,
+    TimeProvider time) : IAccessGate, ISettingsChangeGate, IUnscopedRefusal, IGrantAdmission, IHandOutAdmission
 {
     // PRIV-CONS-001, PRIV-CONS-007: the document that governs a consent whose purpose
     // names none.
@@ -72,11 +80,6 @@ internal sealed class AccessGate(
     private static readonly IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>
         NoResiduals = new Dictionary<Permission, IReadOnlySet<CapabilityResidual>>();
 
-    // A restriction admits no modifying action, so what the host composes into its
-    // query is a fragment that matches nothing rather than a rule that cannot match.
-    private static readonly SqlFilter MatchesNothing =
-        new("false", new Dictionary<string, object>(StringComparer.Ordinal));
-
     /// <inheritdoc/>
     public async ValueTask<Result> RequireAsync(
         AccessContext context,
@@ -89,6 +92,18 @@ internal sealed class AccessGate(
         if (FollowsFromTheHostsData(resource.Type))
         {
             return Result.Failure(Error.From(ErrorCodes.DerivationSourcesMissing));
+        }
+
+        if (ServesRequestToAJob(context))
+        {
+            return await RefusedInRequestAsync(context, permission, resource, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (IsJob(context))
+        {
+            return await ExercisedOnAsync(context, permission, resource, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
@@ -128,6 +143,20 @@ internal sealed class AccessGate(
         // is the calling code's fault, raised before anything is read or recorded.
         Declared(resource.Type);
         Declared(permission);
+
+        if (ServesRequestToAJob(context))
+        {
+            return await RefusedInRequestAsync(context, permission, resource, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // IDN-PRIN-001 (D-207): a job holds no grant and no relationship row, so its
+        // admission reads none of the host's rows.
+        if (IsJob(context))
+        {
+            return await ExercisedOnAsync(context, permission, resource, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
@@ -189,25 +218,336 @@ internal sealed class AccessGate(
     {
         Declared(permission);
 
-        if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
+        if (await RestrictedPersonAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure(Error.From(ErrorCodes.Restricted));
         }
 
-        CandidateGrant? decided = await HoldsAsync(context, permission, organization, cancellationToken)
-            .ConfigureAwait(false);
+        return await AnsweredAsync(
+            context,
+            permission,
+            organization,
+            await DecidedOnAsync(context, permission, organization, cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
+    }
 
-        // AUTHZ-CONCEAL-005: nothing is concealed here, so what the caller answers is
-        // that the operation is forbidden. The refusal is recorded the same way.
-        if (decided is not { Deny: false })
+    /// <summary>
+    /// Admits a grant, or its revocation, in its organization.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">The organization the grant is scoped to.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success; <c>authz.restricted</c> for a restricted account, recording nothing;
+    /// otherwise the refusal of <c>grant:manage</c> in the grant's organization, recorded
+    /// once and only where neither permission admits.
+    /// </returns>
+    /// <remarks>
+    /// Implements AUTHZ-SCOPE-001 and AUTHZ-SEAM-001 (D-207, D-208). In the
+    /// administrative organization, and before bootstrap has marked one, the admission
+    /// is the single check of <c>grant:manage</c>. Elsewhere the acting account's
+    /// restriction is judged first, as for any modifying action, then each permission
+    /// is decided as the single check decides it, recording nothing: one that admits
+    /// admits the grant, and where neither does, the single check of
+    /// <c>grant:manage</c> in the grant's organization answers, so its refusal is the one
+    /// recorded and counted.
+    /// </remarks>
+    public async ValueTask<Result> AdmitAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false) is not OrganizationId administering
+            || administering == organization)
+        {
+            return await RequireAsync(context, Permissions.GrantManage, organization, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (await RestrictedPersonAsync(context, Permissions.GrantManage, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Restricted));
+        }
+
+        OrganizationDecision administered = await DecidedOnAsync(
+            context,
+            Permissions.SystemAdminister,
+            administering,
+            cancellationToken).ConfigureAwait(false);
+
+        if (administered.Admits)
+        {
+            return await AnsweredAsync(
+                context,
+                Permissions.SystemAdminister,
+                administering,
+                administered,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return await AnsweredAsync(
+            context,
+            Permissions.GrantManage,
+            organization,
+            await DecidedOnAsync(context, Permissions.GrantManage, organization, cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-005 (D-212, D-216). A holder of <c>system:administer</c> in
+    /// the administrative organization is admitted, deciding that permission as the single
+    /// check decides it and recording nothing. Otherwise a change that widens the actor's
+    /// own access is refused, whatever the actor may hand out, and so is a role carrying
+    /// <c>system:administer</c> (OPS-CFG-007); then each role is admitted where a role the
+    /// actor holds hands it out at a scope covering the change, or, with
+    /// <c>authz.handout.byholding</c> on, where the actor's stored grants admit every
+    /// permission it carries there. A live derivation is never asked, so it admits nothing
+    /// and raises no fault. A refusal is recorded and counted as every refusal is, under
+    /// the permission the change is admitted under.
+    /// </remarks>
+    public async ValueTask<Result> AdmitAsync(
+        AccessContext context,
+        HandOut change,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(change);
+
+        // Only a person hands a role out; background work that asks is refused.
+        if (context.Acting is null || IsJob(context))
         {
             return await RefusedAsync(
                 context,
-                permission,
+                change.Operation,
                 OrganizationWide,
-                organization,
-                decided is null ? null : Explained(decided, resource: null),
+                change.Organization,
+                grant: null,
                 cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false) is OrganizationId administering
+            && (await DecidedOnAsync(context, Permissions.SystemAdminister, administering, cancellationToken)
+                .ConfigureAwait(false)).Conferred)
+        {
+            return Result.Success();
+        }
+
+        SubjectSet held = await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false);
+
+        if (change.Widened.Any(holder => Holds(held, holder)))
+        {
+            return Result.Failure(await HandOutRefusedAsync(context, change, ErrorCodes.GrantSelf, cancellationToken)
+                .ConfigureAwait(false));
+        }
+
+        if (change.Roles.Count == 0)
+        {
+            return Result.Success();
+        }
+
+        // OPS-CFG-007 stands over the rule: a role carrying system administration is
+        // handed out only by a system administrator, whatever list names it.
+        if (change.Roles.Any(role => role.Permissions.Contains(Permissions.SystemAdminister)))
+        {
+            return Result.Failure(await HandOutRefusedAsync(context, change, ErrorCodes.RoleNotAssignable, cancellationToken)
+                .ConfigureAwait(false));
+        }
+
+        IReadOnlySet<RoleName> listed = await evaluator
+            .HandedOutAsync(
+                PermissionRule.ToHandedOut(change.Organization, change.Resource, held, time.GetUtcNow()),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        bool? byHolding = null;
+
+        foreach (DefinedRole role in change.Roles)
+        {
+            if (listed.Contains(role.Name))
+            {
+                continue;
+            }
+
+            byHolding ??= await HandsOutByHoldingAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!byHolding.Value || !await HoldsEveryAsync(context, role, change, cancellationToken).ConfigureAwait(false))
+            {
+                return Result.Failure(await HandOutRefusedAsync(
+                        context,
+                        change,
+                        ErrorCodes.RoleNotAssignable,
+                        cancellationToken)
+                    .ConfigureAwait(false));
+            }
+        }
+
+        return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-005 (D-212). A holder of <c>system:administer</c> in the
+    /// administrative organization is admitted, recording nothing. Otherwise each
+    /// permission the role carries before or after the change is decided across the
+    /// administrative organization as the single check decides it, and the roles it hands
+    /// out after the change are admitted there as any change handing them out is. A
+    /// refusal is recorded under <c>role:manage</c> in the administrative organization.
+    /// </remarks>
+    public async ValueTask<Result> AdmitAsync(
+        AccessContext context,
+        RoleChange change,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(change);
+
+        OrganizationId? administering = await administrative.FindAsync(cancellationToken).ConfigureAwait(false);
+
+        // Only a person changes a role, and only where an organization administers the
+        // deployment.
+        if (context.Acting is null || IsJob(context) || administering is not OrganizationId reaching)
+        {
+            return await RefusedAsync(
+                context,
+                Permissions.RoleManage,
+                OrganizationWide,
+                administering,
+                grant: null,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if ((await DecidedOnAsync(context, Permissions.SystemAdminister, reaching, cancellationToken)
+                .ConfigureAwait(false)).Conferred)
+        {
+            return Result.Success();
+        }
+
+        IEnumerable<Permission> carried = (change.Before?.Permissions ?? [])
+            .Concat(change.After?.Permissions ?? [])
+            .Distinct();
+
+        foreach (Permission permission in carried)
+        {
+            if (await HoldsAsync(context, permission, reaching, cancellationToken).ConfigureAwait(false)
+                is not { Deny: false })
+            {
+                return Result.Failure(await RecordedAsync(
+                        context,
+                        Permissions.RoleManage,
+                        OrganizationWide,
+                        reaching,
+                        grant: null,
+                        ErrorCodes.RoleNotAssignable,
+                        cancellationToken)
+                    .ConfigureAwait(false));
+            }
+        }
+
+        return await AdmitAsync(
+            context,
+            new HandOut(Permissions.RoleManage, reaching, Resource: null, change.HandedOut, Widened: []),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    // AUTHZ-GRANT-005: the holder is the actor's account or a group holding it at any
+    // depth.
+    private static bool Holds(SubjectSet held, GrantSubject holder) =>
+        holder.Type is SubjectType.Group
+            ? held.Groups.Contains(holder.Value)
+            : held.Accounts.Contains(holder.Value);
+
+    // OPS-CFG-002: a value that cannot be read leaves the stricter rule.
+    private async ValueTask<bool> HandsOutByHoldingAsync(CancellationToken cancellationToken) =>
+        (await configuration
+            .ReadAsync(Settings.AuthzHandoutByHolding, cancellationToken)
+            .ConfigureAwait(false))
+            .Match(read => read, _ => false);
+
+    // AUTHZ-GRANT-005, D-216: what the stored grant terms decide at the change's scope,
+    // allows less denies through groups and containment, materialised derivations among
+    // them; the host's relationships are not read.
+    private async ValueTask<bool> HoldsEveryAsync(
+        AccessContext context,
+        DefinedRole role,
+        HandOut change,
+        CancellationToken cancellationToken)
+    {
+        foreach (Permission permission in role.Permissions)
+        {
+            CandidateGrant? decided = change.Resource is ResourceReference resource
+                ? (await DecideAsync(context, permission, resource, cancellationToken).ConfigureAwait(false)).Grant
+                : await HoldsAsync(context, permission, change.Organization, cancellationToken).ConfigureAwait(false);
+
+            if (decided is not { Deny: false })
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private async ValueTask<Error> HandOutRefusedAsync(
+        AccessContext context,
+        HandOut change,
+        ErrorCode answered,
+        CancellationToken cancellationToken) =>
+        await RecordedAsync(
+            context,
+            change.Operation,
+            OrganizationWide,
+            change.Organization,
+            grant: null,
+            answered,
+            cancellationToken).ConfigureAwait(false);
+
+    // AUTHZ-GATE-006 (D-207): the restriction judged is the acting account's, and a job
+    // acts for none, so none is judged for it.
+    private async ValueTask<bool> RestrictedPersonAsync(
+        AccessContext context,
+        Permission permission,
+        CancellationToken cancellationToken) =>
+        !IsJob(context) && await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false);
+
+    // What an organization-wide check decides of one permission, recording nothing: whether
+    // a grant, or for a job its declaration, confers it, the grant that decided, and what
+    // the session's gate or a consent still asks.
+    private async ValueTask<OrganizationDecision> DecidedOnAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        if (ServesRequestToAJob(context))
+        {
+            return new OrganizationDecision(Conferred: false, Deciding: null, Outstanding: null);
+        }
+
+        // IDN-PRIN-001, AUTHZ-GATE-005 (D-207): a job's declaration reaches every record
+        // of its organization, so it reaches the organization too, as an
+        // organization-wide grant reaches it for a person.
+        if (IsJob(context))
+        {
+            if (!await JobReachesAsync(context, permission, organization, cancellationToken).ConfigureAwait(false))
+            {
+                return new OrganizationDecision(Conferred: false, Deciding: null, Outstanding: null);
+            }
+        }
+        else
+        {
+            CandidateGrant? decided = await HoldsAsync(context, permission, organization, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (decided is not { Deny: false })
+            {
+                return new OrganizationDecision(
+                    Conferred: false,
+                    decided is null ? null : Explained(decided, resource: null),
+                    Outstanding: null);
+            }
         }
 
         // An organization-wide check names no record, so it has no data subject; a
@@ -215,7 +555,35 @@ internal sealed class AccessGate(
         Result outstanding = await OutstandingAsync(context, dataSubject: null, permission, cancellationToken)
             .ConfigureAwait(false);
 
-        return outstanding.Match(() => (Error?)null, error => error) is Error unmet
+        return new OrganizationDecision(
+            Conferred: true,
+            Deciding: null,
+            outstanding.Match(() => (Error?)null, error => error));
+    }
+
+    // AUTHZ-CONCEAL-005: nothing is concealed on an organization, so what the caller
+    // answers is that the operation is forbidden, and the refusal is recorded the same
+    // way (AUTHZ-CONCEAL-004). What a gate or a consent still asks is answered as itself,
+    // recording nothing, and an export is admitted under its limit last.
+    private async ValueTask<Result> AnsweredAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        OrganizationDecision decided,
+        CancellationToken cancellationToken)
+    {
+        if (!decided.Conferred)
+        {
+            return await RefusedAsync(
+                context,
+                permission,
+                OrganizationWide,
+                organization,
+                decided.Deciding,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return decided.Outstanding is Error unmet
             ? Result.Failure(unmet)
             : await exports
                 .AdmitAsync(context, permission, OrganizationWide, organization, record: null, cancellationToken)
@@ -237,6 +605,14 @@ internal sealed class AccessGate(
         // before anything else, so that a concealing type answers one way whatever else
         // is true of it (AUTHZ-CONCEAL-003).
         if (Declared(resource.Type).Concealment is ConcealmentBehaviour.Conceal)
+        {
+            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+        }
+
+        // AUTHZ-GATE-004, IDN-PRIN-001 (D-207): an explanation answers a person's
+        // question, and an admitted job has no grant to name; its refusals resolve by
+        // their correlation identifier.
+        if (IsJob(context))
         {
             return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
         }
@@ -274,6 +650,14 @@ internal sealed class AccessGate(
         // AUTHZ-GATE-004: concealment is read first, so a concealing type answers one
         // way whatever else is true of it (AUTHZ-CONCEAL-003).
         if (Declared(resource.Type).Concealment is ConcealmentBehaviour.Conceal)
+        {
+            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+        }
+
+        // AUTHZ-GATE-004, IDN-PRIN-001 (D-207): an explanation answers a person's
+        // question, and an admitted job has no grant to name; its refusals resolve by
+        // their correlation identifier.
+        if (IsJob(context))
         {
             return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
         }
@@ -399,9 +783,22 @@ internal sealed class AccessGate(
         Declared(type);
         Declared(permission);
 
+        // AUTHZ-TEST-001 AC2: a job's list asked while a request is served, or for what
+        // its declaration does not reach, is refused with the code its check answers,
+        // rather than handed a rule that matches nothing (IDN-PRIN-001, D-207).
+        if (await JobRefusedAsync(context, permission, organization, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure<Expression<Func<TResource, bool>>>(
+                await RecordedAsync(context, permission, type, organization, grant: null, ErrorCodes.Denied, cancellationToken)
+                    .ConfigureAwait(false));
+        }
+
+        // AUTHZ-GATE-006 (D-209): a restriction is the account's and not a row's, so a
+        // list under it is refused as its check is, before any rule is handed out, and
+        // records nothing (AUTHZ-CONCEAL-004).
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Success<Expression<Func<TResource, bool>>>(_ => false);
+            return Result.Failure<Expression<Func<TResource, bool>>>(Error.From(ErrorCodes.Restricted));
         }
 
         // AUTH-STEP-001: a list exercises the permission as a check does, so the gate
@@ -413,13 +810,8 @@ internal sealed class AccessGate(
             return Result.Failure<Expression<Func<TResource, bool>>>(unmet);
         }
 
-        PermissionRule rule = await RuleAsync(
-            context,
-            [permission],
-            type,
-            organization,
-            ConsentOf(permission),
-            cancellationToken).ConfigureAwait(false);
+        PermissionRule rule = await RuleOfAsync(context, permission, type, organization, cancellationToken)
+            .ConfigureAwait(false);
 
         return Result.Success(rule.ToExpression(sources));
     }
@@ -439,9 +831,16 @@ internal sealed class AccessGate(
         Declared(type);
         Declared(permission);
 
+        if (await JobRefusedAsync(context, permission, organization, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure<SqlFilter>(
+                await RecordedAsync(context, permission, type, organization, grant: null, ErrorCodes.Denied, cancellationToken)
+                    .ConfigureAwait(false));
+        }
+
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Success(MatchesNothing);
+            return Result.Failure<SqlFilter>(Error.From(ErrorCodes.Restricted));
         }
 
         if (await ExercisedAsync(context, permission, type, organization, cancellationToken).ConfigureAwait(false)
@@ -450,13 +849,8 @@ internal sealed class AccessGate(
             return Result.Failure<SqlFilter>(unmet);
         }
 
-        PermissionRule rule = await RuleAsync(
-            context,
-            [permission],
-            type,
-            organization,
-            ConsentOf(permission),
-            cancellationToken).ConfigureAwait(false);
+        PermissionRule rule = await RuleOfAsync(context, permission, type, organization, cancellationToken)
+            .ConfigureAwait(false);
 
         return Result.Success(rule.ToFragment(rowAlias, column));
     }
@@ -472,6 +866,26 @@ internal sealed class AccessGate(
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(permissions);
         Declared(permissions);
+
+        // BFF-CAP-002 (D-211): the organization declares no capabilities of its own, so
+        // any declared permission may be asked of it.
+        if (type != OrganizationWide)
+        {
+            Capable(type, permissions);
+        }
+
+        // BFF-CAP-002, AUTHZ-GATE-005 (D-207): the capability page is a person's surface,
+        // which no job reads, in a request or outside one.
+        if (IsJob(context))
+        {
+            return Result.Failure<IReadOnlyList<Capability>>(Error.From(ErrorCodes.Denied));
+        }
+
+        if (type == OrganizationWide)
+        {
+            return await OrganizationPageAsync(context, resources, permissions, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         if (FollowsFromTheHostsData(type))
         {
@@ -502,6 +916,14 @@ internal sealed class AccessGate(
         ArgumentNullException.ThrowIfNull(sources);
         Declared(type);
         Declared(permissions);
+        Capable(type, permissions);
+
+        // BFF-CAP-002, AUTHZ-GATE-005 (D-207): the capability page is a person's surface,
+        // which no job reads, in a request or outside one.
+        if (IsJob(context))
+        {
+            return Result.Failure<IReadOnlyList<Capability>>(Error.From(ErrorCodes.Denied));
+        }
 
         return await PageAsync(
             context,
@@ -530,6 +952,25 @@ internal sealed class AccessGate(
             throw new InvalidOperationException(string.Create(
                 CultureInfo.InvariantCulture,
                 $"The permission '{permission}' is not declared, so no policy governs it."));
+        }
+    }
+
+    // BFF-CAP-002 (D-202): a page of a type's records answers only for the permissions
+    // the host declared as its capabilities, so asking for any other, a declared one
+    // included, is the calling code's fault (CONV-ERR-001), raised before anything is
+    // read; a type that declares none answers none.
+    private void Capable(ResourceType type, IReadOnlyList<Permission> permissions)
+    {
+        IReadOnlyList<Permission> capabilities = Declared(type).Capabilities;
+
+        foreach (Permission permission in permissions)
+        {
+            if (!capabilities.Contains(permission))
+            {
+                throw new InvalidOperationException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The permission '{permission}' is not declared as a capability of '{type}'."));
+            }
         }
     }
 
@@ -585,23 +1026,8 @@ internal sealed class AccessGate(
         IReadOnlySet<Permission> nobody = await UnconsentedAsync(
             dataSubject: null, permissions, cancellationToken).ConfigureAwait(false);
 
-        // AUTHZ-GATE-005 (D-160): a gate is the session's to meet whatever the record,
-        // so it is judged once for the page rather than once per row.
-        var unstepped = new Dictionary<Permission, CapabilityResidual>();
-
-        foreach (Permission permission in permissions)
-        {
-            if (await gates
-                    .ResidualAsync(
-                        context,
-                        model.GateOf(permission)
-                            ?? await exports.GateOfAsync(permission, cancellationToken).ConfigureAwait(false),
-                        cancellationToken)
-                    .ConfigureAwait(false) is CapabilityResidual unmet)
-            {
-                unstepped.Add(permission, unmet);
-            }
-        }
+        Dictionary<Permission, CapabilityResidual> unstepped = await UnsteppedAsync(
+            context, permissions, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<SubjectId, IReadOnlySet<Permission>> unconsented = await UnconsentedAsync(
             [.. whose.Values.OfType<SubjectId>().Distinct()], permissions, cancellationToken)
@@ -623,6 +1049,75 @@ internal sealed class AccessGate(
         Dictionary<ResourceId, SubjectId?> held,
         ResourceId resource) =>
         held.TryGetValue(resource, out SubjectId? subject) ? subject : null;
+
+    // BFF-CAP-002, AUTHZ-GATE-005 AC1 (D-202, D-211): what each organization asked
+    // confers is what its organization-wide check confers, read for every organization
+    // and permission in one statement. Nothing is refused, so nothing is recorded or
+    // counted toward the denial spike; and the check names no data subject, so no
+    // consent is outstanding: consent is asked of each record. An identifier that is not
+    // an organization's is one no grant reaches.
+    private async ValueTask<Result<IReadOnlyList<Capability>>> OrganizationPageAsync(
+        AccessContext context,
+        IReadOnlyList<ResourceId> resources,
+        IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken)
+    {
+        ResourceId[] organizations =
+        [
+            .. resources.Where(resource => Guid.TryParseExact(resource.ToString(), "D", out _)).Distinct(),
+        ];
+
+        if (organizations.Length == 0 || permissions.Count == 0)
+        {
+            return Nothing(resources);
+        }
+
+        SubjectSet set = await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<PageCapability> conferred = await evaluator
+            .PageAsync(PermissionRule.ToOrganizationPage(permissions, set, time.GetUtcNow()), organizations, cancellationToken)
+            .ConfigureAwait(false);
+
+        Dictionary<Permission, CapabilityResidual> unstepped = await UnsteppedAsync(
+            context, permissions, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success<IReadOnlyList<Capability>>(
+        [
+            .. resources.Select(resource => Held(
+                resource,
+                conferred,
+                new Dictionary<Permission, IReadOnlySet<string>>(),
+                set.Restricted,
+                unstepped,
+                new HashSet<Permission>())),
+        ]);
+    }
+
+    // AUTHZ-GATE-005 (D-160): a gate is the session's to meet whatever the record, so it
+    // is judged once for the page rather than once per row.
+    private async ValueTask<Dictionary<Permission, CapabilityResidual>> UnsteppedAsync(
+        AccessContext context,
+        IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken)
+    {
+        var unstepped = new Dictionary<Permission, CapabilityResidual>();
+
+        foreach (Permission permission in permissions)
+        {
+            if (await gates
+                    .ResidualAsync(
+                        context,
+                        model.GateOf(permission)
+                            ?? await exports.GateOfAsync(permission, cancellationToken).ConfigureAwait(false),
+                        cancellationToken)
+                    .ConfigureAwait(false) is CapabilityResidual unmet)
+            {
+                unstepped.Add(permission, unmet);
+            }
+        }
+
+        return unstepped;
+    }
 
     private async ValueTask<IReadOnlySet<Permission>> UnconsentedAsync(
         SubjectId? dataSubject,
@@ -1222,8 +1717,130 @@ internal sealed class AccessGate(
         OrganizationId? organization,
         ExplainedGrant? grant,
         CancellationToken cancellationToken) =>
-        Result.Failure(await RecordedAsync(context, permission, type, organization, grant, cancellationToken)
+        Result.Failure(await RecordedAsync(context, permission, type, organization, grant, ErrorCodes.Denied, cancellationToken)
             .ConfigureAwait(false));
+
+    // IDN-PRIN-001, CONV-DESIGN-007 (D-206): an organization-scoped principal is a host's
+    // job, and a job is background work, so its context asked while a request is served
+    // on the calling flow is refused, whoever built it and whatever it names; a webhook
+    // that needs a host permission records what arrived and hands the work to a job.
+    private bool ServesRequestToAJob(AccessContext context) => IsJob(context) && sessions.ServesRequest;
+
+    // IDN-PRIN-001: every organization-scoped principal is a host's job, a principal
+    // naming no declared job among them, which is then refused every host permission.
+    private static bool IsJob(AccessContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.Principal is { IsDeploymentScoped: false };
+    }
+
+    // IDN-PRIN-001 (D-202, D-207): a job is admitted for the host permissions its
+    // declaration names in its own organization, while that organization has no deletion
+    // request and is not erased, read live at each evaluation (IDN-ORG-003). The state is
+    // read whatever else decides, so a refusal runs the statement an admission does.
+    private async ValueTask<bool> JobReachesAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId? organization,
+        CancellationToken cancellationToken)
+    {
+        SystemPrincipal principal = context.Principal
+            ?? throw new InvalidOperationException("Only a job's context is asked what its declaration reaches.");
+
+        bool suspended = await suspensions
+            .IsSuspendedAsync(organization ?? NoOrganization, cancellationToken)
+            .ConfigureAwait(false);
+
+        return organization is OrganizationId scoped
+            && principal.ActsFor(scoped)
+            && model.Exercises(principal.Name, permission)
+            && !suspended;
+    }
+
+    // What refuses a job's list before a rule is handed out: a request being served, or
+    // a permission or an organization its declaration does not reach.
+    private async ValueTask<bool> JobRefusedAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        ServesRequestToAJob(context)
+        || (IsJob(context)
+            && !await JobReachesAsync(context, permission, organization, cancellationToken).ConfigureAwait(false));
+
+    // IDN-PRIN-001 (D-207): a job's check on a record is decided by its declaration, its
+    // organization and the record's data subject's consent, and by no grant and no
+    // restriction, since a restriction is the acting account's and a job acts for none
+    // (AUTHZ-GATE-006). A refusal is recorded against the organization owning the record.
+    private async ValueTask<Result> ExercisedOnAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        CancellationToken cancellationToken)
+    {
+        RegisteredResource? registered = await records
+            .FindAsync(resource, cancellationToken)
+            .ConfigureAwait(false);
+
+        // AUTHZ-CONCEAL-002 AC3: a record the library holds no row for is judged as a
+        // registered one is, against no organization, so a refusal of either runs the
+        // same statements.
+        bool reaches = await JobReachesAsync(context, permission, registered?.Organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (registered is null || !reaches)
+        {
+            return await RefusedAsync(
+                context,
+                permission,
+                resource.Type,
+                registered?.Organization,
+                grant: null,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return await AllowedAsync(
+            context,
+            permission,
+            resource,
+            new Decision(Grant: null, registered.Organization, registered.Subject),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    // The rule a list is handed: a job's declaration over its organization's records, or
+    // what a person's grants and the host's facts confer.
+    private async ValueTask<PermissionRule> RuleOfAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceType type,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        IsJob(context)
+            ? PermissionRule.Exercised([permission], type, organization, time.GetUtcNow(), ConsentOf(permission))
+            : await RuleAsync(context, [permission], type, organization, ConsentOf(permission), cancellationToken)
+                .ConfigureAwait(false);
+
+    // The refusal is recorded against the organization owning the record, as every
+    // refusal of a record is, and against none where the library holds no row of it.
+    private async ValueTask<Result> RefusedInRequestAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        CancellationToken cancellationToken)
+    {
+        RegisteredResource? registered = await records
+            .FindAsync(resource, cancellationToken)
+            .ConfigureAwait(false);
+
+        return await RefusedAsync(
+            context,
+            permission,
+            resource.Type,
+            registered?.Organization,
+            grant: null,
+            cancellationToken).ConfigureAwait(false);
+    }
 
     private async ValueTask<Error> RecordedAsync(
         AccessContext context,
@@ -1231,6 +1848,7 @@ internal sealed class AccessGate(
         ResourceType type,
         OrganizationId? organization,
         ExplainedGrant? grant,
+        ErrorCode answered,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -1271,7 +1889,7 @@ internal sealed class AccessGate(
         }
 
         return Error.From(
-            ErrorCodes.Denied,
+            answered,
             "correlation",
             JsonSerializer.SerializeToElement(correlation.Value));
     }
@@ -1305,6 +1923,7 @@ internal sealed class AccessGate(
                 OrganizationWide,
                 organization: null,
                 grant: null,
+                ErrorCodes.Denied,
                 cancellationToken).ConfigureAwait(false);
 
     // AUTHZ-GATE-006: a restriction leaves the account's reading actions and refuses
@@ -1437,4 +2056,15 @@ internal sealed class AccessGate(
         CandidateGrant? Grant,
         OrganizationId? Organization,
         SubjectId? Subject);
+
+    // What an organization-wide check decided of one permission before anything is
+    // recorded: whether it is conferred, the grant that decided a refusal, and what a
+    // gate or a consent still asks of a conferred one.
+    private sealed record OrganizationDecision(
+        bool Conferred,
+        ExplainedGrant? Deciding,
+        Error? Outstanding)
+    {
+        public bool Admits => Conferred && Outstanding is null;
+    }
 }

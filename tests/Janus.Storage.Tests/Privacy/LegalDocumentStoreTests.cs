@@ -8,8 +8,9 @@ using Xunit;
 namespace Janus.Storage.Tests.Privacy;
 
 /// <summary>
-/// What the tables hold of a legal document: one governing text a version, and the
-/// translations attached to it (PRIV-CONS-005, PRIV-CONS-006).
+/// What the tables hold of a legal document: one governing text a version, the
+/// translations attached to it, and the cookies a version of the notice lists
+/// (PRIV-CONS-005, PRIV-CONS-006, PRIV-CONS-006a).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class LegalDocumentStoreTests(DatabaseFixture database)
@@ -113,6 +114,49 @@ public sealed class LegalDocumentStoreTests(DatabaseFixture database)
         Assert.Equal(["en"], current.Translations.Select(translation => translation.Language));
         Assert.Equal("النص الأول", first.Text);
         Assert.Empty(first.Translations);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a AC1 (D-203): the cookies a version lists are kept with it and read
+    /// back with it by name, each with its purpose, lifetime and readability by a third
+    /// party, translated or not; a version listing none reads with none.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_006a_AC1_AVersionKeepsTheCookiesItListsAsync()
+    {
+        string notice = Fresh();
+        NoticeCookie session = new("__Host-identity-session", null, TimeSpan.FromDays(365), false);
+        NoticeCookie preauthentication = new("__Host-identity-preauth", null, null, false);
+        NoticeCookie picks = new("host-picks", "recommendations", TimeSpan.FromDays(90), true);
+
+        await WritingAsync(async store => await store.AddAsync(
+            new DocumentVersion(notice, "1", "ar", "النص الأول", [], Noon),
+            TestContext.Current.CancellationToken));
+        await WritingAsync(async store => await store.AddAsync(
+            new DocumentVersion(
+                notice,
+                "2",
+                "ar",
+                "النص الثاني",
+                [new DocumentTranslation("en", "The text"), new DocumentTranslation("fr", "Le texte")],
+                Noon.AddDays(30))
+            {
+                Cookies = [picks, session, preauthentication],
+            },
+            TestContext.Current.CancellationToken));
+
+        await using StoreContext reading = database.Context();
+        var store = new LegalDocumentStore(reading);
+
+        DocumentVersion current = await store.CurrentAsync(notice, TestContext.Current.CancellationToken)
+            ?? throw new InvalidOperationException("The version was not written.");
+        DocumentVersion first = await store.FindAsync(notice, "1", TestContext.Current.CancellationToken)
+            ?? throw new InvalidOperationException("The version was not written.");
+
+        Assert.Equal([preauthentication, session, picks], current.Cookies);
+        Assert.Equal(["en", "fr"], current.Translations.Select(translation => translation.Language));
+        Assert.Empty(first.Cookies);
     }
 
     /// <summary>

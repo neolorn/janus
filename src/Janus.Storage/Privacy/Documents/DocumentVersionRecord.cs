@@ -41,4 +41,9 @@ internal sealed class DocumentVersionRecord
     /// The translations attached to this version.
     /// </summary>
     public ICollection<DocumentTranslationRecord> Translations { get; } = [];
+
+    /// <summary>
+    /// The cookies a version of the privacy notice lists, which no other version has.
+    /// </summary>
+    public ICollection<DocumentCookieRecord> Cookies { get; } = [];
 }

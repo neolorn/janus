@@ -135,6 +135,31 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-CSRF-005a AC3, AUTH-SESS-006 AC2 (D-206): presenting the credential is an
+    /// authentication, so the first contact the browser held is ended rather than left
+    /// beside the session it opened, and the identifier it carried resolves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_CSRF_005a_AC3_PresentingTheCredentialEndsTheFirstContactAsync()
+    {
+        string credential = await GeneratedAsync();
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        string first = browser.Cookies[BrowserCookies.PreAuthentication];
+        Answer opened = await PresentedAsync(browser, credential);
+
+        Assert.Equal(StatusCodes.Status200OK, opened.Status);
+        Assert.NotEqual(first, browser.Cookies[BrowserCookies.Session]);
+        Assert.False(browser.Cookies.ContainsKey(BrowserCookies.PreAuthentication));
+        Assert.Null(await _deployment.Contacts.FindAsync(
+            OpaqueToken.Of(first).Fingerprint(),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// OPS-BOOT-002 AC2 and AUTH-STEP-004 AC3: the session ends at the configured
     /// lifetime however recently it was used, and the exception ends with it.
     /// </summary>

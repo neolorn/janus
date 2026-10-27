@@ -50,6 +50,20 @@ internal interface IGrantStore
     ValueTask<OrganizationId?> ScopeOfAsync(GrantId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads whether the deployment holds an organization, which a grant on the whole
+    /// organization names by its identifier.
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether a row names it, whatever its deletion's state.</returns>
+    /// <remarks>
+    /// Implements AUTHZ-SCOPE-001 (D-209): an organization the deployment does not hold
+    /// is a row it does not hold, so a grant on it is scoped to none. No organization's
+    /// row is ever removed, so what is read here still stands when the grant commits.
+    /// </remarks>
+    ValueTask<bool> HoldsOrganizationAsync(OrganizationId organization, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a new grant, and bumps the counter of every account it reaches in the
     /// same transaction.
     /// </summary>
@@ -154,6 +168,21 @@ internal interface IGrantStore
     ValueTask<IReadOnlyList<Grant>> MaterialisedAsync(
         RoleName role,
         ResourceType type,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The live grants that name one record itself, whoever holds them and whatever
+    /// wrote them, each under a lock on its row held until the operation's transaction
+    /// ends (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="reference">The record.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grants as committed when the locks were taken.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask<IReadOnlyList<Grant>> NamingForUpdateAsync(
+        ResourceReference reference,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 

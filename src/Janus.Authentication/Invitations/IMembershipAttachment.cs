@@ -46,6 +46,10 @@ internal interface IMembershipAttachment
     /// <param name="roles">The roles granted across the organization.</param>
     /// <param name="grantedBy">Who granted them, which is who issued the invitation.</param>
     /// <param name="reason">Why they were granted.</param>
+    /// <param name="acting">
+    /// Who acted, as each grant is recorded: the person acknowledging, or bootstrap's
+    /// principal.
+    /// </param>
     /// <param name="multiple">What <c>organization.multiplememberships</c> allows.</param>
     /// <param name="at">When the person acknowledged.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -60,6 +64,7 @@ internal interface IMembershipAttachment
         IReadOnlyList<RoleName> roles,
         SubjectId grantedBy,
         string reason,
+        AccessContext acting,
         bool multiple,
         DateTimeOffset at,
         CancellationToken cancellationToken);

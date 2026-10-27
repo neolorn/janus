@@ -15,8 +15,8 @@
   </ItemGroup>
 
   <!-- OPS-DATA-001: LINQ for everything normal, Dapper for hand-written SQL.
-       CONV-DESIGN-003: the design package is this project's alone and builds the
-       migration bundle, so it ships with nothing.
+       CONV-DESIGN-008: the design package is this project's alone and writes the
+       migrations and their script, so it ships with nothing; `migrate` applies them.
        CONV-DESIGN-008: the relational package is referenced directly, so every project
        that reaches this one resolves it at the version of the core package. -->
   <ItemGroup>
@@ -38,7 +38,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
                       OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

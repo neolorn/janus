@@ -34,9 +34,22 @@ internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Members
                 "ck_memberships_acknowledged",
                 "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
 
+            // IDN-MEM-001 (D-213): an end set in advance is its instant, its administrator and
+            // its reason together, or nothing.
+            table.HasCheckConstraint(
+                "ck_memberships_end_set",
+                """
+                (ends_at IS NULL AND end_set_by IS NULL AND end_reason IS NULL)
+                OR (ends_at IS NOT NULL AND end_set_by IS NOT NULL
+                    AND length(btrim(end_reason)) BETWEEN 1 AND 1024)
+                """);
+
             table.HasCheckConstraint(
                 "ck_memberships_subject_not_max_uuid",
                 MaxUuid.Refused("subject"));
+            table.HasCheckConstraint(
+                "ck_memberships_end_set_by_not_max_uuid",
+                MaxUuid.Refused("end_set_by"));
         });
 
         builder.HasKey(membership => membership.Id).HasName("pk_memberships");
@@ -61,6 +74,13 @@ internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Members
             .HasColumnType("jsonb");
 
         builder.Property(membership => membership.AcknowledgedAt).HasColumnName("acknowledged_at");
+        builder.Property(membership => membership.EndsAt).HasColumnName("ends_at");
+
+        builder.Property(membership => membership.EndSetBy)
+            .HasColumnName("end_set_by")
+            .HasConversion(subject => subject!.Value.Value, value => new SubjectId(value));
+
+        builder.Property(membership => membership.EndReason).HasColumnName("end_reason");
 
         builder.HasOne<AccountRecord>()
             .WithMany()

@@ -193,20 +193,24 @@ generated_code = true
 [src/Janus.Storage/Migrations/StoreContextModelSnapshot.cs]
 generated_code = true
 
-[src/**.cs]
+# The sample host's project is a source project and its test project a test project
+# under the scopes below (D-207).
+
+[{src,samples/HostSample}/**.cs]
 # CA1812: every service is internal sealed and constructed by dependency injection
 # (CONV-DESIGN-002).
 dotnet_diagnostic.CA1812.severity = none
 
-[src/{Janus.Core,Janus.Hosting,Janus.Conformance}/**.cs]
+[src/{Janus.Core,Janus.Hosting,Janus.Conformance,Janus.Testing}/**.cs]
 # CA1515: these projects hold the contract (CONV-LAYOUT-002).
 dotnet_diagnostic.CA1515.severity = none
 
-[{tests,src/Janus.Hosting,src/Janus.Cli}/**.cs]
-# CA2007: ConfigureAwait is required of library code only (CONV-CODE-002).
+[{tests,samples/HostSample.Tests,src/Janus.Hosting,src/Janus.Cli}/**.cs]
+# CA2007: ConfigureAwait is required of library code, and of the sample host, which is
+# held to what a host following 08 meets (CONV-CODE-002).
 dotnet_diagnostic.CA2007.severity = none
 
-[tests/**.cs]
+[{tests,samples/HostSample.Tests}/**.cs]
 # CA1707: the test naming scheme of CONV-TEST-007 uses underscores by design.
 dotnet_diagnostic.CA1707.severity = none
 

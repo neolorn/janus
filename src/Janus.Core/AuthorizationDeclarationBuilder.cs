@@ -29,6 +29,9 @@ public sealed class AuthorizationDeclarationBuilder
     private readonly Dictionary<Permission, string> _stepUpGates = [];
     private readonly Dictionary<Permission, string> _actionPurposes = [];
     private readonly Dictionary<string, TimeSpan> _retentionFloors = new(StringComparer.Ordinal);
+    private readonly List<CookieDeclaration> _cookies = [];
+    private readonly List<RoleDeclaration> _roles = [];
+    private readonly List<JobDeclaration> _jobs = [];
 
     /// <summary>
     /// Declares one of the host's kinds of thing.
@@ -149,6 +152,11 @@ public sealed class AuthorizationDeclarationBuilder
     /// The permission is not well-formed, the gate is absent or blank, or the
     /// permission is already bound to a gate.
     /// </exception>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-005 (D-160, D-209). A permission of the library's own carries
+    /// its gate in chapter 10 section 5a, so binding one is refused as the deployment
+    /// starts.
+    /// </remarks>
     public AuthorizationDeclarationBuilder StepUpGate(string permission, string gate)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gate);
@@ -178,6 +186,11 @@ public sealed class AuthorizationDeclarationBuilder
     /// The permission is not well-formed, the purpose is absent or blank, or the
     /// permission already serves a purpose.
     /// </exception>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-005 (D-162, D-209). Only the host's own actions are bound to
+    /// a purpose, so binding a permission of the library's own is refused as the
+    /// deployment starts.
+    /// </remarks>
     public AuthorizationDeclarationBuilder ServesPurpose(string permission, string purpose)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
@@ -271,6 +284,151 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Declares a cookie the host sets, which the privacy notice lists beside the
+    /// library's own.
+    /// </summary>
+    /// <param name="name">What the cookie is called.</param>
+    /// <param name="lifetime">How long it is set for, or null where it ends with the browser's session.</param>
+    /// <param name="thirdPartyReadable">Whether any third party can read it.</param>
+    /// <param name="purpose">
+    /// The consent-based purpose it serves, or null where it is strictly necessary.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The name is absent.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The lifetime is not positive.</exception>
+    /// <remarks>
+    /// Implements PRIV-CONS-006a and LIB-HOST-001 (D-203). A purpose not declared or not
+    /// resting on consent, a name the library's own cookies take, a name that is no
+    /// cookie name, or a cookie declared twice is refused as the deployment starts.
+    /// </remarks>
+    public AuthorizationDeclarationBuilder Cookie(
+        string name,
+        TimeSpan? lifetime,
+        bool thirdPartyReadable,
+        string? purpose)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        if (lifetime is TimeSpan set)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(set, TimeSpan.Zero, nameof(lifetime));
+        }
+
+        _cookies.Add(new CookieDeclaration(name, lifetime, thirdPartyReadable, purpose));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a role the deployment starts with. It is defined at the first start
+    /// that finds it not yet seeded, where no role of its name exists, and is the
+    /// administrators' to change or remove from then on; a later start never defines it
+    /// again.
+    /// </summary>
+    /// <param name="name">
+    /// The role's name, as <c>POST /admin/roles</c> takes one and never a role chapter
+    /// 10 section 3 seeds.
+    /// </param>
+    /// <param name="permissions">
+    /// What holding it permits, each as <c>resource:action</c>: permissions the host
+    /// declares, or the library's own other than <c>system:administer</c>.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The name or the permissions are absent.</exception>
+    /// <exception cref="ArgumentException">A permission is not well-formed.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-004 and LIB-HOST-001 (D-204). A name outside the rule or
+    /// given twice, or a permission not declared, is refused as the model is built.
+    /// </remarks>
+    public AuthorizationDeclarationBuilder Role(string name, params IReadOnlyList<string> permissions) =>
+        Role(name, permissions, handsOut: []);
+
+    /// <summary>
+    /// Declares a role the deployment starts with, and the roles its holders may hand
+    /// out. It is defined at the first start that finds it not yet seeded, where no role
+    /// of its name exists, and is the administrators' to change or remove from then on.
+    /// </summary>
+    /// <param name="name">
+    /// The role's name, as <c>POST /admin/roles</c> takes one and never a role chapter
+    /// 10 section 3 seeds.
+    /// </param>
+    /// <param name="permissions">
+    /// What holding it permits, each as <c>resource:action</c>: permissions the host
+    /// declares, or the library's own other than <c>system:administer</c>.
+    /// </param>
+    /// <param name="handsOut">
+    /// The roles a holder may hand out where the role is held, each one this builder
+    /// declares or one chapter 10 section 3 seeds.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The name, the permissions or the roles handed out are absent.</exception>
+    /// <exception cref="ArgumentException">A permission is not well-formed.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-004, AUTHZ-GRANT-005 and LIB-HOST-001 (D-204, D-212). A
+    /// name outside the rule or given twice, a permission not declared, or a role handed
+    /// out that is neither declared nor seeded, is refused as the model is built.
+    /// </remarks>
+    public AuthorizationDeclarationBuilder Role(
+        string name,
+        IReadOnlyList<string> permissions,
+        IReadOnlyList<string> handsOut)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(permissions);
+        ArgumentNullException.ThrowIfNull(handsOut);
+
+        var parsed = new List<Permission>(permissions.Count);
+
+        foreach (string permission in permissions)
+        {
+            parsed.Add(Core.Permission.Parse(permission));
+        }
+
+        _roles.Add(new RoleDeclaration(name, parsed, [.. handsOut]));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Declares one of the host's background jobs. Its principal is
+    /// <see cref="SystemPrincipal.ForOrganization"/> naming it, which acts for one
+    /// organization.
+    /// </summary>
+    /// <param name="name">
+    /// The job's name, under the rule of INT-SMS-003, distinct from every other job's,
+    /// from every principal chapter 10 section 5.29 names and from <c>migrate</c>.
+    /// </param>
+    /// <param name="permissions">
+    /// The host permissions it exercises, each as <c>resource:action</c>: permissions the
+    /// host declares, none bound to a step-up gate and none whose action is
+    /// <c>export</c>.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The name or the permissions are absent.</exception>
+    /// <exception cref="ArgumentException">A permission is not well-formed.</exception>
+    /// <remarks>
+    /// Implements IDN-PRIN-001 and LIB-HOST-001 (D-202, D-206). A name outside the rule,
+    /// given twice or reserved, or a permission the job may not exercise, is refused as
+    /// the deployment starts.
+    /// </remarks>
+    public AuthorizationDeclarationBuilder Job(string name, params IReadOnlyList<string> permissions)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        var parsed = new List<Permission>(permissions.Count);
+
+        foreach (string permission in permissions)
+        {
+            parsed.Add(Core.Permission.Parse(permission));
+        }
+
+        _jobs.Add(new JobDeclaration(name, parsed));
+
+        return this;
+    }
+
+    /// <summary>
     /// Closes the declaration.
     /// </summary>
     /// <returns>What the host declared.</returns>
@@ -285,5 +443,8 @@ public sealed class AuthorizationDeclarationBuilder
             [.. _bases],
             [.. _sensitiveCategories],
             [.. _recipients],
-            new Dictionary<string, TimeSpan>(_retentionFloors, StringComparer.Ordinal));
+            new Dictionary<string, TimeSpan>(_retentionFloors, StringComparer.Ordinal),
+            [.. _cookies],
+            [.. _roles],
+            [.. _jobs]);
 }

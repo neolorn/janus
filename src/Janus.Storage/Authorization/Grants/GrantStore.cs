@@ -93,6 +93,15 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<bool> HoldsOrganizationAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        await context.Organizations
+            .AsNoTracking()
+            .AnyAsync(row => row.Id == organization, cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask CreateAsync(Grant grant, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(grant);
@@ -239,6 +248,43 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
             .ConfigureAwait(false);
 
         return [.. rows.Select(Read)];
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<IReadOnlyList<Grant>> NamingForUpdateAsync(
+        ResourceReference reference,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A grant's row is held only inside the operation's transaction.");
+        }
+
+        string type = reference.Type.ToString();
+        string id = reference.Id.ToString();
+        var tracked = new HashSet<GrantId>(context.Grants.Local.Select(record => record.Id));
+
+        List<GrantRecord> held = await context.Grants
+            .FromSql(
+                $"""
+                SELECT * FROM identity.grants
+                WHERE resource_type = {type} AND resource_id = {id}
+                  AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > {at})
+                FOR UPDATE
+                """)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // As for one grant held, a row the context already tracks was read before the
+        // lock, so it is read again: what is revoked is the row as the lock found it.
+        foreach (GrantRecord record in held.Where(record => tracked.Contains(record.Id)))
+        {
+            await context.Entry(record).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return [.. held.Select(Read)];
     }
 
     /// <inheritdoc/>

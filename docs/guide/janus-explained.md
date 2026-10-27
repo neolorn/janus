@@ -218,7 +218,7 @@ The business processes his data for named purposes, each on a legal footing the 
 
 Six working days is counted on the business's own calendar (Sunday to Thursday plus a holiday list the business maintains). The system sends a receipt, warns staff two working days before the deadline and again on the day, and records what the law makes of a missed deadline.
 
-There is no cookie banner: the only cookies are the ones the service cannot work without, and the privacy notice lists each of them.
+There is no cookie banner while the only cookies are the ones the service cannot work without. If the business adds a cookie that needs his consent, it declares that cookie, and only then is he asked, and only once he is signed in. Each version of the privacy notice lists every cookie set when it was published.
 
 ---
 
@@ -248,7 +248,7 @@ System administration is a permission like any other, never implied by seniority
 
 Invitations were covered in 3.2. The **domain lock** is optional per organisation: the organisation lists its domains, each proven once by placing a record in the domain's public name registry (DNS, the system that maps names like example.com to servers; only the domain's owner can add records there), and while the lock is on, only addresses in those domains can sign in as members. The proof is re-checked on a schedule; a failed re-check raises an alert and revokes nothing by itself (section 11). Personal addresses on a member's account stay for notices and recovery.
 
-When Hossam leaves the company, the offboarding checklist runs in order: end his sessions, suspend the account (reversible), end the membership, transfer any grants only he held, review anything he approved, revoke his mail app password, and verify the mail server actually disabled his mailbox by reading the daily reconciliation report rather than assuming. The corporate address stops working as a sign-in and the mailbox is disabled. His personal email becomes his primary address automatically, the domain lock no longer applies to him, and the account carries on as an ordinary account without a pause. The corporate address is retired and can be given to the next hire. Two days later, a check that nothing survived. If the departure is hostile, everything happens in one sitting before he is told, and any credential he may have seen is changed.
+When Hossam leaves the company, HR can set his membership to end on his last day, so his access ends then without anyone having to remember; anything only he held is handed to someone else before that day, because ending the membership revokes every role he was given. On the day, the offboarding checklist runs in order: end his sessions, suspend the account (reversible), end the membership if it has not ended at its set time, review anything he approved, revoke his mail app password, and verify the mail server actually disabled his mailbox by reading the daily reconciliation report rather than assuming. The corporate address stops working as a sign-in and the mailbox is disabled. His personal email becomes his primary address automatically, the domain lock no longer applies to him, and the account carries on as an ordinary account without a pause. The corporate address is retired and can be given to the next hire. Two days later, a check that nothing survived. If the departure is hostile, everything happens in one sitting before he is told, and any credential he may have seen is changed.
 
 ---
 

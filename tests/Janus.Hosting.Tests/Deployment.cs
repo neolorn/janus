@@ -72,8 +72,10 @@ using Janus.Privacy.Tests.Requests;
 using Janus.Storage.Authentication.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -94,6 +96,7 @@ internal sealed class Deployment : IAsyncDisposable
     private readonly WebApplication _application;
     private readonly RequestDelegate _pipeline;
     private readonly KeyRingService _ring;
+    private Janus.Hosting.Tests.Authorization.HandOutInMemory? _handOuts;
 
     // LIB-HOST-001: where a browser holding no session is sent is a declaration no
     // deployment starts without, so every deployment here carries one (AUTH-SESS-012).
@@ -153,6 +156,22 @@ internal sealed class Deployment : IAsyncDisposable
     /// What judges a challenge token, where the host declared a challenge verifier
     /// (AUTH-ABUSE-008); nothing, unless it says otherwise.
     /// </param>
+    /// <param name="host">
+    /// The host's own endpoints, mapped after the browser profile beside the library's;
+    /// none, unless it says otherwise.
+    /// </param>
+    /// <param name="json">
+    /// How the host sets the application's JSON options for its own endpoints; as the
+    /// framework sets them, unless it says otherwise.
+    /// </param>
+    /// <param name="routing">
+    /// How the host adds routing after the browser profile, with any middleware of its
+    /// own around it; routing comes before the profiles, unless it says otherwise.
+    /// </param>
+    /// <param name="services">
+    /// What the host registers for its own endpoints beside what the library registers;
+    /// nothing, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -165,19 +184,25 @@ internal sealed class Deployment : IAsyncDisposable
         bool codec = true,
         bool resolver = true,
         PhoneSignalProvider? signals = null,
-        ChallengeVerifier? verifier = null)
+        ChallengeVerifier? verifier = null,
+        Action<IEndpointRouteBuilder>? host = null,
+        Action<JsonOptions>? json = null,
+        Action<IApplicationBuilder>? routing = null,
+        Action<IServiceCollection>? services = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
-        builder.Logging.SetMinimumLevel(logging).AddProvider(Logs);
+        builder.Logging.SetMinimumLevel(logging).AddProvider(Logs).AddProvider(Entries);
 
         Signals = new RegistrationSignalsInMemory(Clock);
+        Considered = new PhoneSignalAuditInMemory(Work);
         Directory = new RegistrationDirectoryInMemory(Identifiers);
         Identifiers.Pending = Pending;
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
         Provider = new ProviderInMemory(this);
         Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);
+        AccessGrants.Organizations = organization => Organizations.NameOf(organization) is not null;
         Attachments = new Janus.Authentication.Tests.Invitations.MembershipAttachmentInMemory(Memberships);
         Endings = new Janus.Authentication.Tests.Invitations.MembershipEndingInMemory(Memberships);
 
@@ -226,6 +251,13 @@ internal sealed class Deployment : IAsyncDisposable
             _ = builder.Services.AddSingleton(verifier);
         }
 
+        if (json is not null)
+        {
+            _ = builder.Services.ConfigureHttpJsonOptions(json);
+        }
+
+        services?.Invoke(builder.Services);
+
         _application = builder.Build();
 
         // The web server composes these two around the middleware when it starts;
@@ -237,11 +269,11 @@ internal sealed class Deployment : IAsyncDisposable
             // answers and every address its document publishes carries the prefix
             // (API-CONV-001, LIB-HOST-003). The two documents of REG-PM-001 are the
             // exception: they belong to the site and stay at its root.
-            _ = ((IApplicationBuilder)_application).Map(prefix, Mounted);
+            _ = ((IApplicationBuilder)_application).Map(prefix, mount => Mounted(mount, host, routing));
         }
         else
         {
-            Mounted(_application);
+            Mounted(_application, host, routing);
         }
 
         _ = ((IApplicationBuilder)_application).UseRouting();
@@ -353,6 +385,12 @@ internal sealed class Deployment : IAsyncDisposable
     /// The bot-defence signals recorded (AUTH-ABUSE-008).
     /// </summary>
     public BotDefenceAuditInMemory Signalled { get; } = new();
+
+    /// <summary>
+    /// What was known about each number before a restricted factor was offered or sent
+    /// to it, a record whose unit of work does not commit forgotten (AUTH-FACT-002b).
+    /// </summary>
+    public PhoneSignalAuditInMemory Considered { get; }
 
     /// <summary>
     /// The channel the waiting screen's stream waits on.
@@ -492,6 +530,11 @@ internal sealed class Deployment : IAsyncDisposable
     public ExportLedgerInMemory ExportLedger { get; } = new();
 
     /// <summary>
+    /// The host's export contributor, answering nothing until a test arranges what it holds.
+    /// </summary>
+    public ExportContributorInMemory ExportContributor { get; } = new("host");
+
+    /// <summary>
     /// The three fields the deployment supplies to the records of processing.
     /// </summary>
     public Janus.Privacy.Tests.Records.ComplianceStoreInMemory Compliance { get; } = new();
@@ -540,6 +583,12 @@ internal sealed class Deployment : IAsyncDisposable
     /// Every other line the deployment logged, at every level the host logs at.
     /// </summary>
     public LogsInMemory Logs { get; } = new();
+
+    /// <summary>
+    /// Every entry the deployment wrote, each with the values of the scopes open around
+    /// it, so a test can say which request an entry was written under.
+    /// </summary>
+    public EntriesInMemory Entries { get; } = new();
 
     /// <summary>
     /// What authentication wrote to the audit trail: each combination presented and
@@ -626,6 +675,11 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authorization.Tests.Gate.GroupsInMemory Groups { get; } = new();
 
     /// <summary>
+    /// Which roles each account hands out, judged over the gate and the groups.
+    /// </summary>
+    public Janus.Hosting.Tests.Authorization.HandOutInMemory HandOuts => _handOuts ??= new(Gate, Groups, Configuration);
+
+    /// <summary>
     /// The changes to roles the deployment wrote down.
     /// </summary>
     public Janus.Authorization.Tests.Roles.RoleAuditInMemory RoleChanges { get; } = new();
@@ -634,6 +688,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// The changes to groups the deployment wrote down.
     /// </summary>
     public Janus.Authorization.Tests.Groups.GroupAuditInMemory GroupChanges { get; } = new();
+
+    /// <summary>
+    /// The grants the deployment recorded as written or revoked.
+    /// </summary>
+    public Janus.Authorization.Tests.Grants.GrantAuditInMemory GrantChanges { get; } = new();
 
     /// <summary>
     /// The organizations the deployment holds, their members those placed in
@@ -811,6 +870,7 @@ internal sealed class Deployment : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(context);
 
         await using AsyncServiceScope scope = _application.Services.CreateAsyncScope();
+        using IDisposable? request = Entries.Request(context.TraceIdentifier);
 
         context.RequestServices = scope.ServiceProvider;
 
@@ -829,14 +889,27 @@ internal sealed class Deployment : IAsyncDisposable
         }
     }
 
-    // What a host mounts: the two profiles around the library's endpoints, with
-    // routing named by hand because no web server composes it here.
-    private static void Mounted(IApplicationBuilder mount)
+    // What a host mounts: the two profiles around the library's endpoints and its own,
+    // with routing named by hand because no web server composes it here, before the
+    // profiles or where the host adds it after them.
+    private static void Mounted(
+        IApplicationBuilder mount,
+        Action<IEndpointRouteBuilder>? host,
+        Action<IApplicationBuilder>? routing)
     {
-        _ = mount.UseRouting();
+        if (routing is null)
+        {
+            _ = mount.UseRouting();
+        }
+
         _ = mount.UseMachineProfile();
         _ = mount.UseBrowserProfile();
-        _ = mount.UseEndpoints(endpoints => endpoints.MapIdentityEndpoints());
+        routing?.Invoke(mount);
+        _ = mount.UseEndpoints(endpoints =>
+        {
+            _ = endpoints.MapIdentityEndpoints();
+            host?.Invoke(endpoints);
+        });
     }
 
     // Everything AddJanus registers, over the area's own fakes instead of the
@@ -925,6 +998,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IOpenIddictAuthorizationStore<OidcAuthorizationRecord>>(Grants);
         _ = services.AddSingleton<IOpenIddictScopeStore<OidcScopeRecord>>(Scopes);
         _ = services.AddSingleton<IOpenIddictTokenStore<OidcTokenRecord>>(Tokens);
+        _ = services.AddSingleton<IOidcGrantStore>(new OidcGrantRevocationInMemory(Grants, Tokens));
 
         _ = services.AddSingleton(RestrictionKeySuppliers.None);
         _ = services.AddSingleton(Declared);
@@ -994,7 +1068,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<ISendCarrier>(
             provider => provider.GetRequiredService<SendPublisher>());
         _ = services.AddScoped<INotificationHandler, NotificationHandler>();
-        _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
+        _ = services.AddSingleton<IPhoneSignalAudit>(Considered);
         _ = services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),
             provider.GetRequiredService<IPhoneSignalAudit>(),
@@ -1068,6 +1142,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IPrivacyAudit, Janus.Privacy.Tests.PrivacyAuditInMemory>();
         _ = services.AddSingleton<Janus.Privacy.Policies.IAdministrativeOrganization>(PrivacyAdministrative);
         _ = services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
+        _ = services.AddScoped<IDeploymentCookies>(_ => new DeploymentCookies(
+            Configuration,
+            Janus.Authorization.Tests.HostDomain.Declared().Build()));
+        _ = services.AddScoped<NoticeCookieCheck>();
         _ = services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
         _ = services.AddScoped<ILegalDocuments, LegalDocumentService>();
         _ = services.AddSingleton<IConsentStore>(Consents);
@@ -1089,6 +1167,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         _ = services.AddSingleton<IExportSource>(ExportSource);
         _ = services.AddSingleton<IExportLedger>(ExportLedger);
+        _ = services.AddSingleton<IExportContributor>(ExportContributor);
+        _ = services.AddSingleton<IExportNameRule, ExportNames>();
+        _ = services.AddSingleton<IFaultEntry, FaultEntry>();
         _ = services.AddScoped<IExports, ExportService>();
         _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
@@ -1125,6 +1206,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetRequiredService<Janus.Privacy.CategoryRetention>(),
             provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<NoticeCookieCheck>(),
             provider.GetRequiredService<IUnitOfWork>()));
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
         _ = services.AddScoped<RestrictionAdministration>();
@@ -1133,7 +1215,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authorization.Grants.IEmergencyAccount>(GrantEmergency);
         _ = services.AddSingleton<Janus.Authorization.Grants.IGrantStore>(AccessGrants);
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleReferences>(
-            new Janus.Hosting.Tests.Authorization.RoleReferencesInMemory(AccessGrants, Invitations));
+            new Janus.Hosting.Tests.Authorization.RoleReferencesInMemory(AccessGrants, Invitations, Roles));
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleStore>(Roles);
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupStore>(Groups);
         _ = services.AddSingleton<Janus.Authorization.Resources.IResourceStore>(Resources);
@@ -1141,8 +1223,12 @@ internal sealed class Deployment : IAsyncDisposable
             Janus.Authorization.Tests.HostDomain.Declared().Build()));
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleAudit>(RoleChanges);
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupAudit>(GroupChanges);
+        _ = services.AddSingleton<Janus.Authorization.Grants.IGrantAudit>(GrantChanges);
         _ = services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
         _ = services.AddSingleton<Janus.Authorization.Gate.IUnscopedRefusal, Janus.Authorization.Tests.Gate.UnscopedRefusalInMemory>();
+        _ = services.AddSingleton<Janus.Authorization.Gate.IGrantAdmission>(
+            new Janus.Hosting.Tests.Authorization.GrantAdmissionInMemory(Gate));
+        _ = services.AddSingleton<Janus.Authorization.Gate.IHandOutAdmission>(HandOuts);
         _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();
         _ = services.AddScoped<IRoles, Janus.Authorization.Roles.RoleService>();
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();
@@ -1193,6 +1279,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<RandomNumberGenerator>()));
         _ = services.AddSingleton<Janus.Authentication.Invitations.IInvitationStore>(Invitations);
         _ = services.AddSingleton<Janus.Authentication.Invitations.IRoleCatalogue>(RoleCatalogue);
+        _ = services.AddScoped<Janus.Authentication.Invitations.IRoleHandOut, Janus.Storage.Authentication.Invitations.RoleHandOut>();
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
         _ = services.AddSingleton<IMailServer>(MailServer);
         _ = services.AddSingleton<Janus.Authentication.Maintenance.IMaintenanceStore>(Maintenance);
@@ -1201,6 +1288,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationAcknowledgement>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipEnding>(Endings);
+        _ = services.AddScoped<Janus.Authentication.Invitations.IMembershipRevocations>(provider =>
+            new Janus.Authentication.Tests.Invitations.MembershipRevocationsInMemory(
+                provider.GetRequiredService<Janus.Authentication.Invitations.IRoleHandOut>(),
+                Memberships));
         _ = services.AddScoped<Janus.Authentication.Invitations.MembershipEnd>();
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationOpening>();
         _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
@@ -1229,15 +1320,15 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<SourceAdmissions>();
         _ = services.AddScoped<SourceRateLimiting>();
         _ = services.AddScoped<RequestSession>();
+        _ = services.AddScoped<IRequestAccess>(provider => provider.GetRequiredService<RequestSession>());
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();
         _ = services.AddScoped<SessionRequirement>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<MatcherPolicy, SessionRequirementPolicy>());
         _ = services.AddScoped<MachineProfile>();
 
         _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
-
-        _ = services.ConfigureHttpJsonOptions(HostingRegistration.ReadThroughContexts);
     }
 
     /// <inheritdoc/>

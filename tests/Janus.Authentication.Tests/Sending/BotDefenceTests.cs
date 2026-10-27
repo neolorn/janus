@@ -175,6 +175,37 @@ public sealed class BotDefenceTests : IAsyncDisposable
             _audit.Records.Select(recorded => recorded.Challenged));
         Assert.Equal((4, 0, false), (_work.OutermostCommitted, _work.RolledBack, _work.Open));
     }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a check whose signal is a kept write,
+    /// called inside a unit of work another opened, is a fault of the calling code: it
+    /// ends the level it joined before it records anything, so nothing of the outer unit
+    /// of work commits and the verifier is never asked.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ACheckInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        bool asked = false;
+
+        _verifier = new ChallengeVerifier((_, _) =>
+        {
+            asked = true;
+
+            return ValueTask.FromResult(true);
+        });
+
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await CheckedAsync(Datacenter, "solved"));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_audit.Records);
+        Assert.False(asked);
+    }
     /// <summary>
     /// A signal the deployment stopped counting fires for nobody, which is how the
     /// closed set is turned off (chapter 10 section 4.5), and the ranges are not asked

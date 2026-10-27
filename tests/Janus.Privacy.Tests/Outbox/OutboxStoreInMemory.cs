@@ -37,6 +37,11 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
     public bool WroteOutsideAUnitOfWork { get; private set; }
 
     /// <summary>
+    /// Every delivery added while the unit of work a test names was open, in order.
+    /// </summary>
+    public List<Delivery> AddedInTransaction { get; } = [];
+
+    /// <summary>
     /// Every claim a pass took, in order.
     /// </summary>
     public List<DeliveryClaim> Claimed { get; } = [];
@@ -75,6 +80,11 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
     public ValueTask AddAsync(Delivery delivery, CancellationToken cancellationToken)
     {
         _deliveries.Add(delivery);
+
+        if (Work is { Open: true })
+        {
+            AddedInTransaction.Add(delivery);
+        }
 
         return ValueTask.CompletedTask;
     }
@@ -173,6 +183,8 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
             held.RaisedAt,
             held.Restricted,
             held.Reason,
+            held.Purpose,
+            held.Change,
             delivery.Status,
             delivery.Attempts,
             delivery.NextAttemptAt,
@@ -269,14 +281,11 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
             _deliveries.Find(held => held.Id == delivery) is Delivery held ? Progress(held) : null);
 
     /// <inheritdoc/>
-    public ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(
-        SubjectEventKind kind,
-        CancellationToken cancellationToken) =>
+    public ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<DeliveryProgress>>(
         [
             .. _deliveries
-                .Where(delivery => delivery.Kind == kind
-                    && delivery.Status is not Core.ErasureStatus.Complete)
+                .Where(delivery => delivery.Status is not Core.ErasureStatus.Complete)
                 .OrderBy(delivery => delivery.RaisedAt)
                 .Select(Progress),
         ]);
@@ -343,6 +352,8 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
                 delivery.RaisedAt,
                 delivery.Restricted,
                 delivery.Reason,
+                delivery.Purpose,
+                delivery.Change,
                 delivery.Status,
                 delivery.Attempts,
                 delivery.NextAttemptAt,

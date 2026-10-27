@@ -8,7 +8,10 @@ namespace Janus.Core;
 /// One preference key a host declares at startup: what it is called, what type it
 /// takes, what it is when the person has never set it, and who may set it.
 /// </summary>
-/// <param name="Name">The key, as a request and the export name it.</param>
+/// <param name="Name">
+/// The key, as a request and the export name it: holding no <c>.</c> or <c>/</c>, and
+/// neither <c>language</c> nor <c>timeZone</c>, which the export gives the account's own.
+/// </param>
 /// <param name="Kind">The type its values take.</param>
 /// <param name="Default">The value in force where the person has set none.</param>
 /// <param name="AdministratorOnly">Whether only an administrator may set it.</param>

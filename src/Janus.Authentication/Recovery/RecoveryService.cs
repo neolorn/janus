@@ -513,6 +513,7 @@ internal sealed class RecoveryService(
             source,
             language,
             unheld,
+            outermost: true,
             cancellationToken);
 
     // AUTH-RECOV-004 and AUTH-ABUSE-003: a policy that closes the route and an
@@ -553,9 +554,11 @@ internal sealed class RecoveryService(
         string? recipient = await LanguageAsync(subject, language, cancellationToken).ConfigureAwait(false);
 
         // AUTH-ABUSE-004: a link a person asked for answers to the restrictions a
-        // sign-in link answers to, and no notification restriction counts it.
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        // sign-in link answers to, and no notification restriction counts it. A recovery
+        // may ask the carrier's signal, whose risk is a kept write, so it is never begun
+        // inside another's unit of work (CONV-DESIGN-003, D-207).
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }

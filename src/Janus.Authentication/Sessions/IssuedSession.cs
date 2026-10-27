@@ -1,3 +1,4 @@
+using System;
 using Janus.Core;
 
 namespace Janus.Authentication.Sessions;
@@ -12,5 +13,10 @@ namespace Janus.Authentication.Sessions;
 /// What the script-readable cookie carries, which a state-changing request presents
 /// back and which is bound to this session and no other.
 /// </param>
-/// <remarks>Implements AUTH-SESS-003, AUTH-SESS-006 and BFF-CSRF-001.</remarks>
-internal sealed record IssuedSession(SessionId Id, OpaqueToken Secret, OpaqueToken CsrfToken);
+/// <param name="Lasts">
+/// Until when the browser keeps the two values: the session's absolute expiry where the
+/// policy in force when they were issued requires <c>aal1</c>, or nothing where they end
+/// with the browser's session.
+/// </param>
+/// <remarks>Implements AUTH-SESS-003, AUTH-SESS-006, BFF-CSRF-001 and BFF-SESS-002.</remarks>
+internal sealed record IssuedSession(SessionId Id, OpaqueToken Secret, OpaqueToken CsrfToken, DateTimeOffset? Lasts);

@@ -9,6 +9,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
     <AnalysisLevel>latest-all</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <Deterministic>true</Deterministic>
@@ -60,5 +61,9 @@
       <FileWrites Include="$(LibraryPackageConstantsFile)" />
     </ItemGroup>
   </Target>
+
+  <!-- INT-PWD-001 AC3 (D-205): a project's package identifier as its build sets it, for a
+       test that reads the main package's from the build rather than spelling it. -->
+  <Target Name="PackageIdentity" Returns="$(PackageId)" />
 
 </Project>

@@ -93,6 +93,26 @@ internal sealed class AccessEvaluator(DataConnections connections) : IAccessEval
         return [.. conferred];
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlySet<RoleName>> HandedOutAsync(
+        SqlFilter handedOut,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(handedOut);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        IEnumerable<string> named = await ambient.Connection
+            .QueryAsync<string>(new CommandDefinition(
+                handedOut.Text,
+                Arguments(handedOut, []),
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        return named.Select(RoleName.Parse).ToHashSet();
+    }
+
     // CONV-ENUM-001: the columns are constrained text, so the vocabularies are read
     // back through the one converter that writes them.
     private static CandidateGrant Read(MatchedGrant row) => new()

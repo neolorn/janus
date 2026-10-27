@@ -696,7 +696,8 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     [Fact]
     public async Task AUTHZ_IMP_001_AC5_ASuspensionCarriesBothIdentitiesOfItsContextAsync()
     {
-        (AccessContext context, SessionId session) = OnBehalf();
+        AccessContext context = Acting;
+        SessionId session = Opened(_administrator, Noon);
 
         Accepted(await Administration.SuspendAsync(context, session, _member, TestContext.Current.CancellationToken));
 
@@ -712,7 +713,8 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     [Fact]
     public async Task AUTHZ_IMP_001_AC5_AReactivationCarriesBothIdentitiesOfItsContextAsync()
     {
-        (AccessContext context, SessionId session) = OnBehalf();
+        AccessContext context = Acting;
+        SessionId session = Opened(_administrator, Noon);
 
         Accepted(await SuspendAsync(_member));
         Accepted(await Administration.ReactivateAsync(context, session, _member, TestContext.Current.CancellationToken));
@@ -729,7 +731,8 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     [Fact]
     public async Task AUTHZ_IMP_001_AC5_ACancelledDeletionCarriesBothIdentitiesOfItsContextAsync()
     {
-        (AccessContext context, SessionId session) = OnBehalf();
+        AccessContext context = Acting;
+        SessionId session = Opened(_administrator, Noon);
 
         _directory.Deleting(_member, DeletionOrigin.OutOfBandRequest, Noon.AddDays(-1));
         _directory.ErasedFor(_member, PrivacyRequestId.Of(Noon.AddDays(-1)));
@@ -764,19 +767,6 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
     private async Task<Result<ReadOnlyMemory<byte>>> PhotoAsync(AccessContext context, SubjectId subject) =>
         await Administration.ReadPhotoAsync(context, subject, TestContext.Current.CancellationToken);
-
-    // A context whose acting identity is not its effective one, which is the seam
-    // AUTHZ-IMP-001 keeps and no current path produces: the administrator's grant is
-    // the effective identity's, and the session and its proof are the acting one's.
-    private (AccessContext Context, SessionId Session) OnBehalf()
-    {
-        var acting = SubjectId.New(_randomness);
-
-        _directory.Stands(acting, AccountState.Active);
-        _passwords.Hold(acting, Noon);
-
-        return (AccessContext.Of(acting, _administrator), Opened(acting, Noon));
-    }
 
     private async Task<Result> SuspendAsync(SubjectId subject) =>
         await Administration.SuspendAsync(

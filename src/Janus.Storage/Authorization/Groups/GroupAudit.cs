@@ -75,19 +75,43 @@ internal sealed class GroupAudit(IAuditStore records, TimeProvider time) : IGrou
         await AppendAsync(MemberRemoved, group, member, reason, actor, breakGlassReason, at, cancellationToken)
             .ConfigureAwait(false);
 
-    private async ValueTask AppendAsync(
-        AuditAction action,
+    /// <inheritdoc/>
+    public async ValueTask MemberRemovedAsync(
         Group group,
-        GrantSubject? member,
+        GrantSubject member,
         string reason,
-        SubjectId actor,
-        string? breakGlassReason,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(group);
+        ArgumentNullException.ThrowIfNull(principal);
 
-        var details = new Dictionary<string, JsonElement>(capacity: 5, StringComparer.Ordinal)
+        Dictionary<string, JsonElement> details = Details(group, member, reason);
+
+        // D-217: the job's record names the administrator who set the end it carried out,
+        // and the account it took out as its subject.
+        details["endSetBy"] = JsonSerializer.SerializeToElement(endSetBy.ToString());
+
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    MemberRemoved,
+                    at,
+                    principal,
+                    member.Type is SubjectType.User ? new SubjectId(member.Value) : null,
+                    group.Organization,
+                    details),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static Dictionary<string, JsonElement> Details(Group group, GrantSubject? member, string reason)
+    {
+        var details = new Dictionary<string, JsonElement>(capacity: 6, StringComparer.Ordinal)
         {
             ["group"] = JsonSerializer.SerializeToElement(group.Id.ToString()),
             ["name"] = JsonSerializer.SerializeToElement(group.Name),
@@ -100,6 +124,23 @@ internal sealed class GroupAudit(IAuditStore records, TimeProvider time) : IGrou
                 joined.Type is SubjectType.User ? "user" : "group");
             details["memberId"] = JsonSerializer.SerializeToElement(joined.Value.ToString());
         }
+
+        return details;
+    }
+
+    private async ValueTask AppendAsync(
+        AuditAction action,
+        Group group,
+        GrantSubject? member,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+
+        Dictionary<string, JsonElement> details = Details(group, member, reason);
 
         await records
             .AppendAsync(

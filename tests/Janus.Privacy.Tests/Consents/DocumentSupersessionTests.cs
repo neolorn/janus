@@ -4,6 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.Consents;
+using Janus.Privacy.Outbox;
+using Janus.Privacy.Tests.Outbox;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Consents;
@@ -33,14 +35,19 @@ public sealed class DocumentSupersessionTests : IAsyncDisposable
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon.AddDays(30));
     private readonly EventsInMemory _events;
+    private readonly OutboxStoreInMemory _outbox;
 
     /// <summary>
-    /// A deployment whose events are written in the start's transaction.
+    /// A deployment whose events and deliveries are written in the start's transaction.
     /// </summary>
-    public DocumentSupersessionTests() => _events = new EventsInMemory { Work = _work };
+    public DocumentSupersessionTests()
+    {
+        _events = new EventsInMemory { Work = _work };
+        _outbox = new OutboxStoreInMemory { Work = _work };
+    }
 
     private DocumentSupersession Start =>
-        new(_consents, Declaration.Processing, _events, _work, _clock);
+        new(_consents, Declaration.Processing, _events, _outbox, _work, _clock);
 
     /// <inheritdoc/>
     public ValueTask DisposeAsync() => _work.DisposeAsync();
@@ -162,6 +169,26 @@ public sealed class DocumentSupersessionTests : IAsyncDisposable
             async () => await Start.SupersededAsync(CancellationToken.None));
 
         Assert.Equal(ErrorCodes.SystemFault.ToString(), fault.Message);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-008, IDN-LIFE-003a AC1: a consent a start supersedes is owed to the
+    /// handlers naming its purpose, written in the start's transaction with the event.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_ASupersededConsentIsOwedToItsPurposesHandlersAsync()
+    {
+        _consents.Keep(Ahmed, Held(Newsletter, ConsentService.Notice));
+
+        _ = await Start.SupersededAsync(CancellationToken.None);
+
+        Delivery owed = Assert.Single(_outbox.AddedInTransaction);
+
+        Assert.Single(_outbox.Deliveries);
+        Assert.Equal(
+            (Ahmed, SubjectEventKind.ConsentChanged, Newsletter, DeliveryChange.Superseded, Noon.AddDays(30)),
+            (owed.Subject, owed.Kind, owed.Purpose, owed.Change, owed.RaisedAt));
     }
 
     private static ConsentRecord Held(string purpose, string document) =>

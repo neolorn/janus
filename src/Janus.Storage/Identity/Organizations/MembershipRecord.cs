@@ -47,4 +47,20 @@ internal sealed class MembershipRecord
     /// The <c>acknowledged_at</c> column.
     /// </summary>
     public DateTimeOffset? AcknowledgedAt { get; set; }
+
+    /// <summary>
+    /// The <c>ends_at</c> column: the later instant an administrator set the membership to
+    /// end at.
+    /// </summary>
+    public DateTimeOffset? EndsAt { get; set; }
+
+    /// <summary>
+    /// The <c>end_set_by</c> column: the administrator who set it.
+    /// </summary>
+    public SubjectId? EndSetBy { get; set; }
+
+    /// <summary>
+    /// The <c>end_reason</c> column: why.
+    /// </summary>
+    public string? EndReason { get; set; }
 }

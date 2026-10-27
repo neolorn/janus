@@ -15,6 +15,7 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Background;
 using Janus.Hosting.Tests.Sending;
+using Janus.Storage.Tests;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -409,6 +410,66 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INF-BG-001 AC5 (D-209): a worker whose only job is due further ahead than the
+    /// longest delay the runtime's timer accepts (the restore test's default interval of
+    /// 90 days) keeps running, looks again after that delay without running the job
+    /// early, and runs it when it is due.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INF_BG_001_AC5_AJobDueBeyondTheTimersLongestDelayRunsWhenItIsDueAsync()
+    {
+        var longest = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+        TimeSpan interval = Settings.BackupRestoreTestInterval.Default;
+        var time = new ManualTime(Noon);
+        int ran = 0;
+
+        var distant = BackgroundJob.Every(
+            "distant",
+            "DR-007",
+            SystemOperation.ExpirySweep,
+            Settings.BackupRestoreTestInterval,
+            (_, _, _) =>
+            {
+                _ = Interlocked.Increment(ref ran);
+
+                return ValueTask.FromResult(Result.Success());
+            });
+
+        Assert.True(interval > longest);
+
+        using var worker = new BackgroundWorker(
+            _services.GetRequiredService<IServiceScopeFactory>(),
+            [distant],
+            time,
+            _logging.CreateLogger<BackgroundWorker>());
+
+        await worker.StartAsync(TestContext.Current.CancellationToken);
+
+        try
+        {
+            await WaitedAsync(worker, time);
+
+            Assert.Equal(1, Volatile.Read(ref ran));
+
+            time.Advance(longest);
+            await WaitedAsync(worker, time);
+
+            Assert.Equal(1, Volatile.Read(ref ran));
+
+            time.Advance(interval - longest);
+            await WaitedAsync(worker, time);
+
+            Assert.Equal(2, Volatile.Read(ref ran));
+            Assert.False(worker.ExecuteTask!.IsCompleted);
+        }
+        finally
+        {
+            await worker.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    /// <summary>
     /// INF-BG-002, IDN-PRIN-001 AC3: every job the library schedules is a principal of
     /// its own name, restricted to the one operation it is, stating the item that
     /// requires it.
@@ -482,6 +543,19 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         while (await worker.RunDueAsync(patience.Token) != Sweep)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(5), patience.Token);
+        }
+    }
+
+    // The worker has taken its round and stands waiting on the clock, or has stopped,
+    // which the test then sees as a fault it threw.
+    private static async Task WaitedAsync(BackgroundWorker worker, ManualTime time)
+    {
+        Task ended = await Task.WhenAny(time.PendingAsync(), worker.ExecuteTask!)
+            .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        if (ended == worker.ExecuteTask)
+        {
+            await ended;
         }
     }
 

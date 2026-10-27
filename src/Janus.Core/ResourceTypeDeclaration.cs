@@ -23,7 +23,10 @@ namespace Janus.Core;
 /// <param name="Purposes">What it is processed for, and on which lawful basis.</param>
 /// <param name="Derivations">The relationships in the host's data that confer a role on it.</param>
 /// <param name="EncryptedFields">Its encrypted fields, each with the column naming its subject.</param>
-/// <remarks>Implements AUTHZ-MODEL-001, AUTHZ-MODEL-002, AUTHZ-MODEL-003.</remarks>
+/// <param name="Capabilities">
+/// The permissions a page of its records may be asked about, and no other.
+/// </param>
+/// <remarks>Implements AUTHZ-MODEL-001, AUTHZ-MODEL-002, AUTHZ-MODEL-003, BFF-CAP-002.</remarks>
 public sealed record ResourceTypeDeclaration(
     ResourceType Name,
     Type Entity,
@@ -33,4 +36,5 @@ public sealed record ResourceTypeDeclaration(
     IReadOnlyList<string> SensitiveCategories,
     IReadOnlyList<PurposeDeclaration> Purposes,
     IReadOnlyList<DerivationDeclaration> Derivations,
-    IReadOnlyList<EncryptedFieldDeclaration> EncryptedFields);
+    IReadOnlyList<EncryptedFieldDeclaration> EncryptedFields,
+    IReadOnlyList<Permission> Capabilities);

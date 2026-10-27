@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -112,30 +113,85 @@ public interface IInvitations
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Ends an account's membership of the organization; the account, its state and its
-    /// grants persist. Where the membership gave the account a corporate address, the
-    /// address and its mailbox are retired and the personal email becomes the primary
-    /// in the same operation (REG-MAIL-003).
+    /// Ends an account's membership of the organization; the account and its state
+    /// persist. In the same operation the allow grants a person gave the account in the
+    /// organization are revoked, its deny grants standing, and the account leaves the
+    /// organization's groups, and for the administrative organization the same in every
+    /// organization the account holds no current membership of (IDN-MEM-001); where the
+    /// membership gave the account a corporate address, the address and its mailbox are
+    /// retired and the personal email becomes the primary (REG-MAIL-003).
     /// </summary>
     /// <param name="context">Who is ending it.</param>
     /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="organization">Of which organization.</param>
     /// <param name="member">Whose membership.</param>
+    /// <param name="reason">Why, which each record the end writes carries.</param>
     /// <param name="source">The address the request came from, which a notice counts against.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: <c>identity.organization.notfound</c> where the
     /// deployment holds no such organization, <c>authz.denied</c> where no person asks
-    /// or the person may not manage its memberships, <c>identity.membership.notfound</c>
-    /// where the account holds no current membership of the organization,
-    /// <c>auth.stepup.required</c> where the session does not meet the
-    /// <c>membership:end</c> gate.
+    /// or the person may not manage its memberships, <c>api.request.malformed</c> naming
+    /// <c>reason</c> where it is blank or longer than 1024 characters after trimming,
+    /// <c>authz.role.notassignable</c> where the person may not hand out a role the end
+    /// reaches, <c>identity.membership.notfound</c> where the account holds no current
+    /// membership of the organization, <c>auth.stepup.required</c> where the session
+    /// does not meet the <c>membership:end</c> gate.
     /// </returns>
     ValueTask<Result> EndMembershipAsync(
         AccessContext context,
         SessionId session,
         OrganizationId organization,
         SubjectId member,
+        string reason,
         string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sets an account's membership of the organization to end at a later instant, or
+    /// moves the instant set (IDN-MEM-001, D-213). The end is judged as an end now is,
+    /// when it is set.
+    /// </summary>
+    /// <param name="context">Who is setting it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="member">Whose membership.</param>
+    /// <param name="endsAt">The instant it ends, after the present.</param>
+    /// <param name="reason">Why, which the end is recorded with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal of <see cref="EndMembershipAsync"/> but its
+    /// <c>identity.membership.notfound</c> for a second end, or
+    /// <c>api.request.invalid</c> naming <c>endsAt</c> where it is not after the present.
+    /// </returns>
+    ValueTask<Result> SetMembershipEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        DateTimeOffset endsAt,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Cancels the end an account's membership of the organization is set to reach
+    /// (IDN-MEM-001, D-213).
+    /// </summary>
+    /// <param name="context">Who is cancelling it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="member">Whose membership.</param>
+    /// <param name="reason">Why, which the cancellation is recorded with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal of <see cref="EndMembershipAsync"/>, with
+    /// <c>identity.membership.notfound</c> too where no end is set.
+    /// </returns>
+    ValueTask<Result> CancelMembershipEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        string reason,
         CancellationToken cancellationToken);
 }

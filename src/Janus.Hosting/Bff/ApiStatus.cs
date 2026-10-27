@@ -70,6 +70,8 @@ internal static class ApiStatus
         [ErrorCodes.ChallengeRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Denied] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Restricted] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.RoleNotAssignable] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.GrantSelf] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ConsentRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PhotoNotEnabled] = StatusCodes.Status403Forbidden,
@@ -110,6 +112,7 @@ internal static class ApiStatus
         [ErrorCodes.GroupCycle] = StatusCodes.Status409Conflict,
         [ErrorCodes.GroupInUse] = StatusCodes.Status409Conflict,
         [ErrorCodes.RoleInUse] = StatusCodes.Status409Conflict,
+        [ErrorCodes.ResourceInUse] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportPending] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
         [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,
@@ -127,6 +130,7 @@ internal static class ApiStatus
         [ErrorCodes.InvitationMailboxHeld] = StatusCodes.Status409Conflict,
         [ErrorCodes.MailboxTaken] = StatusCodes.Status409Conflict,
         [ErrorCodes.CallbackInProgress] = StatusCodes.Status409Conflict,
+        [ErrorCodes.SubjectErased] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,

@@ -50,4 +50,12 @@ internal interface IAccessEvaluator
         SqlFilter page,
         IReadOnlyList<ResourceId> resources,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The roles a principal hands out by the roles it holds (AUTHZ-GRANT-005).
+    /// </summary>
+    /// <param name="handedOut">The rendered statement and its parameters.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The roles named.</returns>
+    ValueTask<IReadOnlySet<RoleName>> HandedOutAsync(SqlFilter handedOut, CancellationToken cancellationToken);
 }

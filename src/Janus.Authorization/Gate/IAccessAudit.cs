@@ -47,10 +47,10 @@ internal interface IAccessAudit
     ValueTask RecordAsync(ExportedAccess export, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Records one grant the drift check wrote or took back, in the transaction in
-    /// progress.
+    /// Records one grant a refresh or the drift check wrote or took back, in the
+    /// transaction in progress.
     /// </summary>
-    /// <param name="corrected">The grant, its role and the principal that corrected it.</param>
+    /// <param name="corrected">The grant, its role and who called the refresh.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
     ValueTask RecordAsync(CorrectedGrant corrected, CancellationToken cancellationToken);

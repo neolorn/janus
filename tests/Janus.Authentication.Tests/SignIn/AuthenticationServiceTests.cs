@@ -607,6 +607,160 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a factor presented at a sign-in, whose
+    /// refusal keeps its record and its counts, called inside a unit of work another
+    /// opened is a fault of the calling code: it ends the level it joined before it
+    /// writes anything, so nothing of the outer unit of work commits and nothing is
+    /// recorded or counted.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AFactorPresentedInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = await AccountAsync();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        await InsideAsync(async () => await PresentAsync(began.Challenge, Factor.Password, "wrong" + Secret));
+
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a factor presented against a handle that
+    /// opens nothing, refused and counted before any unit of work of its own, is the
+    /// same fault inside one another opened.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AFactorForAHandleThatOpensNothingInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = await AccountAsync();
+
+        await InsideAsync(async () => await PresentAsync("a-handle-nothing-opened", Factor.Password, Secret));
+
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a new-device code, whose wrong try keeps
+    /// its count, its record and the delay's counts, presented inside a unit of work
+    /// another opened is a fault of the calling code.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ADeviceCodeInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = await AccountAsync();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        await InsideAsync(async () => await Service.VerifyDeviceAsync(
+            began.Challenge,
+            Other(Code()),
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_audit.DeviceVerificationsFailed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a factor presented at a step-up, whose
+    /// refusal keeps <c>auth.stepup.failed</c> and its counts, called inside a unit of
+    /// work another opened is a fault of the calling code.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AStepUpInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+
+        await InsideAsync(async () => await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = "not the password" },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a pressed sign-in link that opens
+    /// nothing, whose refusal keeps its record and its count, landed inside a unit of
+    /// work another opened is a fault of the calling code.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_APressedLinkInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        await InsideAsync(async () => await Service.LandAsync(
+            "a-handle-nothing-opened",
+            browser: null,
+            "a-token-nothing-issued",
+            Factor.PhoneLink,
+            press: true,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a delegated sign-in, whose refusal keeps
+    /// its record and its counts, called inside a unit of work another opened is a
+    /// fault of the calling code.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ADelegatedSignInInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = await AccountAsync();
+
+        await InsideAsync(async () => await Service.DelegatedAsync(
+            Factor.Google,
+            "linked-to-nothing",
+            new SessionOrigin(Source, Browser),
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: an ask for the second step's text code,
+    /// whose refusal keeps the number's consideration where the credential left before
+    /// the code was issued (AUTH-FACT-002 AC11), called inside a unit of work another
+    /// opened is a fault of the calling code: nothing is issued, sent or recorded.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AnAskInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        _ = Held(subject, Factor.PhoneCode);
+        Remembered(subject);
+        Answers(PhoneSignal.Clear);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        await InsideAsync(async () => await AskedAsync(began.Challenge, stepping: null));
+
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Empty(_considered.Records);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC5: a step-up whose challenge another raise removed while this
     /// one waited for its lock is refused, and its transaction is rolled back and left
     /// closed.
@@ -4351,6 +4505,39 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 (D-207): a sign-in link, which may go by text and so ask the
+    /// carrier's signal of the number, asked inside a unit of work another opened is a
+    /// fault of the calling code, for a number an account holds and for one none holds:
+    /// it ends the level it joined, so nothing of the outer unit of work commits and
+    /// nothing is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ALinkAskedInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+        _work.Reset();
+
+        foreach (string number in new[] { Number, "+441632960099" })
+        {
+            _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+            _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await Service.SendLinkAsync(number, Language, Source, browser: null, TestContext.Current.CancellationToken));
+            _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+            Assert.False(_work.Open);
+        }
+
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneLink, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// INT-SMS-001 AC2: with the two SMS entries off in the policy, asking for a link
     /// at a number sends nothing and leaves no sign-in in flight.
     /// </summary>
@@ -6292,6 +6479,21 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Browser,
             Source,
             TestContext.Current.CancellationToken);
+
+    // CONV-DESIGN-003 AC8: an operation called inside a unit of work the test opened
+    // faults and ends it, so the test's own commit commits nothing and faults too.
+    private async ValueTask InsideAsync(Func<Task> operation)
+    {
+        _work.Reset();
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(operation);
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+    }
 
     private async ValueTask<SignInProgress> SignedInAsync(
         SubjectId subject,

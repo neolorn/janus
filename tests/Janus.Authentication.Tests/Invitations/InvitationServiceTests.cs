@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
@@ -14,6 +15,7 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
+using Janus.Authentication.Tests.BreakGlass;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Mailboxes;
@@ -41,6 +43,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     private static readonly AccessContext Carrier = AccessContext.Of(
         SystemPrincipal.ForDeployment("mailbox-provisioning", "INT-MAIL-006a", SystemOperation.Delivery));
+
+    private static readonly AccessContext Ender = AccessContext.Of(
+        SystemPrincipal.ForDeployment("membership-ends", "IDN-MEM-001", SystemOperation.ExpirySweep));
 
     private const string Source = "198.51.100.7";
     private const string Personal = "person@elsewhere.test";
@@ -81,6 +86,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly MailServerInMemory _server = new();
     private readonly GovernedSendInMemory _notifications = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly EmergencyAccountInMemory _emergency = new();
     private readonly OrganizationAuditInMemory _audit = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
     private readonly EventsInMemory _events = new();
@@ -90,6 +96,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly OrganizationsInMemory _organizations;
     private readonly MembershipAttachmentInMemory _attachments;
     private readonly MembershipEndingInMemory _ending;
+    private readonly RoleHandOutInMemory _handOut;
+    private readonly MembershipRevocationsInMemory _revocations;
     private readonly SubjectId _inviter;
 
     /// <summary>
@@ -102,6 +110,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _organizations = new OrganizationsInMemory(_memberships);
         _attachments = new MembershipAttachmentInMemory(_memberships);
         _ending = new MembershipEndingInMemory(_memberships);
+        _handOut = new RoleHandOutInMemory(_gate, _administrative);
+        _revocations = new MembershipRevocationsInMemory(_handOut, _memberships);
         _organizations.Seed(Staff, administrative: true);
         _organizations.Seed(Customer, name: "Northern branch");
 
@@ -644,6 +654,32 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-001 and AUTHZ-SCOPE-001 (D-207): the roles an invitation attaches need
+    /// <c>grant:manage</c> held in the invitation's own organization, for which the
+    /// permission to administer the deployment, held in the administrative organization,
+    /// does not stand in.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_SystemAdministrationDoesNotStandInForAnInvitationsRolesAsync()
+    {
+        RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
+
+        _gate.Grant(_inviter, Staff, Permissions.SystemAdminister);
+        _gate.Grant(_inviter, Staff, Permissions.GrantManage);
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Failure(await IssueAsync(Customer, Request(email: Personal, roles: [clerk]))).Code);
+        Assert.Empty(_invitations.Held);
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+
+        _ = Accepted(await IssueAsync(Customer, Request(email: Personal, roles: [clerk])));
+
+        Assert.Equal([clerk], Assert.Single(_invitations.Held).Roles);
+    }
+
+    /// <summary>
     /// REG-INV-001: an invitation naming a role is also the <c>grant:manage</c> step-up
     /// action, judged after <c>invitation:issue</c>, so a session that meets the issue's
     /// gate and not the grant's issues nothing; one naming no role asks only the issue's.
@@ -657,6 +693,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         gates[StepUpAction.GrantManage] = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
         _configuration.Set(Settings.PolicyDefault, Core.Policies.SystemDefault with { Gates = gates });
         _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, clerk);
 
         Error challenged = Failure(await IssueAsync(Customer, Request(email: Personal, roles: [clerk])));
 
@@ -948,6 +985,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
 
         _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, clerk);
         _documents.Publish("staff-handbook", "2", Noon.AddDays(-1));
         _accounts.Holds(_inviter, new HeldProfile(Named("Ada"), LegalName: null, DateOfBirth: null, PhotoUpdatedAt: null));
 
@@ -1050,6 +1088,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
 
         _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, clerk);
         _documents.Publish("staff-handbook", "2", Noon.AddDays(-1));
 
         string token = Accepted(await IssueAsync(
@@ -1087,6 +1126,51 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Null(invitation.Identifiers);
         Assert.Equal(ErrorCodes.InvitationNotFound, Failure(await AttachedAsync(holder)).Code);
         Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation.Id)).Code);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-005 AC1: with handing out by holding off, an inviter managing grants
+    /// names in an invitation a role it hands out; a role it does not hand out is refused
+    /// <c>authz.role.notassignable</c>, and nothing is issued or sent.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC1_AnInvitationNamesOnlyARoleTheInviterHandsOutAsync()
+    {
+        RoleName accountant = _roles.Define("accountant", Permissions.MembershipManage);
+        RoleName auditor = _roles.Define("auditor", Permissions.AuditRead);
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, accountant);
+
+        Error refused = Failure(await IssueAsync(Customer, Request(email: Personal, roles: [accountant, auditor])));
+
+        Assert.Equal(ErrorCodes.RoleNotAssignable, refused.Code);
+        Assert.Empty(_invitations.Held);
+        Assert.Empty(_notifications.Sent);
+
+        _ = Accepted(await IssueAsync(Customer, Request(email: Personal, roles: [accountant])));
+
+        Assert.Equal([accountant], Assert.Single(_invitations.Held).Roles);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-005 AC3, REG-INV-002: the account that issued an invitation and
+    /// acknowledges it is refused <c>authz.grant.self</c>, and nothing attaches.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC3_AcknowledgingAnInvitationOneIssuedIsRefusedAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        Invitation invitation = _invitations.Held[0];
+
+        _ = _identifiers.Verified(_inviter, IdentifierKind.Phone, Number);
+        Accepted(await OpenAsync(_inviter, token));
+
+        Error refused = Failure(await AcknowledgeAsync(_inviter, invitation.Id));
+
+        Assert.Equal(ErrorCodes.GrantSelf, refused.Code);
+        Assert.Empty(_attachments.Attached);
+        Assert.Null(invitation.AcknowledgedAt);
     }
 
     /// <summary>
@@ -2055,6 +2139,34 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-MEM-001 AC6, OPS-BOOT-002 AC7 (D-202): the reserved account's membership of
+    /// the administrative organization is what its grant confers through, so ending it
+    /// is refused with <c>authz.denied</c> for a caller holding <c>membership:manage</c>
+    /// there, before the step-up is judged, with no transaction begun and the membership
+    /// current; its membership of another organization ends as anyone's does.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC6_TheReservedAccountsMembershipOfTheAdministrativeOrganizationIsNotEndedAsync()
+    {
+        SubjectId reserved = Holder();
+
+        _emergency.Account = reserved;
+        _memberships.Place(reserved, Staff);
+        _memberships.Place(reserved, Customer);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.Denied, Failure(await EndAsync(Staff, reserved, Stale())).Code);
+        Assert.Equal(ErrorCodes.Denied, Failure(await EndAsync(Staff, reserved, Stepped())).Code);
+        Assert.Empty(_ending.Ended);
+        Assert.Equal(0, _work.Opened);
+        Assert.Contains(Staff, await _memberships.OfAsync(reserved, TestContext.Current.CancellationToken));
+
+        Accepted(await EndAsync(Customer, reserved, Stepped()));
+
+        Assert.Equal((reserved, Customer), (Assert.Single(_ending.Ended).Subject, _ending.Ended[0].Organization));
+    }
+
+    /// <summary>
     /// IDN-MEM-001: ending a membership asks <c>membership:manage</c> in the
     /// organization and a person to ask it, and only a current membership is ended;
     /// anything else is refused with nothing written.
@@ -2074,6 +2186,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 Stepped(),
                 Customer,
                 holder,
+                Why,
                 Source,
                 TestContext.Current.CancellationToken)).Code);
         Assert.Equal(
@@ -2083,6 +2196,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 Stepped(),
                 Customer,
                 holder,
+                Why,
                 Source,
                 TestContext.Current.CancellationToken)).Code);
         Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Staff, holder)).Code);
@@ -2095,6 +2209,361 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, holder)).Code);
         Assert.Single(_ending.Ended);
         Assert.Single(_audit.Changes);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC3 (D-213): ending a membership revokes, with the end's reason and
+    /// actor, what a person gave the account in the organization and nothing beyond it;
+    /// ending one of the administrative organization revokes too what the account holds
+    /// where it is no member, and leaves what it holds where it still is.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC3_AnEndRevokesWhatItReachesWithItsReasonAsync()
+    {
+        var clerk = new DefinedRole(_roles.Define("clerk", Permissions.MembershipManage), [Permissions.MembershipManage], []);
+        var elsewhere = new OrganizationId(Guid.NewGuid());
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+        _memberships.Place(holder, Staff);
+        _revocations.Give(holder, Customer, clerk);
+        _revocations.Give(holder, Staff, clerk);
+        _revocations.Give(holder, elsewhere, clerk);
+
+        foreach (OrganizationId organization in new[] { Customer, Staff, elsewhere })
+        {
+            _handOut.HandsOut(_inviter, organization, clerk.Name);
+        }
+
+        Accepted(await EndAsync(Customer, holder));
+
+        MembershipRevocationsInMemory.Revocation revoked = Assert.Single(_revocations.Revoked);
+
+        Assert.Equal((Customer, _inviter, Why), (revoked.Organization, revoked.Actor, revoked.Reason));
+        Assert.Equal([clerk.Name], _revocations.HeldBy(holder, Staff));
+        Assert.Equal([clerk.Name], _revocations.HeldBy(holder, elsewhere));
+
+        _memberships.Place(holder, Customer);
+        _revocations.Give(holder, Customer, clerk);
+
+        Accepted(await EndAsync(Staff, holder));
+
+        Assert.Equal(
+            new HashSet<OrganizationId> { Staff, elsewhere },
+            _revocations.Revoked.Skip(1).Select(revocation => revocation.Organization).ToHashSet());
+        Assert.Equal([clerk.Name], _revocations.HeldBy(holder, Customer));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC8, AUTHZ-GRANT-005 (D-213): ending the membership of an account
+    /// holding a role the actor may not hand out is refused with
+    /// <c>authz.role.notassignable</c>, with no transaction begun and nothing changed.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC8_AnEndReachingARoleTheActorDoesNotHandOutIsRefusedAsync()
+    {
+        var clerk = new DefinedRole(_roles.Define("clerk", Permissions.MembershipManage), [Permissions.MembershipManage], []);
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+        _revocations.Give(holder, Customer, clerk);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Failure(await EndAsync(Customer, holder)).Code);
+        Assert.Empty(_ending.Ended);
+        Assert.Empty(_revocations.Revoked);
+        Assert.Empty(_audit.Changes);
+        Assert.Equal(0, _work.Opened);
+        Assert.Contains(Customer, await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+
+        _handOut.HandsOut(_inviter, Customer, clerk.Name);
+
+        Accepted(await EndAsync(Customer, holder));
+
+        Assert.Single(_revocations.Revoked);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC9 (D-216): an end whose reason is blank or longer than 1024
+    /// characters after trimming is refused with <c>api.request.malformed</c> naming
+    /// <c>reason</c>, and the membership stays current; the reason an end takes is the
+    /// trimmed one its record carries.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC9_AnEndWithoutAReasonIsRefusedAsync()
+    {
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+
+        foreach (string reason in new[] { " ", new string('a', 1025) })
+        {
+            Error refused = Failure(await Service.EndMembershipAsync(
+                AccessContext.Of(_inviter),
+                Stepped(),
+                Customer,
+                holder,
+                reason,
+                Source,
+                TestContext.Current.CancellationToken));
+
+            Assert.Equal(ErrorCodes.RequestMalformed, refused.Code);
+            Assert.Equal("reason", refused.Details["member"].GetString());
+        }
+
+        Assert.Empty(_ending.Ended);
+
+        Accepted(await Service.EndMembershipAsync(
+            AccessContext.Of(_inviter),
+            Stepped(),
+            Customer,
+            holder,
+            "  " + Why + " ",
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Why, Assert.Single(_audit.Changes).Reason);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC7 (D-213): an end set in advance leaves the membership current and
+    /// is recorded with its administrator, instant and reason; moved, the latest instant
+    /// stands; cancelled, none does and the cancellation is recorded without one; a
+    /// second cancellation finds nothing to cancel.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC7_AnEndIsSetMovedAndCancelledAsync()
+    {
+        SubjectId holder = Holder();
+        DateTimeOffset set = _clock.GetUtcNow().AddDays(30);
+        DateTimeOffset moved = set.AddDays(30);
+
+        _memberships.Place(holder, Customer);
+
+        Accepted(await SetEndAsync(Customer, holder, set));
+
+        Assert.Equal(new MembershipEndingInMemory.SetEnd(set, _inviter, Why), _ending.EndSetOn(holder, Customer));
+        Assert.Empty(_ending.Ended);
+        Assert.Contains(Customer, await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+
+        Accepted(await SetEndAsync(Customer, holder, moved));
+
+        Assert.Equal(moved, _ending.EndSetOn(holder, Customer)?.At);
+
+        Accepted(await CancelEndAsync(Customer, holder));
+
+        Assert.Null(_ending.EndSetOn(holder, Customer));
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await CancelEndAsync(Customer, holder)).Code);
+        Assert.Equal(
+            [(AuditActions.MembershipEndSet, (DateTimeOffset?)set), (AuditActions.MembershipEndSet, moved), (AuditActions.MembershipEndSet, null)],
+            _audit.Changes.Select(change => (change.Action, change.EndsAt)));
+        Assert.All(_audit.Changes, change => Assert.Equal((_inviter, holder, Why), (change.Actor, change.Member!.Value, change.Reason)));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC7 (D-213): an end set to an instant not after the present is refused
+    /// with <c>api.request.invalid</c> naming <c>endsAt</c>, and nothing is set.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC7_AnEndNotAfterThePresentIsInvalidAsync()
+    {
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+
+        foreach (DateTimeOffset endsAt in new[] { _clock.GetUtcNow(), _clock.GetUtcNow().AddSeconds(-1) })
+        {
+            Error refused = Failure(await SetEndAsync(Customer, holder, endsAt));
+
+            Assert.Equal(ErrorCodes.RequestInvalid, refused.Code);
+            Assert.Equal("endsAt", refused.Details["member"].GetString());
+        }
+
+        Assert.Null(_ending.EndSetOn(holder, Customer));
+        Assert.Empty(_audit.Changes);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC7 (D-213, D-217): a membership set to end stays current until the
+    /// instant and is ended at the job's first pass after it, with whatever grants the
+    /// account then holds, unjudged; each record is the job's, under its principal, naming
+    /// the administrator who set the end and the reason given, and a grant it revokes
+    /// carries the nil subject as revoker.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC7_TheJobEndsAMembershipAtItsFirstPassAfterTheInstantAsync()
+    {
+        var clerk = new DefinedRole(_roles.Define("clerk", Permissions.MembershipManage), [Permissions.MembershipManage], []);
+        SubjectId holder = Holder();
+        DateTimeOffset endsAt = _clock.GetUtcNow().AddDays(30);
+
+        _memberships.Place(holder, Customer);
+        Accepted(await SetEndAsync(Customer, holder, endsAt));
+        _revocations.Give(holder, Customer, clerk);
+        _clock.Advance(TimeSpan.FromDays(30) - TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, Accepted(await PassAsync()));
+        Assert.Empty(_ending.Ended);
+        Assert.Contains(Customer, await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromSeconds(2));
+        _work.Reset();
+
+        Assert.Equal(1, Accepted(await PassAsync()));
+
+        DateTimeOffset now = _clock.GetUtcNow();
+        EndedMembership ended = Assert.Single(_ending.Ended);
+        MembershipRevocationsInMemory.Revocation revoked = Assert.Single(_revocations.Revoked);
+        OrganizationAuditInMemory.OrganizationChange recorded = _audit.Changes[^1];
+        MembershipChanged announced = _events.Of<MembershipChanged>()[^1];
+
+        Assert.Equal((holder, Customer, now), (ended.Subject, ended.Organization, ended.At));
+        Assert.Empty(await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+        Assert.Equal((holder, Customer, clerk.Name, default(SubjectId), Why, now), (revoked.Member, revoked.Organization, revoked.Role, revoked.Actor, revoked.Reason, revoked.At));
+        Assert.Equal(("membership-ends", "IDN-MEM-001", _inviter), (revoked.Principal?.Name, revoked.Principal?.Reason, revoked.EndSetBy));
+        Assert.Equal((AuditActions.MembershipEnded, Customer, default(SubjectId), Why, now), (recorded.Action, recorded.Organization, recorded.Actor, recorded.Reason, recorded.At));
+        Assert.Equal((ended.Id, holder, _inviter), (recorded.Membership!.Value, recorded.Member!.Value, recorded.EndSetBy!.Value));
+        Assert.Equal(("membership-ends", "IDN-MEM-001"), (recorded.Principal?.Name, recorded.Principal?.Reason));
+        Assert.Equal((ended.Id, Customer, MembershipChange.Ended, holder), (announced.Membership, announced.Organization, announced.Change, announced.Subject));
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(0, Accepted(await PassAsync()));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC7 (D-213): an end moved before its instant ends the membership at the
+    /// new instant, and one cancelled before it ends nothing.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC7_AnEndMovedOrCancelledIsCarriedOutAsItNowStandsAsync()
+    {
+        SubjectId moved = Holder();
+        SubjectId cancelled = Holder();
+        DateTimeOffset first = _clock.GetUtcNow().AddDays(10);
+
+        _memberships.Place(moved, Customer);
+        _memberships.Place(cancelled, Customer);
+        Accepted(await SetEndAsync(Customer, moved, first));
+        Accepted(await SetEndAsync(Customer, cancelled, first));
+        Accepted(await SetEndAsync(Customer, moved, first.AddDays(30)));
+        Accepted(await CancelEndAsync(Customer, cancelled));
+        _clock.Advance(TimeSpan.FromDays(11));
+
+        Assert.Equal(0, Accepted(await PassAsync()));
+
+        _clock.Advance(TimeSpan.FromDays(30));
+
+        Assert.Equal(1, Accepted(await PassAsync()));
+        Assert.Equal(moved, Assert.Single(_ending.Ended).Subject);
+        Assert.Contains(Customer, await _memberships.OfAsync(cancelled, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC7, REG-MAIL-003 (D-213): the job ends a membership of the
+    /// administrative organization as the administrator who set it would have, retiring
+    /// the corporate address, with no request for a notice to count against; the reserved
+    /// account's membership it never ends (OPS-BOOT-002, D-202).
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC7_TheJobEndsAsAnAdministratorWouldAndKeepsTheReservedMembershipAsync()
+    {
+        (SubjectId holder, IdentifierId personal) = await StaffMemberAsync();
+        Mailbox mailbox = Assert.Single(_mailboxes.Held);
+        SubjectId reserved = Holder();
+
+        _memberships.Place(reserved, Staff);
+        _emergency.Account = reserved;
+        _ = await _ending.SetEndAsync(reserved, Staff, _clock.GetUtcNow().AddDays(1), _inviter, Why, TestContext.Current.CancellationToken);
+        Accepted(await SetEndAsync(Staff, holder, _clock.GetUtcNow().AddDays(1)));
+        _clock.Advance(TimeSpan.FromDays(2));
+        _notifications.Sent.Clear();
+
+        Assert.Equal(1, Accepted(await PassAsync()));
+
+        HeldIdentifier continued = Assert.Single(
+            (await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken)).OfKind(IdentifierKind.Email));
+
+        Assert.Equal(holder, Assert.Single(_ending.Ended).Subject);
+        Assert.Equal(personal, continued.Id);
+        Assert.True(continued.IsPrimary);
+        Assert.False(mailbox.IsHeld);
+        Assert.Null(Assert.Single(_notifications.Sent).Source);
+        Assert.Contains(Staff, await _memberships.OfAsync(reserved, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// INF-BG-002 AC1: the pass runs only as a system principal that may sweep what has
+    /// expired, never for a person.
+    /// </summary>
+    [Fact]
+    public async Task INF_BG_002_AC1_ThePassRunsOnlyAsAPrincipalThatMaySweepAsync()
+    {
+        _ = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await Ends().EndDueAsync(Carrier, TestContext.Current.CancellationToken));
+        _ = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await Ends().EndDueAsync(AccessContext.Of(_inviter), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC8 (D-213): setting the end of the membership of an account holding a
+    /// role the actor may not hand out is refused with <c>authz.role.notassignable</c>,
+    /// with no transaction begun and nothing set; so is cancelling one.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC8_AnEndSetReachingARoleTheActorDoesNotHandOutIsRefusedAsync()
+    {
+        var clerk = new DefinedRole(_roles.Define("clerk", Permissions.MembershipManage), [Permissions.MembershipManage], []);
+        SubjectId holder = Holder();
+        DateTimeOffset endsAt = _clock.GetUtcNow().AddDays(30);
+
+        _memberships.Place(holder, Customer);
+        _revocations.Give(holder, Customer, clerk);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Failure(await SetEndAsync(Customer, holder, endsAt)).Code);
+        Assert.Null(_ending.EndSetOn(holder, Customer));
+        Assert.Equal(0, _work.Opened);
+
+        _handOut.HandsOut(_inviter, Customer, clerk.Name);
+        Accepted(await SetEndAsync(Customer, holder, endsAt));
+        _ = _handOut.Withdraws(_inviter, Customer, clerk.Name);
+
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Failure(await CancelEndAsync(Customer, holder)).Code);
+        Assert.Equal(endsAt, _ending.EndSetOn(holder, Customer)?.At);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC5 and AC6, 09 section 8a (D-213): an end set takes the refusals of an
+    /// end now: a person without <c>membership:manage</c>, a reason that is blank, an
+    /// account holding no membership there, the reserved account's membership of the
+    /// administrative organization and a session whose proof is stale are each refused,
+    /// and nothing is set.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AnEndSetTakesTheRefusalsOfAnEndNowAsync()
+    {
+        SubjectId holder = Holder();
+        SubjectId reserved = Holder();
+        DateTimeOffset endsAt = _clock.GetUtcNow().AddDays(30);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        _emergency.Account = reserved;
+        _memberships.Place(holder, Customer);
+        _memberships.Place(reserved, Staff);
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Failure(await Service.SetMembershipEndAsync(
+                AccessContext.Of(Holder()), Stepped(), Customer, holder, endsAt, Why, cancellationToken)).Code);
+        Assert.Equal(
+            ErrorCodes.RequestMalformed,
+            Failure(await Service.SetMembershipEndAsync(
+                AccessContext.Of(_inviter), Stepped(), Customer, holder, endsAt, " ", cancellationToken)).Code);
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await SetEndAsync(Customer, Holder(), endsAt)).Code);
+        Assert.Equal(ErrorCodes.Denied, Failure(await SetEndAsync(Staff, reserved, endsAt)).Code);
+        Assert.Equal(ErrorCodes.StepUpRequired, Failure(await SetEndAsync(Customer, holder, endsAt, Stale())).Code);
+        Assert.Null(_ending.EndSetOn(holder, Customer));
+        Assert.Null(_ending.EndSetOn(reserved, Staff));
+        Assert.Empty(_audit.Changes);
     }
 
     private InvitationService Service => Serving(_server);
@@ -2136,10 +2605,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     private PolicyResolution Policies => new(_memberships, _configuration, _raises);
 
-    private InvitationService Serving(IMailServer? server)
-    {
-        PolicyResolution policies = Policies;
-        var stepUp = new StepUpGuard(
+    private StepUpGuard Guard(PolicyResolution policies) =>
+        new(
             _sessions,
             _authenticators,
             _passwords,
@@ -2148,12 +2615,40 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
             _clock);
 
+    private MembershipEnd Ends() => Ends(Guard(Policies));
+
+    private MembershipEnd Ends(StepUpGuard stepUp) =>
+        new(
+            _gate,
+            stepUp,
+            _organizations,
+            _ending,
+            _revocations,
+            _emergency,
+            _identifiers,
+            _mailboxes,
+            _notifications,
+            _events,
+            _configuration,
+            _audit,
+            _work,
+            _clock);
+
+    private ValueTask<Result<int>> PassAsync() =>
+        Ends().EndDueAsync(Ender, TestContext.Current.CancellationToken);
+
+    private InvitationService Serving(IMailServer? server)
+    {
+        PolicyResolution policies = Policies;
+        StepUpGuard stepUp = Guard(policies);
+
         return new(
             _gate,
             new AdministrativeScope(_gate, _administrative),
             stepUp,
             _organizations,
             _roles,
+            _handOut,
             _documents,
             new DomainLock(_memberships, _configuration, _domains),
             _invitations,
@@ -2163,6 +2658,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _gate,
                 new AdministrativeScope(_gate, _administrative),
                 _roles,
+                _handOut,
                 _restriction,
                 _invitations,
                 _organizations,
@@ -2180,19 +2676,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _audit,
                 _work,
                 _clock),
-            new MembershipEnd(
-                _gate,
-                stepUp,
-                _organizations,
-                _ending,
-                _identifiers,
-                _mailboxes,
-                _notifications,
-                _events,
-                _configuration,
-                _audit,
-                _work,
-                _clock),
+            Ends(stepUp),
             _mailboxes,
             new MailServerInUseInMemory(server),
             _notifications,
@@ -2344,6 +2828,29 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken);
 
+    private ValueTask<Result> SetEndAsync(
+        OrganizationId organization,
+        SubjectId member,
+        DateTimeOffset endsAt,
+        SessionId? session = null) =>
+        Service.SetMembershipEndAsync(
+            AccessContext.Of(_inviter),
+            session ?? Stepped(),
+            organization,
+            member,
+            endsAt,
+            Why,
+            TestContext.Current.CancellationToken);
+
+    private ValueTask<Result> CancelEndAsync(OrganizationId organization, SubjectId member) =>
+        Service.CancelMembershipEndAsync(
+            AccessContext.Of(_inviter),
+            Stepped(),
+            organization,
+            member,
+            Why,
+            TestContext.Current.CancellationToken);
+
     private ValueTask<Result> EndAsync(OrganizationId organization, SubjectId member) =>
         EndAsync(organization, member, Stepped());
 
@@ -2353,6 +2860,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             session,
             organization,
             member,
+            Why,
             Source,
             TestContext.Current.CancellationToken);
 

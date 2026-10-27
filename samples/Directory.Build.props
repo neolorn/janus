@@ -1,0 +1,17 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- CONV-SETUP-002, LIB-TEST-004 (D-204): the sample host keeps no lockfile, since the
+       library's packages it restores change with every commit. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <!-- CONV-LAYOUT-001 (D-207): the sample host is never packed, so it takes no version
+       from the tags. -->
+  <ItemGroup>
+    <PackageReference Remove="MinVer" />
+  </ItemGroup>
+
+</Project>

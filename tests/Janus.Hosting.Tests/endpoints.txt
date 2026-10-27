@@ -299,7 +299,7 @@ POST /account/invitation/acknowledge
   204
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.grant.self authz.restricted
   404 identity.invitation.notfound
   409 identity.identifier.maximum identity.membership.limitreached
   422 identity.identifier.domainnotallowed identity.invitation.expired identity.invitation.identifiermismatch
@@ -697,8 +697,11 @@ GET /admin/erasures
   200
     application/json
       [].id: Guid
+      [].kind: DeliveryKind
       [].subject: Guid
-      [].reason: ErasureReason
+      [].purpose: string
+      [].change: DeliveryChange?
+      [].reason: ErasureReason?
       [].status: ErasureStatus
       [].attempts: number
       [].subscribers[].name: string
@@ -710,8 +713,11 @@ GET /admin/erasures/{id}
   200
     application/json
       id: Guid
+      kind: DeliveryKind
       subject: Guid
-      reason: ErasureReason
+      purpose: string
+      change: DeliveryChange?
+      reason: ErasureReason?
       status: ErasureStatus
       attempts: number
       subscribers[].name: string
@@ -781,7 +787,7 @@ POST /admin/grants
       id: Guid
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.grant.self authz.restricted authz.role.notassignable
   409 authz.grant.duplicate authz.grant.expired
   422 authz.grant.reasonrequired authz.grant.unresolved
 DELETE /admin/grants/{id}
@@ -790,7 +796,7 @@ DELETE /admin/grants/{id}
   204
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.grant.self authz.restricted authz.role.notassignable
   404 authz.grant.notfound
   422 authz.grant.reasonrequired
 GET /admin/groups
@@ -830,7 +836,7 @@ DELETE /admin/groups/{id}/members
   204
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.grant.self authz.restricted authz.role.notassignable
   409 authz.group.cycle
   422 api.request.invalid
 POST /admin/groups/{id}/members
@@ -841,7 +847,7 @@ POST /admin/groups/{id}/members
   204
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.grant.self authz.restricted authz.role.notassignable
   409 authz.group.cycle
   422 api.request.invalid
 POST /admin/notices
@@ -967,7 +973,7 @@ POST /admin/organizations/{id}/invitations
       token: string
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
   404 identity.organization.notfound
   409 identity.invitation.mailboxheld identity.mailbox.taken
   422 api.request.invalid authz.grant.unresolved identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.invitation.addressrequired
@@ -980,11 +986,31 @@ DELETE /admin/organizations/{id}/invitations/{invitationId}
   404 identity.invitation.notfound identity.organization.notfound
   422 identity.invitation.expired
 DELETE /admin/organizations/{id}/memberships/{subject}
+  request application/json
+    reason: string
   204
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
   404 identity.membership.notfound identity.organization.notfound
+DELETE /admin/organizations/{id}/memberships/{subject}/end
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
+  404 identity.membership.notfound identity.organization.notfound
+PUT /admin/organizations/{id}/memberships/{subject}/end
+  request application/json
+    endsAt: DateTimeOffset?
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
+  404 identity.membership.notfound identity.organization.notfound
+  422 api.request.invalid
 GET /admin/organizations/{id}/policy
   200
     application/json
@@ -1147,25 +1173,28 @@ GET /admin/roles
     application/json
       [].name: string
       [].permissions[]: string
+      [].handsOut[]: string
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
 POST /admin/roles
   request application/json
     name: string
     permissions[]: string
+    handsOut[]: string
     reason: string
   201
   204
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
+  422 authz.grant.unresolved
 DELETE /admin/roles/{name}
   request application/json
     reason: string
   204
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
   404 authz.role.notfound
   409 authz.role.inuse
 GET /admin/ropa
@@ -1215,8 +1244,8 @@ POST /auth/begin
     application/json
       challengeId: string
       available[]: Factor
-      webAuthn.relyingPartyId: string
-      webAuthn.challenge: string
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
   400 api.request.malformed
   403 auth.session.csrfinvalid
 POST /auth/break-glass
@@ -1498,6 +1527,7 @@ GET /privacy/export
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required
   429 auth.throttled
+  500 system.fault
 GET /privacy/notice
   200
     application/json
@@ -1507,6 +1537,10 @@ GET /privacy/notice
       text: string
       translations[].language: string
       translations[].text: string
+      cookies[].name: string
+      cookies[].purpose: string
+      cookies[].lifetime: string
+      cookies[].thirdParty: boolean
   403 auth.session.csrfinvalid
   404 privacy.document.notfound
 GET /privacy/objections

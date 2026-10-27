@@ -92,6 +92,44 @@ public sealed class PreferenceDeclarationsTests
     }
 
     /// <summary>
+    /// REG-PREF-001 AC1 (D-206): the export keys a preference's value by its name in the
+    /// <c>preferences</c> section, beside the account's language and time zone, so a
+    /// name holding a <c>.</c> or a <c>/</c>, or taking one of those two names, fails
+    /// startup naming the key.
+    /// </summary>
+    /// <param name="name">The name the preference is declared under.</param>
+    [Theory]
+    [InlineData("display.theme")]
+    [InlineData("display/theme")]
+    [InlineData("language")]
+    [InlineData("timeZone")]
+    public void REG_PREF_001_AC1_APreferenceNamedAsTheExportCannotKeyItFailsStartup(string name)
+    {
+        StartupException fault = Assert.Throws<StartupException>(() =>
+            PreferenceDeclarations.Of([new PreferenceDeclaration(name, PreferenceKind.String, "dark")]));
+
+        Assert.Equal(ErrorCodes.StartupPreferenceDeclaration, fault.Failure?.Code);
+        Assert.Equal(name, fault.Failure?.Details["preference"].GetString());
+    }
+
+    /// <summary>
+    /// REG-PREF-001 AC1 (D-206): the two names the export takes are refused as spelled,
+    /// so a name that differs from them in case, or holds them, is declared.
+    /// </summary>
+    [Fact]
+    public void REG_PREF_001_AC1_ANameOnlyLikeTheExportsOwnIsDeclared()
+    {
+        var declarations = PreferenceDeclarations.Of(
+        [
+            new PreferenceDeclaration("Language", PreferenceKind.String, "dark"),
+            new PreferenceDeclaration("time-zone", PreferenceKind.String, "dark"),
+            new PreferenceDeclaration("reducedMotion", PreferenceKind.Boolean, "false"),
+        ]);
+
+        Assert.Equal(3, declarations.All.Count);
+    }
+
+    /// <summary>
     /// The fault names the key it was found on, so an operator reading a startup
     /// failure knows which declaration to correct.
     /// </summary>

@@ -1,4 +1,7 @@
 using System;
+using System.Linq;
+using System.Reflection;
+using System.Text.Json.Serialization;
 using Xunit;
 
 namespace Janus.Core.Tests;
@@ -141,5 +144,28 @@ public sealed class SystemPrincipalTests
 
         Assert.Equal("mailbox-reconciler", principal.Name);
         Assert.Equal("nightly mailbox reconciliation", principal.Reason);
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC3 (D-206): the operations a deployment-scoped principal may run are
+    /// those chapter 10 section 5.28 lists, in its order, and nothing else; applying the
+    /// migrations is none of them, since <c>migrate</c> runs as no principal.
+    /// </summary>
+    [Fact]
+    public void IDN_PRIN_001_AC3_TheOperationsAreThoseTheReferenceLists()
+    {
+        string[] listed =
+        [
+            "reconciliation", "retention-purge", "records-of-processing", "expiry-sweep",
+            "delivery", "monitoring", "bootstrap", "key-rotation", "configuration",
+            "erasure-replay", "role-seeding",
+        ];
+
+        Assert.Equal(
+            listed,
+            typeof(SystemOperation)
+                .GetFields(BindingFlags.Public | BindingFlags.Static)
+                .OrderBy(field => (int)field.GetValue(null)!)
+                .Select(field => field.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()?.Name));
     }
 }

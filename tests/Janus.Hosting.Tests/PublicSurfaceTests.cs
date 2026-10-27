@@ -15,6 +15,7 @@ using Janus.Hosting.Callbacks;
 using Janus.Hosting.Tests.Authorization;
 using Janus.Hosting.Tests.Bff;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -58,7 +59,7 @@ public sealed class PublicSurfaceTests
         "Janus.Storage",
     ];
 
-    // CONV-LAYOUT-001: every project the two packages ship. The analysers run inside
+    // CONV-LAYOUT-001: every project the three packages ship. The analysers run inside
     // the compiler, not in a host.
     private static readonly string[] Shipped =
     [
@@ -66,6 +67,7 @@ public sealed class PublicSurfaceTests
         "Janus.Conformance",
         "Janus.Core",
         "Janus.Hosting",
+        "Janus.Testing",
     ];
 
     // CONV-DESIGN-002 AC1: the interfaces of the core that are not service contracts,
@@ -81,6 +83,7 @@ public sealed class PublicSurfaceTests
         typeof(IDnsResolver), // LIB-HOST-001, optional: an environment seam (REG-DOM-001).
         typeof(IErasureLedger), // LIB-HOST-001, optional: an environment seam (DR-016).
         typeof(IEventConsumer<>), // LIB-API-001 and IDN-LIFE-003a: the receiver of an emitted event.
+        typeof(IExportContributor), // LIB-API-001 and LIB-HOST-001: an export contributor (PRIV-RIGHT-003).
         typeof(ILocationSource), // LIB-HOST-001, optional: an environment seam (INT-GEN-006).
         typeof(IMailServer), // LIB-HOST-001, optional: an environment seam (INT-MAIL-001).
         typeof(IMailTransport), // LIB-EXT-001 and LIB-HOST-001: mail delivery.
@@ -163,14 +166,15 @@ public sealed class PublicSurfaceTests
 
     // CONV-DESIGN-002 AC3: the collaborators a call on which is the gate step: the gate,
     // the check asked in the administrative organization, the restriction on an
-    // account's changes to its own settings, and the refusal of what names no
-    // organization.
+    // account's changes to its own settings, the refusal of what names no
+    // organization, and the grant admission (D-208).
     private static readonly string[] GateSteps =
     [
         "IAccessGate",
         "AdministrativeScope",
         "ISettingsRestriction",
         "IUnscopedRefusal",
+        "IGrantAdmission",
     ];
 
     // CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001: the call that reads which organization a row
@@ -273,8 +277,8 @@ public sealed class PublicSurfaceTests
     /// <summary>
     /// LIB-API-002 AC1: no type of the areas, the storage or the command line can be
     /// reached from outside its assembly, and the hosting project exposes its mounting
-    /// types, the model-builder extension and the registration entry point and nothing
-    /// else (CONV-LAYOUT-002).
+    /// types, the model-builder extension, the registration entry point and what a host's
+    /// own endpoints use, and nothing else (CONV-LAYOUT-002, BFF-HOST-003, BFF-HOST-004).
     /// </summary>
     [Fact]
     public void LIB_API_002_AC1_InternalTypesAreNotPubliclyAccessible()
@@ -291,6 +295,11 @@ public sealed class PublicSurfaceTests
             typeof(IUnsignedCallback),
             typeof(HostingRegistration),
             typeof(IdentityEndpoints),
+            typeof(AllowNoSessionAttribute),
+            typeof(Answers),
+            typeof(CapabilityFields),
+            typeof(RequestSource),
+            typeof(UnitOfWorkJoin),
         ];
 
         IEnumerable<Type> exposed = Internal.SelectMany(name => Load(name).GetExportedTypes());
@@ -299,6 +308,95 @@ public sealed class PublicSurfaceTests
         Assert.Equal(
             mounting.Select(type => type.FullName).Order(StringComparer.Ordinal),
             typeof(HostingRegistration).Assembly.GetExportedTypes().Select(type => type.FullName).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// BFF-HOST-003, BFF-HOST-004: what a host's own endpoints are given to answer with
+    /// and to key a source by is what the chapter names, and nothing beside it the
+    /// library's own endpoints use stands public.
+    /// </summary>
+    [Fact]
+    public void BFF_HOST_003_AHostEndpointIsGivenTheMembersTheChapterNamesAndNoOthers()
+    {
+        Assert.Equal(["Of(Result, IResult)", "Of(Result`1, Func`2)", "Refused(Error)"], Members(typeof(Answers)));
+        Assert.Equal(["Of(HttpRequest)"], Members(typeof(RequestSource)));
+        Assert.Contains("AllowNoSession(TBuilder)", Members(typeof(PipelineProfiles)));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 (D-206): the host's context joins the unit of work through one
+    /// extension on its database facade, taking the open unit of work and a token and
+    /// answering a value task, and nothing else stands beside it.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_INHERIT_002_TheHostsContextJoinsThroughOneExtensionOnItsDatabaseFacade()
+    {
+        MethodInfo join = Assert.Single(
+            typeof(UnitOfWorkJoin).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly));
+
+        Assert.Equal(["UseUnitOfWorkAsync(DatabaseFacade, IUnitOfWork, CancellationToken)"], Members(typeof(UnitOfWorkJoin)));
+        Assert.True(join.IsDefined(typeof(ExtensionAttribute), inherit: false));
+        Assert.Equal(typeof(ValueTask), join.ReturnType);
+    }
+
+    /// <summary>
+    /// BFF-HOST-001 (D-202, D-205): the entry point registers the request's access in each
+    /// request scope, standing on the one record stage 5 writes, and the access carries
+    /// the context and the session and no assurance.
+    /// </summary>
+    [Fact]
+    public void BFF_HOST_001_TheAccessIsRegisteredInEachRequestScopeAndCarriesTheContextAndTheSessionAlone()
+    {
+        ServiceDescriptor access = Assert.Single(Registered(), service => service.ServiceType == typeof(IRequestAccess));
+
+        Assert.Equal(ServiceLifetime.Scoped, access.Lifetime);
+        Assert.Equal(typeof(RequestSession), Built(access));
+        Assert.Equal(
+            [nameof(RequestAccess.Context), nameof(RequestAccess.Session)],
+            typeof(RequestAccess).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(property => property.Name));
+        Assert.Equal(
+            [typeof(AccessContext), typeof(SessionId)],
+            typeof(RequestAccess).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(property => property.PropertyType));
+    }
+
+    /// <summary>
+    /// BFF-HOST-002 AC5 (D-209): the entry point registers the matcher policy that judges
+    /// the endpoint routing selects after the browser profile, once and for the whole
+    /// application, as routing reads its policies.
+    /// </summary>
+    [Fact]
+    public void BFF_HOST_002_AC5_TheEntryPointRegistersTheMatcherPolicyOfStageEight()
+    {
+        ServiceDescriptor policy = Assert.Single(
+            Registered(),
+            service => service.ServiceType == typeof(MatcherPolicy));
+
+        Assert.Equal(ServiceLifetime.Singleton, policy.Lifetime);
+        Assert.Equal(typeof(SessionRequirementPolicy), policy.ImplementationType);
+    }
+
+    /// <summary>
+    /// BFF-HOST-001 AC4 (D-202): no public member of any shipped assembly makes a context
+    /// whose acting and effective identities differ. The only public members that make
+    /// one are the person's own and the system principal's, each with one identity
+    /// standing for both, and no public constructor opens the type.
+    /// </summary>
+    [Fact]
+    public void BFF_HOST_001_AC4_NoPublicMemberMakesAContextWhoseIdentitiesDiffer()
+    {
+        string[] makers =
+        [
+            .. Shipped
+                .SelectMany(name => Load(name).GetExportedTypes())
+                .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
+                .Where(method => method.ReturnType == typeof(AccessContext))
+                .Select(method => method.DeclaringType!.Name + "." + method.Name + "("
+                    + string.Join(", ", method.GetParameters().Select(parameter => parameter.ParameterType.Name)) + ")")
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Assert.Empty(typeof(AccessContext).GetConstructors(BindingFlags.Public | BindingFlags.Instance));
+        Assert.Equal(["AccessContext.Of(SubjectId)", "AccessContext.Of(SystemPrincipal)"], makers);
     }
 
     /// <summary>
@@ -881,6 +979,15 @@ public sealed class PublicSurfaceTests
     }
 
     private static Assembly Load(string name) => Assembly.Load(new AssemblyName(name));
+
+    // The public methods a type declares, each with the types it takes, in order.
+    private static string[] Members(Type type) =>
+    [
+        .. type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(method => method.Name + "("
+                + string.Join(", ", method.GetParameters().Select(parameter => parameter.ParameterType.Name)) + ")")
+            .Order(StringComparer.Ordinal),
+    ];
 
     // CONV-DESIGN-007 AC6: what the entry point registers for a deployment that declares
     // what the host fixture declares.

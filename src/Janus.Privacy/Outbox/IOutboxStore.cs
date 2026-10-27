@@ -166,15 +166,13 @@ internal interface IOutboxStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Every delivery of one kind whose host-side work is outstanding, awaiting
-    /// subscribers or failed, with when each subscriber confirmed it, in one query.
+    /// Every delivery, of every kind, whose host-side work is outstanding, awaiting
+    /// subscribers or failed, with when each subscriber or handler confirmed it, in one
+    /// query.
     /// </summary>
-    /// <param name="kind">Which fact.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The deliveries and their confirmations, oldest first.</returns>
-    ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(
-        SubjectEventKind kind,
-        CancellationToken cancellationToken);
+    ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// One page of the erasures that are complete and hold no confirmation from the

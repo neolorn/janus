@@ -9,6 +9,7 @@ using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Privacy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Hosting;
@@ -49,6 +50,8 @@ namespace Janus.Hosting;
 /// <param name="sources">The relationship sources the host registered.</param>
 /// <param name="declaration">What the host declared about its own domain.</param>
 /// <param name="subscribers">The subject-event subscribers the host registered.</param>
+/// <param name="handlers">The purpose handlers the host registered.</param>
+/// <param name="contributors">The export contributors the host registered.</param>
 /// <param name="clients">The clients registered with the provider.</param>
 /// <param name="configuration">
 /// Where the stored policies that show photos, and the domains each lists, are read.
@@ -56,8 +59,8 @@ namespace Janus.Hosting;
 /// <param name="scope">The scope the check runs in, which gives a host context as a request does.</param>
 /// <remarks>
 /// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
-/// INT-MAIL-010, IDN-LIFE-012a, REG-DOM-001, INT-SMS-003, API-LAND-001, AUTHZ-DERIVE-005
-/// and AUTHZ-DERIVE-007.
+/// INT-MAIL-010, IDN-LIFE-012a, REG-DOM-001, INT-SMS-003, API-LAND-001, AUTHZ-DERIVE-005,
+/// AUTHZ-DERIVE-007, PRIV-CONS-006a, IDN-PRIN-001 and PRIV-RIGHT-003.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
@@ -73,16 +76,23 @@ namespace Janus.Hosting;
 /// the HTTPS address of its document and at least one client, since a declaration short
 /// of that would verify none of the events it was declared for; one that is malformed is
 /// refused as invalid rather than missing, naming the provider and the member at fault
-/// (D-175). A governing document's name and a subscriber's fill a message place
-/// measured at the width the name rule bounds, so one declared outside the rule is
-/// refused here rather than carried into a text longer than the width it was measured
-/// at. A landing origin is an application of this deployment, so one that no registered
-/// browser client returns to, or an authentication origin that is not where the sign-in
-/// address is, would send every link somewhere the deployment does not serve. A
-/// relationship a derivation follows from is read by the view of who can access a record
-/// and by the drift check through the source the host declares for it, so one with no
-/// source, or a source that does not fit its relationship or names a context the
-/// library cannot read through, stops the deployment here (D-166, D-183).
+/// (D-175). A governing document's name and a subscriber's or a purpose handler's fill
+/// a message place measured at the width the name rule bounds, so one declared outside
+/// the rule is refused here rather than carried into a text longer than the width it
+/// was measured at; a host job's name is held to the same rule (IDN-PRIN-001, D-206), and
+/// an export contributor to the same rule and to a name of its own, since contributors
+/// are asked in the order of their names and a failing one is named by it (D-206). A
+/// landing origin is an application of this deployment, so one that
+/// no registered browser client returns to, or an authentication origin that is not
+/// where the sign-in address is, would send every link somewhere the deployment does
+/// not serve. A relationship a derivation follows from is read by the view of who can
+/// access a record and by the drift check through the source the host declares for it,
+/// so one with no source, or a source that does not fit its relationship or names a
+/// context the library cannot read through, stops the deployment here (D-166, D-183).
+/// A cookie the host declares is listed in the privacy notice beside the library's
+/// own, so one under a name that is no cookie name, under a library cookie's name or
+/// declared twice, or serving a purpose that does not rest on consent, is refused here
+/// (D-203).
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
@@ -97,6 +107,8 @@ internal sealed class DeclarationCoverage(
     IEnumerable<RelationshipSource> sources,
     AuthorizationDeclaration declaration,
     IEnumerable<ISubjectEventSubscriber> subscribers,
+    IEnumerable<IPurposeHandler> handlers,
+    IEnumerable<IExportContributor> contributors,
     IOidcClientStore clients,
     IConfigurationStore configuration,
     IServiceProvider scope)
@@ -120,6 +132,16 @@ internal sealed class DeclarationCoverage(
     private const string Social = "socialProvider";
 
     private const string Source = "relationshipSource";
+
+    private const string Cookie = "cookie";
+
+    private const string Job = "job";
+
+    private const string Contributor = "contributor";
+
+    // RFC 2616 section 2.2: the characters a token never holds, space and tab aside,
+    // which fall outside the visible range.
+    private const string Separators = "()<>@,;:\\\"/[]?={}";
 
     /// <summary>
     /// Reads what LIB-HOST-001 requires against what is registered.
@@ -191,6 +213,11 @@ internal sealed class DeclarationCoverage(
         if (Unruled() is (string named, string member))
         {
             return Invalid(named, member);
+        }
+
+        if (Uncookied() is (string cookie, string at))
+        {
+            return Invalid(cookie, at);
         }
 
         if (Sourced().Match<Error?>(() => null, error => error) is Error unsourced)
@@ -317,8 +344,11 @@ internal sealed class DeclarationCoverage(
     }
 
     // INT-SMS-003: the governing document a purpose names, as the purpose it is
-    // declared on, and the subscriber whose name breaks the rule of a message place,
-    // as the name it is registered under, or nothing where every one keeps it.
+    // declared on, the subscriber or purpose handler whose name breaks the rule of a
+    // message place, as the name it is registered under, the job whose name breaks it,
+    // as the job it declares, and the export contributor whose name breaks it or is given
+    // twice, under the contributor's prefix; or nothing where every one keeps it (D-203,
+    // D-206).
     private (string Declaration, string Field)? Unruled()
     {
         foreach (PurposeDeclaration purpose in declaration.ResourceTypes.SelectMany(type => type.Purposes))
@@ -337,8 +367,82 @@ internal sealed class DeclarationCoverage(
             }
         }
 
+        foreach (IPurposeHandler handler in handlers)
+        {
+            if (!PlaceName.Holds(handler.Name))
+            {
+                return (handler.Name, "name");
+            }
+        }
+
+        foreach (JobDeclaration job in declaration.Jobs)
+        {
+            if (!PlaceName.Holds(job.Name))
+            {
+                return (Job + "." + job.Name, "name");
+            }
+        }
+
+        // PRIV-RIGHT-003, LIB-HOST-001 (D-206): contributors are asked in the order of
+        // their names and a failing one is named by it, so each holds a name of its own.
+        var named = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (IExportContributor contributor in contributors)
+        {
+            if (!PlaceName.Holds(contributor.Name) || !named.Add(contributor.Name))
+            {
+                return (Contributor + "." + contributor.Name, "name");
+            }
+        }
+
         return null;
     }
+
+    // PRIV-CONS-006a, LIB-HOST-001 (D-203): the declared cookie that is no cookie name, a
+    // name the library's own cookies take or one declared twice, as its name, or one
+    // serving a purpose not declared or not resting on consent, as its purpose; or
+    // nothing where every one holds. A cookie that is not strictly necessary rests on
+    // the consent its purpose asks for, so a purpose on any other basis would set it
+    // for everyone.
+    private (string Declaration, string Field)? Uncookied()
+    {
+        var consenting = new HashSet<string>(
+            declaration.LawfulBases.Where(basis => basis.IsConsent).Select(basis => basis.Key),
+            StringComparer.Ordinal);
+        var consented = new HashSet<string>(
+            declaration.ResourceTypes
+                .SelectMany(type => type.Purposes)
+                .Where(purpose => consenting.Contains(purpose.Basis))
+                .Select(purpose => purpose.Name),
+            StringComparer.Ordinal);
+        var named = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (CookieDeclaration cookie in declaration.Cookies)
+        {
+            string declared = Cookie + "." + cookie.Name;
+
+            if (!IsCookieName(cookie.Name)
+                || DeploymentCookies.Library.Contains(cookie.Name)
+                || !named.Add(cookie.Name))
+            {
+                return (declared, "name");
+            }
+
+            if (cookie.Purpose is string purpose && !consented.Contains(purpose))
+            {
+                return (declared, "purpose");
+            }
+        }
+
+        return null;
+    }
+
+    // RFC 6265 section 4.1.1: a cookie's name is a token of RFC 2616 section 2.2, one or
+    // more visible US-ASCII characters none of which is a separator.
+    private static bool IsCookieName(string name) =>
+        name.Length > 0
+        && name.All(character =>
+            character is > ' ' and < '\u007f' && !Separators.Contains(character, StringComparison.Ordinal));
 
     // LIB-HOST-001, AUTHZ-DERIVE-005 AC5: a source is given once, for a relationship the
     // model declares, answers the row type that relationship's selectors are declared

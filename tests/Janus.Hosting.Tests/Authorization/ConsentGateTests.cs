@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Privacy.Consents;
 using Microsoft.EntityFrameworkCore;
@@ -582,6 +583,131 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
                 && requires.SetEquals([CapabilityResidual.Consent])));
     }
 
+    /// <summary>
+    /// IDN-PRIN-001 AC6, AUTHZ-GATE-005, AUTHZ-CONCEAL-004 AC5, OPS-OBS-001 (D-207,
+    /// D-208): a declared job asking a consent-bound permission its declaration names, of
+    /// its organization, is refused <c>privacy.consent.required</c> as a person is,
+    /// carrying no refusal record's identifier, writing no refusal record and so counting
+    /// nothing toward the denial alert.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_PRIN_001_AC6_AJobsConsentRefusalOnTheOrganizationWideCheckWritesNoRecordAsync()
+    {
+        Jobbed jobbed = await JobbedAsync(consented: true);
+
+        Error refused;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            refused = (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .RequireAsync(
+                        jobbed.Job,
+                        HostPermissions.Recommend,
+                        jobbed.Written.Organization,
+                        TestContext.Current.CancellationToken))
+                .Match(() => throw new InvalidOperationException("The permission was admitted."), error => error);
+        }
+
+        Assert.Equal(ErrorCodes.ConsentRequired, refused.Code);
+        Assert.False(refused.Details.ContainsKey("correlation"));
+        Assert.Equal(0, await JobDenialsAsync(jobbed.Written.Organization));
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC5, IDN-PRIN-001 AC6, PRIV-SENS-002 AC1 (D-208): a declared
+    /// job asking a consent-bound permission its declaration names, on a record whose
+    /// data subject has not consented, is refused <c>privacy.consent.required</c> as a
+    /// person is, carrying no refusal record's identifier, writing no refusal record, and
+    /// the lists leave the record out.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC5_AJobsConsentRefusalOnARecordCarriesNoIdentifierAndWritesNoRecordAsync()
+    {
+        Jobbed jobbed = await JobbedAsync(consented: false);
+
+        Error? refused = await JobRefusalAsync(jobbed);
+
+        Assert.Equal(ErrorCodes.ConsentRequired, refused?.Code);
+        Assert.False(refused?.Details.ContainsKey("correlation"));
+        Assert.Equal(0, await JobDenialsAsync(jobbed.Written.Organization));
+        Assert.Equal(
+            (false, false),
+            await ListedBothWaysAsync(jobbed.Written, host.Services, jobbed.Job));
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC6, PRIV-SENS-002 AC1 (D-207, D-208): a declared job asking a
+    /// consent-bound permission its declaration names, on a record of its organization
+    /// whose data subject holds the written consent the purpose asks, is admitted through
+    /// the check and both renderings of the list.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_PRIN_001_AC6_AJobIsAdmittedOnAConsentBoundPermissionWhereConsentIsHeldAsync()
+    {
+        Jobbed jobbed = await JobbedAsync(consented: true);
+
+        Assert.Null(await JobRefusalAsync(jobbed));
+        Assert.Equal(
+            (true, true),
+            await ListedBothWaysAsync(jobbed.Written, host.Services, jobbed.Job));
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC5, PRIV-SENS-002 AC1, PRIV-CONS-007 AC4 (D-208): a person's
+    /// consent-bound action refused <c>privacy.consent.required</c>,
+    /// <c>privacy.consent.writtenrequired</c> or <c>privacy.consent.superseded</c>, on a
+    /// record and on the organization, carries no refusal record's identifier, writes no
+    /// refusal record, and so counts nothing toward <c>alerting.denials.threshold</c>,
+    /// however often it is asked.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC5_APersonsConsentRefusalCarriesNoIdentifierAndWritesNoRecordAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Granted none = await GrantedAsync();
+        Granted ordinary = await GrantedAsync();
+        Granted superseded = await GrantedAsync();
+
+        // PRIV-SENS-002 AC6: the check naming no record is asked by an account holding the
+        // permission over the whole organization.
+        var deployment = new Deployment(host);
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read, HostPermissions.Recommend], cancellationToken);
+        SubjectId wide = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.GrantAsync(GrantSubject.Of(wide), role, on: null, false, null, null, cancellationToken);
+        await RecordAsync(ordinary.Account, Held(ConsentKind.Ordinary));
+        await RecordAsync(
+            superseded.Account,
+            Held(ConsentKind.Written) with { SupersededAt = Deployment.Noon.AddDays(30) });
+
+        var refusals = new List<Error?>();
+
+        for (int each = 0; each <= Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            refusals.Add(await RefusedWithAsync(none));
+        }
+
+        Error? organizationWide = await RefusedWithAsync(wide, HostPermissions.Recommend, deployment.Organization);
+        Error? notWritten = await RefusedWithAsync(ordinary);
+        Error? ended = await RefusedWithAsync(superseded);
+
+        Assert.All(refusals.Append(organizationWide), refusal => Assert.Equal(ErrorCodes.ConsentRequired, refusal?.Code));
+        Assert.Equal(ErrorCodes.ConsentWrittenRequired, notWritten?.Code);
+        Assert.Equal(ErrorCodes.ConsentSuperseded, ended?.Code);
+        Assert.All(
+            refusals.Append(organizationWide).Append(notWritten).Append(ended),
+            refusal => Assert.False(refusal?.Details.ContainsKey("correlation")));
+
+        foreach (SubjectId account in new[] { none.Account, ordinary.Account, superseded.Account, wide })
+        {
+            Assert.Equal(0, await PersonsDenialsAsync(account));
+        }
+    }
+
     private static ConsentRecord Held(ConsentKind kind) =>
         new(
             Recommendations,
@@ -667,6 +793,13 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     private async Task<ErrorCode?> RefusalAsync(
         Granted granted,
         Permission? permission = null,
+        IServiceProvider? deployment = null) =>
+        (await RefusedWithAsync(granted, permission, deployment))?.Code;
+
+    // The refusal of the check whole, with what it carries.
+    private async Task<Error?> RefusedWithAsync(
+        Granted granted,
+        Permission? permission = null,
         IServiceProvider? deployment = null)
     {
         await using AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope();
@@ -680,12 +813,18 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
                 Sources(reading),
                 TestContext.Current.CancellationToken);
 
-        return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+        return outcome.Match(() => (Error?)null, error => error);
     }
 
     // The check that names no record: whether the account may do this at all within
     // the organization.
     private async Task<ErrorCode?> RefusalAsync(
+        SubjectId account,
+        Permission permission,
+        OrganizationId organization) =>
+        (await RefusedWithAsync(account, permission, organization))?.Code;
+
+    private async Task<Error?> RefusedWithAsync(
         SubjectId account,
         Permission permission,
         OrganizationId organization)
@@ -699,7 +838,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
                 organization,
                 TestContext.Current.CancellationToken);
 
-        return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+        return outcome.Match(() => (Error?)null, error => error);
     }
 
     private async Task<IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>>
@@ -764,7 +903,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
 
     // Whether the list for the consent-bound action holds the record, through the
     // expression composed into the host's own query.
-    private async Task<bool> ListedAsync(Granted granted, IServiceProvider deployment)
+    private async Task<bool> ListedAsync(Granted granted, IServiceProvider deployment, AccessContext? asking = null)
     {
         await using AsyncServiceScope scope = deployment.CreateAsyncScope();
         await using HostContext reading = host.Context();
@@ -772,7 +911,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         Result<Expression<Func<HostDocument, bool>>> filter = await scope.ServiceProvider
             .GetRequiredService<IAccessGate>()
             .FilterAsync(
-                AccessContext.Of(granted.Account),
+                asking ?? AccessContext.Of(granted.Account),
                 HostPermissions.Recommend,
                 Document,
                 granted.Organization,
@@ -788,14 +927,94 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
                 TestContext.Current.CancellationToken);
     }
 
-    // Both renderings of the one list, the expression first.
+    // Both renderings of the one list, the expression first, asked by the account holding
+    // the grant or by the context given.
     private async Task<(bool Filter, bool Fragment)> ListedBothWaysAsync(
         Granted granted,
-        IServiceProvider deployment) =>
-        (await ListedAsync(granted, deployment), await ListedByFragmentAsync(granted, deployment));
+        IServiceProvider deployment,
+        AccessContext? asking = null) =>
+        (await ListedAsync(granted, deployment, asking), await ListedByFragmentAsync(granted, deployment, asking));
+
+    // A document of a fresh organization whose data subject is a customer holding the
+    // written consent the recommendations purpose asks, or none, and the context of the
+    // job the host declares, acting for that organization.
+    private async Task<Jobbed> JobbedAsync(bool consented)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        _ = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+
+        SubjectId customer = await deployment.AccountAsync(cancellationToken);
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken, customer);
+
+        if (consented)
+        {
+            await RecordAsync(customer, Held(ConsentKind.Written));
+        }
+
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization(
+            HostFixture.Digest,
+            "the nightly digest",
+            deployment.Organization));
+
+        return new Jobbed(job, new Granted(customer, record, deployment.Organization));
+    }
+
+    // The job's check of the consent-bound action on the record, with the rows the type's
+    // derivation is evaluated over.
+    private async Task<Error?> JobRefusalAsync(Jobbed jobbed)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                jobbed.Job,
+                HostPermissions.Recommend,
+                jobbed.Written.Record,
+                Sources(reading),
+                TestContext.Current.CancellationToken);
+
+        return outcome.Match(() => (Error?)null, error => error);
+    }
+
+    // The refusals recorded naming the declared job in the organization, which is what
+    // the job's denial alert counts (AUTHZ-CONCEAL-004, OPS-ALERT-001).
+    private async Task<int> JobDenialsAsync(OrganizationId organization)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.access.denied' AND principal = @job AND organization = @organization
+            """,
+            new { job = HostFixture.Digest, organization = organization.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The refusals recorded naming the account as acting, which is what its denial alert
+    // counts (AUTHZ-CONCEAL-004, OPS-ALERT-001).
+    private async Task<int> PersonsDenialsAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.access.denied' AND acting_subject = @account
+            """,
+            new { account = account.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
 
     // The same through the fragment, composed into a hand-written query.
-    private async Task<bool> ListedByFragmentAsync(Granted granted, IServiceProvider deployment)
+    private async Task<bool> ListedByFragmentAsync(Granted granted, IServiceProvider deployment, AccessContext? asking = null)
     {
         Result<SqlFilter> rendered;
 
@@ -803,7 +1022,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         {
             rendered = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .FragmentAsync(
-                    AccessContext.Of(granted.Account),
+                    asking ?? AccessContext.Of(granted.Account),
                     HostPermissions.Recommend,
                     Document,
                     granted.Organization,
@@ -840,4 +1059,8 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
 
     // One case's rows: the account holding the grant and the record it holds it on.
     private sealed record Granted(SubjectId Account, ResourceReference Record, OrganizationId Organization);
+
+    // One job's case: the declared job's context, and the record whose data subject is
+    // the account it names.
+    private sealed record Jobbed(AccessContext Job, Granted Written);
 }

@@ -66,6 +66,28 @@ internal sealed class GroupAuditInMemory : IGroupAudit
         CancellationToken cancellationToken) =>
         Recorded(AuditActions.GroupMemberRemoved, group, member, reason, actor, breakGlassReason, at);
 
+    /// <inheritdoc/>
+    public ValueTask MemberRemovedAsync(
+        Group group,
+        GrantSubject member,
+        string reason,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        ArgumentNullException.ThrowIfNull(principal);
+
+        _changes.Add(new GroupChange(AuditActions.GroupMemberRemoved, group.Id, group.Organization, member, reason, default, at)
+        {
+            Principal = principal.Name,
+            EndSetBy = endSetBy,
+        });
+
+        return ValueTask.CompletedTask;
+    }
+
     private ValueTask Recorded(
         AuditAction action,
         Group group,
@@ -109,5 +131,16 @@ internal sealed class GroupAuditInMemory : IGroupAudit
         /// was made in the session it opened, or nothing.
         /// </summary>
         public string? BreakGlassReason { get; init; }
+
+        /// <summary>
+        /// The system principal that acted, the actor then the nil subject, or nothing
+        /// where a person did.
+        /// </summary>
+        public string? Principal { get; init; }
+
+        /// <summary>
+        /// The administrator who set the end a system principal carried out, where one did.
+        /// </summary>
+        public SubjectId? EndSetBy { get; init; }
     }
 }

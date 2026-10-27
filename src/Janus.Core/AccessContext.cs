@@ -9,7 +9,8 @@ namespace Janus.Core;
 /// <remarks>
 /// Implements AUTHZ-IMP-001, IDN-PRIN-001 and LIB-API-005. The acting and the
 /// effective identity are two fields where one would do, so that "who did this" is
-/// never inferred; no current path reads them as differing. The context names no
+/// never inferred; no current path reads them as differing, and no public member makes
+/// a context whose two identities differ (D-202). The context names no
 /// organization: scoping is resolved from the resource (AUTHZ-SCOPE-001). A request
 /// made in a break-glass session carries the reason given at the credential's use, so
 /// every record the action writes carries it with the acting identity (OPS-BOOT-002,
@@ -64,16 +65,6 @@ public sealed class AccessContext
     /// <returns>The context.</returns>
     public static AccessContext Of(SubjectId subject) =>
         new(subject, subject, principal: null, breakGlassReason: null);
-
-    /// <summary>
-    /// A person asking under another identity, which is the seam impersonation would
-    /// use and which no current path produces.
-    /// </summary>
-    /// <param name="acting">Whose credentials the request is made under.</param>
-    /// <param name="effective">Whose identity the action is taken under.</param>
-    /// <returns>The context.</returns>
-    public static AccessContext Of(SubjectId acting, SubjectId effective) =>
-        new(acting, effective, principal: null, breakGlassReason: null);
 
     /// <summary>
     /// Background work asking as a named principal with a stated reason.

@@ -16,7 +16,9 @@ namespace Janus.Authorization.Grants;
 /// Stored grants, written and revoked by an administrator, and read by one holding
 /// <c>grant:read</c>.
 /// </summary>
-/// <param name="gate">Whether the caller may manage grants where the grant is scoped.</param>
+/// <param name="gate">Whether the caller may read the grants of an organization.</param>
+/// <param name="admission">Whether the caller may manage grants where the grant is scoped.</param>
+/// <param name="handOut">Whether the caller may hand out the role, and does not widen its own access.</param>
 /// <param name="unscoped">The refusal of a grant or a record the deployment holds no row for.</param>
 /// <param name="scope">Whether the caller holds system administration.</param>
 /// <param name="stepUp">What granting and revoking ask of the caller's session.</param>
@@ -25,17 +27,20 @@ namespace Janus.Authorization.Grants;
 /// <param name="groups">Where a group a grant is given to is read.</param>
 /// <param name="resources">Where the record a grant is on, and its organization, are read.</param>
 /// <param name="emergency">Which account is granted nothing further.</param>
+/// <param name="audit">Where each grant written or revoked is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, AUTHZ-GRANT-001 to AUTHZ-GRANT-004 and OPS-CFG-007. The
-/// organization a grant is scoped to is read from the record it is on, never from the
-/// caller, and the permission is asked there. A role carrying system administration is
+/// Implements LIB-API-005, AUTHZ-GRANT-001 to AUTHZ-GRANT-005, AUTHZ-SCOPE-001 and
+/// OPS-CFG-007. The organization a grant is scoped to is read from the record it is on,
+/// never from the caller, and the grant is admitted there. A role carrying system administration is
 /// granted and revoked only by a system administrator, a deny as much as an allow,
 /// since a deny takes it away.
 /// </remarks>
 internal sealed class GrantService(
     IAccessGate gate,
+    IGrantAdmission admission,
+    IHandOutAdmission handOut,
     IUnscopedRefusal unscoped,
     AdministrativeScope scope,
     IStepUpGate stepUp,
@@ -44,6 +49,7 @@ internal sealed class GrantService(
     IGroupStore groups,
     IResourceStore resources,
     IEmergencyAccount emergency,
+    IGrantAudit audit,
     IUnitOfWork work,
     TimeProvider time) : IGrants
 {
@@ -70,16 +76,17 @@ internal sealed class GrantService(
             return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
         }
 
-        OrganizationId? scoped = await ScopeOfAsync(request.On, cancellationToken).ConfigureAwait(false);
-
-        if (scoped is null && request.On.Type == OrganizationWide)
+        if (request.On.Type == OrganizationWide && !Guid.TryParse(request.On.Id.ToString(), out _))
         {
             return Result.Failure<GrantId>(Malformed("resourceId"));
         }
 
-        // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3: a record the deployment holds no
-        // registration for belongs to no organization, and the gate refuses it as it
-        // refuses a caller managing nothing where a record is.
+        OrganizationId? scoped = await ScopeOfAsync(request.On, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3 (D-209): a record the deployment holds no
+        // registration for, and an organization it does not hold, belong to no
+        // organization, and the gate refuses them as it refuses a caller managing
+        // nothing where a record is, neither permission of the admission being decided.
         if (scoped is not OrganizationId organization)
         {
             return Result.Failure<GrantId>(
@@ -116,6 +123,19 @@ internal sealed class GrantService(
             && request.Subject == GrantSubject.Of(reserved))
         {
             return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await HandOutRefusedAsync(
+                context,
+                organization,
+                request.On.Type == OrganizationWide ? null : request.On,
+                role,
+                request.Subject,
+                widens: !request.Deny,
+                cancellationToken).ConfigureAwait(false)
+            is Error notHanded)
+        {
+            return Result.Failure<GrantId>(notHanded);
         }
 
         if (Unstated(request.Reason) is Error unstated)
@@ -193,13 +213,13 @@ internal sealed class GrantService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
-        if (await AdministeringRefusedAsync(
-                context,
-                await roles.FindAsync(held.Role, cancellationToken).ConfigureAwait(false),
-                cancellationToken).ConfigureAwait(false)
-            is Error administering)
+        Role? named = await roles.FindAsync(held.Role, cancellationToken).ConfigureAwait(false);
+
+        if ((await AdministeringRefusedAsync(context, named, cancellationToken).ConfigureAwait(false)
+                ?? await RevocationHandOutRefusedAsync(context, held, named, cancellationToken).ConfigureAwait(false))
+            is Error judged)
         {
-            return Result.Failure(administering);
+            return Result.Failure(judged);
         }
 
         if (Unstated(reason) is Error unstated)
@@ -239,6 +259,7 @@ internal sealed class GrantService(
         Error? moved = standing is not { Kind: GrantKind.Stored, RevokedAt: null }
             ? Error.From(ErrorCodes.GrantNotFound)
             : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
+                ?? await RevocationHandOutRefusedAsync(context, standing, role, cancellationToken).ConfigureAwait(false)
                 ?? standing.Revoke(acting, time.GetUtcNow(), reason).Match<Error?>(() => null, error => error);
 
         if (moved is not null)
@@ -251,6 +272,7 @@ internal sealed class GrantService(
         held = standing!;
 
         await grants.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+        await audit.RevokedAsync(held, context.BreakGlassReason, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -322,16 +344,19 @@ internal sealed class GrantService(
     private static Error Unresolved(string member) =>
         Error.From(ErrorCodes.GrantUnresolved, "member", JsonSerializer.SerializeToElement(member));
 
-    // AUTHZ-GRANT-001 AC2: the whole organization is named by its identifier; a record
-    // is scoped to the organization it was registered in.
+    // AUTHZ-GRANT-001 AC2, AUTHZ-SCOPE-001: the whole organization is named by its
+    // identifier, and is the grant's scope where the deployment holds it; a record is
+    // scoped to the organization it was registered in.
     private async ValueTask<OrganizationId?> ScopeOfAsync(
         ResourceReference on,
         CancellationToken cancellationToken)
     {
         if (on.Type == OrganizationWide)
         {
-            return Guid.TryParse(on.Id.ToString(), out Guid organization)
-                ? new OrganizationId(organization)
+            var organization = new OrganizationId(Guid.Parse(on.Id.ToString()));
+
+            return await grants.HoldsOrganizationAsync(organization, cancellationToken).ConfigureAwait(false)
+                ? organization
                 : null;
         }
 
@@ -359,12 +384,15 @@ internal sealed class GrantService(
             ? await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
             : await unscoped.RefusedAsync(context, Permissions.GrantManage, cancellationToken).ConfigureAwait(false);
 
+    // AUTHZ-SCOPE-001 (D-207, D-208): grant:manage in the grant's organization, or
+    // system:administer in the administrative organization for a grant outside it, as
+    // one admission, so an operation either admits records no refusal.
     private async ValueTask<Error?> ManagingRefusedAsync(
         AccessContext context,
         OrganizationId organization,
         CancellationToken cancellationToken) =>
-        (await gate
-            .RequireAsync(context, Permissions.GrantManage, organization, cancellationToken)
+        (await admission
+            .AdmitAsync(context, organization, cancellationToken)
             .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error);
 
@@ -379,6 +407,50 @@ internal sealed class GrantService(
             : await scope
                 .RefusedAsync(context, Permissions.SystemAdminister, cancellationToken)
                 .ConfigureAwait(false);
+
+    // AUTHZ-GRANT-005 (D-212): a grant, allow or deny, hands its role out at its scope,
+    // and an allow widens its holder's access.
+    private async ValueTask<Error?> HandOutRefusedAsync(
+        AccessContext context,
+        OrganizationId organization,
+        ResourceReference? on,
+        Role role,
+        GrantSubject holder,
+        bool widens,
+        CancellationToken cancellationToken) =>
+        (await handOut
+            .AdmitAsync(
+                context,
+                new HandOut(Permissions.GrantManage, organization, on, [Defined(role)], widens ? [holder] : []),
+                cancellationToken)
+            .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
+
+    // AUTHZ-GRANT-005 AC5: a revocation is judged as a grant is, and revoking a deny
+    // widens its holder's access; revoking an allow takes access away. A role nobody
+    // can read hands out what it is named.
+    private async ValueTask<Error?> RevocationHandOutRefusedAsync(
+        AccessContext context,
+        Grant grant,
+        Role? role,
+        CancellationToken cancellationToken) =>
+        await HandOutRefusedAsync(
+            context,
+            grant.Organization,
+            Scope(grant),
+            role ?? Role.Of(grant.Role, []),
+            grant.Subject,
+            widens: grant.Deny,
+            cancellationToken).ConfigureAwait(false);
+
+    // The record a grant is on, or nothing for the whole organization.
+    private static ResourceReference? Scope(Grant grant) =>
+        grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
+            ? new ResourceReference(type, id)
+            : null;
+
+    private static DefinedRole Defined(Role role) =>
+        new(role.Name, [.. role.Permissions], [.. role.HandsOut]);
 
     private async ValueTask<Result<GrantId>> WrittenAsync(
         AccessContext context,
@@ -415,6 +487,25 @@ internal sealed class GrantService(
             standing = await HolderAsync(grant.Subject, grant.Organization, cancellationToken).ConfigureAwait(false);
         }
 
+        // AUTHZ-INHERIT-002 (D-203): a grant on a record is written with its organization's
+        // tree held, which a removal holds too, so the record still stands and a removal
+        // finds the grant to revoke. One removed since is refused as the gate step refuses
+        // a record no registration names, once the unit of work has ended
+        // (AUTHZ-SCOPE-001, 09 section 8).
+        if (grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id)
+        {
+            await resources.HoldAsync(grant.Organization, cancellationToken).ConfigureAwait(false);
+
+            if (await resources.FindAsync(new ResourceReference(type, id), cancellationToken).ConfigureAwait(false)
+                is null)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<GrantId>(
+                    await unscoped.RefusedAsync(context, Permissions.GrantManage, cancellationToken).ConfigureAwait(false));
+            }
+        }
+
         // D-166 X3: the role is read under its row's lock, which a definition and a
         // removal hold too, so OPS-CFG-007 is judged on what the role allows as
         // committed; and two grants of one role at once are written one after the other,
@@ -426,6 +517,14 @@ internal sealed class GrantService(
             : role is null
                 ? Unresolved("role")
                 : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
+                    ?? await HandOutRefusedAsync(
+                        context,
+                        grant.Organization,
+                        Scope(grant),
+                        role,
+                        grant.Subject,
+                        widens: !grant.Deny,
+                        cancellationToken).ConfigureAwait(false)
                     ?? (await grants.ExistsAsync(grant, now, cancellationToken).ConfigureAwait(false)
                         ? Error.From(ErrorCodes.GrantDuplicate)
                         : null);
@@ -438,6 +537,11 @@ internal sealed class GrantService(
         }
 
         await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GRANT-003 AC6 (D-197, D-206): in the transaction that writes it.
+        await audit
+            .CreatedAsync(grant, grant.GrantedBy, context.BreakGlassReason, cancellationToken)
+            .ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)

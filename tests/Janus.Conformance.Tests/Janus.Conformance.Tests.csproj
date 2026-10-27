@@ -4,15 +4,22 @@
     <ProjectReference Include="..\..\src\Janus.Conformance\Janus.Conformance.csproj" />
   </ItemGroup>
 
-  <!-- CONV-TEST-002: the library's own schema is what the sample host's deployment
-       runs on, and the fixture that raises it belongs to the project that owns the
-       schema. -->
+  <!-- LIB-API-002 AC2 (D-206): the first administrator is enrolled with the testing
+       package's software passkey, and the mail and SMS the deployment sends are taken
+       by its transports. -->
   <ItemGroup>
-    <ProjectReference Include="..\Janus.Storage.Tests\Janus.Storage.Tests.csproj" />
+    <ProjectReference Include="..\..\src\Janus.Testing\Janus.Testing.csproj" />
   </ItemGroup>
 
-  <!-- AUTH-OIDC-001: the sample host's client is registered from the server, by the
-       command an operator runs, so the command is built beside it. It runs from its own
+  <!-- CONV-LAYOUT-001: a package the shared framework serves resolves from the
+       framework, never as a package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- LIB-API-002 AC2, AUTH-OIDC-001: the sample host's schema is applied and its
+       client registered from the server, by the commands an operator runs, so the
+       command-line application is built beside it. It runs from its own
        build output: this project's output resolves the shared dependencies for the web
        framework the tests run on, which the command does not run on. -->
   <ItemGroup>

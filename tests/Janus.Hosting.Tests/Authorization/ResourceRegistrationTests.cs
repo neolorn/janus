@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
@@ -351,6 +352,63 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         Assert.Equal(1, await RowsOfAsync(held));
     }
 
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC5, AUTHZ-GRANT-003 AC6 (D-203, D-206): a record that holds a
+    /// registered record is refused with <c>authz.resource.inuse</c>, and one not
+    /// registered with <c>api.request.invalid</c> naming <c>resource</c>, each changing
+    /// nothing. A removal leaves no row and no ancestry row of the record, and revokes
+    /// every live grant naming it with the nil subject as revoker and the reason
+    /// <c>AUTHZ-INHERIT-002</c>, each recorded <c>authz.grant.revoked</c> naming its
+    /// holder as subject; a grant on its container stands, and the record registered
+    /// again inherits nothing it held.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC5_ARemovedRegistrationLeavesNoAncestryAndNoLiveGrantAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case written = await BeginAsync();
+        SubjectId other = await written.Deployment.AccountAsync(cancellationToken);
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference document = Reference(Document);
+
+        Ok(await RegisteredAsync(new ResourceRegistration(workspace, written.Organization, null, null)));
+        Ok(await RegisteredAsync(new ResourceRegistration(document, written.Organization, workspace, written.Account)));
+
+        GrantId onContainer = await written.Deployment.GrantAsync(
+            GrantSubject.Of(written.Account), written.Role, workspace, false, null, null, cancellationToken);
+        GrantId allowed = await written.Deployment.GrantAsync(
+            GrantSubject.Of(other), written.Role, document, false, null, null, cancellationToken);
+        GrantId denied = await written.Deployment.GrantAsync(
+            GrantSubject.Of(written.Account), written.Role, document, true, null, null, cancellationToken);
+
+        Error inUse = Refused(await RemovedAsync(workspace));
+        Error unregistered = Refused(await RemovedAsync(Reference(Document)));
+
+        Assert.Equal(ErrorCodes.ResourceInUse, inUse.Code);
+        Assert.Equal("resource", Invalid(unregistered));
+        Assert.Equal(1, await RowsOfAsync(workspace));
+        Assert.Equal(2, await AncestryOfAsync(document));
+        Assert.Equal(0, await RevokedAsync(allowed) + await RevokedAsync(denied));
+
+        Ok(await RemovedAsync(document));
+
+        Assert.Equal(0, await RowsOfAsync(document));
+        Assert.Equal(0, await AncestryOfAsync(document));
+        Assert.Equal(0, await AncestorRowsOfAsync(document));
+        Assert.Equal(1, await RevokedAsync(allowed));
+        Assert.Equal(1, await RevokedAsync(denied));
+        Assert.Equal(0, await RevokedAsync(onContainer));
+        Assert.Equal(1, await RevocationsRecordedAsync(allowed, other));
+        Assert.Equal(1, await RevocationsRecordedAsync(denied, written.Account));
+
+        Ok(await RegisteredAsync(new ResourceRegistration(document, written.Organization, workspace, written.Account)));
+
+        Assert.False(await ChecksAsync(other, document));
+        Assert.True(await ChecksAsync(written.Account, document));
+        Assert.Equal(ErrorCodes.ResourceInUse, Refused(await RemovedAsync(workspace)).Code);
+    }
+
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
@@ -406,6 +464,56 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
         return await scope.ServiceProvider.GetRequiredService<IResources>()
             .MoveAsync(resource, containedIn, TestContext.Current.CancellationToken);
+    }
+
+    private async Task<Result> RemovedAsync(ResourceReference resource)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return await scope.ServiceProvider.GetRequiredService<IResources>()
+            .RemoveAsync(resource, TestContext.Current.CancellationToken);
+    }
+
+    // A grant revoked by the removal of the record it names, as AUTHZ-GRANT-003 records it.
+    private async Task<int> RevokedAsync(GrantId grant)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.grants
+            WHERE id = @id AND revoked_at IS NOT NULL
+              AND revoked_by = '00000000-0000-0000-0000-000000000000'
+              AND revocation_reason = 'AUTHZ-INHERIT-002';
+            """,
+            new { id = grant.Value });
+    }
+
+    private async Task<int> RevocationsRecordedAsync(GrantId grant, SubjectId holder)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.grant.revoked'
+              AND acting_subject = '00000000-0000-0000-0000-000000000000'
+              AND principal IS NULL
+              AND details ->> 'grant' = CAST(@id AS text)
+              AND details ->> 'reason' = 'AUTHZ-INHERIT-002'
+              AND details ->> 'role' IS NOT NULL
+              AND subject = @holder;
+            """,
+            new { id = grant.Value, holder = holder.Value });
+    }
+
+    private async Task<int> AncestorRowsOfAsync(ResourceReference resource)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<int>(
+            "SELECT count(*)::int FROM identity.ancestry WHERE ancestor_type = @type AND ancestor_id = @id;",
+            new { type = resource.Type.ToString(), id = resource.Id.ToString() });
     }
 
     private async Task<bool> ChecksAsync(SubjectId account, ResourceReference resource)

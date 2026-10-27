@@ -11,7 +11,8 @@ namespace Janus.Hosting.Tests.Privacy;
 
 /// <summary>
 /// The compliance-text endpoints of chapter 09 section 7: what they return, and that
-/// they return it to a reader who has not signed in (PRIV-CONS-005, PRIV-CONS-006).
+/// they return it to a reader who has not signed in (PRIV-CONS-005, PRIV-CONS-006,
+/// PRIV-CONS-006a).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class LegalDocumentEndpointTests
@@ -126,6 +127,55 @@ public sealed class LegalDocumentEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), answered.Text("code"));
         Assert.Equal("document", answered.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a AC1, 09 <c>GET /privacy/notice</c> (D-203): the notice answers the
+    /// cookies its version lists, each with its name, purpose, lifetime as an ISO 8601
+    /// duration and whether a third party reads it, a version named answering its own
+    /// list; another document's answer carries no <c>cookies</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_006a_AC1_TheNoticeAnswersTheCookiesItsVersionListsAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await deployment.Documents.AddAsync(
+            new DocumentVersion("privacy-notice", "1", "ar", "النص الأول", [], Noon)
+            {
+                Cookies = [new NoticeCookie("__Host-identity-preauth", null, null, false)],
+            },
+            CancellationToken.None);
+        await deployment.Documents.AddAsync(
+            new DocumentVersion("privacy-notice", "2", "ar", "النص الثاني", [], Noon)
+            {
+                Cookies =
+                [
+                    new NoticeCookie("__Host-identity-session", null, TimeSpan.FromDays(365), false),
+                    new NoticeCookie("host-picks", "recommendations", TimeSpan.FromDays(90), true),
+                ],
+            },
+            CancellationToken.None);
+        await PublishAsync(deployment, "terms", "1", "الشروط", []);
+
+        var browser = new Browser(deployment);
+        JsonElement current = (await browser.SendAsync("GET", "/privacy/notice")).Json().GetProperty("cookies");
+        JsonElement first = (await browser.SendAsync("GET", "/privacy/notice?version=1")).Json().GetProperty("cookies");
+        Answer terms = await browser.SendAsync("GET", "/privacy/documents/terms");
+
+        Assert.Equal(2, current.GetArrayLength());
+        Assert.Equal("__Host-identity-session", current[0].GetProperty("name").GetString());
+        Assert.Equal(JsonValueKind.Null, current[0].GetProperty("purpose").ValueKind);
+        Assert.Equal("P365D", current[0].GetProperty("lifetime").GetString());
+        Assert.False(current[0].GetProperty("thirdParty").GetBoolean());
+        Assert.Equal("recommendations", current[1].GetProperty("purpose").GetString());
+        Assert.Equal("P90D", current[1].GetProperty("lifetime").GetString());
+        Assert.True(current[1].GetProperty("thirdParty").GetBoolean());
+        Assert.Equal("__Host-identity-preauth", Assert.Single(first.EnumerateArray()).GetProperty("name").GetString());
+        Assert.Equal(JsonValueKind.Null, first[0].GetProperty("lifetime").ValueKind);
+        Assert.Equal(StatusCodes.Status200OK, terms.Status);
+        Assert.False(terms.Json().TryGetProperty("cookies", out _));
     }
 
     /// <summary>

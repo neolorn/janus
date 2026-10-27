@@ -164,17 +164,16 @@ public sealed class ReadVolumeTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-ALERT-005, D-153: the reading is the actor's, so a staff member acting for
-    /// another person is counted and the person acted for is not.
+    /// OPS-ALERT-005, D-153: the reading is the actor's, so the staff member whose
+    /// context returned the records is counted.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_005_TheActorIsCountedNotThePersonActedForAsync()
+    public async Task OPS_ALERT_005_TheActorIsCountedAsync()
     {
         var agent = SubjectId.New(_randomness);
-        var customer = SubjectId.New(_randomness);
 
-        await ReturnedAsync(AccessContext.Of(agent, customer), 40);
+        await ReturnedAsync(AccessContext.Of(agent), 40);
 
         Assert.Equal((agent, Today), Assert.Single(_store.Counted.Keys));
     }

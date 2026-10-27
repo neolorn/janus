@@ -1,6 +1,7 @@
 using System;
 using System.Buffers.Text;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -12,9 +13,11 @@ using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Storage.Authentication.Oidc;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
+using OpenIddict.Abstractions;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Oidc;
@@ -493,6 +496,43 @@ public sealed class OidcFlowTests
 
         Assert.Equal(StatusCodes.Status400BadRequest, replayed.Status);
         Assert.NotEmpty(deployment.OidcAudit.Reuses);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-003 AC4 (D-207): a refresh token presented again revokes its whole
+    /// family, the session record's spine, the provider's grant and every token of the
+    /// grant, the rotated one among them, and records the revocation once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_003_AC4_AReuseRevokesTheSpineTheGrantAndEveryTokenOfItAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Protocol);
+        Answer exchanged = await machine.PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, RelyingParty.Protocol));
+
+        string first = exchanged.Text("refresh_token");
+
+        Answer refreshed = await machine.PostAsync("/oidc/token", Refresh(first));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, (await machine.PostAsync("/oidc/token", Refresh(first))).Status);
+        Assert.Equal(
+            StatusCodes.Status400BadRequest,
+            (await machine.PostAsync("/oidc/token", Refresh(refreshed.Text("refresh_token")))).Status);
+
+        OidcAuthorizationRecord grant = Assert.Single(deployment.Grants.All);
+
+        Assert.Equal(OpenIddictConstants.Statuses.Revoked, grant.Status);
+        Assert.All(
+            deployment.Tokens.All.Where(token => token.AuthorizationId == grant.Id),
+            token => Assert.Equal(OpenIddictConstants.Statuses.Revoked, token.Status));
+        Assert.All(deployment.Sessions.All, session => Assert.NotNull(session.EndedAt));
+        _ = Assert.Single(deployment.OidcAudit.Reuses);
     }
 
     /// <summary>

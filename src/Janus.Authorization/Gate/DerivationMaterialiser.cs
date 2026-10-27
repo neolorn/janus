@@ -18,8 +18,9 @@ namespace Janus.Authorization.Gate;
 /// <param name="records">Where the records a container reaches are read.</param>
 /// <param name="grants">Where the rows the derivation was precomputed into are read and written.</param>
 /// <param name="declared">Where a relationship's rows are read through the source the host declared.</param>
-/// <param name="audit">Where each grant the drift check writes or takes back is recorded.</param>
+/// <param name="audit">Where each grant a refresh writes or takes back is recorded.</param>
 /// <param name="work">The caller's transaction, which the refresh joins.</param>
+/// <param name="sessions">Whether a request is served on the calling flow, which a system principal's refresh is refused in.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-DERIVE-005, AUTHZ-DERIVE-002 and AUTHZ-GRANT-003 (D-161, D-166). The
@@ -28,10 +29,13 @@ namespace Janus.Authorization.Gate;
 /// derivation would confer and inheritance carries them no further than it carries the
 /// derivation. The rows of the relationship are the host's: read through what the host
 /// supplied where the host calls the refresh, and through the source the host declared
-/// where the drift check does. A grant the host's refresh writes records the context's
-/// subject as its granter; one the drift check's writes records the nil subject and the
-/// reason <c>AUTHZ-DERIVE-005</c>, and each grant the drift check writes or takes back is
-/// recorded in the trail in the transaction that corrects it (D-187).
+/// where the drift check does. A grant the host's refresh writes records the caller's acting
+/// account as its granter, or the nil subject for a system principal, with the reason
+/// <c>derivation:&lt;relationship&gt;</c>; one the drift check writes records the nil subject
+/// and the reason <c>AUTHZ-DERIVE-005</c>. Each grant a refresh writes or takes back is
+/// recorded in the trail in the refresh's transaction, naming who called it (D-187, D-207).
+/// The refresh meets no gate, so a system principal's call the chapters do not admit is a
+/// fault of the calling code, raised before anything is written (D-208, D-209).
 /// </remarks>
 internal sealed class DerivationMaterialiser(
     AuthorizationModel model,
@@ -40,6 +44,7 @@ internal sealed class DerivationMaterialiser(
     IRelationshipSources declared,
     IAccessAudit audit,
     IUnitOfWork work,
+    ISessionGates sessions,
     TimeProvider time) : IDerivationMaterialiser
 {
     // AUTHZ-GRANT-003, AUTHZ-DERIVE-005: what a grant the drift check writes or takes
@@ -90,9 +95,11 @@ internal sealed class DerivationMaterialiser(
     /// <returns>What the refresh changed.</returns>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     /// <exception cref="ArgumentException">
-    /// The relationship is undeclared, no materialised derivation follows from it, no
-    /// source is declared for it, or the context names neither a subject nor the drift
-    /// check's principal.
+    /// The relationship is undeclared, no materialised derivation follows from it, or no
+    /// source is declared for it.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The context is a system principal's the refresh does not admit.
     /// </exception>
     public async ValueTask<Result<DerivationRefresh>> RefreshAsync(
         AccessContext context,
@@ -143,34 +150,32 @@ internal sealed class DerivationMaterialiser(
         return subjects;
     }
 
-    // AUTHZ-GRANT-003: who a grant the refresh writes names as its granter, and why it
-    // was granted. A grant a host's refresh writes was granted by a derivation and by
-    // nothing anyone decided, so its reason is the derivation, in the structured form a
-    // code crosses the boundary in (CONV-CONTENT-001); the drift check acts as its
-    // principal, which is no account, so its grants name the nil subject and the item
-    // that requires the check (D-166).
-    private static (SubjectId Granter, string Reason, SystemPrincipal? Correcting) Recorded(
-        AccessContext context,
-        string relationship)
+    // AUTHZ-GRANT-003, AUTHZ-DERIVE-005: who a grant the refresh writes names as its
+    // granter, and why it was granted. A grant a refresh writes was granted by a
+    // derivation and by nothing anyone decided, so its reason is the derivation, in the
+    // structured form a code crosses the boundary in (CONV-CONTENT-001), whoever calls
+    // it; a system principal is no account, so its grants name the nil subject, and the
+    // drift check's carry the item that requires the check (D-166, D-207).
+    private static (SubjectId Granter, string Reason) Recorded(AccessContext context, string relationship)
     {
-        if (context.Effective is SubjectId subject)
+        if (context.Acting is SubjectId acting)
         {
-            return (subject, "derivation:" + relationship, null);
+            return (acting, "derivation:" + relationship);
         }
 
         return context.Principal is { Name: DerivationDriftCheck.Job } principal
             && principal.MayRun(SystemOperation.Reconciliation)
-                ? (default, DriftReason, principal)
-                : throw new ArgumentException(
-                    "The grants a refresh writes are recorded against a subject or by the drift check, and this context is neither.",
-                    nameof(context));
+                ? (default, DriftReason)
+                : (default, "derivation:" + relationship);
     }
 
-    // What every refresh is asked before it reads: a declared relationship that a
-    // materialised derivation follows from, and a context its grants can be recorded
-    // under.
+    // What every refresh is asked before it reads: a caller it admits, a declared
+    // relationship that a materialised derivation follows from, and a context its grants
+    // can be recorded under.
     private Refreshing Asked(AccessContext context, string derivation)
     {
+        Admitted(context);
+
         RelationshipDeclaration relationship = model.Relationship(derivation)
             ?? throw new ArgumentException(
                 "The model declares no relationship of that name.",
@@ -185,9 +190,38 @@ internal sealed class DerivationMaterialiser(
                 nameof(derivation));
         }
 
-        (SubjectId granter, string reason, SystemPrincipal? correcting) = Recorded(context, derivation);
+        (SubjectId granter, string reason) = Recorded(context, derivation);
 
-        return new Refreshing(relationship, following, granter, reason, correcting);
+        return new Refreshing(relationship, following, context, granter, reason);
+    }
+
+    // AUTHZ-DERIVE-005, IDN-PRIN-001, CONV-DESIGN-007 (D-207, D-208): a person's refresh
+    // comes from the host's own gated operation. A system principal's is background work,
+    // so it is admitted only where no request is served on the calling flow, as the gate
+    // judges that, and only within the limits the principal already has: an
+    // organization-scoped one acting as a declared job, a deployment-scoped one able to
+    // run reconciliation, the drift check's operation. Any other call is the calling
+    // code's fault, since the refresh asks no permission a refusal could name.
+    private void Admitted(AccessContext context)
+    {
+        if (context.Principal is not SystemPrincipal principal)
+        {
+            return;
+        }
+
+        if (sessions.ServesRequest)
+        {
+            throw new InvalidOperationException(
+                "A system principal's refresh is background work and is not called while a request is served.");
+        }
+
+        if (principal.IsDeploymentScoped
+            ? !principal.MayRun(SystemOperation.Reconciliation)
+            : !model.DeclaresJob(principal.Name))
+        {
+            throw new InvalidOperationException(
+                "A refresh is called by a system principal only where it names a declared job or may run reconciliation.");
+        }
     }
 
     private async ValueTask<Result<DerivationRefresh>> RefreshedAsync(
@@ -202,6 +236,16 @@ internal sealed class DerivationMaterialiser(
             is not RegisteredResource registered)
         {
             return Result.Success(new DerivationRefresh(0, 0));
+        }
+
+        // IDN-PRIN-001 AC2, AUTHZ-DERIVE-005 (D-209): an organization-scoped principal acts
+        // for one organization, so a declared job's refresh of another's record is the
+        // calling code's fault, raised before anything is written.
+        if (refreshing.Calling.Principal is { IsDeploymentScoped: false } job
+            && !job.ActsFor(registered.Organization))
+        {
+            throw new InvalidOperationException(
+                "A declared job's refresh is called only on a record of the organization it acts for.");
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -306,9 +350,9 @@ internal sealed class DerivationMaterialiser(
         return new DerivationRefresh(written, revoked);
     }
 
-    // AUTHZ-GRANT-003 AC5, AUTHZ-DERIVE-005: a grant the drift check writes or takes back
-    // is recorded in the transaction that corrects it, naming the check's principal. A
-    // host's own refresh is the host's write and records nothing here.
+    // AUTHZ-GRANT-003 AC5 and AC6, AUTHZ-DERIVE-005: a grant a refresh writes or takes
+    // back is recorded in the refresh's transaction, naming who called it: a person as
+    // acting identity, a system principal by its name and stated reason (D-187, D-207).
     private async ValueTask CorrectedAsync(
         Refreshing refreshing,
         Grant grant,
@@ -316,17 +360,18 @@ internal sealed class DerivationMaterialiser(
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        if (refreshing.Correcting is not SystemPrincipal principal)
-        {
-            return;
-        }
+        AccessContext calling = refreshing.Calling;
 
         await audit
             .RecordAsync(
                 new CorrectedGrant(
                     AuditRecordId.New(time),
-                    principal,
+                    calling.Acting,
+                    calling.Effective,
+                    calling.BreakGlassReason,
+                    calling.Principal,
                     grant.Organization,
+                    grant.Subject,
                     grant.Id,
                     grant.Role,
                     retracted,
@@ -383,12 +428,11 @@ internal sealed class DerivationMaterialiser(
     private sealed record Materialised(ResourceType Type, RoleName Role);
 
     // One refresh as it was asked: the relationship, the materialised derivations that
-    // follow from it, who and why its grants record, and the drift check's principal
-    // where the drift check asked.
+    // follow from it, who called it, and who and why its grants record.
     private sealed record Refreshing(
         RelationshipDeclaration Relationship,
         IReadOnlyList<Materialised> Following,
+        AccessContext Calling,
         SubjectId Granter,
-        string Reason,
-        SystemPrincipal? Correcting);
+        string Reason);
 }

@@ -514,6 +514,64 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 (D-209): the signal is asked only with no unit of work open, so
+    /// asking it inside one is a fault of the calling code: the provider is not asked,
+    /// nothing is recorded, and the unit of work open is left as it stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_TheSignalAskedInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        var considered = new PhoneSignalAuditInMemory(_work);
+        var signals = new PhoneSignals(
+            new PhoneSignalProvider((_, _) =>
+                throw new Xunit.Sdk.XunitException("The provider was asked inside a unit of work.")),
+            considered,
+            _work,
+            _clock);
+
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () => await signals.AllowsAsync(
+            Factor.PhoneCode,
+            Phone.Value,
+            new SubjectId(Guid.NewGuid()),
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(considered.Records);
+        Assert.Equal((1, 0, true), (_work.Opened, _work.RolledBack, _work.Open));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 (D-209): the unit of work that records a <c>risk</c> answer
+    /// begins as the outermost, so one that would join a unit of work already open ends
+    /// its level with a rollback, which marks the whole, and throws, nothing recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_ARiskAnswersRecordBeginsTheOutermostUnitOfWorkAsync()
+    {
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk));
+
+        PhoneSignals signals = Path.Signals;
+
+        // The consideration's own audit reads no transaction here, so the open one is
+        // met by the begin alone.
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () => await signals.AllowsAsync(
+            Factor.PhoneLink,
+            Phone.Value,
+            new SubjectId(Guid.NewGuid()),
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_signals.Records);
+        Assert.Equal((2, 1), (_work.Opened, _work.RolledBack));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await _work.CommitAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC6: a reported change is recorded where it is asked, in a unit of
     /// work of its own, and the factor is withheld.
     /// </summary>

@@ -42,19 +42,27 @@ internal sealed class ServerInMemory : IServer
         _serve = async features =>
         {
             TContext context = application.CreateContext(features);
+            Exception? fault = null;
 
             try
             {
                 await application.ProcessRequestAsync(context);
             }
-            catch (Exception fault)
+            catch (Exception thrown)
             {
-                application.DisposeContext(context, fault);
+                fault = thrown;
 
                 throw;
             }
-
-            application.DisposeContext(context, null);
+            finally
+            {
+                // As a web server ends a request, whichever way it went: what the
+                // framework registered on the response's completion runs first, the
+                // disposal of the request's scope among it, and then the context is
+                // disposed.
+                await ((ResponseInMemory)features.Get<IHttpResponseFeature>()!).CompletedAsync();
+                application.DisposeContext(context, fault);
+            }
         };
 
         return Task.CompletedTask;
@@ -114,7 +122,7 @@ internal sealed class ServerInMemory : IServer
                 }
             }
 
-            var answered = new HttpResponseFeature();
+            var answered = new ResponseInMemory();
 
             await using var written = new MemoryStream();
 
@@ -160,5 +168,23 @@ internal sealed class ServerInMemory : IServer
     private sealed class BodyDetection(bool present) : IHttpRequestBodyDetectionFeature
     {
         public bool CanHaveBody => present;
+    }
+
+    // The response as the pipeline writes it, holding what is registered to run once it
+    // has been sent, which runs last registered first.
+    private sealed class ResponseInMemory : HttpResponseFeature
+    {
+        private readonly Stack<(Func<object, Task> Callback, object State)> _completed = new();
+
+        public override void OnCompleted(Func<object, Task> callback, object state) => _completed.Push((callback, state));
+
+        // Runs what was registered, each once.
+        public async Task CompletedAsync()
+        {
+            while (_completed.TryPop(out (Func<object, Task> Callback, object State) entry))
+            {
+                await entry.Callback(entry.State);
+            }
+        }
     }
 }

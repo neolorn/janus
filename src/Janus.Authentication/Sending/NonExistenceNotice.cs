@@ -82,9 +82,18 @@ internal sealed class NonExistenceNotice(
     /// Whether no account holds the destination, which alone is told so; an account
     /// the ask cannot reach is answered by the restrictions and told nothing.
     /// </param>
+    /// <param name="outermost">
+    /// Whether the ask is one that may ask the carrier's signal of a number (a recovery,
+    /// a sign-in link), so its unit of work is the outermost and never joins another's
+    /// (CONV-DESIGN-003, D-207).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Nothing, or the refusal the message would have met.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// An outermost ask was called inside another's unit of work, a fault of the calling
+    /// code; nothing of the outer unit of work commits.
+    /// </exception>
     public async ValueTask<Result> AnswerAsync(
         SendDestination destination,
         MessageKind message,
@@ -92,6 +101,7 @@ internal sealed class NonExistenceNotice(
         string source,
         string language,
         bool unheld,
+        bool outermost,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(destination);
@@ -128,8 +138,11 @@ internal sealed class NonExistenceNotice(
             source,
             RecipientLanguage.Found(language, languages));
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        Result begun = outermost
+            ? await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false)
+            : (await work.BeginAsync(cancellationToken).ConfigureAwait(false)).Match(_ => Result.Success(), Result.Failure);
+
+        if (begun.Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }

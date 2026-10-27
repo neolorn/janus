@@ -86,6 +86,21 @@ internal sealed class ResourcesInMemory : IResourceStore
     }
 
     /// <inheritdoc/>
+    public ValueTask<bool> HoldsAnyAsync(ResourceReference container, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_resources.Values.Any(resource => resource.ContainedIn == container));
+
+    /// <inheritdoc/>
+    public ValueTask RemoveAsync(ResourceReference reference, CancellationToken cancellationToken)
+    {
+        if (!_resources.Remove(reference))
+        {
+            throw new InvalidOperationException("Only a registered record is removed.");
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<ResourceId>> BeneathAsync(
         ResourceReference container,
         ResourceType type,

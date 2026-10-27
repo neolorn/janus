@@ -295,8 +295,8 @@ internal sealed class IdentifierService(
                 is not PendingVerification listed
             || !Reaches(listed, subject, enrolment))
         {
-            return (await throttle.FailedAsync(presenting, cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(Error.From(ErrorCodes.CodeInvalid)), Result.Failure);
+            return Result.Failure(
+                await CountedAloneAsync(presenting, Error.From(ErrorCodes.CodeInvalid), cancellationToken).ConfigureAwait(false));
         }
 
         // REG-SESS-003 AC6, AUTH-ABUSE-001 (D-188): a try is held to the delay the source
@@ -308,8 +308,8 @@ internal sealed class IdentifierService(
             return Result.Failure(delayed);
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -477,10 +477,8 @@ internal sealed class IdentifierService(
             // never issued) is counted against that source alone, and the count is the
             // one write the refusal keeps.
             return press
-                ? (await throttle.FailedAsync(pressing, cancellationToken).ConfigureAwait(false))
-                    .Match(
-                        () => Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeExpired)),
-                        Result.Failure<LinkLanding>)
+                ? Result.Failure<LinkLanding>(
+                    await CountedAloneAsync(pressing, Error.From(ErrorCodes.CodeExpired), cancellationToken).ConfigureAwait(false))
                 : Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
         }
 
@@ -496,8 +494,8 @@ internal sealed class IdentifierService(
                 return Result.Success(new LinkLanding(Verified: false, SameBrowser: false, Code: null));
             }
 
-            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(_ => null, error => error) is Error notBegunAgain)
+            if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
             {
                 return Result.Failure<LinkLanding>(notBegunAgain);
             }
@@ -603,8 +601,8 @@ internal sealed class IdentifierService(
                     : await codes.ShownAsync(PendingVerification.CodeHolder(staged.Id), cancellationToken).ConfigureAwait(false)));
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<LinkLanding>(notBegun);
         }
@@ -1583,6 +1581,17 @@ internal sealed class IdentifierService(
         return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match(() => refusal, error => error);
     }
+
+    // CONV-DESIGN-003, AUTHZ-INHERIT-002: a refusal decided before the operation's unit
+    // of work begins counts in one of its own, the outermost, so the count stands
+    // whatever a caller does after it.
+    private async ValueTask<Error> CountedAloneAsync(
+        ThrottleAttempt attempt,
+        Error refusal,
+        CancellationToken cancellationToken) =>
+        (await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error)
+            ?? await CountedAsync(attempt, refusal, cancellationToken).ConfigureAwait(false);
 
     // REG-IDENT-005: only an identifier the account holds and has proved is promoted,
     // and the personal email stays non-primary for the whole membership (REG-MAIL-001).

@@ -98,6 +98,16 @@ internal sealed class ResourceStore(StoreContext context, DataConnections connec
         DO UPDATE SET depth = EXCLUDED.depth;
         """;
 
+    // AUTHZ-INHERIT-002 AC5, AUTHZ-INHERIT-003 AC3 (D-203): a record removed is no
+    // longer anything's ancestor or descendant; one that holds no record is an ancestor
+    // of itself alone, and both directions are cleared so no row is left orphaned.
+    private const string Forget =
+        """
+        DELETE FROM identity.ancestry
+        WHERE (resource_type = CAST(@type AS text) AND resource_id = CAST(@id AS text))
+           OR (ancestor_type = CAST(@type AS text) AND ancestor_id = CAST(@id AS text));
+        """;
+
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">No transaction is open.</exception>
     public async ValueTask HoldAsync(OrganizationId organization, CancellationToken cancellationToken)
@@ -219,6 +229,36 @@ internal sealed class ResourceStore(StoreContext context, DataConnections connec
         await RunAsync(ambient, LockTree, arguments, cancellationToken).ConfigureAwait(false);
         await RunAsync(ambient, Detach, arguments, cancellationToken).ConfigureAwait(false);
         await RunAsync(ambient, Attach, arguments, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> HoldsAnyAsync(ResourceReference container, CancellationToken cancellationToken) =>
+        await context.Resources
+            .AnyAsync(
+                row => row.ContainedInType == container.Type && row.ContainedInId == container.Id,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No such row exists.</exception>
+    public async ValueTask RemoveAsync(ResourceReference reference, CancellationToken cancellationToken)
+    {
+        ResourceRecord record = await context.Resources
+            .FirstOrDefaultAsync(
+                row => row.Type == reference.Type && row.Id == reference.Id,
+                cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The record has no row to remove.");
+
+        context.Resources.Remove(record);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        await RunAsync(
+            ambient,
+            Forget,
+            new { type = reference.Type.ToString(), id = reference.Id.ToString() },
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

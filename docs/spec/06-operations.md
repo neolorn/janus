@@ -36,9 +36,14 @@ for one job produce case-by-case judgment calls.
 transaction already attached. Direct connection retrieval SHALL NOT be used.
 
 A port that runs hand-written SQL inside a unit of work first saves the changes the
-context tracks, in that transaction, so the query sees them too (CONV-DESIGN-003).
+context tracks, in that transaction, so the query sees them too (CONV-DESIGN-003). The
+one other place that touches a context's connection is `UseUnitOfWorkAsync` in
+`Janus.Hosting`, which reads the host's context's connection and options to judge it,
+hands it the accessor's connection and transaction, and returns it to its configuration,
+the data source its provider built included, after the outermost commit or rollback
+(AUTHZ-INHERIT-002, `08` CONV-DESIGN-007, D-206, D-207).
 
-*Source: D-017, D-166, D-186*
+*Source: D-017, D-166, D-186, D-206, D-207*
 
 Without this, a hand-written query on a separate connection silently misses rows
 written earlier in the same transaction — a nasty and easily-missed bug in financial
@@ -49,7 +54,8 @@ code.
    transaction, the changes the context tracked before the query included.
 2. Direct connection retrieval is unreachable from the service layer. In
    `Janus.Storage` only the accessor retrieves a connection, besides the listen/notify
-   connection of OPS-DATA-003, which runs nothing but `LISTEN`.
+   connection of OPS-DATA-003, which runs nothing but `LISTEN`; outside `Janus.Storage`,
+   only `UseUnitOfWorkAsync` touches a context's connection.
 3. A test asserts transaction visibility across both tools: it lives in
    `Janus.Storage.Tests` and uses an entity `Janus.Storage` itself owns (a settings
    row), written through the context and read through the accessor inside one
@@ -138,7 +144,35 @@ AUTHZ-TEST-002: 1,000,000 resources, 1,000,000 grants of which 10% are revoked,
 **OPS-MIG-001** — Migrations SHALL be applied by a dedicated step in the pipeline
 before the new version deploys. They SHALL NOT be applied at application startup.
 
-*Source: D-018*
+**Values (D-204).** The step is `migrate`, a command of the `Janus.Cli` tool package
+(LIB-PKG-001): it applies the library's migrations to the database of the connection the
+JSON document on its standard input carries, under the `identity_migrate` credential
+(OPS-MIG-003). It writes no audit row, asks no gate and runs as no principal (D-206).
+Its document carries the connection and nothing else: `migrate` reads no key and fills
+no key ring; it is refused with `model.startup.secretunavailable`, `details.key`
+`input`, where standard input is a terminal or the document carries no connection
+member; with `api.request.malformed` naming `connection` where that member is blank or
+not a string (D-209); and, first, with `api.request.malformed` naming `input` where the
+document carries any member but the connection, whether or not it carries the
+connection, so the migration step never holds the key-encryption key (D-173). It runs no
+schema check (OPS-MIG-002), which needs the schema it creates, and, as no command of the
+tool does, none of the model's checks, which need the host's declaration
+(AUTHZ-MODEL-004). It exits 0 with nothing on standard output; a migration the database
+refuses exits 1 with one JSON line `system.fault` on standard error, nothing applied
+beyond the migrations before it. `migrate --report` writes to standard output the
+destructive-operation report (OPS-DEP-002) of the migrations pending on its target and
+applies nothing: one JSON line per statement of those migrations that `08`
+CONV-DESIGN-003's scan matches, in the order they apply, an object whose `migration` is
+the migration's identifier, `statement` the matched statement itself, never the block
+that guards it in the script, and `destructive` `true` where OPS-DEP-001 names the
+statement destructive and `false` otherwise; it writes nothing where nothing matches,
+and exits 0 whatever it found, since whether a destructive statement stops a deploy is
+the pipeline's gate (OPS-DEP-001, D-206), so a host's pipeline reports what a library
+upgrade would do before it does it. A host's pipeline runs `migrate` before its own
+migrations (OPS-MIG-004); the library's own pipeline applies its migrations the same
+way, the double run of OPS-MIG-007 included, so there is one way to apply them.
+
+*Source: D-018, D-204, D-206, D-209*
 
 Startup migration means instances racing each other on deploy, failures surfacing as
 crash loops rather than failed pipelines, and the running application holding
@@ -147,6 +181,17 @@ permission to alter the tables that authorize it.
 **Acceptance criteria**
 1. Starting the application against an un-migrated database does not migrate it.
 2. The pipeline fails before deployment if migration fails.
+3. `migrate` run twice against one database applies the migrations once and changes
+   nothing the second time.
+4. `migrate` reads no key: a document carrying a usable connection alone (a string not
+   blank) is accepted and the command fills no key ring, and one whose connection is
+   blank or not a string is refused with `api.request.malformed` naming `connection`
+   (D-209); one carrying any other member, with the connection or without it, is refused
+   with `api.request.malformed` naming `input`, and nothing is applied.
+5. `migrate --report` applies nothing, writes one JSON line for each statement of the
+   pending migrations the scan matches, its `statement` the matched statement itself and
+   never the block that guards it in the script, marking as destructive exactly those
+   OPS-DEP-001 names, writes nothing where none matches, and exits 0 either way.
 
 ---
 
@@ -360,23 +405,29 @@ protected from pull-request modification.
 **OPS-DEP-004** — A secret-scanning step SHALL run in the pipeline over the full
 history on every push and fail the build on detection.
 
-*Source: D-042.3, D-150, D-167*
+*Source: D-042.3, D-150, D-167, D-210*
 
 GitHub's own secret scanning and push protection are unavailable on this plan for
-private repositories, so OPS-SEC-001 has no platform enforcement. The check moves
-into the pipeline. The scanner is **gitleaks**, run as its own release at a pinned
-version: the step downloads the release archive and checks it against a SHA-256
-written in the pipeline beside the version before it runs anything. The official
-action is not used, because on a push it scans only the pushed commits and it does not
-check what it downloads (D-167). The scan covers every commit of every branch and tag,
-on every push, with the default rule set and a committed `.gitleaks.toml` holding only
-allow-list entries. Each entry names one file and the one value it exempts, both of
-which must match, and gives the reason; an entry never exempts a whole file, a
-directory or a shape of value (D-150, D-167). The one exception is the offline
-leaked-password list (AUTH-PASS-004): its entry names the file and the list's line form,
-a whole line of exactly 40 upper-case hexadecimal characters, because every such line is
-the hash of a leaked password and the list is drawn again at every release (D-167). No
-other scanner is added.
+private repositories, so OPS-SEC-001 has no platform enforcement. The check moves into
+the pipeline. The scanner is **gitleaks**, run as its own release at a pinned version:
+the step downloads the release archive and checks it against a SHA-256 written in the
+pipeline beside the version before it runs anything. The official action is not used,
+because on a push it scans only the pushed commits and it does not check what it
+downloads (D-167). The scan covers every commit of every branch and tag, on every push,
+with the default rule set and a committed `.gitleaks.toml` holding only allow-list
+entries. Each entry names one file and the one value it exempts, both of which must
+match, and gives the reason; an entry never exempts a whole file, a directory or a shape
+of value (D-150, D-167). The one exception is the offline leaked-password list
+(AUTH-PASS-004): its entry names the file and the list's line form, a whole line of
+exactly 40 upper-case hexadecimal characters, because every such line is the hash of a
+leaked password and the list is drawn again at every release (D-167). No other
+allow-list reaches the scan: it runs with `--config` naming the committed
+`.gitleaks.toml`, with `--ignore-gitleaks-allow`, so a line's inline `gitleaks:allow`
+marker silences nothing, with `--gitleaks-ignore-path` naming a folder that holds no
+file and with no `--baseline-path`, and it fails where the checked-out tree holds a
+`.gitleaksignore` (a list of findings gitleaks reads at the scanned repository's root
+whatever its flags say), at its root or tracked anywhere in it (D-210). No other scanner
+is added.
 
 **Acceptance criteria**
 1. A committed credential fails the build.
@@ -391,6 +442,9 @@ other scanner is added.
 6. In the offline leaked-password list, a whole line of 40 upper-case hexadecimal
    characters passes the scan; any other matched text in that file, and the same hash in
    any other file, fails the build.
+7. A credential on a line that carries gitleaks' inline allow marker fails the build,
+   and so does a `.gitleaksignore` the checked-out tree holds, whatever it lists
+   (D-210).
 
 ---
 
@@ -585,10 +639,12 @@ changing the members of a group that holds, itself or through a group holding it
 live grant (allow or deny) of such a role or of a role that cannot be read, SHALL
 require it likewise.
 
-*Source: D-010, D-166*
+*Source: D-010, D-166, D-212*
 
-Self-referential deliberately. Without it, any administrator who can manage grants is
-a system administrator one step removed, and the distinction is decorative.
+Self-referential deliberately. Without it, any administrator who can manage grants is a
+system administrator one step removed, and the distinction is decorative.
+AUTHZ-GRANT-005 holds every other role to the same reasoning: nobody hands out a role
+beyond what they may hand out, and nobody gives themselves access (D-212).
 
 **Acceptance criteria**
 1. A grant-managing administrator without the permission cannot confer it.
@@ -688,7 +744,7 @@ protected keys (OPS-CFG-005).
 | Spike in permission denials | Normal | AUTHZ-GATE-004 |
 | Gateway balance drain or floor breach | Normal | INT-SMS-004 |
 | **Background job failure** | Normal | INF-BG-001 |
-| **Erasure or takedown delivery exhausted its retries** | High | IDN-LIFE-003a |
+| **A delivery of host-side work exhausted its retries**: an erasure's, a takedown's, a restriction's, a consent's or an objection's (`10` section 5.50) | High | IDN-LIFE-003a, D-203 |
 | **Certificate renewal failure** | High — a total-outage precursor | INF-TLS-003 |
 | **Host clock drift beyond tolerance** | Normal | INF-HOST-001 |
 | **Degradation: blocklist fallback, failed provider push, undelivered notification (attempts exhausted), reconciliation drift, registration channel lost, a watch the environment does not supply, a failed refresh of the location or range file** | Normal | OPS-OBS-002, D-190 |
@@ -927,10 +983,11 @@ while `exfiltration.export.stepuprequired` is on, a gate named by the export, co
 the strictest of the policy's gates), consent, the limit
 (`exfiltration.export.ratelimit` per actor over a rolling hour, refused with
 `auth.throttled` and `retryAt`) and the audit row `authz.access.exported`. A system
-principal meets no gate and cannot export while the key is on. The limit's records of an
+principal meets no gate and cannot export while the key is on, and a host's job is never
+declared with an export permission (IDN-PRIN-001, D-202). The limit's records of an
 actor are cleared by the expiry sweep once they are an hour old (OPS-OBS-003).
 
-*Source: D-045, D-166, D-187*
+*Source: D-045, D-166, D-187, D-202*
 
 Bulk export is the exfiltration mechanism; ordinary browsing is not.
 
@@ -980,7 +1037,7 @@ generate the break-glass credential**: that is issued from the management applic
 (OPS-BOOT-004), so the secret never touches a terminal, a log or a file.
 
 **Values (D-153, D-166).** The command is `bootstrap`, the first argument of the
-`Janus.Cli` executable, which a deployment installs under any name (CONV-NAME-001).
+`Janus.Cli` tool, whose command is `identity` (LIB-PKG-001, `08` CONV-LAYOUT-001, D-204).
 Every other argument is `--<name> <value>`: `--organization`, `--email`, `--phone`,
 `--dateofbirth` (`YYYY-MM-DD`, required whatever `registration.adultaffirmation`
 says) and each required deployment value by its key name (`10` section 4 preamble). A
@@ -1009,11 +1066,12 @@ as `<origin>/link#enrolment.<token>`: the origin is the first entry of
 `webauthn.origins`, which the deployment lists first as the authentication
 application's origin, since the command reads no host declaration; the token sits in the
 fragment, so no request, log or referrer carries it. It lives for
-`recovery.link.lifetime`. Exit code 0 on success, with the address alone on standard
-output; 1 on refusal, with one JSON line `{"code": ..., "details": {...}}` on standard
+`recovery.link.lifetime`. Exit code 0 on success, with two lines on standard output: the
+address, then the administrative organization's identifier, which a host keeps in its
+own configuration and the library reads from none (D-204); 1 on refusal, with one JSON line `{"code": ..., "details": {...}}` on standard
 error and nothing on standard output.
 
-*Source: D-028, D-133, D-166, D-188*
+*Source: D-028, D-133, D-166, D-188, D-204*
 
 Whoever runs the deployment already holds server access, which is strictly more
 privileged than anything the first account can do. No new secret is created, nothing
@@ -1065,6 +1123,8 @@ name the deployment (`10` section 4), and it is protected from then on (OPS-CFG-
    under eighteen is refused with `identity.profile.underage` and creates nothing.
 7. Both `system-administrator` grants bootstrap makes name the nil subject as granter
    and `OPS-BOOT-001` as reason; no grant names its holder as granter.
+8. On success standard output holds two lines: the enrolment link, then the
+   administrative organization's identifier.
 
 ---
 
@@ -1084,10 +1144,10 @@ audited with `emergency` as acting and effective identity (AUTHZ-IMP-001), the a
 the action concerns as the record's subject (IDN-AUD-001), and the reason the owner
 states with the credential at `/break-glass`; it appears in no device list, holds no
 mailbox, and cannot be granted anything further, suspended, or deleted; its
-`system-administrator` grant cannot be revoked, and the role it holds keeps every
-library-owned permission (`10` section 3). Each of those changes, and deactivating the
-account, taking it down or adding it to a group, SHALL be refused with 403
-`authz.denied`, and so SHALL, from the break-glass session or a session another
+`system-administrator` grant cannot be revoked, its membership of the administrative
+organization cannot be ended (D-202), and the role it holds keeps every library-owned
+permission (`10` section 3). Each of those changes, and deactivating the account, taking
+it down or adding it to a group, SHALL be refused with 403 `authz.denied`, and so SHALL, from the break-glass session or a session another
 application opened from it (BFF-SESS-006), the step-up actions `password:set`,
 `identifier:add`, `username:change`, `factor:enrol`, `provider:link`,
 `recoverycodes:generate`, `mailcredential:create`, `account:deactivate` and
@@ -1132,7 +1192,7 @@ credential, one field for the reason, one button. The endpoint
 free-text member under API-CONV-002, and kept with the session. The owner is not technical
 (`12` §1); an API endpoint is not a procedure they can follow.
 
-*Source: D-065, D-129, D-166, D-170, D-171, D-179, D-183*
+*Source: D-065, D-129, D-166, D-170, D-171, D-179, D-183, D-202*
 
 **Acceptance criteria**
 1. Use consumes it; a second attempt fails.
@@ -1146,8 +1206,9 @@ free-text member under API-CONV-002, and kept with the session. The owner is not
 6. From the break-glass session, opening the management application requires no
    further credential.
 7. A change that would take a library-owned permission out of the role the
-   `emergency` account holds, or revoke its `system-administrator` grant, is refused
-   with `authz.denied` and changes nothing.
+   `emergency` account holds, revoke its `system-administrator` grant or end its
+   membership of the administrative organization, is refused with `authz.denied` and
+   changes nothing.
 8. A second account carrying the reserved-account mark is refused by the database.
 9. From a break-glass session, or a session another application opened from it
    (BFF-SESS-006), each step-up action listed above is refused with `authz.denied`
@@ -1279,15 +1340,20 @@ it fails with `model.startup.declarationmissing`, `details.key` `secretSource`
 
 A `Janus.Cli` command SHALL read its database connection and every key version it needs
 from one JSON document on standard input, the same document the secret source serves,
-SHALL refuse to run where standard input is a terminal, SHALL take none of them as an
-argument, a file or an environment variable, and SHALL clear every key when it ends. A
-command the executable does not carry is refused with one JSON line
-`api.request.malformed` naming it on standard error, and exit code 1. Every `Janus.Cli`
-command exits 0 on success and 1 on a refusal, writing the refusal as one JSON line
-`{"code": ..., "details": {...}}` on standard error and nothing on standard output, as
-`bootstrap` does (OPS-BOOT-001, D-197).
+save `migrate`, whose document carries the migration connection alone and which reads no
+key (OPS-MIG-001, D-204), SHALL refuse to run where standard input is a terminal, SHALL
+take none of them as an argument, a file or an environment variable, and SHALL clear
+every key when it ends. A command the executable does not carry is refused with one JSON
+line `api.request.malformed` naming it on standard error, and exit code 1. Every
+`Janus.Cli` command exits 0 on success and 1 on a refusal, writing the refusal as one
+JSON line `{"code": ..., "details": {...}}` on standard error and nothing on standard
+output, as `bootstrap` does (OPS-BOOT-001, D-197). A fault ends every command the same
+way: one JSON line on standard error carrying the code the fault carries (OPS-SEC-003
+criterion 3), or `{"code": "system.fault", "details": {}}` for one that carries none, as
+`migrate` answers a database's refusal (OPS-MIG-001); nothing on standard output, exit
+code 1, its keys cleared (D-207).
 
-*Source: D-026.3, D-069, D-103, D-105, D-166, D-180, D-183, D-197*
+*Source: D-026.3, D-069, D-103, D-105, D-166, D-180, D-183, D-197, D-204, D-207, D-209*
 
 **Acceptance criteria**
 1. No secret value appears in any repository file or image layer.
@@ -1301,10 +1367,18 @@ command exits 0 on success and 1 on a refusal, writing the refusal as one JSON l
    (LIB-HOST-001); the server serves no request before every secret is read.
 3. No secret other than the two bootstrap values is present on the host outside the
    secrets manager.
-4. A command whose standard input is a terminal, or whose document holds no usable
-   key, is refused with `model.startup.secretunavailable`, `details.key` naming `input`
-   or the missing member; a document that is not JSON or exceeds 64 KiB is refused with
+4. A command whose standard input is a terminal is refused with
+   `model.startup.secretunavailable`, `details.key` `input`; one whose document holds no
+   usable key is refused with it naming the missing member in `details.key`; a
+   `connection` that is absent, blank or not a string is refused with
+   `api.request.malformed` naming `connection`, save `migrate`, whose document carrying
+   any other member is refused first with `api.request.malformed` naming `input`, and
+   one carrying no member with `model.startup.secretunavailable`, `details.key` `input`
+   (OPS-MIG-001, D-209); a document that is not JSON or exceeds 64 KiB is refused with
    `api.request.malformed` naming `input`; no refusal carries anything of the document.
+5. A command whose work throws a fault that carries no code writes one JSON line
+   `{"code": "system.fault", "details": {}}` on standard error and nothing on standard
+   output, exits 1, and clears every key it read (D-207).
 
 ---
 
@@ -1461,7 +1535,13 @@ than an improvisation.
 **OPS-OBS-001** — Every authorization decision SHALL be explicable without a
 debugger.
 
-*Source: P-003, AUTHZ-GATE-004, D-166*
+*Source: P-003, AUTHZ-GATE-004, D-166, D-207, D-208*
+
+A host job's decision is explained by its declaration (`07` LIB-HOST-001, Jobs) and,
+where the gate refused it `authz.denied`, by its recorded refusal's correlation
+identifier, which names its principal and reason; a consent refusal writes no record and
+is explained by its code (AUTHZ-CONCEAL-004, D-208); the explanation operation refuses a
+job's context `authz.denied` (`01` IDN-PRIN-001, D-207).
 
 **Acceptance criteria**
 1. A denial resolves to an explanation naming the permission and the missing grant,
@@ -1582,18 +1662,24 @@ watched from its rotation record, not from the log (DR-009a).
 **OPS-ENV-001** — Development databases SHALL be seeded with realistic principals and
 grants.
 
-*Source: D-010, D-166*
+*Source: D-010, D-166, D-204, D-207*
 
 A development environment where nothing is visible invites a temporary bypass that
 reaches production.
 
 **Values (D-166).** A development database is made ready as a production one is: the
-migrations, then the `bootstrap` command of `Janus.Cli`, which seeds the administrative
-organization, the administrative roles and their permissions, the first
-administrator, `emergency` and the canary. The library ships no seed of its own; every
-further principal and grant is made through the library's own operations, and a host
-seeds its own domain the same way. No code path reads which environment it runs in,
-and no key of `10` section 4 bypasses, skips or disables a check.
+`migrate` command of `Janus.Cli`, then its `bootstrap` command, which seeds the
+administrative organization, the administrative roles and their permissions, the first
+administrator, `emergency` and the canary, then `register-client` for each browser
+application the host declares (AUTH-SESS-012, D-204). The library ships no seed of its
+own; every further principal and grant is made through the library's own operations, and
+a host seeds its own domain the same way: its declared roles at the first start
+(AUTHZ-GRANT-004), an organization of its own through `POST /admin/organizations` with
+its first grants written under `system:administer` (AUTHZ-SCOPE-001, D-207), and its
+people through the library's endpoints, which `Janus.Testing` drives for a test or a
+development setup with its stand-in transports and software passkey (LIB-TEST-003,
+D-204). No code path reads which environment it runs in, and no key of `10` section 4
+bypasses, skips or disables a check.
 
 **Acceptance criteria**
 1. A fresh development database yields a usable, permission-realistic dataset.

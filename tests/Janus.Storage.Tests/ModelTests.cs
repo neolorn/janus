@@ -446,6 +446,12 @@ public sealed class ModelTests
             // Not an account field: the legal documents the deployment publishes, each
             // version binding in the one language it names (PRIV-CONS-005,
             // PRIV-CONS-006).
+            "legal_document_cookies.cookie",
+            "legal_document_cookies.document",
+            "legal_document_cookies.lifetime",
+            "legal_document_cookies.purpose",
+            "legal_document_cookies.third_party",
+            "legal_document_cookies.version",
             "legal_document_translations.document",
             "legal_document_translations.language",
             "legal_document_translations.translated_text",
@@ -515,11 +521,14 @@ public sealed class ModelTests
             "maintenance_log.task",
 
             // Standing: the membership record of IDN-MEM-001, with its own beginning
-            // and end.
+            // and end, and the end an administrator set it to reach (D-213).
             "memberships.acknowledged_at",
             "memberships.acknowledged_documents",
             "memberships.created_at",
+            "memberships.end_reason",
+            "memberships.end_set_by",
             "memberships.ended_at",
+            "memberships.ends_at",
             "memberships.id",
             "memberships.organization",
             "memberships.subject",
@@ -609,12 +618,16 @@ public sealed class ModelTests
             "organizations.name",
 
             // Not an account field: one fact about a subject the host has its own half
-            // of, and each subscriber's confirmation of it (IDN-LIFE-003a).
+            // of, the purpose and the change of a consent or an objection change, and
+            // each subscriber's or purpose handler's confirmation of it (IDN-LIFE-003a,
+            // PRIV-RIGHT-001a).
             "outbox.attempts",
+            "outbox.change",
             "outbox.claimed_until",
             "outbox.id",
             "outbox.kind",
             "outbox.next_attempt_at",
+            "outbox.purpose",
             "outbox.raised_at",
             "outbox.reason",
             "outbox.restricted",
@@ -805,11 +818,17 @@ public sealed class ModelTests
             "resources.resource_type",
             "resources.subject",
 
-            // Authorization: what a role allows (AUTHZ-GRANT-004), read live so that
-            // editing it takes effect at once.
+            // Authorization: what a role allows (AUTHZ-GRANT-004) and the roles its
+            // holders hand out (AUTHZ-GRANT-005), read live so that editing it takes
+            // effect at once.
             "role_permissions.permission",
             "role_permissions.role",
+            "roles.hands_out",
             "roles.name",
+
+            // Not an account field: the names of the declared roles a start has seeded,
+            // so none is seeded again (AUTHZ-GRANT-004, D-204).
+            "seeded_roles.name",
 
             // Not an account field: the sending counters of AUTH-ABUSE-004, an HMAC of the
             // restriction key with the times counted against it, a destination's apart

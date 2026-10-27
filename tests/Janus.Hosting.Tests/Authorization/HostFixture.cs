@@ -29,6 +29,12 @@ namespace Janus.Hosting.Tests.Authorization;
 /// </remarks>
 public sealed class HostFixture : IAsyncLifetime
 {
+    /// <summary>
+    /// The one background job the host declares, which reads and edits its documents
+    /// (IDN-PRIN-001).
+    /// </summary>
+    internal const string Digest = "digest";
+
     private readonly DatabaseFixture _database = new();
 
     private ServiceProvider? _services;
@@ -138,6 +144,7 @@ public sealed class HostFixture : IAsyncLifetime
                     reviewer uuid NOT NULL,
                     PRIMARY KEY (workspace_id, reviewer));
                 CREATE INDEX ix_reviewers_reviewer ON host.reviewers (reviewer);
+                CREATE TYPE host.stage AS ENUM ('draft', 'published');
                 """);
         }
 
@@ -176,6 +183,13 @@ public sealed class HostFixture : IAsyncLifetime
         // PRIV-RIGHT-005b: the deployment declares its documents sensitive, so it
         // registers what does the host-side work for them.
         services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
+
+        // PRIV-RIGHT-003: and what carries what it holds about a person into their export.
+        services.AddSingleton<IExportContributor>(new HostExportContributor());
+
+        // PRIV-RIGHT-001a: and its recommendations rest on consent, so it registers what
+        // does the host-side work of a consent change for them.
+        services.AddSingleton<IPurposeHandler>(new HostPurposes());
 
         _services = Started(services.BuildServiceProvider());
     }
@@ -286,6 +300,14 @@ public sealed class HostFixture : IAsyncLifetime
             .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
             .ServesPurpose(HostPermissions.Recommend.ToString(), "recommendations")
             .ServesPurpose(HostPermissions.Retain.ToString(), "keeping the books")
+            // IDN-PRIN-001 AC6 (D-208): the job exercises a permission bound to a
+            // consent-based purpose, which the gate admits on the record's data subject's
+            // consent alone.
+            .Job(
+                Digest,
+                HostPermissions.Read.ToString(),
+                HostPermissions.Edit.ToString(),
+                HostPermissions.Recommend.ToString())
             .Relationship<HostReviewer>(
                 "reviewer",
                 "workspace",
@@ -301,7 +323,14 @@ public sealed class HostFixture : IAsyncLifetime
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
                 .Sensitive("financial")
-                .Encrypted(held => held.Notes, held => held.Owner, "history")
+                .Capabilities(
+                    HostPermissions.Read.ToString(),
+                    HostPermissions.Edit.ToString(),
+                    HostPermissions.Publish.ToString(),
+                    HostPermissions.Recommend.ToString())
+                // PRIV-RIGHT-005a: the field is bound to a name of its own, which decides
+                // no outcome of the gate (CONV-VCS-004).
+                .Encrypted(held => held.Notes, held => held.Owner, "history", name: "case-notes")
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"])
                 .Purpose("keeping the books", "legal-obligation", data: ["history"], subjects: ["members"])
                 .Purpose(

@@ -63,7 +63,7 @@ never rendered prose.
 }
 ```
 
-*Source: LIB-API-003, CONV-NAME-003, D-166, D-179, D-183, D-197*
+*Source: LIB-API-003, CONV-NAME-003, D-166, D-179, D-183, D-197, D-208*
 
 The host renders the message in the user's language from the code. `details` carries
 structured context: never a sentence. Every free-text request field (`reason`, `detail`,
@@ -89,7 +89,9 @@ instant the next attempt is looked at, built by one builder wherever it is answe
 
 **Acceptance criteria**
 1. No error body contains a user-facing sentence.
-2. Every error carries a correlation identifier resolving to audit and logs.
+2. Every error carries the request's correlation identifier, resolving to that request's
+   log entries, and a refusal the gate records carries its audit record's identifier in
+   `details.correlation` as well (AUTHZ-CONCEAL-004, D-208).
 3. A free-text member that is blank, or longer than 1024 characters after trimming, is
    refused 400 `api.request.malformed` naming it, or, where it is a required reason that
    is blank, with that reason's code.
@@ -188,20 +190,21 @@ session
 invitation binds
 **429**: `auth.throttled` with `retryAt`
 
-*Source: D-146; REG-SESS-001, REG-SESS-002, API-REDIR-002, D-162, D-166, D-183, D-188*
+*Source: D-146; REG-SESS-001, REG-SESS-002, API-REDIR-002, D-162, D-166, D-183, D-188,
+D-207*
 
-A signed-in person is not offered registration; a request that nonetheless arrives
-with a live session creates no registration session and is refused **409**
+A signed-in person is not offered registration; a request that nonetheless arrives with
+a live session creates no registration session and is refused **409**
 `identity.registration.signedin`; the frontend navigates to the account application, and
 no account document crosses a registration route (REG-SESS-002). Where such a request
 carries `invitationToken`, the invitation the token opens is first attached to the
-signed-in account (REG-INV-002 AC1) and the answer is the same 409; the landing page
-presents the token again after a sign-in. Beginning a registration with the token is
-the invitation link's press and spends it (REG-INV-001, IDN-LIFE-009a); where an account
-already holds the bound email, the press is refused and the invitation stays unspent.
-The client identifier is
-validated at capture and stored on the session; no destination parameter is accepted
-here or at any later step (API-REDIR-002).
+signed-in account (REG-INV-002 AC1), a kept write committed with the refusal (`08`
+CONV-DESIGN-003, D-207), and the answer is the same 409; the landing page presents the
+token again after a sign-in. Beginning a registration with the token is the invitation
+link's press and spends it (REG-INV-001, IDN-LIFE-009a); where an account already holds
+the bound email, the press is refused and the invitation stays unspent. The client
+identifier is validated at capture and stored on the session; no destination parameter
+is accepted here or at any later step (API-REDIR-002).
 
 Every `/register/*` endpoint below requires the registration session's cookie, except a
 request presenting a message's `linkToken` (`POST /register/verify/{id}`,
@@ -783,17 +786,19 @@ D-197).
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
 *Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188, D-189, D-190,
-D-191, D-192, D-193, D-197*
+D-191, D-192, D-193, D-197, D-205, D-206, D-209*
 
-Rotates the session identifier on success.
+Rotates the identifier the session's cookie carries on success; the record's `SessionId`
+is kept (BFF-SESS-004).
 
 **What the gate tells the frontend.** Every `403` `auth.stepup.required` that judged a
 gate on a session of the library belonging to the acting account carries in `details`
 the three gate values and what the subject can do about them. Where no such session
 carries the request (an in-process call without one, or a context the session does not
-belong to), no gate is judged and the refusal carries no `details`. A gate a host binds
-to its own action and judges through its assurance provider (LIB-HOST-004) carries
-`required`, `outcome` `present`, empty `options` and a null `pendingUntil`:
+belong to), no gate is judged against a session and the refusal carries no `details`,
+save one: a gate a host binds to its own action, judged from its assurance provider's
+report (LIB-HOST-004), carries `required`, `outcome` `present`, empty `options` and a null
+`pendingUntil`:
 
 ```json
 {
@@ -808,18 +813,20 @@ to its own action and judges through its assurance provider (LIB-HOST-004) carri
 ```
 
 `options` lists **every combination of the account's usable factors that reaches the
-gate** (AUTH-STEP-002 step 2); the subject picks one and presents it factor by factor.
-`enrol` means no usable combination exists and the account has never reached the level —
-the frontend offers enrolment in place (AUTH-STEP-005 AC2). `report-loss` means the
-account can reach the level but a factor that would do it is gone — the frontend offers
-`POST /recovery/report-loss`. `pending` means a loss report is already running and
-`pendingUntil` is when it completes; the answer is still a 403, since the operation did
-not proceed, and the frontend presents it as a status. `pendingUntil` is present in
-every refusal and null unless the outcome is `pending`. `maxAge` is the gate's maximum
-age in whole seconds, truncated, and null where the gate asks none (a `delegated` gate,
-AUTH-STEP-007, D-193). Factor names appear here as presentation data for the prompt,
-spelled as the catalogue spells them (AUTH-FACT-002); the session record itself stores
-properties only (AUTH-SESS-002).
+gate** (AUTH-STEP-002 step 2); the subject picks one and presents it factor by factor. A
+step-up judged while a unit of work is open offers as where no phone signal is declared;
+the signal is asked when the step-up is carried out here, before any text is sent
+(AUTH-FACT-002b, D-209). `enrol` means no usable combination exists and the account has
+never reached the level — the frontend offers enrolment in place (AUTH-STEP-005 AC2).
+`report-loss` means the account can reach the level but a factor that would do it is
+gone — the frontend offers `POST /recovery/report-loss`. `pending` means a loss report
+is already running and `pendingUntil` is when it completes; the answer is still a 403,
+since the operation did not proceed, and the frontend presents it as a status.
+`pendingUntil` is present in every refusal and null unless the outcome is `pending`.
+`maxAge` is the gate's maximum age in whole seconds, truncated, and null where the gate
+asks none (a `delegated` gate, AUTH-STEP-007, D-193). Factor names appear here as
+presentation data for the prompt, spelled as the catalogue spells them (AUTH-FACT-002);
+the session record itself stores properties only (AUTH-SESS-002).
 
 ---
 
@@ -1177,7 +1184,9 @@ Edits the profile fields of REG-PROF-001 and, where enabled, the username
 ```
 
 **204**
-**403**: `auth.stepup.required`, for a username change only (`username:change`)
+**403**: `auth.stepup.required`, for a username change only (`username:change`): a body
+naming the username the account held when the edit's step-up was judged is no username
+change (REG-IDENT-009, D-208)
 **409**: `identity.username.taken`, `identity.username.reserved` (disclosed by design:
 a username is public, REG-IDENT-009); `identity.username.coolingoff` where a username
 change falls inside `identifiers.username.changecooloff`, with the cooling-off end in
@@ -1187,7 +1196,7 @@ over 64 bytes, or a legal name outside its bound); `identity.profile.notaccepted
 `dateOfBirth` field, immutable to the person and corrected through support; a
 `legalName` or `username` while its key or `identifiers.username.enabled` is off)
 
-*Source: D-146; REG-PROF-001, REG-IDENT-009, D-162, D-166*
+*Source: D-146; REG-PROF-001, REG-IDENT-009, D-162, D-166, D-208*
 
 Display name and legal name need no gate and are audited. A username change is a
 step-up action and re-verifies nothing: a username is never verified.
@@ -1927,6 +1936,7 @@ writes is one transaction; a refusal writes nothing. The refusals that can never
 
 **204**
 **403**: `authz.restricted` for a restricted account (IDN-ACCT-007);
+`authz.grant.self` where the account accepting issued the invitation (AUTHZ-GRANT-005);
 `auth.stepup.required` with `outcome` `enrol` and `policyRequirement` `{ field, value }`
 (AUTH-FACT-017, with no `deadline`: no grace applies to an account joining) when the
 account does not satisfy `requiredAssurance` or `credentialRedundancy` of the policy in
@@ -1950,7 +1960,7 @@ email the lock could admit (REG-DOM-001)
 Emits `MembershipChanged` and, where a corporate address is taken on,
 `IdentifierAdded` and `IdentifierPrimaryChanged`.
 
-*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183, D-187*
+*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183, D-187, D-212*
 
 ---
 
@@ -2025,16 +2035,25 @@ host publishes (terms of service, consent texts).
   "version": "...",
   "governingLanguage": "ar",
   "text": "...",
-  "translations": [ { "language": "en", "text": "..." } ]
+  "translations": [ { "language": "en", "text": "..." } ],
+  "cookies": [ { "name": "...", "purpose": null, "lifetime": "...", "thirdParty": false } ]
 }
 ```
+
+`cookies` is carried by `/privacy/notice` alone, and lists the cookies kept with the
+version answered, those the deployment set when it was published: every cookie the
+library sets (`17` BFF-SESS-002) and every one the host declares (LIB-HOST-001), each with its `name`, the
+consent-based `purpose` it serves (null for one strictly necessary), its `lifetime` as an
+ISO 8601 duration (null for one that ends with the browser's session) and whether a
+third party can read it (`thirdParty`), so the notice enumerates them (PRIV-CONS-006a,
+D-203).
 
 **400**: `api.request.malformed` naming `document` where `{document}` is not a document
 name (INT-SMS-003).
 **404**: `privacy.document.notfound`, the document, or the named version, was never
 published.
 
-*Source: PRIV-CONS-005, PRIV-CONS-006, D-146, D-162, D-166, D-183*
+*Source: PRIV-CONS-005, PRIV-CONS-006, PRIV-CONS-006a, D-146, D-162, D-166, D-183, D-203*
 
 Public, unauthenticated. The governing text is always returned with the translations,
 so a screen can show either without changing the interface language (PRIV-CONS-005
@@ -2087,8 +2106,10 @@ Restriction enters the request queue; erasure reaches it only through
 **Requires step-up at the account's reachable assurance** (AUTH-STEP-002a — never
 phishing-resistant under the system policy), and is **rate-limited**.
 
-The limit is `privacy.export.ratelimit` exports in the 24 hours ending at the request.
-Past it the answer is **429** `auth.throttled` with `Retry-After` and `details.retryAt`,
+The limit is `privacy.export.ratelimit` exports in the 24 hours ending at the request;
+an export is counted once every export contributor has answered, under a lock on the
+subject with the window counted again, and one a contributor failed is not counted
+(PRIV-RIGHT-003, D-203). Past it the answer is **429** `auth.throttled` with `Retry-After` and `details.retryAt`,
 the instant the oldest counted export leaves the window; a request at that instant is
 served.
 
@@ -2096,7 +2117,7 @@ served.
 without it, or with any other value, is **400** `api.request.malformed` naming `format`;
 nothing is assembled.
 
-*Source: D-086, D-141, D-162, D-166*
+*Source: D-086, D-141, D-162, D-166, D-203*
 
 Without it, anyone holding a live session (a borrowed phone, a shared computer)
 pulled a complete export, sensitive records included, in one request, from a session that
@@ -2115,15 +2136,23 @@ The staff bulk-export controls in D-045 remain scoped to staff and do not apply 
 stable-named. Each membership carries `acknowledgedAt` where an invitation attached it,
 and the section `membership-acknowledgements` holds one record per document
 acknowledged: `membership`, `document`, `version`, `acknowledgedAt` (REG-INV-001 AC3);
-the sections and their order are PRIV-RIGHT-003's. **Neither is a rendered document.**
-The frontend renders the readable view and localizes it through the frontend
-localization library.
+the sections and their order are PRIV-RIGHT-003's, the library's first and then each
+export contributor's in contributor name order. A host's section is carried as the
+library's are: in `machine` under the keys `<section>.<index>.<value>`, the index
+counting the section's records from 0 (D-206); in `human` grouped under the section in
+the same order, its labels read from the deployment's frontend message catalogue under
+the key `export/<section>` for a section and `export/<section>/<value>` for a value,
+which the host adds for its own (`18` FE-LOC-001); `/` and `.` are outside the names'
+rule and in no library name, so no two keys coincide. A contributor that fails or faults
+fails the export: **500** `system.fault`, nothing returned (D-203). **Neither is a
+rendered document.** The frontend renders the readable view and localizes it through the
+frontend localization library.
 
 No server-generated PDF. A rendered page satisfies the obligation, browsers print to
 PDF anyway, and a downloadable file of health data is a larger exposure than a page
 read while authenticated.
 
-*Source: PRIV-RIGHT-003, D-054, D-058*
+*Source: PRIV-RIGHT-003, D-054, D-058, D-203, D-206*
 
 ---
 
@@ -2161,21 +2190,22 @@ response carries `partial: true` and `unevaluated`, the derivations not evaluate
 
 Asked under `grant:read` in the organization the record sits in; `resourceType`
 `organization` with the organization's identifier asks for the whole of it. **200**
-`{ resource: { resourceType, resourceId }, grants: [ { id, kind, subjectType, subjectId,
-role, deny, inheritedFrom } ], partial, unevaluated }`: grants on the record, then on
-each container nearest first, then on the whole organization; a derived grant carries no
-`id`; a grant whose role allows nothing is not reported. Derivations that are not
-materialised are evaluated over the rows the host declares for each relationship
-(`07` LIB-HOST-001, relationship sources).
+`{ resource: { resourceType, resourceId }, grants: [ { id, kind, subjectType, subjectId, role, deny, inheritedFrom } ], partial, unevaluated }`:
+grants on the record, then on each container nearest first, then on the whole
+organization; a derived grant carries no `id`; a grant whose role allows nothing is not
+reported. Derivations that are not materialised are evaluated over the rows the host
+declares for each relationship (`07` LIB-HOST-001, relationship sources). A host's
+declared job holds no grant and is not listed; its reach is its declaration
+(AUTHZ-DERIVE-007, `01` IDN-PRIN-001, D-207).
 
 **400**: `api.request.malformed` naming `resourceType` where the model declares no such
 type, or `resourceId` where the type is `organization` and the identifier is not a UUID
 **403**: `authz.denied` without `grant:read` in the organization the record belongs to,
 and for a record the deployment holds no registration for, which belongs to no
-organization (AUTHZ-SCOPE-001): one answer for both, recorded and counted as every
-refusal is
+organization (AUTHZ-SCOPE-001): one answer for both, recorded and counted
+(AUTHZ-CONCEAL-004)
 
-*Source: AUTHZ-GATE-004, AUTHZ-DERIVE-007, D-166*
+*Source: AUTHZ-GATE-004, AUTHZ-DERIVE-007, D-166, D-207, D-208*
 
 ---
 
@@ -2197,29 +2227,40 @@ refusal is
 A grant on the whole organization is written `resourceType` `organization` with
 `resourceId` the organization's identifier, and is stored with no resource
 (AUTHZ-GRANT-001 AC2). `grant:manage` is asked in the organization the grant is scoped
-to: the one the record was registered in, or the one named. `reason` is recorded.
-Revocation records the revoking actor; `DELETE` takes `{ "reason": "..." }`. A grant or
-revocation of a role that carries `system:administer` also requires `system:administer`
-in the administrative organization (OPS-CFG-007). Nothing is granted to the reserved
-`emergency` account, and its `system-administrator` grant is not revoked (OPS-BOOT-002).
+to: the one the record was registered in, or the one named; for a grant in an
+organization other than the administrative organization, `system:administer` held in the
+administrative organization admits it too, so an organization
+`POST /admin/organizations` created receives its first grant (AUTHZ-SCOPE-001, D-207);
+the two are one admission, refused and recorded once, only where neither admits
+(AUTHZ-SCOPE-001, D-208). `reason` is recorded. Revocation records the revoking actor;
+`DELETE` takes `{ "reason": "..." }`. A grant or revocation of a role that carries
+`system:administer` also requires `system:administer` in the administrative organization
+(OPS-CFG-007). Each grant and revocation is held to AUTHZ-GRANT-005: the actor may hand
+out the role, and the change does not widen the actor's own access. Nothing is granted
+to the reserved `emergency` account, and its `system-administrator` grant is not revoked
+(OPS-BOOT-002).
 
-**201**: `{ "id": "..." }` · **204**
-**400**: `api.request.malformed` naming `reason` where it is longer than 1024 characters
-after trimming
-**403**: `authz.denied` where `grant:manage` is not held in the grant's organization,
-where the identifier names no grant or no registered record (section 8), where a role
-carrying `system:administer` is granted or revoked without it, and for a grant to the
-reserved account or a revocation of its `system-administrator` grant;
-`auth.stepup.required` (`grant:manage`)
-**404**: `authz.grant.notfound`, to a caller holding `grant:manage` there, for a grant
-already revoked, or one a derivation wrote or materialised
-**409**: `authz.grant.duplicate`; `authz.grant.expired` where `expiresAt` is not after
-the present
-**422**: `authz.grant.reasonrequired`; `authz.grant.unresolved` where `role` names no role
-the deployment holds, or `subjectId` names a group that does not exist or belongs to
-another organization (`details.member`)
+**201**: `{ "id": "..." }` · **204** **400**: `api.request.malformed` naming `reason`
+where it is longer than 1024 characters after trimming **403**: `authz.denied` where
+`grant:manage` is not held in the grant's organization and, for a grant in an
+organization other than the administrative organization, `system:administer` is not held
+in the administrative organization either, where the identifier names no grant or no
+registered record, or, for a grant on `resourceType` `organization`, its `resourceId`
+names no organization the deployment holds, recorded against no organization as section
+8 records an identifier naming no row (AUTHZ-SCOPE-001, D-209), where a role carrying
+`system:administer` is granted or revoked without it, and for a grant to the reserved
+account or a revocation of its `system-administrator` grant; `authz.role.notassignable`
+where the actor may not hand out the role, and `authz.grant.self` where the grant or
+revocation would widen the actor's own access (AUTHZ-GRANT-005); `auth.stepup.required`
+(`grant:manage`) **404**: `authz.grant.notfound`, to a caller the permission check
+admitted (`grant:manage` there, or `system:administer` in the administrative
+organization for a grant outside it), for a grant already revoked, or one a derivation
+wrote or materialised **409**: `authz.grant.duplicate`; `authz.grant.expired` where
+`expiresAt` is not after the present **422**: `authz.grant.reasonrequired`;
+`authz.grant.unresolved` where `role` names no role the deployment holds, or `subjectId`
+names a group that does not exist or belongs to another organization (`details.member`)
 
-*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, D-166*
+*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-GRANT-005, AUTHZ-SCOPE-001, D-166, D-207, D-208, D-209, D-212*
 
 ---
 
@@ -2245,27 +2286,36 @@ marks a grant a revocation refuses
 Runtime role management, under `role:manage` in the administrative organization for
 reading and changing alike. Every change carries `reason`, recorded, and is the
 `grant:manage` step-up action. A change to a role that carries `system:administer`
-before or after it requires that permission in the administrative organization. A
-change that would take a library-owned permission out of the role the reserved
-`emergency` account holds is refused (OPS-BOOT-002).
+before or after it requires that permission in the administrative organization. A change
+that would take a library-owned permission out of the role the reserved `emergency`
+account holds is refused (OPS-BOOT-002). A change stays within the actor's reach: the
+permissions the role carries before and after, and every role its `handsOut` names
+after, are ones the actor may give or hand out (AUTHZ-GRANT-005).
 
-`GET /admin/roles`: **200** `[ { name, permissions } ]`.
-`POST /admin/roles` `{ "name": "...", "permissions": [ "..." ], "reason": "..." }`:
-**201** creates the role; **204** gives the role of that name the permissions stated.
+`GET /admin/roles`: **200** `[ { name, permissions, handsOut } ]`.
+`POST /admin/roles`
+`{ "name": "...", "permissions": [ "..." ], "handsOut": [ "..." ], "reason": "..." }`,
+`handsOut` optional and none where absent: **201** creates the role; **204** gives the
+role of that name the permissions and the `handsOut` stated.
 `DELETE /admin/roles/{name}` `{ "reason": "..." }`: **204**.
 
-**400**: `api.request.malformed` naming `name` where it is not a role name,
+**400**: `api.request.malformed` naming `name` where it is not a role name (a lower-case
+letter, then lower-case letters and digits, in parts joined by single hyphens:
+`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`),
 `permissions` where one is declared neither by the library nor by the host
-(AUTHZ-MODEL-004), `reason` where it is absent, blank or longer than 1024 characters
-after trimming
-**403**: `authz.denied` without `role:manage`, without `system:administer` for a role
-that carries it, or for a change taking a library-owned permission out of the role the
+(AUTHZ-MODEL-004), `handsOut` where one is not a role name, `reason` where it is absent,
+blank or longer than 1024 characters after trimming
+**403**: `authz.role.notassignable` where the change reaches beyond the actor
+(AUTHZ-GRANT-005); `authz.denied` without `role:manage`, without `system:administer` for
+a role that carries it, or for a change taking a library-owned permission out of the role the
 reserved account holds; `auth.stepup.required` (`grant:manage`)
 **404**: `authz.role.notfound` where `DELETE` names a role the deployment does not hold
 **409**: `authz.role.inuse` for a `DELETE` of a role a grant (live, expired or revoked),
-a declared derivation or a standing invitation names
+a declared derivation, a standing invitation or another role's `handsOut` names
+**422**: `authz.grant.unresolved` (`details.member` `handsOut`) where `handsOut` names a
+role the deployment does not hold
 
-*Source: AUTHZ-GRANT-004, OPS-CFG-007, OPS-BOOT-002, D-166*
+*Source: AUTHZ-GRANT-004, AUTHZ-GRANT-005, OPS-CFG-007, OPS-BOOT-002, D-166, D-212*
 
 ---
 
@@ -2542,7 +2592,7 @@ gate. Not gated, each for its reason: revoking an invitation (it touches no acco
 creating an organization, publishing documents and translations, the compliance
 records, and refusing a privacy request.
 
-*Source: D-106, D-166, D-183*
+*Source: D-106, D-166, D-183, D-207*
 
 ### Organizations — `organization:manage`
 
@@ -2555,7 +2605,7 @@ configuration change's missing reason excepted, below). **404**
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/organizations` | `{ name, reason }`: creates an organization and writes its policy key `policy.<organization>` as `{}` in the same transaction, recorded as a configuration change (OPS-CFG-005) and as `identity.organization.created`. Not gated. **201** `{ id }` (IDN-ORG-002). **422** `identity.identifier.mixedscript` for a name that mixes scripts within a word, judged on its comparison key (IDN-ACCT-005) |
+| `POST /admin/organizations` | `{ name, reason }`: creates an organization and writes its policy key `policy.<organization>` as `{}` in the same transaction, recorded as a configuration change (OPS-CFG-005) and as `identity.organization.created`. Not gated. **201** `{ id }` (IDN-ORG-002). The organization holds no grant: its first grants, `membership:manage` and `grant:manage` among them, are written through `POST /admin/grants` under `system:administer` held in the administrative organization (AUTHZ-SCOPE-001, D-207). **422** `identity.identifier.mixedscript` for a name that mixes scripts within a word, judged on its comparison key (IDN-ACCT-005) |
 | `PUT /admin/organizations/{id}/policy` | Replaces the organization's policy overrides: the policy object of `10` §4.1a without `emailDomains` (`requiredAssurance`, `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery`, `photos`), and `reason`. Omitted fields inherit `policy.default`; the domain lock in force is kept. Every replacement, a tightening included, is the `policy:change` step-up action and carries `reason` (**422** `config.change.reasonrequired`, `details.key` `policy.<organization>`, where it is absent or blank). A replacement under which the organization's members resolve to a policy granting more on any field, by the direction column of `10` §4.1a, is a loosening (OPS-CFG-002) and also requires `system:administer` (**403** `authz.denied`, before the step-up). **422** `config.policy.belowsystem` where a stated field is looser than the system default, `details.field` naming the first in the order of `10` §4.1a (AUTH-STEP-002a); **422** `config.value.belowfloor`, `details.field` `requiredAssurance`, where the administrative organization's members would resolve below `aal2` (AUTH-SESS-005b); **422** `config.value.notallowed` for a value a field does not take, and for `photos` `true` while the host declares no image codec (`details.field` `photos`, `details.requires` `imageCodec`); **400** `api.request.malformed` for a body that is no object (the code alone) or a member the object does not have, `emailDomains` included (naming it), refused at the endpoint before the service. **204**. `GET` returns the resolved policy: **200** `{ requiredAssurance, loginFactors, gates, credentialRedundancy, selfServiceRecovery, photos, emailDomains }`, each field `{ value, overridden }`, `gates` an object keyed by the `10` §5a action name whose members are `{ value: { level, phishingResistant, maxAge }, overridden }`; `overridden` is true where the organization states the field or the action and the value in force is its own, and false where the system policy's value is in force; `emailDomains` is a list of domains in their ASCII form, and `off` is the empty list (D-143) |
 | `POST /admin/organizations/{id}/delete` · `/delete/cancel` | `{ reason }`: request, suspend, grace, erasure, cancellable (IDN-ORG-003). The request ends every session of every current member in the same transaction, and the organization's grants confer nothing until it is cancelled. Each requires step-up (`organization:delete`) and is recorded (`identity.organization.deletionrequested`, `identity.organization.deletioncancelled`). **204**, also for a request on an organization already being deleted and a cancellation where none is pending, which change and record nothing. **409** `identity.organization.protected` for the administrative organization. **422** `identity.deletion.windowelapsed` for a cancellation at or after `organization.deletion.grace` from the request, or after the erasure, whether or not the erasure has run. The erasure erases no account |
 | `POST /admin/organizations/{id}/domains` · `POST /admin/organizations/{id}/domains/{domain}/verify` · `DELETE /admin/organizations/{id}/domains/{domain}` | Domain lock (REG-DOM-001, IDN-ORG-006): adds a domain to the policy field `emailDomains`, verifies it by the DNS TXT record the add response names (one TXT value equal to the record value, compared exactly; a lookup that cannot be made proves nothing; **422** `identity.domain.unverified`, nothing written; **404** `identity.domain.notfound` for a domain not listed, never listed or removed; verifying a verified domain or adding a listed one answers it as it stands and changes nothing; removing an unlisted one is **204** and changes nothing), removes it. A domain that does not read as a domain is **400** `api.request.malformed` naming `domain`. Every change is the `domain:manage` step-up action and carries `reason` (**422** `config.change.reasonrequired` where it is absent or blank), and is recorded. Adding and verifying a domain are loosenings, and so is a removal that leaves the list empty (OPS-CFG-002): each also requires `system:administer` (**403** `authz.denied`). Adding a domain while the host registers no DNS resolver is refused **422** `config.value.notallowed`, `details.requires` `dnsResolver`. The lock is on from the first domain listed, verified or not, and while no listed domain is verified it admits no address. Removal stops new sign-ins with addresses in the domain until it is listed anew, whether or not the list holds another domain, and raises an alert (OPS-ALERT-001). Re-verification runs every `domain.reverify.interval` on the sweep; a failure alerts and revokes nothing. The record is `_identity-verify.<domain>` TXT with value `identity-domain-verification=<32 random bytes, base64url>`, one token per organization and domain, never reused (D-153). `GET` answers an array of `{ domain, recordName, recordValue, addedAt, verifiedAt, checkedAt, lastCheckPassed }`, the domain in its ASCII form (REG-DOM-001). `POST .../domains` takes `{ domain, reason }` and answers **201** with one such object; `POST .../{domain}/verify` takes `{ reason }` and answers **200** with it; `DELETE .../{domain}` takes `{ reason }` and answers **204**. Each change writes `identity.organization.domainadded`, `.domainverified` or `.domainremoved` with details `{ domain, reason }`; each change to the list is also a configuration change of `policy.<organization>` (OPS-CFG-005) |
@@ -2568,9 +2618,10 @@ configuration change's missing reason excepted, below). **404**
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/organizations/{id}/invitations` | Issues a time-boxed, single-use enrolment link (IDN-LIFE-009a). The body members are `email`, `phone`, `corporateEmail`, `roles` and `documents`, and `formerMailbox` with `reason` where a mailbox is taken over (below). MAY bind `email`, `phone`, both or neither (REG-INV-001); a bound identifier is pre-filled and locked at registration, and a bound phone is verified before the membership step. Where the mail server is integrated, the invitation names a personal `email` (required; the link goes to it and its press verifies it, so the account is created with a verified personal email) and a `corporateEmail`, asserted, whose mailbox is provisioned disabled (REG-MAIL-001, D-148); `corporateEmail` where the mail is not integrated is **400** `api.request.malformed`. `roles` (optional; none where absent) names roles granted across the organization when the membership attaches; naming a role also requires `grant:manage` in the organization and the `grant:manage` gate, and a role carrying `system:administer` also requires `system:administer` in the administrative organization (OPS-CFG-007). `documents` (optional; none where absent) names legal documents, each fixed at the version published when the invitation is issued, which the membership step shows and the acknowledgement records. Requires step-up (`invitation:issue`). The link is sent to the bound email only, never to the bound phone; its send is written in the transaction that issues the invitation and first attempted once that transaction commits (AUTH-ABUSE-004), and a send a restriction refuses issues nothing and answers **429** `auth.restriction.exceeded` with `retryAt`. A corporate address whose mailbox was held before, by anyone, the person invited included, never passes silently (the address of an erased holder is not recognised, REG-MAIL-003): the issue is refused **409** `identity.invitation.mailboxheld` unless the body carries `formerMailbox` (`10` section 5.44), `transfer` (the invitee receives the mailbox with its mail) or `replace` (the old mailbox is removed and a new one reserved), with a `reason`; either is stepped up with the issue and audited. The issue makes no check of who the invitee is, since issuing tells nothing about accounts; the mail-server adapter's adoption of an existing server account is REG-MAIL-003's (D-166). An organization whose deletion was requested takes no invitation: its grants confer nothing, so issuing answers **403** `authz.denied`. **201** `{ id, expiresAt, token }`: `token` is the link's token where no email is bound, answered once for the administrator to hand over and never shown again, and `null` wherever the link was sent; only its fingerprint is kept (IDN-LIFE-009a). **409** `identity.mailbox.taken` (`details.member` `corporateEmail`) where the corporate address is held by a member or reserved by a standing invitation that has not expired; an expired one is revoked in the issuing transaction and its mailbox kept. **422** `identity.invitation.addressrequired`, `details.member` naming `email` or `corporateEmail`, for an integrated-mail invitation without a personal `email`, without a `corporateEmail`, or naming the corporate address as the personal one; **422** `identity.identifier.domainnotallowed` where the address the member will sign in with (the corporate address where the mail is integrated, the bound email otherwise) is outside the organization's lock (REG-DOM-001); `identity.identifier.mixedscript` and `identity.identifier.invalid` carry `details.member` naming `email`, `phone` or `corporateEmail`; **422** `authz.grant.unresolved` (`details.member` `roles`) for a role the deployment does not hold; **422** `api.request.invalid` (`details.member` `documents`) for a document never published; **422** `api.request.invalid` (`details.member` `formerMailbox`) for a `formerMailbox` where no held mailbox stands for the corporate address. The identifier-mismatch refusal belongs to acceptance (`POST /account/invitation/acknowledge`), not to issue |
+| `POST /admin/organizations/{id}/invitations` | Issues a time-boxed, single-use enrolment link (IDN-LIFE-009a). The body members are `email`, `phone`, `corporateEmail`, `roles` and `documents`, and `formerMailbox` with `reason` where a mailbox is taken over (below). MAY bind `email`, `phone`, both or neither (REG-INV-001); a bound identifier is pre-filled and locked at registration, and a bound phone is verified before the membership step. Where the mail server is integrated, the invitation names a personal `email` (required; the link goes to it and its press verifies it, so the account is created with a verified personal email) and a `corporateEmail`, asserted, whose mailbox is provisioned disabled (REG-MAIL-001, D-148); `corporateEmail` where the mail is not integrated is **400** `api.request.malformed`. `roles` (optional; none where absent) names roles granted across the organization when the membership attaches; naming a role also requires `grant:manage` held in the organization itself, for which `system:administer` does not stand in (AUTHZ-SCOPE-001, D-207), and the `grant:manage` gate, and a role carrying `system:administer` also requires `system:administer` in the administrative organization (OPS-CFG-007); each role named is one the inviter may hand out (AUTHZ-GRANT-005), or the issue is refused **403** `authz.role.notassignable`. `documents` (optional; none where absent) names legal documents, each fixed at the version published when the invitation is issued, which the membership step shows and the acknowledgement records. Requires step-up (`invitation:issue`). The link is sent to the bound email only, never to the bound phone; its send is written in the transaction that issues the invitation and first attempted once that transaction commits (AUTH-ABUSE-004), and a send a restriction refuses issues nothing and answers **429** `auth.restriction.exceeded` with `retryAt`. A corporate address whose mailbox was held before, by anyone, the person invited included, never passes silently (the address of an erased holder is not recognised, REG-MAIL-003): the issue is refused **409** `identity.invitation.mailboxheld` unless the body carries `formerMailbox` (`10` section 5.44), `transfer` (the invitee receives the mailbox with its mail) or `replace` (the old mailbox is removed and a new one reserved), with a `reason`; either is stepped up with the issue and audited. The issue makes no check of who the invitee is, since issuing tells nothing about accounts; the mail-server adapter's adoption of an existing server account is REG-MAIL-003's (D-166). An organization whose deletion was requested takes no invitation: its grants confer nothing, so issuing answers **403** `authz.denied`. **201** `{ id, expiresAt, token }`: `token` is the link's token where no email is bound, answered once for the administrator to hand over and never shown again, and `null` wherever the link was sent; only its fingerprint is kept (IDN-LIFE-009a). **409** `identity.mailbox.taken` (`details.member` `corporateEmail`) where the corporate address is held by a member or reserved by a standing invitation that has not expired; an expired one is revoked in the issuing transaction and its mailbox kept. **422** `identity.invitation.addressrequired`, `details.member` naming `email` or `corporateEmail`, for an integrated-mail invitation without a personal `email`, without a `corporateEmail`, or naming the corporate address as the personal one; **422** `identity.identifier.domainnotallowed` where the address the member will sign in with (the corporate address where the mail is integrated, the bound email otherwise) is outside the organization's lock (REG-DOM-001); `identity.identifier.mixedscript` and `identity.identifier.invalid` carry `details.member` naming `email`, `phone` or `corporateEmail`; **422** `authz.grant.unresolved` (`details.member` `roles`) for a role the deployment does not hold; **422** `api.request.invalid` (`details.member` `documents`) for a document never published; **422** `api.request.invalid` (`details.member` `formerMailbox`) for a `formerMailbox` where no held mailbox stands for the corporate address. The identifier-mismatch refusal belongs to acceptance (`POST /account/invitation/acknowledge`), not to issue |
 | `DELETE /admin/organizations/{id}/invitations/{invitationId}` | Revokes an invitation not yet acknowledged, whether or not its link was opened; what it bound is forgotten and a mailbox nobody ever held is released, marked and owed `removed` (REG-MAIL-001, INT-MAIL-006). **204**, also for one already revoked. **404** `identity.invitation.notfound` where the organization issued no such invitation; **422** `identity.invitation.expired` where it was acknowledged. Not a step-up action |
-| `DELETE /admin/organizations/{id}/memberships/{subject}` | Ends a membership; the account and organization persist (IDN-MEM-001), and the account's grants in the organization are not removed (`16` section 3 step 4); a grant in the administrative organization confers only while its holder holds a current membership there (IDN-MEM-001). Requires step-up (`membership:end`). **204** · **404** `identity.membership.notfound` where the account holds no current membership of the organization, a second end included. Recorded as `identity.membership.ended`; emits `MembershipChanged`, and `IdentifierRemoved` where the end retires the corporate address (REG-MAIL-003) |
+| `DELETE /admin/organizations/{id}/memberships/{subject}` | `{ reason }`, required: ends a membership; the account and organization persist, and in the same transaction the account's allow grants in the organization, save those a derivation wrote, are revoked, its deny grants standing (D-217), and the account is taken out of its groups, and, for the administrative organization, the same in every organization the account is not a member of (IDN-MEM-001, D-213). Requires step-up (`membership:end`). **204** · **400** `api.request.malformed` naming `reason` where it is absent, blank or longer than 1024 characters after trimming (D-216) · **403** `authz.denied` where `{subject}` is the reserved `emergency` account and `{id}` the administrative organization, before the step-up (OPS-BOOT-002, D-202); `authz.role.notassignable` where the actor may not hand out a role the end reaches (AUTHZ-GRANT-005) · **404** `identity.membership.notfound` where the account holds no current membership of the organization, a second end included. Recorded as `identity.membership.ended`; emits `MembershipChanged`, and `IdentifierRemoved` where the end retires the corporate address (REG-MAIL-003) |
+| `PUT /admin/organizations/{id}/memberships/{subject}/end` · `DELETE /admin/organizations/{id}/memberships/{subject}/end` | `PUT` `{ endsAt, reason }` sets or moves the instant the membership ends, which the job `membership-ends` carries out as `DELETE /admin/organizations/{id}/memberships/{subject}` would; `DELETE` `{ reason }` cancels it (IDN-MEM-001, D-213). The same permission, step-up (`membership:end`) and refusals as ending now, judged when set. **204** · **403** as ending now · **404** `identity.membership.notfound` where the account holds no current membership of the organization, and for a `DELETE` where no end is set · **422** `api.request.invalid` (`details.member` `endsAt`) where `endsAt` is not after the present. Recorded as `identity.membership.endset` |
 
 ### Groups — `group:manage`
 
@@ -2579,7 +2630,7 @@ configuration change's missing reason excepted, below). **404**
 | `GET /admin/groups?organization={id}` | The organization's groups, each with the members it holds directly: **200** `[ { id, name, members: [ { subjectType, subjectId } ] } ]`. Membership is transitive (AUTHZ-GROUP-001) |
 | `POST /admin/groups` | `{ organization, name, reason }`: creates a group in the organization. **201** `{ id }` |
 | `DELETE /admin/groups/{id}` | `{ reason }` in the body: removes a group nothing names. **204**. **409** `authz.group.inuse` where the group holds a member, belongs to a group, or was given a grant, live, expired or revoked |
-| `POST /admin/groups/{id}/members` · `DELETE /admin/groups/{id}/members` | `{ subjectType, subjectId, reason }`: adds or removes an account or a group of the group's own organization. **204**, also where the member is already held or already absent, which changes and records nothing. **409** `authz.group.cycle`. Requires step-up (`grant:manage`); where the group, or a group holding it, holds a live grant (allow or deny) of a role carrying `system:administer` or of a role that cannot be read, also requires `system:administer` in the administrative organization (OPS-CFG-007) |
+| `POST /admin/groups/{id}/members` · `DELETE /admin/groups/{id}/members` | `{ subjectType, subjectId, reason }`: adds or removes an account or a group of the group's own organization. **204**, also where the member is already held or already absent, which changes and records nothing. **409** `authz.group.cycle`. Requires step-up (`grant:manage`); where the group, or a group holding it, holds a live grant (allow or deny) of a role carrying `system:administer` or of a role that cannot be read, also requires `system:administer` in the administrative organization (OPS-CFG-007); every role the group reaches is held to AUTHZ-GRANT-005: **403** `authz.role.notassignable`, `authz.grant.self` |
 
 `group:manage` is asked in the organization the group belongs to, read from the group's
 row, or for `GET` and `POST` in the organization the request names (AUTHZ-SCOPE-001). An
@@ -2616,17 +2667,17 @@ organization (API-CONV-003). The reserved `emergency` account is refused as a me
 | `GET /admin/privacy/requests` | The queue, each request with its decision deadline and status — `open` · `fulfilled` · `refused` · `granted-by-lapse` · `deemed-refused-by-lapse` (PRIV-RIGHT-002) |
 | `POST /admin/privacy/requests` | Enters an out-of-band request on a subject's behalf, `type` one of `erasure` · `restriction` · `rectification` (`10` section 5.12c; rectification of editable data is account editing and is entered here only where the subject cannot edit it themselves); what an `erasure` fulfilled does follows the account's state (the fulfil row below, IDN-LIFE-003). Records the channel, the identity confirmation performed (D-113), and **`receivedAt`: required, the calendar date (`YYYY-MM-DD`, in `privacy.calendar.timezone`) the request reached the company, never later than today there; the decision clock runs from the end of it** (D-136, D-153). **422** `privacy.request.receivedfuture`. `detail` is optional; where present it is 1 to 1024 characters after trimming (API-CONV-002), as `channel` and the identity confirmation are. An absent or `null` `detail` is recorded as none, never as empty text; a blank one is refused **400** `api.request.malformed` naming `detail`. A subject no account bears is refused **422** `api.request.invalid`, `details.member` the member naming it (D-183) |
 | `POST /admin/privacy/requests/{id}/fulfil` · `/refuse` | The decision. Fulfilment of restriction sets the state; refusal records the reason. Fulfilment of erasure follows the state it finds (IDN-LIFE-003): an account `active` or `restricted` enters `deleting` by `oob-request`, holding a restriction where one is in force; an account `suspended` begins its deletion all the same, holding the suspension with its origin, so that a cancellation returns it to `suspended`; an account already `deleting`, by any origin, has the request recorded fulfilled against the running window, and nothing restarts; an account `deleted` has the request recorded fulfilled, and nothing further happens. Where a window starts, the security-notice set is sent `oob-deletion-notice`, which carries no cancel link. Fulfilment of every request type, rectification included, requires step-up (`privacyrequest:fulfil`); refusing is not gated. Receipt is automatic at creation (D-126); no acknowledge endpoint. **403** `authz.denied` without `privacyrequest:manage`, before the request is read, and for an erasure whose subject is the reserved `emergency` account, once that account is read (OPS-BOOT-002), before the step-up; **404** `privacy.request.notfound` where the identifier names no request; **409** `privacy.request.decided` where it is already decided. Nothing is concealed (section 8, AUTHZ-CONCEAL-005). The fulfilment of an erasure refuses nothing on the account's state, each state having its outcome above, and nothing on its existence, which the entry checked; a deletion that will not begin after that is a fault (D-183) |
-| `GET /admin/erasures` · `GET /admin/erasures/{id}` | Every incomplete erasure in one query; per-subscriber state for one (IDN-LIFE-003b): `{ id, subject, reason, status, attempts, subscribers: [ { name, required, confirmedAt } ] }` (D-153). `id` is the identifier of the outbox record the erasure's host-side work travels on. **200** · **404** `privacy.erasure.notfound` where no erasure is held under it |
-| `POST /admin/erasures/{id}/complete` | The manual completion path after exhausted retries, itself recorded (IDN-LIFE-003a): closes a `failed` erasure, takedown (`takedownId`) or restriction delivery named by its identifier. Requires step-up (`erasure:complete`). **204** · **404** `privacy.erasure.notfound` where no such delivery is held under the identifier · **409** `privacy.erasure.notfailed` where it is `awaiting-subscribers` or `complete` |
+| `GET /admin/erasures` · `GET /admin/erasures/{id}` | Every incomplete delivery of host-side work in one query, an erasure's, a takedown's, a restriction change's, a consent change's and an objection change's alike; per-subscriber state for one (IDN-LIFE-003a, IDN-LIFE-003b): `{ id, kind, subject, purpose, change, reason, status, attempts, subscribers: [ { name, required, confirmedAt } ] }` (D-153, D-203). `id` is the identifier of the outbox record the delivery travels on, whatever its kind; `kind` is spelled as `10` section 5.50 (`erasure` · `takedown` · `restriction` · `consent` · `objection`), `status` as section 5.12, `subscribers` naming the subject-event subscribers or the purpose handlers the delivery is owed to; `purpose` is the purpose a consent or an objection delivery concerns and null for another kind; `change` is the change its event announces, as `10` section 5.50 spells it, and null for an erasure or a takedown; `reason` is an erasure's (`10` section 5.12a) and null for another kind; `required` is true for every purpose handler, each being required (`10` section 5b). A takedown's `takedownId` (`GET /admin/accounts/{subject}/takedown`) is its delivery's `id`. Every kind is listed under `privacyrequest:manage`, whose manual completion path closes every kind (`10` section 2.1). **200** · **404** `privacy.erasure.notfound` where no delivery is held under it |
+| `POST /admin/erasures/{id}/complete` | The manual completion path after exhausted retries, itself recorded (IDN-LIFE-003a): closes a `failed` delivery of any kind of `10` section 5.50 named by its identifier, a takedown's by its `takedownId`. Requires step-up (`erasure:complete`). **204** · **404** `privacy.erasure.notfound` where no delivery is held under the identifier · **409** `privacy.erasure.notfailed` where it is `awaiting-subscribers` or `complete` |
 
 ### Audit and explanations — `audit:read`
 
 | Endpoint | Does |
 |---|---|
 | `GET /admin/audit?subject=...` | Every audit record naming one subject, as the acting identity or as the data subject the record concerns (`subject`), most recent first, without a full scan (PRIV-BREACH-002): each entry carries the record's identifier, category, action, occurrence, acting and effective subjects, the data subject the record concerns as `subject` (null where it concerns none, a record written before that column existed among them), organization and plain details, and never a value held under a subject's key (PRIV-RET-002), so it reads the same before and after erasure; a record of background work carries `principal` and `principalReason` (IDN-AUD-001); a record written in a break-glass session, or in a session another application opened from it, carries `breakGlassReason`, the reason given at its use (OPS-BOOT-002, D-170, D-171) |
-| `GET /admin/explanations/{correlationId}` | Resolves a concealed denial's correlation identifier to the permission and principal (AUTHZ-GATE-004, AUTHZ-CONCEAL-004), with the outcome `allowed` or `denied` (the explanation outcomes of `10`); any recorded refusal resolves |
+| `GET /admin/explanations/{correlationId}` | Resolves a concealed denial's correlation identifier to the permission and principal (AUTHZ-GATE-004, AUTHZ-CONCEAL-004), with the outcome `allowed` or `denied` (the explanation outcomes of `10`); any recorded refusal resolves; `{correlationId}` is the `details.correlation` its refusal carried (D-208) |
 
-Self-service explanation for **non-concealed** types is `GET /account/explanations/{correlationId}`, requiring only the subject's own session: it resolves a refusal whose acting and effective principal are both the caller, on a type that discloses or on no record (AUTHZ-CONCEAL-005); any other identifier answers `authz.denied` (D-166).
+Self-service explanation for **non-concealed** types is `GET /account/explanations/{correlationId}`, requiring only the subject's own session: it resolves a refusal whose acting and effective principal are both the caller, on a type that discloses or on no record (AUTHZ-CONCEAL-005); any other identifier answers `authz.denied` (D-166). `{correlationId}` is the `details.correlation` its refusal carried (D-208).
 
 ### Compliance text — `notice:publish`
 
@@ -2742,10 +2793,12 @@ the provider delivers it again; one meeting an older unsettled claim takes it ov
 is carried (BFF-MACH-002).
 
 *Source: AUTH-ABUSE-007, INT-GEN-003, IDN-LIFE-012a, BFF-MACH-002, D-164, D-166, D-183,
-D-187, D-188, D-197*
+D-187, D-188, D-197, D-207*
 
 **Acceptance criteria**
-1. A forged callback with a guessed reference is rejected and logged.
+1. A forged callback (a guessed reference on the delivery reports' route, a token that
+   does not verify on a provider's) is rejected, recorded against its source's
+   fingerprint and logged, the log line carrying no source (INT-GEN-003, D-207).
 2. An unsigned callback advances state only after independent confirmation, save the
    releases of INT-SMS-005; a provider event advances it only once its provider's
    published keys verify it.
@@ -2891,23 +2944,26 @@ address bar, and presents it to the endpoint that consumes it in the request bod
 ## 13. Capabilities
 
 **API-CAP-001** — Resource responses SHALL carry the capabilities the caller holds
-for that record, computed in the same query.
+for that record, computed for the whole page at once, in the record's own query or in one
+statement beside it, never per record.
 
 ```json
 {
   "id": "...",
   "...": "...",
-  "can": ["read", "edit", "share"],
+  "can": ["edit", "read", "share"],
   "requires": { "edit": ["stepup"] }
 }
 ```
 
-*Source: AUTHZ-GATE-005, D-078, D-087*
+*Source: AUTHZ-GATE-005, D-078, D-087, D-202, D-206, D-207*
 
 A capability means **"permitted by grants, subject to session gates."** It is not a
 promise the action will succeed: an action may still be refused for step-up, a
-downgraded session, the subject's processing restriction, or missing consent — none of
-which the per-row grant query evaluates.
+downgraded session, the acting account's processing restriction (AUTHZ-GATE-006), or
+missing consent, none of which the per-row grant query evaluates. Capabilities answer a
+person: asked with a host job's context they are refused `authz.denied` (`01`
+IDN-PRIN-001, D-207).
 
 `requires` names what remains for each capability, from the closed set of `10` section
 5.20 (`stepup` · `reauthenticate` · `restricted` · `consent` · `accountstate`, D-153),
@@ -2919,7 +2975,7 @@ The frontend renders controls from `can` and SHALL NOT infer permissions from ro
 names.
 
 **Acceptance criteria**
-1. A list of 50 records returns capabilities without additional queries.
+1. A list of 50 records returns capabilities without a query per record.
 2. A capability with an empty `requires` always succeeds.
 3. A capability with `requires` prompts for what is named rather than failing.
 4. No frontend code contains a role name.
@@ -2929,4 +2985,7 @@ names.
 ## 14. Open items
 
 None. The host's own business endpoints are out of scope — they consume the gate
-directly (`03-authorization`) rather than through this surface.
+directly (`03-authorization`) rather than through this surface, reading who is asking
+from the request, needing a session unless marked as answering anyone (`AllowNoSession`)
+and answering the library's results
+through the public surface `17` section 2a gives (D-202).

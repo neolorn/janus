@@ -4,6 +4,12 @@
     <ProjectReference Include="..\..\src\Janus.Storage\Janus.Storage.csproj" />
   </ItemGroup>
 
+  <!-- CONV-LAYOUT-001: a package the shared framework serves resolves from the
+       framework, never as a package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <!-- CONV-TEST-002: the integration kind runs against a real PostgreSQL in a
        container. -->
   <ItemGroup>

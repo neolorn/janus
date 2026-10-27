@@ -111,12 +111,13 @@ internal interface IOrganizationAudit
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Records a membership an administrator ended, filed under the organization with
-    /// the member as whom it was done to.
+    /// Records a membership an administrator ended, filed under the organization with the
+    /// member as whom it was done to.
     /// </summary>
     /// <param name="organization">Which organization.</param>
     /// <param name="membership">Which membership.</param>
     /// <param name="member">Whose membership it was.</param>
+    /// <param name="reason">Why.</param>
     /// <param name="actor">Who ended it.</param>
     /// <param name="breakGlassReason">
     /// The reason given at the use of the break-glass credential, where the action was
@@ -129,6 +130,60 @@ internal interface IOrganizationAudit
         OrganizationId organization,
         MembershipId membership,
         SubjectId member,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records a membership the job <c>membership-ends</c> ended at the instant an
+    /// administrator set, under its principal, naming that administrator, filed under the
+    /// organization with the member as whom it was done to (IDN-MEM-001, D-217).
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="membership">Which membership.</param>
+    /// <param name="member">Whose membership it was.</param>
+    /// <param name="reason">The reason the end was set with.</param>
+    /// <param name="principal">The principal that ended it.</param>
+    /// <param name="endSetBy">The administrator who set the end.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask MembershipEndedAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        string reason,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records an end an administrator set a membership to reach at a later instant,
+    /// moved or cancelled, filed under the organization with the member as whom it was
+    /// done to.
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="membership">Which membership.</param>
+    /// <param name="member">Whose membership it is.</param>
+    /// <param name="endsAt">The instant set, or nothing where the end was cancelled.</param>
+    /// <param name="reason">Why.</param>
+    /// <param name="actor">Who set, moved or cancelled it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask MembershipEndSetAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        DateTimeOffset? endsAt,
+        string reason,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,

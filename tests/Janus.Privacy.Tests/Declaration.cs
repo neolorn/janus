@@ -38,6 +38,12 @@ internal static class Declaration
     {
         /// <summary>The preference set.</summary>
         public string Id { get; init; } = string.Empty;
+
+        /// <summary>The person the preferences are theirs, where a deployment holds a field under their key.</summary>
+        public SubjectId Recipient { get; init; }
+
+        /// <summary>Where the mail goes, held as ciphertext under the recipient's key.</summary>
+        public ReadOnlyMemory<byte> Address { get; init; }
     }
 
     /// <summary>

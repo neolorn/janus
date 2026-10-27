@@ -104,15 +104,17 @@ its SHA-256 and looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003);
 send's reference, drawn at its admission, also travels inside its outbox row's encrypted
 content until the row is removed (PRIV-RIGHT-005a). A signing secret rotates with a 24
 hour overlap (BFF-MACH-002). A callback's admission count, a rejected callback's count
-and record, the `callback-verification-failed` raise past `alerting.callback.threshold`
-and, for a provider's security event, the record of its rejection
+and record (one row, recorded against its source's fingerprint, which the count reads,
+D-207), the `callback-verification-failed` raise past `alerting.callback.threshold` and,
+for a provider's security event, the record of its rejection
 (`auth.providerevent.rejected`, IDN-LIFE-012a) are kept writes, committed with the
 refusal and nothing else (CONV-DESIGN-003); any other failure in handling a callback
-rolls back.
+rolls back. Every route logs each rejection, the delivery reports' route included, and
+the log line carries no source (CONV-LOG-004, D-207).
 
 *Source: D-070*
 
-*Source: D-013, D-030, D-164, D-166, D-183, D-186, D-197*
+*Source: D-013, D-030, D-164, D-166, D-183, D-186, D-197, D-207*
 
 Callbacks arrive unauthenticated or weakly authenticated. A forged one must be
 unable to mark a phone verified, or to advance any state the host hangs on a callback.
@@ -122,7 +124,8 @@ unable to mark a phone verified, or to advance any state the host hangs on a cal
 2. An unsigned callback advances state only after the system confirms independently, or
    is treated as a hint requiring corroboration, save the releases INT-SMS-005 allows
    (BFF-MACH-003).
-3. Rejected callbacks are logged with their source.
+3. Rejected callbacks are recorded against their source's fingerprint and logged, on
+   every route, the delivery reports' included; the log line carries no source (D-207).
 4. A callback past `integration.callback.ratelimit` is answered 429 with `Retry-After`
    before any lookup; a callback refused for any other cause is answered 422 with no
    `Retry-After`, except where `09` section 10 gives a provider's route an answer of its
@@ -755,19 +758,23 @@ letters and digits separated by single `.`, `-` or `_`: a restriction's name out
 rule is refused with `config.value.notallowed` where the `restrictions` value is
 written, and with 400 `api.request.malformed` naming `name` where a route names it; a
 document or subscriber declared under a name outside it is refused at startup with
-`model.startup.declarationinvalid`, `details.declaration` and `details.field` naming it;
-and a route naming a document outside it, the publish route included, is refused with
-400 `api.request.malformed` naming `document` before anything is read (`09` sections 7
-and 8a). A restriction's name and a document's name are the value types
-`RestrictionName` and `DocumentName` of `Janus.Core` (CONV-DESIGN-004), which bind a
-route's value through `IParsable` and which the operation contracts that name one take
-(`IRestrictionSet`, `ILegalDocuments`), so a route answers the name before any body is
-read and an in-process caller cannot name a restriction or a document outside the rule
-either; a declaration names a document as text, judged at startup as above (D-187).
-Bounding these values where they are written keeps every rendered template within the
-width it was measured at.
+`model.startup.declarationinvalid`, `details.declaration` and `details.field` naming it,
+as is a host's job, purpose handler or export contributor declared under one
+(LIB-HOST-001, D-202, D-203), a contributor's under `details.declaration`
+`contributor.<name>` (D-206); the names of the sections and values a contributor answers
+are held to it without `.`, one outside it failing the export as a fault
+(PRIV-RIGHT-003, D-206); and a route naming a document outside it, the publish route
+included, is refused with 400 `api.request.malformed` naming `document` before anything
+is read (`09` sections 7 and 8a). A restriction's name and a document's name are the
+value types `RestrictionName` and `DocumentName` of `Janus.Core` (CONV-DESIGN-004),
+which bind a route's value through `IParsable` and which the operation contracts that
+name one take (`IRestrictionSet`, `ILegalDocuments`), so a route answers the name before
+any body is read and an in-process caller cannot name a restriction or a document
+outside the rule either; a declaration names a document as text, judged at startup as
+above (D-187). Bounding these values where they are written keeps every rendered
+template within the width it was measured at.
 
-*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166, D-183, D-187*
+*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166, D-183, D-187, D-202, D-203, D-206*
 
 Unicode messages are 70 characters for a single message and 67 per part when
 concatenated; Latin gets 160 and 153. An Arabic message one character over 70 costs
@@ -776,11 +783,13 @@ double.
 **Acceptance criteria**
 1. A test fails if any rendered template exceeds its language's budget.
 2. Coverage spans every template in every supported language.
-3. A restriction, governing document or subscriber whose name breaks the rule is
-   refused where it is written or declared, a document's at the publish route before its
-   body is read, so no alert carries it; the `key` place is measured at the widest key
-   including each family's widest parameter, and `outstanding` at the joined width of
-   the registered required subscribers' names.
+3. A restriction, governing document, subscriber, purpose handler, job or export
+   contributor whose name breaks the rule is refused where it is written or declared, a
+   document's at the publish route before its body is read, so no alert carries it, and
+   a contributor's section or value name outside the rule, or holding a `.`, fails the
+   export; the `key` place is measured at the widest key including each family's widest
+   parameter, and `outstanding` at the joined width of the registered required
+   subscribers' names or of the registered purpose handlers' names, whichever is wider.
 4. A text message carrying `{link}` that fits two segments of its alphabet at the
    width of its link is accepted, one that does not stops startup, and a text-message
    template naming a place with no defined width stops startup with
@@ -819,7 +828,7 @@ that text's count from every bucket it counted against but those of a restrictio
 release that send's one count from each restriction marked `resend` (AUTH-ABUSE-004,
 D-197); a report SHALL do nothing else.
 
-*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183, D-197*
+*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183, D-197, D-207*
 
 The gateway calls over plain HTTP with parameters in the query string, unauthenticated.
 The deployment's SMS transport (`ISmsTransport`, INT-SMS-006) reads the report from the
@@ -842,8 +851,9 @@ already allowed, a forged delivery report at most one text to that number sooner
    text of the send has failed for good, and a credit it spent is spent no longer. A
    report of delivery releases a `secondfactor` send's count from each restriction
    marked `resend` and changes nothing else. A report of either kind whose reference no
-   held send answers changes nothing and is rejected, recorded against its source and
-   counted toward `alerting.callback.threshold` (INT-GEN-003 AC1).
+   held send answers changes nothing and is rejected, recorded against its source's
+   fingerprint, logged without its source and counted toward
+   `alerting.callback.threshold` (INT-GEN-003 criteria 1 and 3, D-207).
 
 ---
 
@@ -887,19 +897,21 @@ password SHALL NEVER leave the system.
 SHA-1 of the UTF-8 password; the remaining 35 are matched locally against the range
 returned (D-041). Every range request SHALL send a user agent naming the library and its
 version, since the provider's acceptable use asks callers to identify themselves. The
-agent is `<package identifier>/<package version>` of the library's package, both taken
+agent is `<package identifier>/<package version>` of the library's package, `Janus.Hosting`
+(LIB-PKG-001), both taken
 from the constants of CONV-CODE-004: the identifier names the library as a host installed
 it, and the version carries no build metadata, so no commit identifier leaves the
 deployment (D-168).
 
-*Source: D-011, D-166, D-168*
+*Source: D-011, D-166, D-168, D-205*
 
 **Acceptance criteria**
 1. Outbound requests contain a prefix only.
 2. A test asserts the request contains no full hash.
 3. A test asserts every range request carries a user agent naming the library and its
-   version, that the version equals the version constant of CONV-CODE-004, and that it
-   contains no `+`.
+   version, that the identifier equals the main package's, `Janus.Hosting`'s `PackageId`,
+   read from the build and never spelled in committed source, that the version equals the
+   version constant of CONV-CODE-004, and that it contains no `+`.
 
 ---
 

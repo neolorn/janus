@@ -26,6 +26,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="stepUp">What issuing asks of the caller's session.</param>
 /// <param name="directory">Where the organization is found.</param>
 /// <param name="roles">Where the roles an invitation names are looked up.</param>
+/// <param name="handOut">Whether the caller may hand out the roles an invitation names.</param>
 /// <param name="legal">Where the documents an invitation names are resolved to a version.</param>
 /// <param name="locks">Whether the organization's domain lock admits an address.</param>
 /// <param name="invitations">Where invitations are kept.</param>
@@ -63,6 +64,7 @@ internal sealed class InvitationService(
     StepUpGuard stepUp,
     IOrganizationDirectory directory,
     IRoleCatalogue roles,
+    IRoleHandOut handOut,
     ILegalDocuments legal,
     DomainLock locks,
     IInvitationStore invitations,
@@ -534,7 +536,8 @@ internal sealed class InvitationService(
 
     // REG-INV-001: the roles attach across the organization with the membership, so
     // naming one is granting it: it asks what a grant asks, including the permission to
-    // administer the deployment for a role that carries it (OPS-CFG-007).
+    // administer the deployment for a role that carries it (OPS-CFG-007), and each role
+    // is one the caller may hand out (AUTHZ-GRANT-005).
     private async ValueTask<Result<IReadOnlyList<RoleName>>> RolesAsync(
         AccessContext context,
         OrganizationId organization,
@@ -561,7 +564,7 @@ internal sealed class InvitationService(
             return Result.Failure<IReadOnlyList<RoleName>>(refused);
         }
 
-        bool administering = false;
+        List<DefinedRole> handed = [];
 
         // D-166 X3: under the transaction the rows are locked in one order, so a removal or
         // a redefinition at the same moment is judged before or after the invitation.
@@ -580,15 +583,23 @@ internal sealed class InvitationService(
                 return Result.Failure<IReadOnlyList<RoleName>>(Named(ErrorCodes.GrantUnresolved, "roles"));
             }
 
-            administering |= defined.Permissions.Contains(Permissions.SystemAdminister);
+            handed.Add(defined);
         }
 
-        if (administering
+        if (handed.Any(defined => defined.Permissions.Contains(Permissions.SystemAdminister))
             && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken)
                 .ConfigureAwait(false)
             is Error withheld)
         {
             return Result.Failure<IReadOnlyList<RoleName>>(withheld);
+        }
+
+        if (await handOut
+                .RefusedAsync(context, Permissions.GrantManage, organization, handed, [], cancellationToken)
+                .ConfigureAwait(false)
+            is Error unassignable)
+        {
+            return Result.Failure<IReadOnlyList<RoleName>>(unassignable);
         }
 
         return Result.Success<IReadOnlyList<RoleName>>(distinct);
@@ -802,9 +813,31 @@ internal sealed class InvitationService(
         SessionId session,
         OrganizationId organization,
         SubjectId member,
+        string reason,
         string source,
         CancellationToken cancellationToken) =>
-        end.EndAsync(context, session, organization, member, source, cancellationToken);
+        end.EndAsync(context, session, organization, member, reason, source, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> SetMembershipEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        DateTimeOffset endsAt,
+        string reason,
+        CancellationToken cancellationToken) =>
+        end.SetEndAsync(context, session, organization, member, endsAt, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> CancelMembershipEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        string reason,
+        CancellationToken cancellationToken) =>
+        end.CancelEndAsync(context, session, organization, member, reason, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Result> AcknowledgeAsync(

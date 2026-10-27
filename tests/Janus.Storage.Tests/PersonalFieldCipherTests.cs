@@ -375,6 +375,103 @@ public sealed class PersonalFieldCipherTests
             PersonalFieldCipher.Decrypt(dataKey, field, new byte[8]));
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-005a AC20 (D-203): a host's value is AES-256-GCM under the marker, its
+    /// own initialisation vector and the tag, and its authenticated data is the marker,
+    /// the subject's 16 bytes in network order, then the mark <c>host</c>, the type's
+    /// declared name and the field's declared name, each behind its length in two bytes,
+    /// big-endian. The value is opened here with the primitive alone, over data laid out
+    /// by hand, so the layout is the one the item states and not the one the code chose.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005a_AC20_AHostValueIsBoundToTheMarkTheTypeAndTheFieldAsLaidOut()
+    {
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+        var field = new HostFieldLocation(Ahmed, ResourceType.Parse("delivery"), "RecipientName");
+
+        byte[] stored = PersonalFieldCipher.Encrypt(dataKey, field, Plaintext, randomness);
+
+        byte[] associated =
+        [
+            Scheme,
+            .. Ahmed.Value.ToByteArray(bigEndian: true),
+            0x00, 0x04, .. "host"u8,
+            0x00, 0x08, .. "delivery"u8,
+            0x00, 0x0D, .. "RecipientName"u8,
+        ];
+        byte[] opened = new byte[Plaintext.Length];
+
+        using var cipher = new AesGcm(dataKey, 16);
+        cipher.Decrypt(stored.AsSpan(1, 12), stored.AsSpan(13, Plaintext.Length), stored.AsSpan(^16), opened, associated);
+
+        Assert.Equal(Scheme, stored[0]);
+        Assert.Equal(1 + 12 + Plaintext.Length + 16, stored.Length);
+        Assert.Equal(Plaintext, opened);
+        Assert.Equal(Plaintext, PersonalFieldCipher.Decrypt(dataKey, field, stored));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC20: a host's value moved to another subject, another type or
+    /// another field fails its authentication tag.
+    /// </summary>
+    /// <param name="moved">Where the value is read back from.</param>
+    [Theory]
+    [InlineData("subject")]
+    [InlineData("type")]
+    [InlineData("field")]
+    public void PRIV_RIGHT_005a_AC20_AHostValueMovedElsewhereDoesNotDecrypt(string moved)
+    {
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+        var written = new HostFieldLocation(Ahmed, ResourceType.Parse("delivery"), "RecipientName");
+        byte[] stored = PersonalFieldCipher.Encrypt(dataKey, written, Plaintext, randomness);
+
+        HostFieldLocation elsewhere = moved switch
+        {
+            "subject" => written with { Subject = Mona },
+            "type" => written with { Type = ResourceType.Parse("parcel") },
+            _ => written with { Field = "RecipientPhone" },
+        };
+
+        Assert.ThrowsAny<CryptographicException>(() => PersonalFieldCipher.Decrypt(dataKey, elsewhere, stored));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC20: a host's value carries three named parts and a library's
+    /// two, so a host's value moved into a column of the library's does not decrypt, nor
+    /// a library value moved into a host's field, whatever names the host chose, the
+    /// mark itself and a library table's name among them.
+    /// </summary>
+    /// <param name="type">The type's declared name.</param>
+    /// <param name="field">The field's declared name.</param>
+    [Theory]
+    [InlineData("delivery", "RecipientName")]
+    [InlineData("host", "host")]
+    [InlineData("accounts", "enc_legal_name")]
+    public void PRIV_RIGHT_005a_AC20_AHostValueAndALibraryValueNeverStandForEachOther(string type, string field)
+    {
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+        var hosted = new HostFieldLocation(Ahmed, ResourceType.Parse(type), field);
+        PersonalFieldLocation[] libraryPlaces =
+        [
+            new(Ahmed, "host", type),
+            new(Ahmed, type, field),
+            new(Ahmed, "accounts", "enc_legal_name"),
+        ];
+
+        byte[] hostValue = PersonalFieldCipher.Encrypt(dataKey, hosted, Plaintext, randomness);
+
+        foreach (PersonalFieldLocation library in libraryPlaces)
+        {
+            byte[] libraryValue = PersonalFieldCipher.Encrypt(dataKey, library, Plaintext, randomness);
+
+            Assert.ThrowsAny<CryptographicException>(() => PersonalFieldCipher.Decrypt(dataKey, library, hostValue));
+            Assert.ThrowsAny<CryptographicException>(() => PersonalFieldCipher.Decrypt(dataKey, hosted, libraryValue));
+        }
+    }
+
     // The library sources carrying the text outside a comment, by file name.
     private static IReadOnlyList<string> Sources(string text)
     {

@@ -34,6 +34,14 @@ public sealed class BootstrappedDeployment : IAsyncLifetime
     /// <returns>The open connection.</returns>
     public ValueTask<NpgsqlConnection> OpenAsync() => _database.OpenAsync();
 
+    /// <summary>
+    /// Creates another database on the instance with no migration applied, for a case
+    /// that makes a database ready from nothing.
+    /// </summary>
+    /// <param name="name">The database's name.</param>
+    /// <returns>How to reach it.</returns>
+    public ValueTask<string> CreateDatabaseAsync(string name) => _database.CreateDatabaseAsync(name);
+
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {

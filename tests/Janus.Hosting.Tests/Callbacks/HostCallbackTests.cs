@@ -55,6 +55,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly LogInMemory<SignedCallbackGuard> _signedLog = new();
     private readonly LogInMemory<UnsignedCallbackGuard> _unsignedLog = new();
+    private readonly LogsInMemory _logs = new();
     private readonly SignedHostCallback _signed = new();
     private readonly UnsignedHostCallback _unsigned = new();
     private readonly ServiceProvider _provider;
@@ -90,8 +91,8 @@ public sealed class HostCallbackTests : IAsyncDisposable
         services.AddTransient<IMiddlewareFactory, MiddlewareFactory>();
 
         // The writer logs every refusal it answers (BFF-LOG-001), through the logging
-        // every host registers.
-        services.AddLogging();
+        // every host registers, which here keeps every line it is handed.
+        services.AddLogging(logging => logging.AddProvider(_logs));
         services.AddScoped<ConcealedRefusals>();
         services.AddScoped<ErrorTranslation>();
         services.AddScoped<MalformedRequest>();
@@ -114,6 +115,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
         await _provider.DisposeAsync();
         await _work.DisposeAsync();
         _randomness.Dispose();
+        _logs.Dispose();
     }
 
     /// <summary>
@@ -429,7 +431,8 @@ public sealed class HostCallbackTests : IAsyncDisposable
     /// <summary>
     /// BFF-MACH-003 AC2 and chapter 09 section 10 AC1: a forged callback carrying a
     /// reference of the right shape that was never issued, or one issued for another
-    /// callback, is rejected, logged, and never put to the provider.
+    /// callback, is rejected, recorded as a rejection against its source, logged with no
+    /// line naming the source (INT-GEN-003, D-207), and never put to the provider.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -455,6 +458,13 @@ public sealed class HostCallbackTests : IAsyncDisposable
         Assert.Equal(0, forged.Response.Headers.RetryAfter.Count);
         Assert.Equal(0, misdirected.Response.Headers.RetryAfter.Count);
         Assert.Equal(2, _unsignedLog.Entries.Count(entry => entry is (LogLevel.Warning, 1)));
+        Assert.Equal(2, _callbacks.Counted.Count(callback => callback.Rejected && callback.Source == Provider.ToString()));
+        Assert.DoesNotContain(_callbacks.Counted, callback => callback.Rejected && callback.Source != Provider.ToString());
+        Assert.DoesNotContain(
+            _unsignedLog.Carried.SelectMany(carried => carried.Values),
+            value => value?.Contains(Provider.ToString(), StringComparison.Ordinal) ?? false);
+        Assert.NotEmpty(_logs.Lines);
+        Assert.DoesNotContain(_logs.Lines, line => line.Contains(Provider.ToString(), StringComparison.Ordinal));
         Assert.Equal(0, _unsigned.Asked);
         Assert.Equal(0, _reached);
     }
@@ -567,6 +577,32 @@ public sealed class HostCallbackTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a callback, whose rejection keeps its
+    /// counts, its record and its raise, taken inside a unit of work another opened is a
+    /// fault of the calling code, signed, unsigned or carrying a session cookie, and is
+    /// answered as every fault is (BFF-ERR-002): the guard ends the level it joined
+    /// before it counts anything, so nothing of the outer unit of work commits and the
+    /// host's route is not reached.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ACallbackInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        string reference = await IssuedAsync();
+
+        await InsideAsync(() => SentAsync(Events, Body, SignedHostCallback.Signing(Body, Noon, Secret)));
+        await InsideAsync(() => SentAsync(Status, "{}", headers: [], query: "?reference=" + reference));
+        await InsideAsync(() => SentAsync(
+            Events,
+            Body,
+            [.. SignedHostCallback.Signing(Body, Noon, Secret), ("Cookie", BrowserCookies.Session + "=stale")]));
+
+        Assert.Empty(_callbacks.Counted);
+        Assert.Equal(0, _claims.Held);
+        Assert.Equal(0, _reached);
+    }
+
+    /// <summary>
     /// INT-GEN-003 AC4 and BFF-MACH-001 AC2: the rate limit is answered first, so a
     /// callback carrying a session cookie from a source past
     /// <c>integration.callback.ratelimit</c> is answered 429 with the interval and is
@@ -655,6 +691,25 @@ public sealed class HostCallbackTests : IAsyncDisposable
         await _pipeline(context);
 
         return context;
+    }
+
+    // CONV-DESIGN-003 AC8: a request taken inside a unit of work the test opened faults,
+    // answered as every fault is (BFF-ERR-002), and ends it, so the test's own commit
+    // commits nothing and faults too.
+    private async Task InsideAsync(Func<Task<HttpContext>> sent)
+    {
+        _work.Reset();
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        HttpContext answered = await sent();
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, answered.Response.StatusCode);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), Code(answered));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
     }
 
     // The code a refusal carries.

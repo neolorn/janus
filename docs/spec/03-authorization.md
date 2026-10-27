@@ -15,7 +15,7 @@ lawfully be held is `04-privacy`.
 **AUTHZ-PRIN-001** — Every permission rule SHALL be expressed **once** and SHALL
 serve both a single check and a list filter.
 
-*Source: D-015, P-003*
+*Source: D-015, P-003, D-207, D-208*
 
 The two questions the system asks are "may this principal do X to Y?" and "which Ys
 may this principal do X to?". Where these are written separately they drift, and the
@@ -23,8 +23,9 @@ list screen begins showing records the check would refuse — a silent data leak
 rather than a crash.
 
 **Acceptance criteria**
-1. A test enumerating every truth-table case runs each through both the single check
-   and the list filter and asserts identical outcomes.
+1. A test enumerating every truth-table case runs each through both the single check and
+   the list filter and asserts identical outcomes, save the cases that name no record,
+   which AUTHZ-TEST-001 criterion 2 runs without the list filter (D-207, D-208).
 2. No permission logic exists that is reachable by only one of the two paths.
 
 ---
@@ -116,12 +117,22 @@ the grants bootstrap makes carry the reason `OPS-BOOT-001`, and a materialised g
 drift check writes carries the reason `AUTHZ-DERIVE-005`, its audit record,
 `authz.grant.materialised`, naming the system principal `derivation-driftcheck`; a grant
 the drift check takes back is recorded as `authz.grant.retracted` the same way, in the
-transaction that corrects the drift (AUTHZ-DERIVE-005, D-187). A grant a person, an
-acknowledgement or bootstrap writes is recorded as `authz.grant.created`, and a
-revocation a person makes as `authz.grant.revoked`, each with its reason, in the
-transaction that writes it (`10` section 5.24, D-197).
+transaction that corrects the drift (AUTHZ-DERIVE-005, D-187). A grant a host's refresh
+writes records as its granter the caller's acting account, or the nil subject for a
+system principal, a host's job among them, with the reason `derivation:<relationship>`,
+one it takes back records the same as its revoker, with the same reason, and each is
+recorded as `authz.grant.materialised` or `authz.grant.retracted` in the refresh's
+transaction, naming who called it, a system principal by its name and stated reason
+(AUTHZ-DERIVE-005, D-207, D-208). Any other grant a person, an acknowledgement or
+bootstrap writes is recorded as `authz.grant.created`, and any other revocation a person
+makes as `authz.grant.revoked`, each with its reason, in the transaction that writes it
+(`10` section 5.24, D-197). A grant revoked because the record it names was removed
+(`IResources.RemoveAsync`, AUTHZ-INHERIT-002) records the nil subject as its revoker and
+the reason `AUTHZ-INHERIT-002`, as `authz.grant.revoked` (D-203). Each of these four
+records names the grant's holder as its subject where the holder is an account, and none
+where it is a group, whoever acted (`10` section 5.24, D-206).
 
-*Source: D-015, D-166, D-187, D-197*
+*Source: D-015, D-166, D-187, D-197, D-203, D-206, D-207, D-208*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
 migration across every query later.
@@ -137,26 +148,48 @@ migration across every query later.
    `authz.grant.materialised` or `authz.grant.retracted`, naming the principal
    `derivation-driftcheck` and the reason `AUTHZ-DERIVE-005`, in the transaction that
    corrects the drift.
-6. A grant a person, an acknowledgement or bootstrap writes is recorded as
-   `authz.grant.created`, and a revocation a person makes as `authz.grant.revoked`, each
-   with its reason, in the transaction that writes it.
+6. Save a grant a refresh writes or takes back (AUTHZ-DERIVE-005, D-207), a grant a
+   person, an acknowledgement or bootstrap writes is recorded as `authz.grant.created`,
+   and a revocation a person or a registration's removal makes as `authz.grant.revoked`,
+   each with its reason, in the transaction that writes it. These two records, and the
+   two a refresh or the drift check writes, name the grant's holder as their subject
+   where the holder is an account, and none where it is a group (D-206, D-207).
 
 ---
 
 **AUTHZ-GRANT-004** — Grants and roles SHALL be runtime-changeable without a deploy.
 
 A change to a role SHALL carry a `reason` (API-CONV-002), SHALL be the `grant:manage`
-step-up action (`10` section 5a), and SHALL be recorded with the role, its permissions
-before and after, the reason and the actor. A change to a role that carries
-`system:administer` before or after it SHALL require `system:administer`
-(OPS-CFG-007). A change SHALL NOT take a library-owned permission out of a role the
-reserved `emergency` account holds, and the `emergency` account's grant of
-`system-administrator` SHALL NOT be revoked (OPS-BOOT-002). A role that a grant (live,
-expired or revoked), a declared derivation or a standing invitation (neither
-acknowledged nor revoked, expired or not) names SHALL NOT be removed
-(`authz.role.inuse`).
+step-up action (`10` section 5a), SHALL stay within the actor's reach (AUTHZ-GRANT-005),
+and SHALL be recorded with the role, its permissions and its `handsOut` before and
+after, the reason and the actor. A change to a role that carries `system:administer`
+before or after it SHALL require `system:administer` (OPS-CFG-007). A change SHALL NOT
+take a library-owned permission out of a role the reserved `emergency` account holds,
+and the `emergency` account's grant of `system-administrator` SHALL NOT be revoked
+(OPS-BOOT-002). A role that a grant (live, expired or revoked), a declared derivation or
+a standing invitation (neither acknowledged nor revoked, expired or not) or another
+role's `handsOut` names SHALL NOT be removed (`authz.role.inuse`).
 
-*Source: D-010, D-015, D-166*
+**Declared roles (D-204, D-212).** A host may declare the roles its deployment starts
+with (`AuthorizationDeclarationBuilder.Role(name, permissions, handsOut)`, LIB-HOST-001,
+`handsOut` optional), each name a role name as `POST /admin/roles` takes it and none a
+role of `10` section 3, and each permission a declared host permission or a
+library-owned one other than `system:administer` (OPS-CFG-007), and each role its
+`handsOut` names one it declares or one of `10` section 3 (AUTHZ-GRANT-005); any other
+fails startup with `model.startup.declarationinvalid`, `details.declaration`
+`role.<name>`. At each start, before the application serves a request, every declared
+role the deployment has not yet seeded is seeded, under the lock of its name, by the
+start principal `role-declaration` (`10` section 5.29, operation `role-seeding`), inside
+the start step and through no public operation. The role definition admits it there
+without `role:manage`, a step-up or a person's reason, its reason being
+`AUTHZ-GRANT-004`, and `IRoles` admits no system principal, refusing one with
+`authz.denied`, so no code outside the start step defines a role as it does, whatever
+principal it builds: the role is defined where no role of that name exists, recorded
+`authz.role.defined`, and left as it stands where one does; either way the name is kept
+as seeded, a row of a library table. A role once seeded is never seeded again, so a
+change or a removal an administrator makes later stands.
+
+*Source: D-010, D-015, D-166, D-204, D-212*
 
 **Acceptance criteria**
 1. Creating a role and assigning permissions to it requires no restart.
@@ -166,8 +199,103 @@ acknowledged nor revoked, expired or not) names SHALL NOT be removed
 5. A change taking a library-owned permission out of the role the `emergency` account
    holds, and a revocation of that account's `system-administrator` grant, are refused
    with `authz.denied` and change nothing.
-6. Removing a role that a grant, a derivation or a standing invitation names, an
-   expired one included, is refused with `authz.role.inuse` and changes nothing.
+6. Removing a role that a grant, a derivation, a standing invitation or another role's
+   `handsOut` names, an expired one included, is refused with `authz.role.inuse` and
+   changes nothing.
+7. A declared role is defined at the first start of a fresh deployment; changed or removed
+   by an administrator, it is not defined again at the next start; one an administrator
+   made before it was declared is left as it stands; a declared role named as a role of
+   `10` section 3 fails startup; an `IRoles` call made with a system principal's context,
+   one named `role-declaration` included, is refused with `authz.denied` and changes
+   nothing.
+
+---
+
+**AUTHZ-GRANT-005** — Nobody SHALL hand out a role beyond what they may hand out, and
+nobody SHALL give themselves access.
+
+**Values (D-212).** A person hands out a role where they make or revoke a grant of it,
+allow or deny; name it among an invitation's roles; or add a member (an account or a
+group) to a group, or remove one from it, where the group reaches a grant of the role,
+live, allow or deny, its own or that of a group it belongs to; and ending a membership,
+now or at an end set in advance, hands out every role its revocations and removals reach
+(`01` IDN-MEM-001, D-213). Each such change SHALL, beside the admission of
+AUTHZ-SCOPE-001, be refused with 403 `authz.role.notassignable` unless the actor may
+hand out every role it touches. The actor may hand out a role where:
+- it holds `system:administer` in the administrative organization; or
+- a role it holds, through a live allow grant at a scope that covers the change (across
+  the organization, or on the grant's resource or an ancestor of it), lists that role
+  among the roles its holders may hand out (`handsOut`), and no live deny grant of that
+  role to the actor, or to a group it belongs to, covers the change, since a deny
+  defeats any allow (AUTHZ-GRANT-002, D-217); or
+- `authz.handout.byholding` is on (`10` section 4.5a; off by default) and the actor's
+  grants admit, at the change's scope, every permission the role carries, as the gate's
+  stored grant terms decide it (allows less denies, through groups and containment,
+  materialised derivations included); a live derivation, whose relationships only the
+  host's sources hold, admits nothing here and is no fault
+  (`authz.derivation.sourcesmissing` is not raised), so the setting never admits more
+  than the actor's stored grants do (D-216).
+
+A role's `handsOut` is a list of role names, set by the host for its own roles, any role
+a deployment holds named: where the role is created or changed (`POST /admin/roles`), and
+in a declared role (`AuthorizationDeclarationBuilder.Role(name, permissions, handsOut)`),
+none where absent. A change to a role SHALL be refused with `authz.role.notassignable`
+unless the actor holds `system:administer` in the administrative organization, or its
+grants there admit, across the organization, every permission the role carries before
+and after the change and it may hand out, by the rule above in the administrative
+organization, every role the role's `handsOut` names after the change; so nobody widens
+a role, or their own list, beyond their own reach.
+
+Nobody gives themselves access, whatever they may hand out. These SHALL be refused with
+403 `authz.grant.self`, save to an actor holding `system:administer` in the
+administrative organization, which can already change any role it holds:
+- an allow grant to the actor, or to a group the actor belongs to, directly or through
+  nesting;
+- the revocation of a deny grant to the actor or to such a group;
+- adding the actor, or such a group, to a group, and removing the actor or such a group
+  from a group that reaches a deny grant;
+- the acknowledgement of an invitation by the account that issued it (`20` REG-INV-002).
+
+Taking away one's own access stays allowed. OPS-CFG-007 stands over this rule: a role
+carrying `system:administer` needs that permission whatever list names it. Derived
+grants, which no person hands out, are outside it. The rule is judged where the
+admission is (AUTHZ-SCOPE-001, AUTHZ-GATE-006); a refusal writes nothing and is recorded
+as a refusal (AUTHZ-CONCEAL-004), counting toward `alerting.denials.threshold`; an
+admitted change is recorded as before, with its reason and its step-up.
+
+*Source: D-212, D-213, D-216, D-217*
+
+Without it, anyone who may manage grants holds every role one step removed, which is
+OPS-CFG-007's reasoning applied to every role. The lists are Kubernetes' `bind` on named
+roles, PostgreSQL's per-role `ADMIN OPTION` and Salesforce's assignable profiles; the
+setting is Kubernetes' rule that holding a role's permissions is enough. Someone who may
+hand out a role can still give it to anyone: that is the trust handing it out means, and
+the record of who gave what, when and why is the control.
+
+**Acceptance criteria**
+1. With `authz.handout.byholding` off, an actor holding `grant:manage` and a role whose
+   `handsOut` names `accountant` grants `accountant` to another account, names it in an
+   invitation and adds a member to a group holding it; granting a role no role of the
+   actor lists is refused `authz.role.notassignable` and changes nothing.
+2. With the setting on, an actor whose grants admit every permission of a role hands it
+   out with no list naming it; one whose grants miss a permission, or deny one, is
+   refused.
+3. An allow grant to oneself, one to a group one belongs to through nesting, the
+   revocation of a deny on oneself, adding oneself to a group and acknowledging an
+   invitation one issued are each refused `authz.grant.self`; revoking one's own allow
+   grant is not.
+4. A role change adding a permission the actor's grants do not admit, and a `handsOut`
+   naming a role the actor may not hand out, are refused `authz.role.notassignable` and
+   change nothing.
+5. A revocation, a deny and a removal from a group are judged as a grant is.
+6. An actor holding `system:administer` in the administrative organization hands out any
+   role, to itself included, and changes any role.
+7. With the setting on, an actor admitted to a permission on a record only through a live
+   derivation is refused a role carrying it there with `authz.role.notassignable`, not a
+   fault; one admitted through a materialised derivation hands the role out (D-216).
+8. An actor holding a role whose `handsOut` names `accountant`, and a deny of that role
+   covering the change, is refused `authz.role.notassignable` for `accountant`, the
+   setting off; with the deny revoked, it hands `accountant` out (D-217).
 
 ---
 
@@ -182,12 +310,12 @@ removing a member) SHALL carry a `reason` (API-CONV-002) and SHALL be recorded w
 group, its name, the member where one changed, the reason and the actor, under the
 group's organization. A change of members SHALL be the `grant:manage` step-up action
 (`10` section 5a), and where the group reaches a grant of a role carrying
-`system:administer` it SHALL also require that permission (OPS-CFG-007); creating a
-group and removing one SHALL NOT be stepped up. A group that holds a member, belongs to
-a group, or was given a grant, live, expired or revoked, SHALL NOT be removed
-(`authz.group.inuse`).
+`system:administer` it SHALL also require that permission (OPS-CFG-007), and every role
+the group reaches is held to AUTHZ-GRANT-005; creating a group and removing one SHALL
+NOT be stepped up. A group that holds a member, belongs to a group, or was given a
+grant, live, expired or revoked, SHALL NOT be removed (`authz.group.inuse`).
 
-*Source: D-015, D-166*
+*Source: D-015, D-166, D-212*
 
 **Acceptance criteria**
 1. A user in a team inside a department inherits grants held by the department.
@@ -242,13 +370,49 @@ container is not of the declared type, is unregistered, belongs to another
 organization or is absent where the type requires one; or, for a sensitive type, the
 subject it names holds no account, or one `deleting` or `deleted` (IDN-LIFE-002a). A
 batch is judged whole before anything is written. `IResources` is a seam, not an
-operation: it joins the host's transaction, has no endpoint and takes no access context
-(LIB-API-005).
-Placing a record, or moving it, confers on it the grants held on its new containers
-(AUTHZ-INHERIT-001), so whether a caller may do it is the host's own action, which the
-host asks of the gate before it writes.
+operation: it joins the unit of work, which the host's context joins, has no endpoint and
+takes no access context (LIB-API-005).
 
-*Source: D-015, D-017, D-166*
+**Values (D-203).** The host's context joins the unit of work with
+`UseUnitOfWorkAsync(IUnitOfWork work, CancellationToken cancellationToken)`
+(`Janus.Hosting`), an extension method on the context's `DatabaseFacade` answering a
+`ValueTask`. With `work` begun, it gives the host's context the unit of work's open
+connection, which the context does not own, and its transaction; at the outermost commit
+or rollback the unit of work takes both back, and the context returns to the connection
+it was configured with (D-206), exactly as it was configured: a context configured with
+a connection string keeps the data source its provider built from it, with its type
+mappings and plugins, and the string as the context resolved it (D-207). So its
+`SaveChangesAsync` and the library's writes commit together at the outermost
+`CommitAsync` and roll back together. The connection runs under the deployment's one
+application credential, `identity_app`, to which the host's own migrations grant the
+host's tables (OPS-MIG-003). Called with `work` not begun, on a context that holds a
+connection of its own (one whose connection is open, or which holds a transaction, when
+it is called; one configured with a connection string or a closed connection it does not
+own holds none, and one the unit of work gave it is not its own), on a context
+configured with a connection object it owns (replacing it would dispose it, D-207), on a
+context taken from a pool (`AddDbContextPool`, `AddPooledDbContextFactory`: the pool's
+reset keeps the joined connection, open inside the unit of work's transaction, for the
+next lease, D-207), or for another unit of work while one is joined, it throws
+`InvalidOperationException`, a fault of the calling code (CONV-ERR-001); a second call
+for the unit of work already joined changes nothing. A host never returns a joined
+context to a pool, one it builds itself included, before the outermost commit or
+rollback (D-207). An operation whose refusal keeps a write, called inside the host's
+open unit of work, is a fault too (CONV-DESIGN-003). The host saves before the outermost
+commit; the library commits nothing the host has not saved and clears nothing the host's
+context tracks. `IResources.RemoveAsync(resource)` removes a record's registration and
+its ancestry rows, in the unit of work, for a record the host removes from its own
+table, and revokes every live grant that names the record (AUTHZ-GRANT-003), so a later
+registration of the same identifier inherits none of them. It is refused 422
+`api.request.invalid` naming `resource` where the record is not registered, and 409
+`authz.resource.inuse` where a record is registered inside it. A record's data subject
+is fixed at registration: a host that must change it removes the registration and
+registers the record again, encrypting its fields again under the new subject
+(PRIV-RIGHT-005a), in one unit of work, and records the change in its own history
+(IDN-PRIN-003). Placing a record, or moving it, confers on it the grants held on its new
+containers (AUTHZ-INHERIT-001), so whether a caller may do it is the host's own action,
+which the host asks of the gate before it writes.
+
+*Source: D-015, D-017, D-166, D-203, D-206, D-207*
 
 Precomputation is what keeps the rule composable into a query and therefore usable
 as a `WHERE` clause. Same-transaction maintenance is why permission data and business
@@ -257,10 +421,22 @@ service.
 
 **Acceptance criteria**
 1. Creating a resource writes its ancestry in the same transaction; a rollback
-   leaves neither.
+   leaves neither, the host's own row written through a context joined with
+   `UseUnitOfWorkAsync` included.
 2. Moving a subtree updates ancestry for every descendant.
 3. A bulk import of 10,000 resources produces correct ancestry for all.
 4. No permission query contains a recursive common table expression.
+5. Removing a registration leaves no ancestry row of the record and no live grant naming
+   it; removing one not registered is refused with `api.request.invalid` naming
+   `resource`, and one that holds a registered record with `authz.resource.inuse`, each
+   changing nothing.
+6. `UseUnitOfWorkAsync` called with its unit of work not begun, on a context whose own
+   connection is open or which holds a transaction, on a context configured with a
+   connection object it owns, on a context taken from a pool, or for another unit of
+   work while one is joined throws `InvalidOperationException`; called again for the
+   unit of work it joined, it changes nothing; after the outermost commit or rollback
+   the host's context uses the connection it was configured with (D-206), a context
+   configured with a connection string keeping its provider's type mappings (D-207).
 
 ---
 
@@ -275,7 +451,8 @@ they should not, silently. No choice of registry syntax makes it easier or harde
 **Acceptance criteria**
 1. Tests cover moving a subtree beneath its own former sibling.
 2. Tests cover concurrent moves of overlapping subtrees.
-3. A test asserts no orphaned ancestry rows remain after any operation.
+3. A test asserts no orphaned ancestry rows remain after any operation, a removal
+   (`IResources.RemoveAsync`, AUTHZ-INHERIT-002) included.
 
 ---
 
@@ -385,19 +562,20 @@ SHALL be marked as such so they are never mistaken for stored grants someone wro
 
 **Values (D-161, D-162).** Refresh is the host's call: the library exposes
 `IDerivationMaterialiser.RefreshAsync(context, derivation, resource, sources)`, which
-takes the access context whose subject every grant it writes records as its granter
-(AUTHZ-GRANT-003), the relationship's name, the `ResourceId` of the resource the
-relationship's rows are about, and the same host-supplied sources object the filter
-takes (AUTHZ-DERIVE-001), and which the host calls from the operation that changes the
-relationship. The grants a refresh writes commit with the library's unit of work, and
-none exists if that unit of work does not commit. Where the host's write and the refresh
-do not both commit, the difference is drift, which the next refresh or the drift check
-detects, reports and corrects: the drift check re-evaluates every materialised
-derivation every `derivation.materialised.driftcheck` (default `P1D`), and a difference
-raises the `degradation` condition with the derivation's name in `details` and is
-corrected in the same run. A refresh SHALL write the derivation's grant on each resource of the type the
-derivation is declared on whose ancestry includes the resource the relationship's row
-names, that resource itself included where it is of that type.
+takes the access context of who calls it (every grant it writes records as its granter
+that context's acting account, or the nil subject for a system principal, a host's job
+among them; AUTHZ-GRANT-003, D-207), the relationship's name, the `ResourceId` of the
+resource the relationship's rows are about, and the same host-supplied sources object
+the filter takes (AUTHZ-DERIVE-001), and which the host calls from the operation that
+changes the relationship. The grants a refresh writes commit with the library's unit of
+work, and none exists if that unit of work does not commit. Where the host's write and
+the refresh do not both commit, the difference is drift, which the next refresh or the
+drift check detects, reports and corrects: the drift check re-evaluates every
+materialised derivation every `derivation.materialised.driftcheck` (default `P1D`), and
+a difference raises the `degradation` condition with the derivation's name in `details`
+and is corrected in the same run. A refresh SHALL write the derivation's grant on each
+resource of the type the derivation is declared on whose ancestry includes the resource
+the relationship's row names, that resource itself included where it is of that type.
 
 **Values (D-166).** The drift check reads each relationship's rows through the source
 the host declares for it (`07` LIB-HOST-001), the source the `GET /admin/access` view
@@ -407,10 +585,35 @@ with `model.startup.declarationmissing` naming the relationship. The drift check
 the system principal `derivation-driftcheck` (`10` section 5.29, IDN-PRIN-001); a grant
 it writes records the nil subject as its granter and the reason `AUTHZ-DERIVE-005`, and
 its audit record (`authz.grant.materialised`, or `authz.grant.retracted` for one it
-takes back) names the principal (AUTHZ-GRANT-003, D-187). The refresh meets no gate of
-its own: the host calls it from its own gated operation (CONV-DESIGN-002 AC3).
+takes back) names the principal (AUTHZ-GRANT-003, D-187); one it takes back records the
+nil subject as its revoker and the reason `AUTHZ-DERIVE-005`. The refresh meets no gate
+of its own: the host calls it from its own gated operation, or from a declared job
+outside a request (CONV-DESIGN-002 AC3, `01` IDN-PRIN-001); a host job's context calling
+it while a request is served, as the gate judges that (`08` CONV-DESIGN-007), is a fault
+of the calling code (below).
 
-*Source: D-043, D-162, D-166, D-183, D-187*
+**Values (D-207).** A grant a host's refresh writes carries the reason
+`derivation:<relationship>`, whoever calls it, and records as its granter the caller's
+acting account, or the nil subject for a system principal; one it takes back records the
+same as its revoker, with the same reason; and each grant it writes or takes back is
+recorded `authz.grant.materialised` or `authz.grant.retracted`, in the refresh's
+transaction, naming who called it: a person as acting identity, a system principal (a
+host's job, or a deployment-scoped principal) by its name and stated reason
+(IDN-AUD-001), and the grant's holder as subject where the holder is an account (D-206).
+A job's context calling it while a request is served is a fault of the calling code: it
+throws `InvalidOperationException` (CONV-ERR-001) and writes nothing, since the refresh
+meets no gate and asks no permission a refusal could name (`01` IDN-PRIN-001, D-208). A
+system principal's refresh is admitted outside a request where the principal names a
+declared job, or is a deployment-scoped principal that may run `reconciliation`, the
+drift check's operation (`10` section 5.28). Every other call by a system principal is a
+fault of the calling code that throws `InvalidOperationException` and writes nothing:
+one while a request is served, one by an organization-scoped principal naming no
+declared job or on a record of an organization other than its own (`01` IDN-PRIN-001
+criterion 2, D-209), and one by a deployment-scoped principal that may not run
+`reconciliation`, which is restricted from the refresh as from every operation not its
+own (`01` IDN-PRIN-001 criterion 3, D-208).
+
+*Source: D-043, D-161, D-162, D-166, D-183, D-187, D-207, D-208, D-209*
 
 Materialisation reintroduces, deliberately and in one controlled place, the
 synchronisation problem the design otherwise avoids. It is the last rung of the
@@ -436,6 +639,19 @@ and for the same reason.
    `model.startup.declarationinvalid`.
 6. The view and the drift check evaluate a derivation in one statement in the host's
    context, over the rows and the contract tables of one context instance.
+7. A refresh called with a person's context writes grants naming that person as granter,
+   and one called with a host job's context outside a request writes grants naming the
+   nil granter; each carries the reason `derivation:<relationship>`, and each grant
+   written or taken back is recorded `authz.grant.materialised` or
+   `authz.grant.retracted` naming the caller; a job's refresh while a request is served
+   (through either profile or neither, and in a scope opened within it) throws
+   `InvalidOperationException` and writes nothing (D-207, D-208); a refresh called
+   outside a request with an organization-scoped principal naming no declared job, or on
+   a record of an organization other than its own (D-209), or with a deployment-scoped
+   principal that may not run `reconciliation`, throws `InvalidOperationException` and
+   writes nothing, and one called with a deployment-scoped principal that may run it
+   records that principal's name and reason, and throws `InvalidOperationException` and
+   writes nothing while a request is served (D-208).
 
 ---
 
@@ -479,9 +695,10 @@ reads. `unevaluated` names the relationships whose derivations were not evaluate
 grant that confers nothing is not reported. The view is asked under `grant:read` in the
 organization the record belongs to (AUTHZ-SCOPE-001); a record the deployment holds no
 registration for belongs to no organization and is refused as a caller without
-`grant:read` is refused.
+`grant:read` is refused. The view reports grants: a host's declared job holds none and
+is not listed, its reach being its declaration (`01` IDN-PRIN-001, D-207).
 
-*Source: D-043, AUTHZ-GATE-004, D-166*
+*Source: D-043, AUTHZ-GATE-004, D-166, D-207*
 
 Stored grants answer this with a query. Derived grants cannot — there is no row to
 look up. This is the genuine ceiling of the design, and the reason the migration
@@ -515,15 +732,33 @@ recovery approval, the privacy request queue and erasures, the audit trail and
 explanation resolution, compliance text and records, and the break-glass credential.
 Before bootstrap has marked an administrative organization every such operation is
 refused. Grants, groups, memberships and invitations are evaluated in the organization
-they belong to. A grant in the administrative organization confers only on a principal
-holding a current membership of it (IDN-MEM-001). Where the organization is read from
-the row a request names, an identifier naming no row belongs to no organization, so no
-grant reaches it, and it is refused as a missing permission is (`09` section 8). A path
-under `/admin` whose `{id}` names no organization the deployment holds is answered 404
+they belong to, save that a grant in an organization other than the administrative
+organization, and its revocation, are also admitted under `system:administer` held in
+the administrative organization (D-207): an organization `POST /admin/organizations`
+creates holds no grant until one is written this way, and one whose last holder of
+`grant:manage` has gone is given another. The two permissions, `grant:manage` in the
+grant's organization and `system:administer` in the administrative organization, are one
+admission (D-208), which the grant operations ask through the grant admission (`08`
+CONV-DESIGN-007): the gate judges the acting account's restriction first, as for any
+modifying action, then both permissions together, and records one refusal, naming
+`grant:manage` in the grant's organization, only where neither admits; an admission
+under either records no refusal and adds nothing to the count toward
+`alerting.denials.threshold` (AUTHZ-CONCEAL-004, OPS-ALERT-001). The gate's second ask
+inside the unit of work (AUTHZ-GATE-006) is the same one admission. An identifier naming
+no grant or no registered record, and an organization-wide grant whose `resourceId`
+names no organization the deployment holds, are refused as the gate refuses a row the
+deployment does not hold: the restriction first, then `authz.denied` naming the
+permission asked (`grant:manage` for a grant), recorded against no organization
+(AUTHZ-CONCEAL-004), no permission being decided (D-209). A grant in the administrative
+organization confers only on a principal holding a current membership of it
+(IDN-MEM-001). Where the organization is read from the row a request names, an
+identifier naming no row belongs to no organization, so no grant reaches it, and it is
+refused as a missing permission is (`09` section 8). A path under `/admin` whose `{id}`
+names no organization the deployment holds is answered 404
 `identity.organization.notfound`, nothing being concealed at that level (`09` section
 8a).
 
-*Source: D-003, IDN-MEM-003, D-166*
+*Source: D-003, IDN-MEM-003, D-166, D-207, D-208, D-209*
 
 **Acceptance criteria**
 1. No session field names an organization.
@@ -531,6 +766,18 @@ under `/admin` whose `{id}` names no organization the deployment holds is answer
    without switching.
 3. A permission held in an organization other than the administrative organization
    authorizes no operation on the deployment or on an account.
+4. A holder of `system:administer` in the administrative organization writes and revokes
+   a grant in an organization `POST /admin/organizations` created, which holds no grant
+   before it; a holder of `grant:manage` in the administrative organization alone is
+   refused there (D-207). A grant or revocation in an organization other than the
+   administrative organization writes no refusal record where either permission admits
+   it, at the first ask and at the second inside its unit of work; where neither does,
+   it is refused with one refusal record, naming `grant:manage` in the grant's
+   organization; an acting account under restriction is refused `authz.restricted`, with
+   no record, whatever it holds (D-208); an organization-wide grant whose `resourceId`
+   names no organization the deployment holds is refused 403 `authz.denied`, naming
+   `grant:manage` and recorded against no organization, whatever the caller holds, save
+   `authz.restricted` for an acting account under restriction (D-209).
 
 ---
 
@@ -607,25 +854,30 @@ and compliance records all derive from it.
 that need only the declaration run inside `AddJanus`; checks that read the database
 (an undeclared permission granted by a stored role, an unindexed derivation column) run
 in a hosted service `Janus.Hosting` registers before the web server, so the process
-exits non-zero before a request is served; `Janus.Cli` runs the same validation before
-any command (D-160). The
+exits non-zero before a request is served. `Janus.Cli` reads no host declaration
+(OPS-BOOT-001), so none of these checks runs before its commands (D-160, D-204). The
 following SHALL fail:
 
 - A containment cycle
 - A type referencing an undeclared type
 - A type with no path to an organization
-- A role granting an undeclared permission
+- A role the deployment holds granting an undeclared permission (a declared role
+  naming one fails as AUTHZ-GRANT-004 states)
 - A purpose declaring legitimate interest without a linked assessment
 - A queryable entity with no registered policy
 - **A derivation naming an unindexed column** (AUTHZ-DERIVE-004)
 - **A derivation referencing an undeclared resource type or relationship**
 - An action bound to a purpose no resource type declares (AUTHZ-GATE-005)
+- A resource type declared twice under one name, since a host's encrypted value is bound
+  to its type's declared name (PRIV-RIGHT-005a, D-206)
 - A resource type named `organization`, which the library reserves for the whole
   organization (AUTHZ-MODEL-002)
 - A consent-based purpose named for the hosting or its cross-border transfer
   (INT-HOST-002)
+- A step-up gate or a purpose bound to a library-owned permission (AUTHZ-GATE-005,
+  D-209)
 
-*Source: D-015, D-032, D-043, D-162, D-166*
+*Source: D-015, D-032, D-043, D-162, D-166, D-204, D-206, D-209*
 
 Failing at boot rather than at first query. The same principle as the relying party
 identifier validation in `02-authentication`.
@@ -637,7 +889,11 @@ identifier validation in `02-authentication`.
    `details.permission` naming the action), `model.role.undeclaredpermission`,
    `model.derivation.undeclaredreference`, `model.derivation.unindexed`,
    `model.type.reserved` (`details.key` naming the type), `model.purpose.hostingconsent`
-   (`details.key` naming `<type>.<purpose>`) (`10` section 1.5, D-153).
+   (`details.key` naming `<type>.<purpose>`), for a resource type declared twice
+   `model.startup.declarationinvalid` (`details.declaration` the type, `details.field`
+   `name`, D-206), and for a binding to a library-owned permission
+   `model.startup.declarationinvalid` (`details.declaration` `binding.<permission>`,
+   `details.field` `stepUpGate` or `purpose`, D-209) (`10` section 1.5, D-153).
 2. Validation runs before any request is served.
 3. A new entity added without a policy fails the build via test, not only at
    startup.
@@ -767,20 +1023,23 @@ this SHALL be stated in the public contract.
 **AUTHZ-GATE-004** — The gate SHALL provide an explanation operation returning **why**
 access was granted or denied, naming the matched or missing grant.
 
-**Values (D-153).** The explanation is `{ outcome: allowed · denied, permission, principal:
-{ acting, effective, name, reason }, grant }`, `name` and `reason` present only for a
-system principal (D-166), where `grant` is `{ id, kind, subjectType, subjectId, role,
-deny, inheritedFrom: { resourceType, resourceId } or null }` for the grant that decided,
-or null when none matched. A derived grant has no row: it is named `{ id: null, kind:
-derived, subjectType: user, subjectId, role, deny: false, inheritedFrom }`, where
-`subjectId` is the asking account, `role` the role the derivation confers, and
+**Values (D-153).** The explanation is
+`{ outcome: allowed · denied, permission, principal: { acting, effective, name, reason }, grant }`,
+`name` and `reason` present only for a system principal (D-166), where `grant` is
+`{ id, kind, subjectType, subjectId, role, deny, inheritedFrom: { resourceType, resourceId } or null }`
+for the grant that decided, or null when none matched. A derived grant has no row: it is
+named
+`{ id: null, kind: derived, subjectType: user, subjectId, role, deny: false, inheritedFrom }`,
+where `subjectId` is the asking account, `role` the role the derivation confers, and
 `inheritedFrom` the resource the relationship's row names, or null where that is the
 resource explained (D-162). A matching deny is named before any allow; where several
 grants of one kind would decide, the one named is the nearest, on the resource itself
 first and then on its containers nearest first, a derived grant placed by the resource
-its relationship's row names (D-166).
+its relationship's row names (D-166). A host job's context is refused the explanation
+with `authz.denied`, an admitted job having no grant to name; its recorded refusals
+resolve by their correlation identifier (AUTHZ-CONCEAL-004, `01` IDN-PRIN-001, D-207).
 
-*Source: P-003, D-162, D-166*
+*Source: P-003, D-162, D-166, D-207*
 
 Costs little and answers "why can't I see this record?" without a debugger. Also the
 backing query for a "who can access this?" administrative view.
@@ -805,23 +1064,23 @@ from the correlation identifier.
 ---
 
 **AUTHZ-GATE-005** — The API SHALL return **capabilities** alongside each record,
-meaning **"permitted by grants, subject to session gates"** — computed in the same
-query.
+meaning **"permitted by grants, subject to session gates"** — computed for a whole page
+at once, in the record's own query or in one statement beside it, never per record.
 
 **A capability is not a promise the action will succeed.** An action can still be
-refused for step-up, a downgraded session, the subject's processing restriction, missing
-or superseded consent, or the caller's account state — none of which the per-row grant
-query evaluates. A list filter or SQL fragment under an action bound to a step-up gate
-asks that gate after the restriction and before its query is rendered, and is refused
-with the gate's code where it is unmet, whatever its rows; the per-row query then
-renders no step-up term (D-187). A check answers the gate's code only for a record its
-grants admit, so a step-up case of the truth table is one whose grants admit the record
-(AUTHZ-TEST-001).
+refused for step-up, a downgraded session, the acting account's processing restriction
+(AUTHZ-GATE-006), missing or superseded consent, or the caller's account state, none of
+which the per-row grant query evaluates. A list filter or SQL fragment under an action
+bound to a step-up gate asks that gate after the restriction and before its query is
+rendered, and is refused with the gate's code where it is unmet, whatever its rows; the
+per-row query then renders no step-up term (D-187). A check answers the gate's code only
+for a record its grants admit, so a step-up case of the truth table is one whose grants
+admit the record (AUTHZ-TEST-001).
 
 **Each capability therefore carries what it still requires:**
 
 ```json
-{ "id": "...", "can": ["read", "edit"], "requires": { "edit": ["stepup"] } }
+{ "id": "...", "can": ["edit", "read"], "requires": { "edit": ["stepup"] } }
 ```
 
 The frontend renders the control and prompts for what is needed, rather than hiding a
@@ -834,21 +1093,28 @@ explanation.
 **Values (D-160).** The `stepup` residual comes from the **gate bound to the action**,
 not from the permission string: the model builder binds a host-declared action to a
 step-up gate name (`10` section 5a or a host-declared gate), and the library-owned
-actions carry their bindings in section 5a. `requires` lists `reauthenticate` for an
-action whose bound gate the session would satisfy but for proof last reached before its
-last downgrade (AUTH-SESS-009), and `stepup` for one whose bound gate it otherwise does
-not currently satisfy (`10` section 5.20).
+actions carry their bindings in section 5a. A host binds only its own actions: a step-up
+gate or a purpose bound to a library-owned permission (`10` section 2.1) fails startup
+with `model.startup.declarationinvalid`, `details.declaration` `binding.<permission>`,
+`details.field` `stepUpGate` or `purpose` (D-209). `requires` lists `reauthenticate` for
+an action whose bound gate the session would satisfy but for proof last reached before
+its last downgrade (AUTH-SESS-009), and `stepup` for one whose bound gate it otherwise
+does not currently satisfy (`10` section 5.20).
 
 **Values (D-162, D-166).** The `consent` residual comes from the **purpose bound to the
-action**, as `stepup` comes from its gate: the model builder binds a host-declared action
-to the purpose it is done for, beside its step-up gate. Where that purpose rests on
-consent, the gate SHALL refuse the action until the record's data subject
-(AUTHZ-MODEL-003) holds the consent PRIV-SENS-002 AC1 names, whoever the caller is,
-a system or staff principal included (`privacy.consent.required`,
+action**, as `stepup` comes from its gate: the model builder binds a host-declared
+action to the purpose it is done for, beside its step-up gate. Where that purpose rests
+on consent, the gate SHALL refuse the action until the record's data subject
+(AUTHZ-MODEL-003) holds the consent PRIV-SENS-002 AC1 names, whoever the caller is, a
+system or staff principal included (`privacy.consent.required`,
 `privacy.consent.superseded`, `privacy.consent.writtenrequired`), and `requires` lists
 `consent` for it. The list filter and the SQL fragment apply the same condition
 (AUTHZ-GATE-002). An action bound to no purpose, or to one on another basis, asks for no
-consent.
+consent. On the organization-wide check, which names no record and so no data subject,
+an action bound to a consent-based purpose is refused `privacy.consent.required`, for a
+person as for a host's job (D-207). The capability page is a person's surface: a host
+job's context is refused it with `authz.denied`, in a request and outside one (`01`
+IDN-PRIN-001, D-207).
 
 **Values (D-162, D-166).** Where the host supplies the sources of AUTHZ-DERIVE-001, the
 capabilities of a page SHALL be computed in one query in the host's context: for each
@@ -858,14 +1124,14 @@ each derivation confers allows is read from the model and mapped in memory; no r
 and no permission costs a further query, and no grant is read through the library's own
 connection.
 
-*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191*
+*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202, D-206, D-207, D-209*
 
 The frontend must never infer permissions from role names; that is how a button
 appears while the endpoint refuses. Computing them per row in separate calls
 produces N+1 queries.
 
 **Acceptance criteria**
-1. A list of 50 records returns capabilities without additional queries.
+1. A list of 50 records returns capabilities without a query per record.
 2. A capability present with an empty `requires` always succeeds.
 3. A capability with `requires` prompts rather than failing silently.
 4. No frontend code contains a role name.
@@ -873,17 +1139,30 @@ produces N+1 queries.
    issues one statement in the host's context and reads no grant through the library's
    own connection; a deny on a record defeats a derived grant on the page as it does in
    the check.
+6. A host's declaration binding a step-up gate or a purpose to a library-owned
+   permission fails startup with `model.startup.declarationinvalid`,
+   `details.declaration` `binding.<permission>`, `details.field` `stepUpGate` or
+   `purpose` (D-209).
 
 ---
 
 **AUTHZ-GATE-006** — A processing restriction (`01-identity`, state `restricted`)
 SHALL be evaluated wherever the gate is evaluated.
 
-**Values (D-160).** Every permission action is classified **reading** or **modifying**. An
-action named `read`, `list` or `export` is reading; every other action is modifying
+**Values (D-160).** Every permission action is classified **reading** or **modifying**.
+An action named `read`, `list` or `export` is reading; every other action is modifying
 unless the model builder declares it reading. Under restriction the gate allows the
 account's own reading actions and refuses every modifying one with `authz.restricted`.
-The library-owned actions of `10` section 2.1 follow the same rule.
+The library-owned actions of `10` section 2.1 follow the same rule. The list filter and
+the SQL fragment refuse a modifying permission under restriction with
+`authz.restricted`, as the check does, before any rule is handed out, writing no refusal
+record (AUTHZ-CONCEAL-004), rather than a rule that matches nothing (D-209).
+
+**Values (D-207).** The restriction the gate judges is the acting account's. A host
+job's context acts for no account, so the gate judges no restriction for it, a modifying
+permission on a record whose data subject is restricted included; a data subject's
+restriction reaches the host's processing, a job's included, through
+`RestrictionChanged` (PRIV-RIGHT-004), not through the gate (`01` IDN-PRIN-001).
 
 **Values (D-166).** Restriction refuses no sign-in: a `restricted` account signs in and
 reads (IDN-ACCT-007, "Yes, read only"). The changes the library makes to the account's
@@ -900,9 +1179,15 @@ restriction, which takes the row `FOR UPDATE`, therefore commits either before t
 action, which the gate then refuses, or after it. A library operation refuses before its
 unit of work begins where the state it reads then already refuses, and asks the gate
 again inside its unit of work before its first write, on the state read under that hold;
-a refusal there is recorded as every gate refusal is, and the unit of work rolls back.
-Where a host asks the gate for a modifying action inside an open transaction, the gate
-holds the row in that transaction the same way.
+a refusal there is recorded where AUTHZ-CONCEAL-004 records one (an `authz.denied`,
+outside the unit of work; a restriction's refusal writes none, D-208), and the unit of
+work rolls back. Where a host asks the gate for a modifying action inside an open
+transaction, the gate holds the row in that transaction the same way. A host asks the
+gate of an action bound to a step-up gate before it begins the unit of work it joins, as
+a library operation judges its step-up before its own, and asks again inside it before
+its first write (`08` CONV-DESIGN-003, D-207), where the step-up gate answers as at the
+first ask (`02` AUTH-STEP-002, D-210); a step-up first judged with a unit of work open
+asks no phone signal (`02` AUTH-FACT-002b, D-209).
 
 **Values (D-186).** The first write is the first write to the library's database of the
 unit of work that makes the change. Where an effect outside it must come first, the gate
@@ -918,20 +1203,24 @@ the send in the unit of work that writes what the send carries, so the second as
 both: an approved recovery's link is undertaken in the approval's unit of work
 (AUTH-RECOV-002).
 
-*Source: D-037, D-166, D-183, D-186*
+*Source: D-037, D-166, D-183, D-186, D-207, D-208, D-209, D-210*
 
 **Acceptance criteria**
 1. A restricted account's records are readable by that account and not modifiable.
 2. Restriction is enforced through the gate, not by scattered checks.
 3. A restriction committed after a modifying action of the account passed the gate step
    and before its first write refuses the action with `authz.restricted`, and the action
-   leaves nothing of its own in the library's database (the gate's record of the refusal
-   stands, AUTHZ-CONCEAL-004); a restriction begun while an admitted action holds the
+   leaves nothing of its own in the library's database, save a kept write committed
+   before its unit of work (`08` CONV-DESIGN-003), and no refusal record
+   (AUTHZ-CONCEAL-004, D-208); a restriction begun while an admitted action holds the
    row waits for that action to commit.
 4. An app password's creation refused at the second ask leaves no app password at the
    mail server where the server answers the revocation, and returns no secret either
    way; an approved recovery refused there leaves neither the approval nor its link's
    send.
+5. A restricted account's list filter and SQL fragment for a modifying permission are
+   refused `authz.restricted`, as its check is, and write no refusal record; for a
+   reading permission each is handed its rule (D-209).
 
 ---
 
@@ -991,17 +1280,30 @@ Per-type is fine; per-instance is an oracle.
 **AUTHZ-CONCEAL-004** — A concealment response SHALL carry a correlation identifier
 that appears in the audit trail.
 
-Every gate refusal SHALL carry the identifier, whoever asked. A refusal of background
-work SHALL be recorded as its other actions are: the nil subject under both identities,
-and the system principal's name and stated reason (IDN-PRIN-001 AC4, D-162). The record
-of a refusal SHALL be written outside any transaction the caller holds open and
-committed at once, so a rollback of the caller's work leaves it standing. Where it takes
-its actor's refusals past `alerting.denials.threshold`, the `denial-spike` alert and its
+Every refusal of a permission the gate is asked for (by the check, on a record, on an
+organization or on a row the deployment does not hold, by the list filter or the
+fragment, and by the grant admission of AUTHZ-SCOPE-001) that it answers `authz.denied`,
+or conceals as `authz.resource.notfound`, whatever its cause, SHALL carry the identifier
+and be recorded, whoever asked, a host's job included. Every other refusal carries none
+and writes no refusal record, for a person as for a host's job: one the gate answers
+with a residual of `10` section 5.20 (a step-up, the session's re-authentication, a
+restriction, a consent, the account's state), and an `authz.denied` that refuses no
+permission asked of the gate, such as the refusals of the explanation operations
+(AUTHZ-GATE-004: explaining a decision, resolving an identifier) and of the capability
+page (API-CAP-001), and an operation's own refusal at its gate step (`08`
+CONV-DESIGN-002, OPS-BOOT-002). Carrying none means carrying no refusal record's
+identifier: an answer over HTTP still carries the request's correlation identifier, as
+every error body does (`09` API-CONV-002, D-208). A recorded refusal of background work
+SHALL carry what its other actions carry: the nil subject under both identities, and the
+system principal's name and stated reason (IDN-PRIN-001 AC4, D-162). The record of a
+refusal SHALL be written outside any transaction the caller holds open and committed at
+once, so a rollback of the caller's work leaves it standing. Where it takes its actor's
+refusals past `alerting.denials.threshold`, the `denial-spike` alert and its
 `AlertRaised` row SHALL be written in that same transaction, the count read with the
 actor's refusals held (CONV-DESIGN-003), and a failure to write them fails the record
 (OPS-ALERT-001). An action's own records stay in its transaction (D-166, D-183).
 
-*Source: D-016, D-162, D-166, D-183*
+*Source: D-016, D-162, D-166, D-183, D-208*
 
 Support can diagnose a legitimate permission problem without the response revealing
 anything.
@@ -1012,10 +1314,15 @@ anything.
 2. The identifier reveals nothing about record existence.
 3. The identifier of a refusal of a system principal resolves to the principal's name
    and reason.
-4. A refusal inside a transaction the caller rolls back is still recorded, resolves by
-   its identifier, and counts toward `alerting.denials.threshold`; one that takes the
-   count past it raises `denial-spike`, with its `AlertRaised` row, whatever the
-   caller's outcome.
+4. A recorded refusal (`authz.denied`, or `authz.resource.notfound` concealing one)
+   inside a transaction the caller rolls back still stands, resolves by its identifier,
+   and counts toward `alerting.denials.threshold`; one that takes the count past it
+   raises `denial-spike`, with its `AlertRaised` row, whatever the caller's outcome.
+5. A refusal answered `auth.stepup.required`, `authz.restricted` or a
+   `privacy.consent.*` code carries no refusal record's identifier, writes no refusal
+   record and counts nothing toward `alerting.denials.threshold`, for a person's
+   context, and for a host job's context on a consent-based purpose, its refusal on the
+   organization-wide check included (D-208).
 
 ---
 
@@ -1104,7 +1411,15 @@ subject (PRIV-BREACH-002) reads the records naming the subject as acting identit
 identities from it; an event raised from a link a message carried, with no context,
 carries neither (`10` section 5b, D-187).
 
-*Source: D-014, D-166, D-183, D-187*
+**Where a context comes from (D-202).** No public member makes a context whose acting and
+effective identities differ. A host whose requests carry the library's sessions takes a
+person's context from the request their session carries (`17` BFF-HOST-001), so a
+break-glass session's reason comes with it and the step-up the session proved is judged
+against that session (AUTH-STEP-002, D-205), and never builds one; `AccessContext.Of(SubjectId)` is for a host that consumes authorization
+without the library's authentication (LIB-HOST-004), for the conformance suite and for
+tests; `AccessContext.Of(SystemPrincipal)` makes a system principal's.
+
+*Source: D-014, D-166, D-183, D-187, D-202, D-205*
 
 Impersonation is out of scope. Two identity fields where one would do is defensible
 on its own terms — it makes "who did this" unambiguous — and retrofitting a second
@@ -1120,6 +1435,8 @@ identity into every audit record and permission check later would not be.
 5. Every event raised with the access context of a person who acted carries the acting
    and the effective identity from it; one raised from a link with no context carries
    neither.
+6. No public member of the library makes a context whose acting and effective
+   identities differ.
 
 ---
 
@@ -1129,7 +1446,7 @@ identity into every audit record and permission check later would not be.
 relationship, permission, and condition for each resource type. Changing a policy
 SHALL require changing the table first.
 
-*Source: D-015, D-183, D-187, D-189, D-192*
+*Source: D-015, D-183, D-187, D-189, D-192, D-206, D-207, D-208, D-209*
 
 The diff in that table is the change under review. It is the difference between an
 authorization system that is trusted and one that is feared.
@@ -1141,16 +1458,38 @@ authorization system that is trusted and one that is feared.
    **a derived grant on a container reaching its contents**, **a bound action judged
    from a host's assurance report** (met; unmet on its level, its phishing resistance,
    its age, each where the bound gate asks it, or an instant after now; a provider that
-   fails; no provider), and **a bound action judged from the library's session** (met;
-   unmet on its level, its phishing resistance or its age, each where the bound gate
-   asks it; a lower level reached since, beside a higher one past the gate's maximum
-   age; proof reached only before the session's last downgrade); the session's rows are
-   the library's own, not scenarios of `10` section 5.30, since the conformance suite
-   judges a step-up from a host's report alone (LIB-TEST-001).
+   fails; no provider), **a bound action judged from the library's session** (met; unmet
+   on its level, its phishing resistance or its age, each where the bound gate asks it;
+   a lower level reached since, beside a higher one past the gate's maximum age; proof
+   reached only before the session's last downgrade), **a host job's context** (admitted
+   for a permission its declaration names outside a request, on a record, a modifying
+   one on a record whose data subject is restricted included, and on its organization;
+   refused for a permission it does not declare, in another organization, in an
+   organization whose deletion is requested, and while a request is served, through
+   either profile or neither and in a scope opened within it; D-206, D-207), and **a
+   grant written in an organization other than the administrative organization**
+   (admitted under `grant:manage` held there, or under `system:administer` held in the
+   administrative organization, either recording no refusal; refused, with one refusal
+   recorded, under `grant:manage` held in the administrative organization alone; D-207,
+   D-208), and **a restricted account** (a modifying permission refused
+   `authz.restricted` through the check and the filter alike, a reading one admitted;
+   D-209); the session's rows are the library's own, not scenarios of `10` section 5.30,
+   since the conformance suite judges a step-up from a host's report alone
+   (LIB-TEST-001), and so are the job's, since whether a request is being served is the
+   library's own answer (`08` CONV-DESIGN-007), and a grant's, since `grant:manage` and
+   `system:administer` are library-owned permissions no host declares (`10` section
+   2.1), and a restricted account's, since a restriction is the acting account's state,
+   which the library keeps.
 2. Every case runs through both the single check and the list filter (AUTHZ-PRIN-001). A
    step-up case agrees when the check answers the gate's outcome and the filter answers
    the same: where the gate is met, the filter lists the record; where it is not, the
-   filter is refused with the code the check answers (AUTHZ-GATE-005).
+   filter is refused with the code the check answers (AUTHZ-GATE-005). A host job's case
+   refused while a request is served agrees when the check and the filter are both
+   refused `authz.denied` (D-206), and a restricted account's case for a modifying
+   permission when both are refused `authz.restricted` (D-209). A case that names no
+   record runs without the list filter, no list holding it: a host job's context on its
+   organization through the single check alone (D-207), and a grant written in an
+   organization through the grant admission of AUTHZ-SCOPE-001 alone (D-208).
 3. Where a derivation is materialised, the same cases pass identically before and
    after materialisation.
 
@@ -1178,7 +1517,12 @@ is what keeps it cheap.
 interface, so the implementation behind it can be replaced without changing call
 sites.
 
-*Source: D-015, D-125*
+The grant admission through which the grant operations ask the one admission of
+AUTHZ-SCOPE-001 (`08` CONV-DESIGN-007) is part of that seam: `AccessGate` implements it,
+deciding each permission as the single check decides it, so the implementation is still
+replaced in one place (D-208).
+
+*Source: D-015, D-125, D-208*
 
 **Acceptance criteria**
 1. Replacing the implementation requires changes in one place.

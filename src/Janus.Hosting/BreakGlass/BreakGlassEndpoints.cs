@@ -1,7 +1,10 @@
 using System;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
 using Janus.Authentication.BreakGlass;
+using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
@@ -39,6 +42,7 @@ internal static class BreakGlassEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.BreakGlassConsumed,
                     ErrorCodes.BreakGlassInvalid, ErrorCodes.Throttled))
+            .Accepts<PresentBreakGlassRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status200OK);
         _ = SessionRequired.On(endpoints.MapPost("/admin/break-glass/generate", GenerateAsync))
             .Declares(EndpointDeclaration
@@ -53,16 +57,20 @@ internal static class BreakGlassEndpoints
     }
 
     private static async Task<IResult> PresentAsync(
-        PresentBreakGlassRequest request,
         BreakGlassService breakGlass,
         BrowserSessionCookies cookies,
+        PreAuthenticationService contacts,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(breakGlass);
         ArgumentNullException.ThrowIfNull(cookies);
+        ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(context);
+
+        PresentBreakGlassRequest request = await JsonBody
+            .ReadAsync<PresentBreakGlassRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (request.Credential is not { Length: > 0 } credential)
         {
@@ -76,17 +84,30 @@ internal static class BreakGlassEndpoints
             return Answers.Malformed("reason");
         }
 
-        return Answers.Of(
-            await breakGlass
-                .PresentAsync(credential, reason, RequestOrigin.Of(context.Request), cancellationToken)
-                .ConfigureAwait(false),
-            issued =>
-            {
-                cookies.Write(context.Response, issued);
-                cookies.ClearFirstContact(context.Response);
+        Error? failure = null;
 
-                return Opened;
-            });
+        IssuedSession issued = (await breakGlass
+                .PresentAsync(credential, reason, RequestOrigin.Of(context.Request), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<IssuedSession>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Answers.Refused(failure);
+        }
+
+        // BFF-CSRF-005a AC3 (D-206): presenting the credential is an authentication, so
+        // the first contact the browser carried ends rather than standing beside the
+        // session it opened.
+        if (context.Request.Cookies[BrowserCookies.PreAuthentication] is { Length: > 0 } first)
+        {
+            await contacts.RotateAsync(OpaqueToken.Of(first), cancellationToken).ConfigureAwait(false);
+        }
+
+        cookies.Write(context.Response, issued);
+        cookies.ClearFirstContact(context.Response);
+
+        return Opened;
     }
 
     private static async Task<IResult> GenerateAsync(
@@ -126,5 +147,12 @@ internal static class BreakGlassEndpoints
                 BreakGlassJson.Default.BreakGlassStandingView,
                 contentType: null,
                 StatusCodes.Status200OK));
+    }
+
+    private static TValue Withheld<TValue>(Error error, ref Error? failure)
+    {
+        failure = error;
+
+        return default!;
     }
 }

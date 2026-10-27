@@ -326,7 +326,8 @@ public sealed class AccountServiceTests : IAsyncDisposable
 
     /// <summary>
     /// REG-IDENT-009 AC2: the second change inside the window is refused, and the
-    /// refusal carries the instant the next one may be made.
+    /// refusal carries the instant the next one may be made. The window is judged first
+    /// without a lock, before the step-up, so the refusal begins no unit of work (D-207).
     /// </summary>
     [Fact]
     public async Task REG_IDENT_009_AC2_ASecondChangeInsideTheWindowIsRefusedAsync()
@@ -346,8 +347,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.UsernameCoolingOff, refused.Code);
         Assert.False(_work.Open);
-        Assert.Equal(0, _work.Committed);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(0, _work.Opened);
         Assert.Equal(
             Noon + Settings.IdentifiersUsernameChangeCoolOff.Default,
             refused.Details["retryAt"].Deserialize<DateTimeOffset>());
@@ -509,9 +509,96 @@ public sealed class AccountServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-009 AC6 (D-208): an edit naming the username the account held when its
+    /// step-up was judged, whose unit of work begins after a username change of the same
+    /// account has committed, asks no step-up (the session's proof is stale), leaves the
+    /// username that change wrote, judges nothing of the name it named (no lock taken on
+    /// it, and the cooling-off of the first choice still running), and commits its other
+    /// fields.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_009_AC6_AnEditNamingTheUsernameHeldLeavesAChangeCommittedMeanwhileAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+        _directory.Holds(_person, Profile("Kestrel", null, null));
+
+        await ChosenAsync(Chosen);
+
+        SessionId stale = Stepped();
+
+        _clock.Advance(TimeSpan.FromMinutes(16));
+        _identifiers.Locked.Clear();
+        _work.Reset();
+        _work.Meanwhile = () => ChangedMeanwhile("merlin");
+
+        Accepted(await Service.EditProfileAsync(
+            Acting,
+            stale,
+            new ProfileEdit(DisplayName: "Harrier", Username: Chosen),
+            TestContext.Current.CancellationToken));
+
+        AccountDetail detail = Read(await Service.ReadAsync(Acting, TestContext.Current.CancellationToken));
+
+        Assert.Equal("merlin", detail.Identifiers.Username);
+        Assert.Equal("Harrier", detail.Profile.DisplayName);
+        Assert.Empty(_identifiers.Locked);
+        Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 (D-207): a change of username judged free of its cooling-off
+    /// before its step-up is judged again under the set's lock, so a change of the same
+    /// account committed meanwhile, which starts the cooling-off, refuses it there, its
+    /// unit of work rolled back and the username that change wrote standing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AUsernameChangeIsJudgedAgainUnderTheLockAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+        _work.Meanwhile = () => ChangedMeanwhile("merlin");
+
+        Assert.Equal(
+            ErrorCodes.UsernameCoolingOff,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(Username: Chosen),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(1, _work.RolledBack);
+        Assert.False(_work.Open);
+        Assert.Equal("merlin", await UsernameAsync());
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 (D-207): a username another account holds is refused before the
+    /// step-up is judged, with no unit of work begun.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AUsernameTakenIsRefusedBeforeTheUnitOfWorkBeginsAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+        _ = _identifiers.Verified(SubjectId.New(_randomness), IdentifierKind.Username, Taken);
+
+        Assert.Equal(
+            ErrorCodes.UsernameTaken,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(Username: Taken),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(0, _work.Opened);
+        Assert.Null(await UsernameAsync());
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
     /// and before the first write refuses the choice of a username and of a preferred
     /// second step, each inside its unit of work, which rolls back and leaves nothing.
+    /// The username is chosen before the account holds the second step, so the session
+    /// meets the change's step-up, judged before the unit of work begins.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -522,8 +609,6 @@ public sealed class AccountServiceTests : IAsyncDisposable
 
         Authenticator key = SecondStepKey("The key", Noon);
 
-        _authenticators.Hold(key);
-
         foreach (Func<ValueTask<Result>> change in new Func<ValueTask<Result>>[]
         {
             () => Service.EditProfileAsync(
@@ -531,7 +616,12 @@ public sealed class AccountServiceTests : IAsyncDisposable
                 Stepped(),
                 new ProfileEdit(Username: Chosen),
                 TestContext.Current.CancellationToken),
-            () => Service.PreferSecondStepAsync(Acting, key.Id, TestContext.Current.CancellationToken),
+            () =>
+            {
+                _authenticators.Hold(key);
+
+                return Service.PreferSecondStepAsync(Acting, key.Id, TestContext.Current.CancellationToken);
+            },
         })
         {
             int rolledBack = _work.RolledBack;
@@ -622,6 +712,21 @@ public sealed class AccountServiceTests : IAsyncDisposable
             new ProfileEdit(Username: username),
             TestContext.Current.CancellationToken));
     }
+
+    // A username change of the account itself, committed by another transaction now.
+    private void ChangedMeanwhile(string username) =>
+        _identifiers
+            .TakeUsernameAsync(
+                _person,
+                IdentifierId.New(_clock),
+                Username.TryParse(username, out Username read)
+                    ? read
+                    : throw new InvalidOperationException("The username does not parse."),
+                _clock.GetUtcNow(),
+                TestContext.Current.CancellationToken)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
 
     private async Task<string?> UsernameAsync() =>
         Read(await Service.ReadAsync(Acting, TestContext.Current.CancellationToken))

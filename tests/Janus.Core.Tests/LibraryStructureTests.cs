@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Xml.Linq;
+using Microsoft.AspNetCore.Http;
 using Xunit;
 
 namespace Janus.Core.Tests;
@@ -17,8 +20,8 @@ namespace Janus.Core.Tests;
 /// (CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-LAYOUT-003, CONV-SETUP-001, CONV-SETUP-002,
 /// CONV-SETUP-004, CONV-DESIGN-001, CONV-DESIGN-003, CONV-DESIGN-004, CONV-DESIGN-007,
 /// CONV-DESIGN-008, CONV-CODE-007, CONV-CODE-008, CONV-ERR-001, CONV-ERR-003,
-/// CONV-TEST-002, CONV-VCS-005, LIB-API-002, LIB-PKG-001, LIB-PKG-002, OPS-DATA-001,
-/// OPS-DATA-002, OPS-DATA-003).
+/// CONV-TEST-002, CONV-VCS-005, LIB-API-002, LIB-PKG-001, LIB-PKG-002, LIB-TEST-004,
+/// OPS-DATA-001, OPS-DATA-002, OPS-DATA-003).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class LibraryStructureTests
@@ -55,6 +58,7 @@ public sealed class LibraryStructureTests
         ["Janus.Storage"] = ["Janus.Authentication", "Janus.Authorization", "Janus.Core", "Janus.Identity", "Janus.Privacy"],
         ["Janus.Hosting"] = ["Janus.Authentication", "Janus.Authorization", "Janus.Core", "Janus.Identity", "Janus.Privacy", "Janus.Storage"],
         ["Janus.Conformance"] = ["Janus.Core", "Janus.Hosting"],
+        ["Janus.Testing"] = ["Janus.Core", "Janus.Hosting"],
         ["Janus.Analyzers"] = [],
         ["Janus.UnicodeTables"] = [],
         ["Janus.Cli"] = ["Janus.Authentication", "Janus.Core", "Janus.Identity", "Janus.Privacy", "Janus.Storage"],
@@ -63,6 +67,10 @@ public sealed class LibraryStructureTests
     // CONV-LAYOUT-001: the library is under src and the generators are under tools,
     // outside the package. Both are held to the same conventions.
     private static readonly string[] Roots = ["src", "tools"];
+
+    // CONV-SETUP-002: the folders the project files of both solutions are under, the
+    // library's tests and the sample host's solution beside the library itself.
+    private static readonly string[] ProjectRoots = [.. Roots, "tests", "samples"];
 
     private static readonly string[] RawSql =
     [
@@ -78,9 +86,12 @@ public sealed class LibraryStructureTests
     // OPS-DATA-002: the accessor is the one place a connection comes from. These are
     // the ways a caller could get another one instead: the context's own, one a data
     // source or a factory opens, or one constructed, which names its type whether the
-    // type follows `new` or the declaration it is constructed into.
+    // type follows `new` or the declaration it is constructed into; and the ways a caller
+    // could hand a context another connection or transaction, directly or through the
+    // context's connection service.
     private static readonly Regex DirectConnection = new(
-        @"\b(GetDbConnection|OpenConnection(Async)?|CreateConnection)\s*\(|\bNpgsql(Connection|DataSource)\b",
+        @"\b(GetDbConnection|OpenConnection(Async)?|CreateConnection|SetDbConnection|SetConnectionString|UseTransaction(Async)?)\s*\("
+            + @"|\bNpgsql(Connection|DataSource)\b|\bIRelationalConnection\b",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
@@ -128,11 +139,13 @@ public sealed class LibraryStructureTests
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
-
-    private static readonly string[] AllowedPackages =
+    // CONV-DESIGN-008: every package identifier the table names, those it names only as
+    // ones another package brings among them.
+    private static readonly string[] TablePackages =
     [
         "Dapper",
         "Fido2",
+        "Fido2.Models",
         "Konscious.Security.Cryptography.Argon2",
         "Microsoft.CodeAnalysis.Analyzers",
         "Microsoft.CodeAnalysis.CSharp",
@@ -140,15 +153,30 @@ public sealed class LibraryStructureTests
         "Microsoft.EntityFrameworkCore",
         "Microsoft.EntityFrameworkCore.Design",
         "Microsoft.EntityFrameworkCore.Relational",
+        "Microsoft.IdentityModel.JsonWebTokens",
+        "Microsoft.IdentityModel.Protocols",
         "Microsoft.Testing.Platform",
         "MinVer",
+        "NSec.Cryptography",
         "Npgsql.EntityFrameworkCore.PostgreSQL",
         "OpenIddict.AspNetCore",
         "OpenIddict.Server",
         "OpenIddict.Validation",
         "Otp.NET",
+        "System.Formats.Cbor",
         "Testcontainers.PostgreSql",
         "xunit.v3",
+    ];
+
+    // CONV-DESIGN-008 AC1 (D-206): the packages the table names only as ones another
+    // package brings, none referenced directly.
+    private static readonly string[] BroughtPackages =
+    [
+        "Fido2.Models",
+        "Microsoft.IdentityModel.JsonWebTokens",
+        "Microsoft.IdentityModel.Protocols",
+        "NSec.Cryptography",
+        "System.Formats.Cbor",
     ];
 
     // CONV-DESIGN-008 AC3: the packages that carry one version and move together.
@@ -159,29 +187,43 @@ public sealed class LibraryStructureTests
         "Microsoft.EntityFrameworkCore.Relational",
     ];
 
-    private static readonly string[] InheritedProperties =
+    // CONV-SETUP-001: the settings Directory.Build.props sets once and every project
+    // inherits.
+    private static readonly string[] BuildSettings =
     [
         "AnalysisLevel",
         "Deterministic",
         "EnforceCodeStyleInBuild",
         "GenerateDocumentationFile",
         "ImplicitUsings",
+        "MSBuildTreatWarningsAsErrors",
         "Nullable",
-        "TargetFramework",
-        "TargetFrameworks",
         "TreatWarningsAsErrors",
     ];
 
-    // CONV-SETUP-004 AC2: the folders every project lives in. With the root above them
-    // they are every directory the build reads a configuration from.
-    private static readonly string[] Built = ["src", "tests", "tools"];
+    private static readonly string[] InheritedProperties =
+    [
+        .. BuildSettings,
+        "TargetFramework",
+        "TargetFrameworks",
+    ];
 
-    // CONV-SETUP-004 AC2: what configures a rule when a project, props or targets file
-    // declares it, as a property, an item or an item's metadata: a rule's severity or
-    // suppression, a rule set, a further configuration file, whether the analysers run,
-    // or a mode or a level for one category of rules.
+    // CONV-SETUP-004 AC2: the folders every project lives in, the sample host's among
+    // them (D-207). With the root above them they are every directory the build reads a
+    // configuration from.
+    private static readonly string[] Built = ["src", "tests", "tools", "samples"];
+
+    // CONV-SETUP-004 AC2 and AC3 (D-210): what configures a rule when a project, props or
+    // targets file declares it, as a property, an item or an item's metadata: a rule's
+    // severity or suppression, a rule set, a further configuration file, whether the
+    // analysers run, a mode or a level for one category of rules, the warning level of
+    // the compiler, of MSBuild and of the SDK, the SDK's warnings on a target framework,
+    // and the restore's audit.
     private static readonly Regex RuleConfiguration = new(
-        @"^(NoWarn|WarningsAsErrors|WarningsNotAsErrors|CodeAnalysisRuleSet|GlobalAnalyzerConfigFiles|EditorConfigFiles|RunAnalyzers\w*|Analysis(Mode\w*|Level\w+))$",
+        @"^(NoWarn|WarningsAsErrors|WarningsNotAsErrors|WarningLevel|MSBuildWarningsAsMessages|MSBuildWarningsNotAsErrors"
+            + @"|EnableNETAnalyzers|CodeAnalysisRuleSet|CodeAnalysisTreatWarningsAsErrors|SuppressTfmSupportBuildWarnings"
+            + @"|CheckEolTargetFramework|NuGetAudit(Mode|Level|Suppress)?|GlobalAnalyzerConfigFiles|EditorConfigFiles"
+            + @"|RunAnalyzers\w*|Analysis(Mode\w*|Level\w+))$",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
@@ -550,6 +592,71 @@ public sealed class LibraryStructureTests
         Assert.Empty(PackageReferences("Janus.Core"));
 
     /// <summary>
+    /// CONV-LAYOUT-001 AC4: every project that targets the solution's framework and takes,
+    /// directly or through another project, a project carrying the framework reference to
+    /// the ASP.NET Core shared framework carries it itself, test projects included, and no
+    /// lockfile resolves as a package an assembly that framework serves.
+    /// </summary>
+    [Fact]
+    public void CONV_LAYOUT_001_AC4_EveryProjectTakingTheSharedFrameworkCarriesIt()
+    {
+        string[] roots = [.. Roots, "tests"];
+        var projects = roots
+            .SelectMany(root => Directory.EnumerateFiles(
+                Path.Combine(Repository.Root, root),
+                "*.csproj",
+                SearchOption.AllDirectories))
+            .Where(file => !IsBuildOutput(file))
+            .ToDictionary(
+                file => Path.GetFileNameWithoutExtension(file),
+                file => XDocument.Parse(File.ReadAllText(file)),
+                StringComparer.Ordinal);
+
+        bool Carries(string project) => projects[project]
+            .Descendants("FrameworkReference")
+            .Any(reference => reference.Attribute("Include")!.Value == "Microsoft.AspNetCore.App");
+
+        bool Takes(string project) => projects[project]
+            .Descendants("ProjectReference")
+            .Where(reference => reference.Attribute("OutputItemType") is null)
+            .Select(reference => Referenced(reference.Attribute("Include")!.Value))
+            .Any(referenced => Carries(referenced) || Takes(referenced));
+
+        string[] taking =
+        [
+            .. projects.Keys
+                .Where(project => !projects[project].Descendants("TargetFramework").Any())
+                .Where(Takes)
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Assert.Contains("Janus.Core.Tests", taking);
+        Assert.All(taking, project => Assert.True(Carries(project), project));
+
+        var served = Directory
+            .EnumerateFiles(Path.GetDirectoryName(typeof(HttpContext).Assembly.Location)!, "*.dll")
+            .Select(Path.GetFileNameWithoutExtension)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains("System.Security.Cryptography.Xml", served);
+
+        foreach (string lockfile in roots.SelectMany(root => Directory.EnumerateFiles(
+            Path.Combine(Repository.Root, root),
+            "packages.lock.json",
+            SearchOption.AllDirectories)))
+        {
+            using var locked = JsonDocument.Parse(File.ReadAllText(lockfile));
+
+            foreach (JsonProperty framework in locked.RootElement.GetProperty("dependencies").EnumerateObject())
+            {
+                Assert.All(
+                    framework.Value.EnumerateObject(),
+                    package => Assert.DoesNotContain(package.Name, served));
+            }
+        }
+    }
+
+    /// <summary>
     /// LIB-PKG-001 AC2: no area reaches into another area.
     /// </summary>
     [Fact]
@@ -608,6 +715,130 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// LIB-API-002 AC2: the conformance suite's sample takes its schema from
+    /// <c>migrate</c>. It references the conformance package, the command-line
+    /// application it runs and the testing package whose software passkey enrols its
+    /// first administrator (D-206), no test project's fixture, and nothing in it
+    /// applies a migration itself.
+    /// </summary>
+    [Fact]
+    public void LIB_API_002_AC2_TheConformanceSampleTakesItsSchemaFromMigrate()
+    {
+        string folder = Path.Combine("tests", Sample);
+
+        Assert.Equal(
+            ["Janus.Cli", "Janus.Conformance", "Janus.Testing"],
+            XDocument
+                .Parse(Repository.ReadText(Path.Combine(folder, Sample + ".csproj")))
+                .Descendants("ProjectReference")
+                .Where(reference => reference.Attribute("OutputItemType") is null)
+                .Select(reference => Referenced(reference.Attribute("Include")!.Value))
+                .Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(
+            Directory.EnumerateFiles(Path.Combine(Repository.Root, folder), "*.cs", SearchOption.AllDirectories)
+                .Where(file => !IsBuildOutput(file)),
+            file => Regex.IsMatch(
+                File.ReadAllText(file),
+                @"\b(DatabaseFixture|MigrateAsync|IMigrator)\b|\.Database\.Migrate\b",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(5)));
+        Assert.Contains(
+            "await RunAsync([\"migrate\"]",
+            Repository.ReadText(Path.Combine(folder, "SampleHost.cs")),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// LIB-API-002 AC2: the conformance suite's sample takes its configuration through
+    /// the library's operations: it writes nothing into the library-owned settings and
+    /// changes <c>policy.default</c> at <c>PUT /admin/config/{key}</c>, as its first
+    /// administrator (D-206).
+    /// </summary>
+    [Fact]
+    public void LIB_API_002_AC2_TheConformanceSampleChangesPolicyDefaultAtTheConfigurationEndpoint()
+    {
+        string sample = Repository.ReadText(Path.Combine("tests", Sample, "SampleHost.cs"));
+
+        Assert.DoesNotContain("identity.settings", sample, StringComparison.Ordinal);
+        Assert.Contains("\"admin/config/\" + Settings.PolicyDefault.Key", sample, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// LIB-TEST-004 AC3: the sample host is a solution of its own beside the library's,
+    /// and no project of it references a project of the library's solution: each
+    /// reference it holds is to a project of its own solution, under its own folder, and
+    /// the library reaches it only as packages.
+    /// </summary>
+    [Fact]
+    public void LIB_TEST_004_AC3_TheSampleHostReferencesNoProjectOfTheLibrarysSolution()
+    {
+        string samples = Path.Combine(Repository.Root, "samples") + Path.DirectorySeparatorChar;
+        string[] library = SolutionProjects("Janus.slnx");
+        string[] sample = SolutionProjects(Path.Combine("samples", "HostSample.slnx"));
+
+        Assert.Equal(
+            ["HostSample", "HostSample.Tests"],
+            sample.Select(Path.GetFileNameWithoutExtension).Order(StringComparer.Ordinal));
+        Assert.Empty(sample.Intersect(library, StringComparer.Ordinal));
+
+        foreach (string project in sample)
+        {
+            string[] referenced =
+            [
+                .. XDocument
+                    .Parse(File.ReadAllText(project))
+                    .Descendants("ProjectReference")
+                    .Select(reference => Path.GetFullPath(Path.Combine(
+                        Path.GetDirectoryName(project)!,
+                        reference.Attribute("Include")!.Value.Replace('\\', '/')))),
+            ];
+
+            Assert.All(referenced, reference => Assert.StartsWith(samples, reference, StringComparison.Ordinal));
+            Assert.All(referenced, reference => Assert.Contains(reference, sample));
+            Assert.Empty(referenced.Intersect(library, StringComparer.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// CONV-LAYOUT-001 (D-207): the sample host's projects take the library's settings
+    /// from the root's file, which the sample's own imports, without a lockfile and
+    /// without a MinVer reference, and none of the sample's build files references the
+    /// public surface analysers or the library's analysers.
+    /// </summary>
+    [Fact]
+    public void CONV_LAYOUT_001_TheSampleHostTakesTheLibrarysSettingsWithoutALockfileOrMinVer()
+    {
+        var settings = XDocument.Parse(Repository.ReadText(Path.Combine("samples", "Directory.Build.props")));
+        string[] files =
+        [
+            Path.Combine(Repository.Root, "samples", "Directory.Build.props"),
+            Path.Combine(Repository.Root, "samples", "Directory.Packages.props"),
+            .. SolutionProjects(Path.Combine("samples", "HostSample.slnx")),
+        ];
+
+        Assert.Equal(
+            ["$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"],
+            settings.Descendants("Import").Select(import => import.Attribute("Project")!.Value));
+        Assert.Equal(
+            ["false"],
+            settings.Descendants("RestorePackagesWithLockFile").Select(property => property.Value));
+        Assert.Equal(
+            ["MinVer"],
+            settings.Descendants("PackageReference").Select(reference => reference.Attribute("Remove")!.Value));
+
+        foreach (string file in files)
+        {
+            Assert.DoesNotContain(
+                XDocument.Parse(File.ReadAllText(file)).Descendants(),
+                element => element.Name.LocalName is "PackageReference" or "PackageVersion" or "ProjectReference"
+                    && element.Attribute("Include")?.Value is string include
+                    && (include.Contains("PublicApiAnalyzers", StringComparison.Ordinal)
+                        || include.Contains("Janus.Analyzers", StringComparison.Ordinal)
+                        || string.Equals(include, "MinVer", StringComparison.Ordinal)));
+        }
+    }
+
+    /// <summary>
     /// CONV-TEST-001 AC2: no project grants its internals to the project that holds
     /// the consumer sample.
     /// </summary>
@@ -657,16 +888,21 @@ public sealed class LibraryStructureTests
     /// hand-written query can never run outside the operation's transaction. The one
     /// other connection is the one that listens for registration signals, a
     /// listen/notify use of OPS-DATA-003: it runs no query, holds no operation's
-    /// transaction, and nothing above the port it implements reaches it.
+    /// transaction, and nothing above the port it implements reaches it. Outside the
+    /// storage project, only <c>UseUnitOfWorkAsync</c> touches a context's connection,
+    /// reading the host's to judge it and handing it the accessor's (D-206).
     /// </summary>
     [Fact]
-    public void OPS_DATA_002_AC2_OnlyTheAccessorAndTheListenerRetrieveAConnection() =>
+    public void OPS_DATA_002_AC2_OnlyTheAccessorTheListenerAndTheHostsJoinTouchAConnection() =>
         Assert.Equal(
-            ["DataConnections.cs", "RegistrationSignals.cs"],
+            [
+                "src/Janus.Hosting/UnitOfWorkJoin.cs",
+                "src/Janus.Storage/Authentication/Registration/RegistrationSignals.cs",
+                "src/Janus.Storage/DataConnections.cs",
+            ],
             Sources()
                 .Where(file => DirectConnection.IsMatch(File.ReadAllText(file)))
-                .Select(Path.GetFileName)
-                .Select(name => name!)
+                .Select(file => Path.GetRelativePath(Repository.Root, file).Replace('\\', '/'))
                 .Order(StringComparer.Ordinal));
 
     /// <summary>
@@ -734,8 +970,9 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC4: the field cipher is reached from a port implementation and
-    /// from nowhere else, so no caller above the port holds a personal field's
+    /// CONV-DESIGN-003 AC4: the field cipher is reached from a port implementation and,
+    /// for a host's own fields, from the implementation of IPersonalFields, and from
+    /// nowhere else, so no caller above the port holds a personal field's
     /// ciphertext and no caller below it holds the plaintext.
     /// </summary>
     [Fact]
@@ -947,12 +1184,21 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-SETUP-001 AC1: no project file sets a target framework or any inherited
-    /// property, except the analyser project, which must target netstandard2.0.
+    /// property, except the analyser project, which must target netstandard2.0, the
+    /// sample host's projects among them (D-207).
     /// </summary>
     [Fact]
     public void CONV_SETUP_001_AC1_NoProjectOverridesTheInheritedProperties()
     {
-        foreach (string project in Projects().Where(project => !IsTheAnalyserProject(project)))
+        string[] projects =
+        [
+            .. Projects().Where(project => !IsTheAnalyserProject(project)),
+            .. SolutionProjects(Path.Combine("samples", "HostSample.slnx")),
+        ];
+
+        Assert.Contains(projects, project => Path.GetFileNameWithoutExtension(project) is "HostSample.Tests");
+
+        foreach (string project in projects)
         {
             Assert.Empty(XDocument
                 .Parse(File.ReadAllText(project))
@@ -960,6 +1206,62 @@ public sealed class LibraryStructureTests
                 .Elements()
                 .Select(element => element.Name.LocalName)
                 .Intersect(InheritedProperties, StringComparer.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// CONV-SETUP-001 AC2 (D-210): a warning MSBuild raises itself, from the Warning task
+    /// of a probe that takes the settings of Directory.Build.props, fails the probe's
+    /// build, as the compiler's, the analysers' and NuGet's do.
+    /// </summary>
+    [Fact]
+    public async Task CONV_SETUP_001_AC2_AWarningMSBuildRaisesFailsTheBuildAsync()
+    {
+        const string code = "PROBE001";
+
+        string folder = Path.Combine(Path.GetTempPath(), "probe-" + Guid.NewGuid().ToString("N"));
+        string probe = Path.Combine(folder, "probe.proj");
+
+        Directory.CreateDirectory(folder);
+
+        try
+        {
+            new XDocument(new XElement(
+                "Project",
+                new XElement("Import", new XAttribute("Project", Path.Combine(Repository.Root, "Directory.Build.props"))),
+                new XElement(
+                    "Target",
+                    new XAttribute("Name", "Probe"),
+                    new XElement("Warning", new XAttribute("Code", code), new XAttribute("Text", "A warning MSBuild raises.")))))
+                .Save(probe);
+
+            var start = new ProcessStartInfo(Dotnet())
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                WorkingDirectory = folder,
+            };
+
+            foreach (string argument in new[] { "msbuild", probe, "-target:Probe", "-nologo" })
+            {
+                start.ArgumentList.Add(argument);
+            }
+
+            using Process build = Process.Start(start)
+                ?? throw new InvalidOperationException("The probe's build did not start.");
+
+            Task<string> output = build.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+            Task<string> error = build.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+
+            await build.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+            Assert.NotEqual(0, build.ExitCode);
+            Assert.Contains("error " + code, await output + await error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
         }
     }
 
@@ -985,12 +1287,24 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-SETUP-002 AC1: no project file carries a package version.
+    /// CONV-SETUP-002 AC1: no project file of either solution carries a package version:
+    /// the library's, its tests and generators included, and the sample host's.
     /// </summary>
     [Fact]
     public void CONV_SETUP_002_AC1_NoProjectFileCarriesAPackageVersion()
     {
-        foreach (string project in Projects())
+        string[] projects =
+        [
+            .. ProjectRoots
+                .Select(root => Path.Combine(Repository.Root, root))
+                .Where(Directory.Exists)
+                .SelectMany(root => Directory.EnumerateFiles(root, "*.csproj", SearchOption.AllDirectories))
+                .Where(file => !IsBuildOutput(file)),
+        ];
+
+        Assert.Contains(projects, project => project.Contains(Path.DirectorySeparatorChar + "tests" + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+
+        foreach (string project in projects)
         {
             Assert.DoesNotContain(
                 XDocument.Parse(File.ReadAllText(project)).Descendants("PackageReference"),
@@ -999,8 +1313,10 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-SETUP-004 AC2: the .editorconfig at the root is the one file that configures
-    /// a rule, and no project, props or targets file configures one beside it.
+    /// CONV-SETUP-004 AC2 and AC3 (D-210): the .editorconfig at the root is the one file
+    /// that configures a rule, and no project, props or targets file configures one beside
+    /// it or sets a rule below error, a setting of CONV-SETUP-001 set anywhere but
+    /// Directory.Build.props among them.
     /// </summary>
     [Fact]
     public void CONV_SETUP_004_AC2_TheEditorconfigIsTheOnlyPlaceARuleIsConfigured()
@@ -1012,33 +1328,75 @@ public sealed class LibraryStructureTests
                 .Select(file => Path.GetRelativePath(Repository.Root, file)),
         ];
         IEnumerable<string> configuring = BuildFiles()
-            .Where(file => XDocument
-                .Parse(File.ReadAllText(file))
-                .Descendants()
-                .SelectMany(element => element
-                    .Attributes()
-                    .Select(attribute => attribute.Name.LocalName)
-                    .Prepend(element.Name.LocalName))
-                .Any(RuleConfiguration.IsMatch));
+            .Where(file => ConfiguresARule(
+                Path.GetRelativePath(Repository.Root, file).Replace('\\', '/'),
+                File.ReadAllText(file)));
 
         Assert.Equal([".editorconfig"], configurations);
         Assert.Empty(configuring);
     }
 
     /// <summary>
+    /// CONV-SETUP-004 AC3 (D-210): each setting the paragraph refuses, set in a project,
+    /// props or targets file, is found by the scan of the build files: a property, an
+    /// item or a reference's metadata that turns warnings off, lowers them or keeps them
+    /// from failing the build, and a setting of CONV-SETUP-001 set anywhere but
+    /// Directory.Build.props.
+    /// </summary>
+    /// <param name="file">The file's path from the root.</param>
+    /// <param name="text">The file's text.</param>
+    [Theory]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><NoWarn>CA2000</NoWarn></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><WarningsNotAsErrors>CA2000</WarningsNotAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><WarningLevel>0</WarningLevel></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><MSBuildWarningsNotAsErrors>MSB3277</MSBuildWarningsNotAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><RunAnalyzers>false</RunAnalyzers></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><EnableNETAnalyzers>false</EnableNETAnalyzers></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><CodeAnalysisRuleSet>rules.ruleset</CodeAnalysisRuleSet></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><CodeAnalysisTreatWarningsAsErrors>false</CodeAnalysisTreatWarningsAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><CheckEolTargetFramework>false</CheckEolTargetFramework></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><AnalysisMode>Minimum</AnalysisMode></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><AnalysisLevelSecurity>none</AnalysisLevelSecurity></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><AnalysisModeSecurity>None</AnalysisModeSecurity></PropertyGroup></Project>")]
+    [InlineData("Directory.Build.props", "<Project><PropertyGroup><NuGetAudit>false</NuGetAudit></PropertyGroup></Project>")]
+    [InlineData("Directory.Build.props", "<Project><PropertyGroup><NuGetAuditMode>direct</NuGetAuditMode></PropertyGroup></Project>")]
+    [InlineData("Directory.Build.props", "<Project><PropertyGroup><NuGetAuditLevel>critical</NuGetAuditLevel></PropertyGroup></Project>")]
+    [InlineData("Directory.Build.props", "<Project><ItemGroup><NuGetAuditSuppress Include='https://github.com/advisories/GHSA-0000-0000-0000' /></ItemGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><ItemGroup><PackageReference Include='MinVer' NoWarn='NU1608' /></ItemGroup></Project>")]
+    [InlineData("tests/Janus.Core.Tests/Janus.Core.Tests.csproj", "<Project><ItemGroup><ProjectReference Include='../../src/Janus.Core/Janus.Core.csproj'><NoWarn>NU1608</NoWarn></ProjectReference></ItemGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><ItemGroup><GlobalAnalyzerConfigFiles Include='rules.globalconfig' /></ItemGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><ItemGroup><EditorConfigFiles Include='rules.editorconfig' /></ItemGroup></Project>")]
+    [InlineData("Directory.Build.targets", "<Project><PropertyGroup><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Directory.Build.targets", "<Project><PropertyGroup><MSBuildTreatWarningsAsErrors>false</MSBuildTreatWarningsAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Directory.Build.props", "<Project><PropertyGroup><AnalysisLevel>none</AnalysisLevel></PropertyGroup></Project>")]
+    [InlineData("samples/Directory.Build.props", "<Project><PropertyGroup><EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild></PropertyGroup></Project>")]
+    [InlineData("tests/Directory.Build.props", "<Project><PropertyGroup><Nullable>disable</Nullable></PropertyGroup></Project>")]
+    [InlineData("tools/Directory.Build.props", "<Project><PropertyGroup><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><Target Name='Late'><PropertyGroup><Deterministic>false</Deterministic></PropertyGroup></Target></Project>")]
+    [InlineData("samples/HostSample/HostSample.csproj", "<Project><PropertyGroup><GenerateDocumentationFile>false</GenerateDocumentationFile></PropertyGroup></Project>")]
+    public void CONV_SETUP_004_AC3_ASettingThatSetsARuleBelowErrorIsFoundInAnyBuildFile(string file, string text) =>
+        Assert.True(ConfiguresARule(file, text));
+
+    /// <summary>
     /// CONV-SETUP-004 AC3, the configuration: the .editorconfig sets below error the five
-    /// rules of the table, each where the table scopes it, and no other rule.
+    /// rules of the table, each where the table scopes it, the sample host's project among
+    /// the source projects and its test project among the test projects (D-207), and no
+    /// other rule.
     /// </summary>
     [Fact]
     public void CONV_SETUP_004_AC3_NoRuleButTheFiveOfTheTableIsSetBelowError() =>
         Assert.Equal(
             [
                 "*.cs CA1062 none",
-                "src/**.cs CA1812 none",
-                "src/{Janus.Core,Janus.Hosting,Janus.Conformance}/**.cs CA1515 none",
-                "{tests,src/Janus.Hosting,src/Janus.Cli}/**.cs CA2007 none",
-                "tests/**.cs CA1707 none",
-                "tests/**.cs CA1515 none",
+                "{src,samples/HostSample}/**.cs CA1812 none",
+                "src/{Janus.Core,Janus.Hosting,Janus.Conformance,Janus.Testing}/**.cs CA1515 none",
+                "{tests,samples/HostSample.Tests,src/Janus.Hosting,src/Janus.Cli}/**.cs CA2007 none",
+                "{tests,samples/HostSample.Tests}/**.cs CA1707 none",
+                "{tests,samples/HostSample.Tests}/**.cs CA1515 none",
             ],
             BelowError(Repository.ReadText(".editorconfig")));
 
@@ -1099,8 +1457,9 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-DESIGN-008 AC1: the set of package identifiers the build may resolve is
-    /// exactly the table's.
+    /// CONV-DESIGN-008 AC1: the set of direct package references is exactly the table's
+    /// identifiers, less the packages it names only as ones another package brings
+    /// (D-206).
     /// </summary>
     [Fact]
     public void CONV_DESIGN_008_AC1_ThePackageSetIsExactlyTheAllowList()
@@ -1112,7 +1471,57 @@ public sealed class LibraryStructureTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.Equal(AllowedPackages, declared);
+        Assert.Subset(TablePackages.ToHashSet(StringComparer.Ordinal), BroughtPackages.ToHashSet(StringComparer.Ordinal));
+        Assert.Equal(TablePackages.Except(BroughtPackages, StringComparer.Ordinal).Order(StringComparer.Ordinal), declared);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-008 AC1 (D-206): the testing package references no package for
+    /// <c>System.Formats.Cbor</c>, which the ASP.NET Core shared framework serves, and
+    /// takes it from that framework through its framework reference, so no lockfile holds
+    /// it and no project references a package the table names only as one another brings.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_008_AC1_TheTestingPackageTakesCborFromTheSharedFramework()
+    {
+        const string cbor = "System.Formats.Cbor";
+
+        string[] roots = [.. Roots, "tests"];
+        var served = Directory
+            .EnumerateFiles(Path.GetDirectoryName(typeof(HttpContext).Assembly.Location)!, "*.dll")
+            .Select(Path.GetFileNameWithoutExtension)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains(cbor, served);
+        Assert.Contains(
+            XDocument.Parse(File.ReadAllText(Project("Janus.Testing"))).Descendants("FrameworkReference"),
+            reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.AspNetCore.App", StringComparison.Ordinal));
+        Assert.All(
+            roots
+                .SelectMany(root => Directory.EnumerateFiles(
+                    Path.Combine(Repository.Root, root),
+                    "*.csproj",
+                    SearchOption.AllDirectories))
+                .Where(file => !IsBuildOutput(file)),
+            project => Assert.Empty(XDocument
+                .Parse(File.ReadAllText(project))
+                .Descendants("PackageReference")
+                .Select(reference => reference.Attribute("Include")!.Value)
+                .Intersect(BroughtPackages, StringComparer.Ordinal)));
+
+        foreach (string lockfile in roots.SelectMany(root => Directory.EnumerateFiles(
+            Path.Combine(Repository.Root, root),
+            "packages.lock.json",
+            SearchOption.AllDirectories)))
+        {
+            using var locked = JsonDocument.Parse(File.ReadAllText(lockfile));
+
+            Assert.All(
+                locked.RootElement.GetProperty("dependencies").EnumerateObject(),
+                framework => Assert.DoesNotContain(
+                    framework.Value.EnumerateObject(),
+                    package => string.Equals(package.Name, cbor, StringComparison.OrdinalIgnoreCase)));
+        }
     }
 
     /// <summary>
@@ -1139,7 +1548,8 @@ public sealed class LibraryStructureTests
     /// CONV-DESIGN-008 AC3: the core, relational and design packages carry one version,
     /// the tool manifest gives dotnet-ef that version, and every lockfile resolves each
     /// of the three at it, so no build has two versions of one of their assemblies to
-    /// choose between. Storage alone references the relational package.
+    /// choose between. Storage references the relational package, and Janus.Hosting for the
+    /// main package's dependencies (CONV-LAYOUT-001, D-205).
     /// </summary>
     [Fact]
     public void CONV_DESIGN_008_AC3_TheRelationalAccessPackagesAndTheirToolCarryOneVersion()
@@ -1182,14 +1592,18 @@ public sealed class LibraryStructureTests
             }
         }
 
-        string referencing = Assert.Single(
-            Projects(),
-            project => XDocument
-                .Parse(File.ReadAllText(project))
-                .Descendants("PackageReference")
-                .Any(reference => reference.Attribute("Include")!.Value == "Microsoft.EntityFrameworkCore.Relational"));
+        string[] referencing =
+        [
+            .. Projects()
+                .Where(project => XDocument
+                    .Parse(File.ReadAllText(project))
+                    .Descendants("PackageReference")
+                    .Any(reference => reference.Attribute("Include")!.Value == "Microsoft.EntityFrameworkCore.Relational"))
+                .Select(project => Path.GetFileName(project))
+                .Order(StringComparer.Ordinal),
+        ];
 
-        Assert.Equal("Janus.Storage.csproj", Path.GetFileName(referencing));
+        Assert.Equal(["Janus.Hosting.csproj", "Janus.Storage.csproj"], referencing);
     }
 
     /// <summary>
@@ -1391,6 +1805,21 @@ public sealed class LibraryStructureTests
                 || name.StartsWith(tool + ".", StringComparison.Ordinal)));
     }
 
+    // LIB-TEST-004 AC3: the full path of each project a solution file names, read
+    // against the folder the solution file is in.
+    private static string[] SolutionProjects(string solution)
+    {
+        string folder = Path.GetDirectoryName(Path.Combine(Repository.Root, solution))!;
+
+        return
+        [
+            .. XDocument
+                .Parse(Repository.ReadText(solution))
+                .Descendants("Project")
+                .Select(project => Path.GetFullPath(Path.Combine(folder, project.Attribute("Path")!.Value))),
+        ];
+    }
+
     /// <summary>
     /// The project a reference names. A project file writes its includes with the
     /// separator of the machine that wrote them, which is not the separator of the
@@ -1399,6 +1828,11 @@ public sealed class LibraryStructureTests
     private static string Referenced(string include) =>
         Path.GetFileNameWithoutExtension(include.Replace('\\', '/'));
 
+    // The host the tests run under where the platform names it, and the one on the path
+    // otherwise.
+    private static string Dotnet() =>
+        Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } named ? named : "dotnet";
+
     private static bool IsTheAnalyserProject(string project) =>
         string.Equals(Path.GetFileNameWithoutExtension(project), "Janus.Analyzers", StringComparison.Ordinal);
 
@@ -1406,10 +1840,12 @@ public sealed class LibraryStructureTests
         Roots.SelectMany(root =>
             Directory.EnumerateFiles(Path.Combine(Repository.Root, root), "*.csproj", SearchOption.AllDirectories));
 
-    // The cipher itself and the port implementations that run it. A store is named for
-    // what it stores, so the suffix is the whole rule.
+    // The cipher itself, the port implementations that run it, and the implementation of
+    // IPersonalFields that runs it over a host's own fields (D-203). A store is named for
+    // what it stores, so the suffix is the whole rule for the ports.
     private static bool IsCipherOrStore(string file) =>
         Path.GetFileName(file) is "PersonalFieldCipher.cs" or "PersonalFieldLocation.cs"
+            or "PersonalFields.cs" or "LentFields.cs"
             || Path.GetFileNameWithoutExtension(file).EndsWith("Store", StringComparison.Ordinal);
 
     private static IEnumerable<string> SourcesOf(string[] projects) =>
@@ -1715,6 +2151,25 @@ public sealed class LibraryStructureTests
     private static IEnumerable<string> BuildFiles() =>
         BuildTree().Where(file => Path.GetExtension(file) is ".csproj" or ".props" or ".targets");
 
+    // CONV-SETUP-004 AC2 and AC3 (D-210): whether a project, props or targets file, given
+    // by its path from the root with forward slashes, configures a rule or sets one below
+    // error: through a property, an item or an item's metadata RuleConfiguration names,
+    // or, outside the root's Directory.Build.props, through a setting of CONV-SETUP-001.
+    private static bool ConfiguresARule(string file, string text)
+    {
+        XElement[] elements = [.. XDocument.Parse(text).Descendants()];
+
+        return elements
+                .SelectMany(element => element
+                    .Attributes()
+                    .Select(attribute => attribute.Name.LocalName)
+                    .Prepend(element.Name.LocalName))
+                .Any(RuleConfiguration.IsMatch)
+            || (!string.Equals(file, "Directory.Build.props", StringComparison.Ordinal)
+                && elements.Any(element => element.Parent?.Name.LocalName is "PropertyGroup"
+                    && BuildSettings.Contains(element.Name.LocalName, StringComparer.Ordinal)));
+    }
+
     // What an .editorconfig sets below error, each as its section, the rule and the
     // severity, in the order the file sets them.
     private static string[] BelowError(string configuration)
@@ -1867,10 +2322,12 @@ public sealed class LibraryStructureTests
         // The generator of CONV-LAYOUT-001 is not a source project: it lives outside the
         // package and the gate that regenerates its output is what covers it. The
         // conformance package's test project holds the sample host, which reads no
-        // internal type (LIB-API-002 AC2), so that one grant is not made.
+        // internal type (LIB-API-002 AC2), and the testing package is built only on the
+        // public surface (LIB-TEST-003 AC2), so neither of those grants is made.
         if (!string.Equals(project, "Janus.Core", StringComparison.Ordinal)
             && IsLibrary(project)
-            && !string.Equals(project + ".Tests", Sample, StringComparison.Ordinal))
+            && !string.Equals(project + ".Tests", Sample, StringComparison.Ordinal)
+            && !string.Equals(project, "Janus.Testing", StringComparison.Ordinal))
         {
             permitted.Add(project + ".Tests");
         }

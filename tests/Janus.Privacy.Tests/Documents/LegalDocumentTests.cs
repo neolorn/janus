@@ -8,6 +8,7 @@ using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Tests.Consents;
+using Janus.Privacy.Tests.Outbox;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Documents;
@@ -35,6 +36,7 @@ public sealed class LegalDocumentTests : IAsyncDisposable
     private readonly LegalDocumentStoreInMemory _store = new();
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly PrivacyAlertsInMemory _alerts = new();
+    private readonly DeploymentCookiesInMemory _cookies = new();
     private readonly ConsentStoreInMemory _consents = new();
     private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
@@ -54,10 +56,11 @@ public sealed class LegalDocumentTests : IAsyncDisposable
         new LegalDocumentService(
             _store,
             new AdministrativeScope(_gate, _administrative),
-            new Supersession(_consents, Declaration.Processing, _events),
+            new Supersession(_consents, Declaration.Processing, _events, new OutboxStoreInMemory()),
             _configuration,
             _audit,
             _alerts,
+            _cookies,
             _work,
             _clock);
 
@@ -396,6 +399,76 @@ public sealed class LegalDocumentTests : IAsyncDisposable
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
         Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a AC1 (D-203): a version of the privacy notice keeps the cookies the
+    /// deployment sets when it is published, and an earlier version keeps those it was
+    /// published with whatever the deployment sets since.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_006a_AC1_ANoticeVersionKeepsTheCookiesSetWhenItWasPublishedAsync()
+    {
+        Permit();
+
+        NoticeCookie session = new("__Host-identity-session", null, TimeSpan.FromDays(365), false);
+        NoticeCookie picks = new("host-picks", "recommendations", TimeSpan.FromDays(90), true);
+
+        _cookies.Set = [session];
+
+        DocumentVersion first = await PublishAsync(
+            new DocumentPublication(Notice, "النص الأول", "ar", [], Material: false));
+
+        _cookies.Set = [session with { Lifetime = TimeSpan.FromDays(30) }, picks];
+
+        DocumentVersion second = await PublishAsync(
+            new DocumentPublication(Notice, "النص الثاني", "ar", [], Material: false));
+
+        Assert.Equal([session], first.Cookies);
+        Assert.Equal([session], Read(await Documents.ReadAsync(Notice, "1", CancellationToken.None)).Cookies);
+        Assert.Equal([session with { Lifetime = TimeSpan.FromDays(30) }, picks], second.Cookies);
+        Assert.Equal(second.Cookies, (await CurrentAsync()).Cookies);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a (D-203): the cookies belong to the privacy notice, so a version of
+    /// another document keeps none and the cookies are not read for it.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_006a_AVersionOfAnotherDocumentKeepsNoCookiesAsync()
+    {
+        Permit();
+
+        _cookies.Set = [new NoticeCookie("__Host-identity-preauth", null, null, false)];
+
+        DocumentVersion published = await PublishAsync(
+            new DocumentPublication(DocumentName.Parse("terms"), "النص", "ar", [], Material: false));
+
+        Assert.Empty(published.Cookies);
+        Assert.Equal(0, _cookies.Reads);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a (D-203): a notice whose cookies cannot be read is not published
+    /// without them; nothing is written and no unit of work begins.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_006a_ANoticeIsNotPublishedWithoutItsCookiesAsync()
+    {
+        Permit();
+
+        _cookies.Failure = Error.From(ErrorCodes.SystemFault);
+
+        Result<DocumentVersion> refused = await Documents.PublishAsync(
+            Acting,
+            new DocumentPublication(Notice, "النص", "ar", [], Material: false),
+            CancellationToken.None);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            refused.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_store.Versions);
+        Assert.Equal(0, _work.Opened);
     }
 
     /// <summary>

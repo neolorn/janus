@@ -982,6 +982,13 @@ public static class ErrorCodes
     public static ErrorCode PolicyUnregistered { get; } = ErrorCode.Parse("authz.policy.unregistered");
 
     /// <summary>
+    /// A record is registered inside the one whose registration is being removed.
+    /// Remove its contents first.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-INHERIT-002 (D-203), chapter 10 section 1.3.</remarks>
+    public static ErrorCode ResourceInUse { get; } = ErrorCode.Parse("authz.resource.inuse");
+
+    /// <summary>
     /// No such record, or one the caller may not see on a type that conceals its
     /// records; the answer is the same for both. Name a record that exists and that
     /// the caller holds a permission on.
@@ -1000,6 +1007,19 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTHZ-GATE-006, chapter 10 section 1.3.</remarks>
     public static ErrorCode Restricted { get; } = ErrorCode.Parse("authz.restricted");
+
+    /// <summary>
+    /// The actor may not hand out a role the change touches, or a role change reaches
+    /// beyond what the actor may give or hand out. Ask someone who may hand the role out.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-005, D-212.</remarks>
+    public static ErrorCode RoleNotAssignable { get; } = ErrorCode.Parse("authz.role.notassignable");
+
+    /// <summary>
+    /// The change would widen the actor's own access. Ask someone else to make it.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-005, D-212.</remarks>
+    public static ErrorCode GrantSelf { get; } = ErrorCode.Parse("authz.grant.self");
 
     /// <summary>
     /// A grant or a derivation still names the role, so removing it would take away
@@ -1183,6 +1203,14 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements PRIV-RIGHT-002, chapter 10 section 1.4.</remarks>
     public static ErrorCode RequestReceivedFuture { get; } = ErrorCode.Parse("privacy.request.receivedfuture");
+
+    /// <summary>
+    /// A host's field was to be encrypted or read for a subject whose key has been
+    /// erased. No personal data is written or read for a person who has been erased;
+    /// leave the field as it stands.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-005a, chapter 10 section 1.4.</remarks>
+    public static ErrorCode SubjectErased { get; } = ErrorCode.Parse("privacy.subject.erased");
 
     /// <summary>
     /// The request could not be read: its body is not the shape the endpoint takes, or

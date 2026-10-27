@@ -10,8 +10,9 @@ namespace Janus.Hosting.Authorization;
 /// </summary>
 /// <param name="Name">The role's name.</param>
 /// <param name="Permissions">What holding it permits.</param>
-/// <remarks>Implements chapter 09 section 8 and AUTHZ-GRANT-004.</remarks>
-internal sealed record RoleView(string Name, IReadOnlyList<string> Permissions)
+/// <param name="HandsOut">The roles its holders may hand out.</param>
+/// <remarks>Implements chapter 09 section 8, AUTHZ-GRANT-004 and AUTHZ-GRANT-005.</remarks>
+internal sealed record RoleView(string Name, IReadOnlyList<string> Permissions, IReadOnlyList<string> HandsOut)
 {
     /// <summary>
     /// The view of one role.
@@ -25,6 +26,7 @@ internal sealed record RoleView(string Name, IReadOnlyList<string> Permissions)
 
         return new RoleView(
             role.Name.ToString(),
-            [.. role.Permissions.Select(permission => permission.ToString())]);
+            [.. role.Permissions.Select(permission => permission.ToString())],
+            [.. role.HandsOut.Select(handed => handed.ToString())]);
     }
 }

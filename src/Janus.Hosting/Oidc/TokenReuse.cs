@@ -12,19 +12,18 @@ namespace Janus.Hosting.Oidc;
 /// What happens when a refresh token is presented after it has already been used.
 /// </summary>
 /// <param name="oidc">Where the session family is ended and the reuse recorded.</param>
-/// <param name="tokens">Where the row behind the presented token is read and revoked.</param>
-/// <param name="authorizations">Where the grant it was issued under is revoked.</param>
+/// <param name="tokens">Where the row behind the presented token is read.</param>
 /// <remarks>
-/// Implements AUTH-OIDC-003 AC1 and AC2. A token presented twice means a copy is in
+/// Implements AUTH-OIDC-003 AC1, AC2 and AC4. A token presented twice means a copy is in
 /// someone's hands and there is no telling whose, so everything that stands on the
 /// session record goes: the grant, every token issued under it, and the sessions
-/// derived from the record. The refusal is issued here rather than left to the stage
-/// after it, so nothing can be issued on the strength of a token already spent.
+/// derived from the record, together in one unit of work (D-207). Whatever the token
+/// carries, it takes that one path: a token naming no session record or no account, or
+/// issued under no grant, loses what of its family it names (D-208). The refusal is
+/// issued here rather than left to the stage after it, so nothing can be issued on the
+/// strength of a token already spent.
 /// </remarks>
-internal sealed class TokenReuse(
-    OidcService oidc,
-    IOpenIddictTokenManager tokens,
-    IOpenIddictAuthorizationManager authorizations)
+internal sealed class TokenReuse(OidcService oidc, IOpenIddictTokenManager tokens)
     : IOpenIddictServerHandler<OpenIddictServerEvents.ValidateTokenContext>
 {
     /// <summary>
@@ -54,32 +53,24 @@ internal sealed class TokenReuse(
             return;
         }
 
-        if (presented.GetAuthorizationId() is string grant)
-        {
-            _ = await tokens.RevokeByAuthorizationIdAsync(grant, context.CancellationToken)
-                .ConfigureAwait(false);
+        SubjectId? subject = presented.GetClaim(OpenIddictConstants.Claims.Subject) is string account
+            && Guid.TryParse(account, out Guid named)
+                ? new SubjectId(named)
+                : null;
 
-            if (await authorizations.FindByIdAsync(grant, context.CancellationToken)
-                .ConfigureAwait(false) is object issued)
-            {
-                _ = await authorizations.TryRevokeAsync(issued, context.CancellationToken)
-                    .ConfigureAwait(false);
-            }
-        }
+        SessionId? session = presented.GetClaim(OidcClaimNames.Session) is string record
+            && Guid.TryParse(record, out Guid spine)
+                ? new SessionId(spine)
+                : null;
 
-        if (presented.GetClaim(OidcClaimNames.Session) is string named
-            && Guid.TryParse(named, out Guid session)
-            && presented.GetClaim(OpenIddictConstants.Claims.Subject) is string account
-            && Guid.TryParse(account, out Guid subject))
-        {
-            await oidc
-                .ReuseAsync(
-                    new SubjectId(subject),
-                    new SessionId(session),
-                    context.Request?.ClientId ?? string.Empty,
-                    context.CancellationToken)
-                .ConfigureAwait(false);
-        }
+        await oidc
+            .ReuseAsync(
+                subject,
+                session,
+                context.Request?.ClientId ?? string.Empty,
+                presented.GetAuthorizationId(),
+                context.CancellationToken)
+            .ConfigureAwait(false);
 
         context.Reject(OpenIddictConstants.Errors.InvalidGrant, description: null, uri: null);
     }

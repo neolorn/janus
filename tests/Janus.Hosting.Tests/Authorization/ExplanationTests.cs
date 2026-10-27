@@ -346,6 +346,50 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-CONCEAL-004, AUTHZ-GATE-004 (D-208): the explanation operations' own
+    /// refusals, which refuse no permission asked of the gate (an explanation on a type
+    /// that conceals, the caller's resolution of another's identifier, a support role's
+    /// resolution of an identifier the trail holds no refusal for), are
+    /// <c>authz.denied</c> carrying no refusal record's identifier, and write no refusal
+    /// record.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AnExplanationsOwnRefusalCarriesNoIdentifierAndWritesNoRecordAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync(granted: false);
+        AuditRecordId theirs = await RefusedAsync(deployed, deployed.Note, HostPermissions.ReadNote);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Error[] refusals =
+        [
+            Refusal(await gate.ExplainAsync(
+                AccessContext.Of(deployed.Support),
+                HostPermissions.Read,
+                deployed.Record,
+                Sources(reading),
+                cancellationToken)),
+            Refusal(await gate.ResolveOwnAsync(AccessContext.Of(deployed.Support), theirs, cancellationToken)),
+            Refusal(await gate.ResolveAsync(
+                AccessContext.Of(deployed.Support),
+                AuditRecordId.New(TimeProvider.System),
+                cancellationToken)),
+        ];
+
+        Assert.All(refusals, refusal =>
+        {
+            Assert.Equal(ErrorCodes.Denied, refusal.Code);
+            Assert.Empty(refusal.Details);
+        });
+        Assert.Equal(0, await DenialsOfAsync(deployed.Support));
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-004 AC4, AUTHZ-SCOPE-001: <c>audit:read</c> held in the organization
     /// the refused record sits in, and not in the administrative one, resolves nothing.
     /// </summary>
@@ -570,6 +614,54 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.Equal(
             new ExplainedPrincipal(deployed.Account, deployed.Account, Name: null, Reason: null),
             person.Principal);
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC6, AUTHZ-CONCEAL-004 AC1, OPS-OBS-001 (D-207): a declared job's
+    /// refusals, of a permission its declaration does not name on a record and on its
+    /// organization, and of one it names once its organization's deletion is requested,
+    /// are each recorded as a refusal of background work and resolve to its principal and
+    /// stated reason.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_PRIN_001_AC6_ADeclaredJobsRefusalsAreRecordedNamingItsPrincipalAndReasonAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization(
+            HostFixture.Digest, "the nightly digest", deployed.Deployment.Organization));
+
+        AuditRecordId undeclared = await RefusedAsync(job, deployed.Record, HostPermissions.Retain);
+
+        Error organizationWide;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            organizationWide = (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .RequireAsync(job, HostPermissions.Retain, deployed.Deployment.Organization, TestContext.Current.CancellationToken))
+                .Match(() => throw new InvalidOperationException("The permission was not refused."), error => error);
+        }
+
+        await deployed.Deployment.SuspendAsync(TestContext.Current.CancellationToken);
+
+        AuditRecordId suspended = await RefusedAsync(job, deployed.Record, HostPermissions.Read);
+
+        foreach (AuditRecordId correlation in new[]
+        {
+            undeclared,
+            new AuditRecordId(organizationWide.Details["correlation"].GetGuid()),
+            suspended,
+        })
+        {
+            Assert.Equal(
+                new Identified(Guid.Empty, Guid.Empty, HostFixture.Digest, "the nightly digest"),
+                await IdentifiedAsync(correlation));
+            Assert.Equal(
+                new ExplainedPrincipal(Acting: null, Effective: null, HostFixture.Digest, "the nightly digest"),
+                (await ResolvedAsync(deployed, correlation)).Principal);
+        }
+
+        Assert.Equal(ErrorCodes.Denied, organizationWide.Code);
     }
 
     /// <summary>
@@ -1035,6 +1127,18 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
             "SELECT count(*) FROM identity.audit_records WHERE id = @id AND action = @action;",
             new { id = correlation.Value, action = "authz.access.denied" },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The refusals recorded naming the account as acting, which is what its denial alert
+    // counts (AUTHZ-CONCEAL-004, OPS-ALERT-001).
+    private async Task<int> DenialsOfAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.audit_records WHERE action = @action AND acting_subject = @account;",
+            new { action = "authz.access.denied", account = account.Value },
             cancellationToken: TestContext.Current.CancellationToken));
     }
 

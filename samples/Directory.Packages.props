@@ -1,0 +1,22 @@
+<Project>
+
+  <!-- LIB-TEST-004, CONV-SETUP-002 (D-204): the sample host's own package versions. The
+       library's packages are at the version the gate packed them at and passes as
+       LibraryVersion; every other package is one CONV-DESIGN-008 permits, at the version
+       the library's solution holds it at. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup Label="The library">
+    <PackageVersion Include="Janus.Hosting" Version="$(LibraryVersion)" />
+    <PackageVersion Include="Janus.Testing" Version="$(LibraryVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.4.1" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
+  </ItemGroup>
+
+</Project>

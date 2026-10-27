@@ -27,6 +27,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="gate">What judges whether the inviter may still grant what the invitation carries.</param>
 /// <param name="scope">What judges the inviter's permissions in the administrative organization.</param>
 /// <param name="roles">Where the roles the invitation names are read.</param>
+/// <param name="handOut">Whether an acknowledgement widens the access of the account that issued the invitation.</param>
 /// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="invitations">Where the invitation is read and its acknowledgement recorded.</param>
 /// <param name="directory">Where the organization's standing is read.</param>
@@ -56,6 +57,7 @@ internal sealed class InvitationAcknowledgement(
     IAccessGate gate,
     AdministrativeScope scope,
     IRoleCatalogue roles,
+    IRoleHandOut handOut,
     ISettingsRestriction restriction,
     IInvitationStore invitations,
     IOrganizationDirectory directory,
@@ -113,6 +115,11 @@ internal sealed class InvitationAcknowledgement(
             || invitation.Invitee != invitee)
         {
             return Result.Failure(Error.From(ErrorCodes.InvitationNotFound));
+        }
+
+        if (await OwnRefusedAsync(context, invitation, cancellationToken).ConfigureAwait(false) is Error own)
+        {
+            return Result.Failure(own);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -241,6 +248,15 @@ internal sealed class InvitationAcknowledgement(
 
         invitation = standing;
 
+        // AUTHZ-GATE-006: the rule is judged again inside the unit of work, so an
+        // administration that lapsed since the gate step no longer exempts the issuer.
+        if (await OwnRefusedAsync(context, invitation, cancellationToken).ConfigureAwait(false) is Error exempted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(exempted);
+        }
+
         // REG-SESS-005, REG-INV-001: the corporate address is taken on under its lock, and
         // whether an account holds it, or it is reserved for an undo to another account,
         // is judged under that lock before anything is written.
@@ -260,6 +276,7 @@ internal sealed class InvitationAcknowledgement(
                     invitation.Roles,
                     invitation.Inviter,
                     Reason(invitation.Id),
+                    context,
                     multiple,
                     now,
                     cancellationToken)
@@ -453,6 +470,25 @@ internal sealed class InvitationAcknowledgement(
     // judged against what the inviter holds now, as issuing it was: an inviter who no
     // longer manages the organization's memberships, or no longer may grant a role it
     // names, leaves an invitation that grants nothing.
+    // AUTHZ-GRANT-005, REG-INV-002 (D-212): the account that issued an invitation does
+    // not join on it, save one the rule exempts; the refusal is recorded where the rule
+    // is judged, under the permission the issue was admitted under.
+    private async ValueTask<Error?> OwnRefusedAsync(
+        AccessContext context,
+        Invitation invitation,
+        CancellationToken cancellationToken) =>
+        invitation.Inviter == invitation.Invitee
+            ? await handOut
+                .RefusedAsync(
+                    context,
+                    Permissions.MembershipManage,
+                    invitation.Organization,
+                    [],
+                    [GrantSubject.Of(invitation.Inviter)],
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
     private async ValueTask<bool> InviterLapsedAsync(Invitation invitation, CancellationToken cancellationToken)
     {
         var inviter = AccessContext.Of(invitation.Inviter);

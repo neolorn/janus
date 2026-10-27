@@ -136,6 +136,40 @@ public sealed class RoleStoreTests(DatabaseFixture database)
         Assert.Equal(before, await CountAsync());
     }
 
+    /// <summary>
+    /// AUTHZ-GRANT-005, AUTHZ-GRANT-004 AC6 (D-212): the roles a role hands out are kept
+    /// with it and read back with it, changed as its permissions are, and a role another
+    /// role hands out is named so that it is not removed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_TheRolesARoleHandsOutAreKeptWithItAsync()
+    {
+        RoleName handed = await CreateAsync([Permissions.GrantRead]);
+        var lead = RoleName.Parse("role" + Guid.NewGuid().ToString("n")[..8]);
+
+        await WriteAsync(Role.Of(lead, [Permissions.GrantRead], [handed, lead]));
+
+        Assert.Equal(new HashSet<RoleName> { handed, lead }, (await ReadAsync(lead)).HandsOut);
+        Assert.True(await NamedAsync(handed));
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            await new RoleStore(writing).RecordAsync(
+                Role.Of(lead, [Permissions.GrantRead], [lead]),
+                TestContext.Current.CancellationToken);
+
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal([lead], (await ReadAsync(lead)).HandsOut);
+        Assert.False(await NamedAsync(handed));
+        Assert.False(await NamedAsync(lead));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -172,6 +206,13 @@ public sealed class RoleStoreTests(DatabaseFixture database)
         await using StoreContext reading = database.Context();
 
         return (await new RoleStore(reading).FindAsync(name, TestContext.Current.CancellationToken))!;
+    }
+
+    private async Task<bool> NamedAsync(RoleName role)
+    {
+        await using StoreContext reading = database.Context();
+
+        return await new RoleReferences(reading).NamedAsync(role, TestContext.Current.CancellationToken);
     }
 
     private async Task<long> VersionAsync(SubjectId subject)

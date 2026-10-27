@@ -216,6 +216,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
             _outbox,
             new ErasureStoreInMemory(),
             [_records, _newsletter],
+            [],
             ledger: null,
             _audit,
             _work,
@@ -783,7 +784,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     [Fact]
     public async Task AUTHZ_IMP_001_AC5_ATakedownsSuspensionCarriesBothIdentitiesOfItsContextAsync()
     {
-        AccessContext context = OnBehalf();
+        var context = AccessContext.Of(Mona);
 
         _ = Held(await Takedowns.ExecuteAsync(
             context,
@@ -806,7 +807,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     [Fact]
     public async Task AUTHZ_IMP_001_AC5_AReversalCarriesBothIdentitiesOfItsContextAsync()
     {
-        AccessContext context = OnBehalf();
+        var context = AccessContext.Of(Mona);
 
         _ = Held(await ExecutedAsync());
         Held(await Takedowns.ReverseAsync(
@@ -896,19 +897,6 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         outcome.Match(
             () => throw new InvalidOperationException("The operation succeeded."),
             error => error);
-
-    // A context whose acting identity is not its effective one, which is the seam
-    // AUTHZ-IMP-001 keeps and no current path produces: the session and its proof are
-    // the acting identity's, and the grant is the effective one's.
-    private AccessContext OnBehalf()
-    {
-        var onBehalf = new SubjectId(Guid.Parse("55555555-5555-4555-8555-555555555555"));
-
-        _accounts.Hold(onBehalf, AccountState.Active);
-        _gate.Grant(onBehalf, Company, Permissions.TakedownExecute);
-
-        return AccessContext.Of(Mona, onBehalf);
-    }
 
     private ValueTask<Result<ExecutedTakedown>> ExecutedAsync(
         SubjectId? by = null,

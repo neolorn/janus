@@ -30,6 +30,24 @@ internal sealed class KeyDocument
     // A connection and a handful of keys; anything longer is not the document.
     private const int Longest = 64 * 1024;
 
+    /// <summary>
+    /// The members of the document every command but <c>migrate</c> reads, each with the
+    /// type it is written as (LIB-API-001); a version's key is base64.
+    /// </summary>
+    public static IReadOnlyList<string> Members { get; } =
+    [
+        "connection: string",
+        "keyEncryptionKeys.current: number",
+        "keyEncryptionKeys.versions{}: string",
+        "fingerprintKeys.current: number",
+        "fingerprintKeys.versions{}: string",
+    ];
+
+    /// <summary>
+    /// The one member of the document <c>migrate</c> reads (OPS-MIG-001).
+    /// </summary>
+    public static IReadOnlyList<string> ConnectionMembers { get; } = ["connection: string"];
+
     private KeyDocument(string connection, IKeyRing ring)
     {
         Connection = connection;
@@ -67,9 +85,51 @@ internal sealed class KeyDocument
         ArgumentNullException.ThrowIfNull(terminal);
         ArgumentNullException.ThrowIfNull(held);
 
+        try
+        {
+            return await ReadAsync(terminal, text => Parsed(text, held), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            held.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reads the document of <c>migrate</c> from standard input, which carries the
+    /// connection and nothing else.
+    /// </summary>
+    /// <param name="terminal">Where it is read from.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>
+    /// The connection, or the failure: malformed naming <c>input</c> where the document
+    /// carries any member but the connection or does not read, malformed naming
+    /// <c>connection</c> where that member is blank or not a string, and unavailable
+    /// naming <c>input</c> where standard input is a terminal or the document carries no
+    /// connection member.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The terminal is absent.</exception>
+    /// <remarks>
+    /// Implements OPS-MIG-001 AC4 and D-173: the migration step never holds a key, so a
+    /// document carrying one is refused before its connection is read.
+    /// </remarks>
+    public static ValueTask<Result<string>> ConnectionAsync(Terminal terminal, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(terminal);
+
+        return ReadAsync(terminal, ConnectionAlone, cancellationToken);
+    }
+
+    // The whole of standard input, read as bytes into an array cleared once it is
+    // parsed, so that nothing but what the parse keeps passes through a string.
+    private static async ValueTask<Result<TValue>> ReadAsync<TValue>(
+        Terminal terminal,
+        Func<ReadOnlyMemory<byte>, Result<TValue>> parsed,
+        CancellationToken cancellationToken)
+    {
         if (!terminal.IsInputRedirected)
         {
-            return Result.Failure<KeyDocument>(Unavailable("input"));
+            return Result.Failure<TValue>(Unavailable("input"));
         }
 
         byte[] read = new byte[4096];
@@ -83,7 +143,7 @@ internal sealed class KeyDocument
                 {
                     if (read.Length >= Longest)
                     {
-                        return Result.Failure<KeyDocument>(Malformed("input"));
+                        return Result.Failure<TValue>(Malformed("input"));
                     }
 
                     byte[] grown = new byte[read.Length * 2];
@@ -104,12 +164,11 @@ internal sealed class KeyDocument
                 length += taken;
             }
 
-            return Parsed(read.AsMemory(0, length), held);
+            return parsed(read.AsMemory(0, length));
         }
         finally
         {
             CryptographicOperations.ZeroMemory(read);
-            held.Release();
         }
     }
 
@@ -159,6 +218,51 @@ internal sealed class KeyDocument
             held.Ring.Fill();
 
             return Result.Success(new KeyDocument(connection.GetString()!, held.Ring));
+        }
+    }
+
+    // OPS-MIG-001: a member beside the connection is refused first, whether or not the
+    // connection is there; a connection blank or not a string is refused as the other
+    // commands refuse it (D-209).
+    private static Result<string> ConnectionAlone(ReadOnlyMemory<byte> text)
+    {
+        JsonDocument document;
+
+        try
+        {
+            document = JsonDocument.Parse(text);
+        }
+        catch (JsonException)
+        {
+            return Result.Failure<string>(Malformed("input"));
+        }
+
+        using (document)
+        {
+            JsonElement root = document.RootElement;
+
+            if (root.ValueKind is not JsonValueKind.Object)
+            {
+                return Result.Failure<string>(Unavailable("input"));
+            }
+
+            foreach (JsonProperty member in root.EnumerateObject())
+            {
+                if (!member.NameEquals("connection"))
+                {
+                    return Result.Failure<string>(Malformed("input"));
+                }
+            }
+
+            if (!root.TryGetProperty("connection", out JsonElement connection))
+            {
+                return Result.Failure<string>(Unavailable("input"));
+            }
+
+            return connection.ValueKind is JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(connection.GetString())
+                    ? Result.Success(connection.GetString()!)
+                    : Result.Failure<string>(Malformed("connection"));
         }
     }
 

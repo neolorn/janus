@@ -9,8 +9,8 @@ namespace Janus.Storage.Authorization.Roles;
 /// How a role is stored.
 /// </summary>
 /// <remarks>
-/// Implements AUTHZ-GRANT-004 and CONV-DESIGN-003. The name is the key, because a grant
-/// names the role and nothing else identifies it.
+/// Implements AUTHZ-GRANT-004, AUTHZ-GRANT-005 and CONV-DESIGN-003. The name is the key,
+/// because a grant names the role and nothing else identifies it.
 /// </remarks>
 internal sealed class RoleConfiguration : IEntityTypeConfiguration<RoleRecord>
 {
@@ -26,5 +26,12 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<RoleRecord>
         builder.Property(role => role.Name)
             .HasColumnName("name")
             .HasConversion(name => name.ToString(), value => RoleName.Parse(value));
+
+        // AUTHZ-GRANT-005 (D-212): a list on the row, as an invitation's roles are, with no
+        // foreign key: a declared role may hand out one bootstrap has not seeded yet, and
+        // the removal of a role a list names is refused by the read that finds it.
+        builder.Property(role => role.HandsOut)
+            .HasColumnName("hands_out")
+            .HasDefaultValueSql("'{}'");
     }
 }

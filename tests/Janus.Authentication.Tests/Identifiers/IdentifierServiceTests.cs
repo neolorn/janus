@@ -3199,6 +3199,116 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a code, whose wrong try keeps its count
+    /// on the code's record and the delay's counts, presented inside a unit of work
+    /// another opened is a fault of the calling code: nothing is counted and no try of
+    /// the code is spent.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ACodeInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        SessionId session = Stepped();
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            session,
+            IdentifierKind.Email,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        IdentifierId added = Named(await HeldAsync(), Third).Id;
+        string right = Code(added);
+        string wrong = string.Concat(right.AsSpan(0, right.Length - 1), right[^1] == '0' ? "1" : "0");
+
+        await InsideAsync(async () =>
+            await Service.VerifyAsync(Acting, session, added, wrong, Source, TestContext.Current.CancellationToken));
+
+        Assert.Empty(_throttle.Failures);
+        Assert.Equal(0, Outstanding(added).Attempts);
+        Assert.False(Named(await HeldAsync(), Third).IsVerified);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a code that names no verification of the
+    /// account, refused and counted before any unit of work of its own, is the same
+    /// fault inside one another opened.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ACodeNamingNothingInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await InsideAsync(async () => await Service.VerifyAsync(
+            Acting,
+            Stepped(),
+            new IdentifierId(Guid.NewGuid()),
+            "000000",
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_throttle.Failures);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: an enrolment session's code, whose
+    /// refusal keeps its count, presented inside a unit of work another opened is a
+    /// fault of the calling code, as an account session's is.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AnEnrolmentSessionsCodeInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        Accepted(await Service.AddAsync(
+            Acting,
+            Stepped(),
+            IdentifierKind.Phone,
+            Number,
+            Source,
+            TestContext.Current.CancellationToken));
+        IdentifierId phone = Named(await HeldAsync(), Number).Id;
+        EnrolmentSessionId enrolment = Enrolling(mailboxLost: true);
+
+        await InsideAsync(async () =>
+            await Service.VerifyAsync(enrolment, phone, Code(phone), Source, TestContext.Current.CancellationToken));
+
+        Assert.Empty(_throttle.Failures);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a pressed token that opens nothing, whose
+    /// refusal keeps its count, landed inside a unit of work another opened is a fault
+    /// of the calling code, from a browser with an account session or an enrolment
+    /// session alike.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_APressedTokenInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await InsideAsync(async () => await Service.LandAsync(
+            session: null,
+            "a-token-nothing-issued",
+            press: true,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        EnrolmentSessionId enrolment = Enrolling(mailboxLost: true);
+
+        await InsideAsync(async () => await Service.LandAsync(
+            enrolment,
+            "a-token-nothing-issued",
+            press: true,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_throttle.Failures);
+    }
+
+    /// <summary>
     /// REG-IDENT-007 AC3 (D-189): an enrolment session reaches the pending verification
     /// of the replace it staged and no other, so the code of an add the account staged
     /// from a session is answered there as a wrong code, counted against the request's
@@ -4012,6 +4122,21 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
     private BoundCredentials Bound =>
         new(_authenticators, _enrolments, _passwords, _reports, Losses, _credentials, _configuration);
+
+    // CONV-DESIGN-003 AC8: an operation called inside a unit of work the test opened
+    // faults and ends it, so the test's own commit commits nothing and faults too.
+    private async Task InsideAsync(Func<Task> operation)
+    {
+        _work.Reset();
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(operation);
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+    }
 
     private AccessContext Acting => AccessContext.Of(_person);
 

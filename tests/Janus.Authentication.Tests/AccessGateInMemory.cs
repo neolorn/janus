@@ -86,6 +86,17 @@ internal sealed class AccessGateInMemory : IAccessGate
     }
 
     /// <summary>
+    /// Whether a principal holds a permission within an organization, read without
+    /// deciding anything, so nothing is recorded.
+    /// </summary>
+    /// <param name="subject">The principal.</param>
+    /// <param name="organization">The organization.</param>
+    /// <param name="permission">The permission.</param>
+    /// <returns>Whether a test granted it.</returns>
+    public bool Holds(SubjectId subject, OrganizationId organization, Permission permission) =>
+        _granted.Contains((subject, organization, permission)) || _everyone.Contains((organization, permission));
+
+    /// <summary>
     /// Grants every principal a permission within an organization, for a test that is
     /// not about who holds it.
     /// </summary>
@@ -287,6 +298,23 @@ internal sealed class AccessGateInMemory : IAccessGate
         FilterSources<TResource> sources,
         CancellationToken cancellationToken) =>
         CapabilitiesAsync(context, type, resources, permissions, cancellationToken);
+
+    /// <summary>
+    /// Whether the gate admits a principal's permission within an organization, asked
+    /// as the grant admission decides one permission: recording nothing.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permission">The permission.</param>
+    /// <param name="organization">The organization.</param>
+    /// <returns>Whether it is admitted.</returns>
+    public bool Admits(AccessContext context, Permission permission, OrganizationId organization)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return !Restricted(context, permission)
+            && context.Effective is SubjectId subject
+            && (_granted.Contains((subject, organization, permission)) || _everyone.Contains((organization, permission)));
+    }
 
     private static Result Refused() => Result.Failure(Error.From(ErrorCodes.Denied));
 

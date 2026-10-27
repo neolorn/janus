@@ -211,7 +211,7 @@ it, as deployment-injected configuration: the **database connection** and the
 **secrets-manager access credential**. No other secret SHALL be present in files,
 images, environment variables, or the repository.
 
-*Source: D-148, D-166; OPS-SEC-001, D-047, D-105*
+*Source: D-148, D-166; OPS-SEC-001, D-047, D-105, D-204*
 
 **Why two, and why these.** The application must prove who it is to the secrets
 manager before it can fetch anything, and that proof has to live somewhere — this is
@@ -228,8 +228,9 @@ maintenance credential, the mail server's management key where the shipped adapt
 used (INT-MAIL-001), and each declared social provider's credential by the provider's
 name (INT-GEN-002); a refusal names them in `details.key` as OPS-SEC-001 lists. A
 `Janus.Cli` command reads its database connection and every key
-version and credential it needs from one JSON document the operator pipes to its
-standard input from the secrets manager's own client, never from an argument, a file or
+version and credential it needs from one JSON document the operator, or for `migrate`
+the pipeline's migration step, pipes to its standard input from the secrets manager's own
+client (`migrate`'s carries the migration connection alone, OPS-MIG-001, D-204), never from an argument, a file or
 an environment variable (OPS-SEC-001). The secrets of the
 provider's client registry are none of these: the library generates and rotates them
 itself and no deployment supplies one (OPS-SEC-002).
@@ -241,9 +242,11 @@ itself and no deployment supplies one (OPS-SEC-002).
 | Be **off-host** | Losing the host must not lose the keys (DR-009) |
 | Be **reachable at boot** | Every secret above is read at startup; nothing serves without them |
 | Hold **every version of the KEK and of the fingerprint key** the deployment holds, and the **backup private key** | The keys a restore needs, also escrowed in the envelope (DR-009). Each key is a set of versions with one current; a version a rotation retires stays until every backup taken before that rotation completed has expired (OPS-SEC-003, DR-009) |
+| Hold the **migration database credential** | Read only by the pipeline's migration step, which pipes it to `migrate` (OPS-MIG-001, OPS-MIG-003, D-204); never in the application's configuration (INF-DB-003) |
 | Hold the **maintenance database credential** | Read by the application at startup for the audit partition job, and by the `Janus.Cli` key-rotation commands from the document piped to them (OPS-MIG-003a, OPS-SEC-003, D-148); not escrowed, recreated by migration |
 | Hold the **mail server's management key**, where the shipped adapter is used, and **each social provider's credential** the deployment declares | Read at startup (INT-MAIL-001, INT-GEN-002, IDN-LIFE-012) |
 | Authenticate the application by a **scoped credential**, revocable and rotatable without a code change | A leaked secret zero is contained and replaced, not redeployed around |
+| Authenticate the pipeline's migration step by a **credential of its own**, which reads the migration database credential and nothing else, held by the pipeline platform's secret store and never on the host | The migration step never reaches the key-encryption key (OPS-MIG-001, D-173, D-204) |
 | Protect its own access by hardware-backed multi-factor authentication | D-084 |
 
 **Boot dependency, accepted.** A restart while the secrets manager is unreachable
@@ -332,36 +335,39 @@ inside an open one, and the worker carries whatever that attempt did not
 (AUTH-ABUSE-004); Stalwart reconciliation (INT-MAIL-007); mailbox provisioning, which
 pushes the state each mailbox is owed (INT-MAIL-006, INT-MAIL-006a); expired-session and
 consumed-token sweeps (AUTH-KEY-003); the sending-restriction record sweep
-(PRIV-RET-005); organization deletion grace windows (IDN-ORG-003); authenticator
-invalidation windows (AUTH-RECOV-007); gateway balance polling (INT-SMS-004); licence
-expiry warnings and the annual envelope operation (OPS-MAINT-001); the key-encryption
-key's cryptoperiod (DR-009a); the automated restore test (DR-007); the audit partition
-job, which creates the months ahead and drops expired partitions (PRIV-RET-002,
-OPS-MIG-003a); the registration-session sweep (REG-SESS-001); the invitation sweep,
-which forgets what an expired invitation bound (PRIV-RIGHT-005a); domain-lock
-re-verification (REG-DOM-001); the IP-to-city database refresh (INT-GEN-006); the
-datacenter range refresh (AUTH-ABUSE-008); the recovery-code reminder (AUTH-FACT-008);
-the account deletion grace window (`account.deletion.grace`, IDN-ACCT-007); the takedown
-window (`takedown.grace`, IDN-LIFE-003); the transactional outbox publisher
-(IDN-LIFE-003a); the event publisher, which carries each event from the row written in
-the transaction that made its fact true (CONV-DESIGN-002, LIB-API-001); the daily drift
-check of materialised derivations over the declared relationship sources
-(`derivation.materialised.driftcheck`, AUTHZ-DERIVE-005), under the principal
-`derivation-driftcheck`; the carrying of raised alerts to their channels every
-`outbox.poll.interval` (OPS-ALERT-001); the watches of the host clock (INF-HOST-001), of
-certificate renewal (INF-TLS-003) and of the emergency credential (OPS-BOOT-001); the
-privacy-request deadline alerts and the holiday-list look (PRIV-RIGHT-002); and the
-read-volume baseline (OPS-ALERT-005) (D-148, D-166). Each runs as the system principal
-`10` names for it (INF-BG-002). A job may run in several processes at once; what a
-delivery job carries is claimed row by row before it is carried (CONV-DESIGN-003), so
-each row is carried by one process at a time: a row is claimed by a pass only once it is
-due, a send's immediate attempt claiming its new row whatever its due instant
-(CONV-DESIGN-003, D-188), and a row that tracks several deliveries is carried under one
-claim, renewed before each delivery (D-186). The key-encryption-key re-wrap
+(PRIV-RET-005); organization deletion grace windows (IDN-ORG-003); the membership ends
+set in advance (`membership-ends`, IDN-MEM-001, D-213); authenticator invalidation
+windows (AUTH-RECOV-007); gateway balance polling (INT-SMS-004); licence expiry warnings
+and the annual envelope operation (OPS-MAINT-001); the key-encryption key's cryptoperiod
+(DR-009a); the automated restore test (DR-007); the audit partition job, which creates
+the months ahead and drops expired partitions (PRIV-RET-002, OPS-MIG-003a); the
+registration-session sweep (REG-SESS-001); the invitation sweep, which forgets what an
+expired invitation bound (PRIV-RIGHT-005a); domain-lock re-verification (REG-DOM-001);
+the IP-to-city database refresh (INT-GEN-006); the datacenter range refresh
+(AUTH-ABUSE-008); the recovery-code reminder (AUTH-FACT-008); the account deletion grace
+window (`account.deletion.grace`, IDN-ACCT-007); the takedown window (`takedown.grace`,
+IDN-LIFE-003); the transactional outbox publisher (IDN-LIFE-003a); the event publisher,
+which carries each event from the row written in the transaction that made its fact true
+(CONV-DESIGN-002, LIB-API-001); the daily drift check of materialised derivations over
+the declared relationship sources (`derivation.materialised.driftcheck`,
+AUTHZ-DERIVE-005), under the principal `derivation-driftcheck`; the carrying of raised
+alerts to their channels every `outbox.poll.interval` (OPS-ALERT-001); the watches of
+the host clock (INF-HOST-001), of certificate renewal (INF-TLS-003) and of the emergency
+credential (OPS-BOOT-001); the privacy-request deadline alerts and the holiday-list look
+(PRIV-RIGHT-002); and the read-volume baseline (OPS-ALERT-005) (D-148, D-166). Each runs
+as the system principal `10` names for it (INF-BG-002). A job may run in several
+processes at once; what a delivery job carries is claimed row by row before it is
+carried (CONV-DESIGN-003), so each row is carried by one process at a time: a row is
+claimed by a pass only once it is due, a send's immediate attempt claiming its new row
+whatever its due instant (CONV-DESIGN-003, D-188), and a row that tracks several
+deliveries is carried under one claim, renewed before each delivery (D-186). The worker
+waits between rounds until the next job is due, or a run ends, and never longer than the
+longest single delay the runtime's timer accepts: a job due further ahead is looked at
+again after that delay and run when it is due (D-209). The key-encryption-key re-wrap
 (OPS-SEC-003) is not background work of the worker: it runs inside the command-line
 process so that it does not depend on the application being up (D-147).
 
-*Source: D-148, D-166, D-183, D-186, D-188, D-189; D-147, the items named above*
+*Source: D-148, D-166, D-183, D-186, D-188, D-189, D-209; D-147, the items named above*
 
 **Acceptance criteria**
 1. Scheduled work runs without a person triggering it.
@@ -373,6 +379,9 @@ process so that it does not depend on the application being up (D-147).
 3. No job's run delays another job's turn in the same process.
 4. Two processes running one delivery job at once carry each row once, and each delivery
    of a row that tracks several once.
+5. A worker whose every job not running is due further ahead than the longest delay the
+   runtime's timer accepts keeps running, looks again after that delay, and runs each
+   job when it is due (D-209).
 
 ---
 

@@ -78,7 +78,7 @@ public sealed class SecurityKeyFlowTests
         Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
         Answer nobody = await stranger.SendAsync("POST", "/auth/begin", ("identifier", "nobody@example.test"));
         string challenge = began.Text("challengeId");
-        string signed = began.Json().GetProperty("webAuthn").GetProperty("challenge").GetString()!;
+        string signed = began.Json().GetProperty("webauthn").GetProperty("challenge").GetString()!;
 
         Answer first = await browser.SendAsync(
             "POST",
@@ -96,10 +96,10 @@ public sealed class SecurityKeyFlowTests
                 Origin,
                 options.GetProperty("relyingPartyId").GetString()!)));
 
-        Assert.Equal(["challengeId", "available", "webAuthn"], Members(began.Json()));
-        Assert.Equal(["relyingPartyId", "challenge"], Members(began.Json().GetProperty("webAuthn")));
+        Assert.Equal(["challengeId", "available", "webauthn"], Members(began.Json()));
+        Assert.Equal(["relyingPartyId", "challenge"], Members(began.Json().GetProperty("webauthn")));
         Assert.Equal(Members(began.Json()), Members(nobody.Json()));
-        Assert.Equal(Members(began.Json().GetProperty("webAuthn")), Members(nobody.Json().GetProperty("webAuthn")));
+        Assert.Equal(Members(began.Json().GetProperty("webauthn")), Members(nobody.Json().GetProperty("webauthn")));
         Assert.Equal(StatusCodes.Status200OK, first.Status);
         Assert.Equal("factorRequired", first.Text("status"));
         Assert.Equal(["securityKey"], Named(first.Json().GetProperty("required")));
@@ -259,7 +259,7 @@ public sealed class SecurityKeyFlowTests
         Assert.Equal("required", options.GetProperty("userVerification").GetString());
         Assert.Equal(RelyingPartyId, options.GetProperty("relyingPartyId").GetString());
         Assert.Equal(
-            began.Json().GetProperty("webAuthn").GetProperty("challenge").GetString(),
+            began.Json().GetProperty("webauthn").GetProperty("challenge").GetString(),
             options.GetProperty("challenge").GetString());
         Assert.Equal(
             new[]
@@ -342,7 +342,7 @@ public sealed class SecurityKeyFlowTests
 
         Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
         string challenge = began.Text("challengeId");
-        string signed = began.Json().GetProperty("webAuthn").GetProperty("challenge").GetString()!;
+        string signed = began.Json().GetProperty("webauthn").GetProperty("challenge").GetString()!;
         int failed = deployment.SessionAudit.Failed.Count;
 
         Answer verified = await browser.SendAsync(
@@ -407,7 +407,7 @@ public sealed class SecurityKeyFlowTests
             "/auth/begin",
             ("identifier", named ? Flow.Address : "nobody@example.test"));
         string challenge = began.Text("challengeId");
-        string signed = began.Json().GetProperty("webAuthn").GetProperty("challenge").GetString()!;
+        string signed = began.Json().GetProperty("webauthn").GetProperty("challenge").GetString()!;
         int failed = deployment.SessionAudit.Failed.Count;
 
         Answer refused = await browser.SendAsync(
@@ -498,7 +498,7 @@ public sealed class SecurityKeyFlowTests
                     began.Text("challengeId"),
                     "passkey",
                     key.Asserted(
-                        began.Json().GetProperty("webAuthn").GetProperty("challenge").GetString()!,
+                        began.Json().GetProperty("webauthn").GetProperty("challenge").GetString()!,
                         Origin,
                         RelyingPartyId,
                         (byte)(failing is "userVerification"

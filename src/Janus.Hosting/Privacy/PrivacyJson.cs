@@ -19,6 +19,7 @@ namespace Janus.Hosting.Privacy;
 [JsonSerializable(typeof(TakedownReversalBody))]
 [JsonSerializable(typeof(AssessmentsRequest))]
 [JsonSerializable(typeof(DocumentVersionView))]
+[JsonSerializable(typeof(NoticeVersionView))]
 [JsonSerializable(typeof(IReadOnlyList<ConsentView>))]
 [JsonSerializable(typeof(IReadOnlyList<ObjectionView>))]
 [JsonSerializable(typeof(PrivacyReceiptView))]
