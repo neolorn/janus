@@ -588,6 +588,13 @@ public static class Settings
         new("authz.reverselookup.budget", SettingScope.Runtime, "PT2S");
 
     /// <summary>
+    /// Whether an actor whose stored grants admit every permission a role carries may
+    /// hand the role out with no role of theirs listing it (AUTHZ-GRANT-005).
+    /// </summary>
+    public static FlagSetting AuthzHandoutByHolding { get; } =
+        new("authz.handout.byholding", SettingScope.Runtime, false);
+
+    /// <summary>
     /// How often every materialised derivation is re-evaluated against the host's own
     /// relation, a difference corrected and the degradation condition raised.
     /// </summary>
@@ -1062,6 +1069,7 @@ public static class Settings
         AlertingSmsSeverityThreshold,
         MaintenanceExpiryWarningLead,
         AuthzReverseLookupBudget,
+        AuthzHandoutByHolding,
         DerivationMaterialisedDriftCheck,
         OrganizationDeletionGrace,
         TakedownGrace,

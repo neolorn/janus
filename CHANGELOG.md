@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `authz.handout.byholding` (runtime, off by default; turning it on is loosening) lets an
+  actor whose stored grants admit every permission a role carries hand the role out with
+  no role of theirs listing it.
 - A role carries `handsOut`, the roles its holders may hand out: `POST /admin/roles` takes
   it, optional and none where absent (`api.request.malformed` naming `handsOut` for a name
   outside the rule, `authz.grant.unresolved` naming it for a role the deployment does not

@@ -65,6 +65,19 @@ public sealed class SettingDirectionTests
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-005 (D-212): handing a role out by holding its permissions ships off,
+    /// and turning it on loosens.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GRANT_005_HandingOutByHoldingShipsOffAndTurningItOnLoosens()
+    {
+        Assert.False(Settings.AuthzHandoutByHolding.Default);
+        Assert.Equal(SettingScope.Runtime, Settings.AuthzHandoutByHolding.Scope);
+        Assert.True(Settings.AuthzHandoutByHolding.Loosens(false, true));
+        Assert.False(Settings.AuthzHandoutByHolding.Loosens(true, false));
+    }
+
+    /// <summary>
     /// Chapter 10 section 4: a set loosens by what it gained or lost, and this one by
     /// what it lost, so dropping a rejection source loosens and adding one does not.
     /// </summary>
