@@ -1466,43 +1466,46 @@ those operations and stating as its reason the item that requires it.
 **A host's jobs (D-202).** A host declares each of its background jobs
 (`AuthorizationDeclarationBuilder.Job(name, permissions)`, LIB-HOST-001): a name under
 INT-SMS-003's rule, distinct from every other job, from every name of `10` section 5.29
-and from `migrate` (D-206), and the host permissions it exercises. Its principal is
-organization-scoped, `SystemPrincipal.ForOrganization(name, reason, organization)`
-naming a declared job. The gate admits it for the host permissions its declaration
-names, on the records of its organization and on the organization itself (the
-organization-wide check), as an organization-wide grant of them admits a person, with
-the consent the permission's purpose asks of the record's data subject (AUTHZ-GATE-005),
-a consent-based purpose being refused `privacy.consent.required` on the
-organization-wide check, which names no data subject. The gate judges no restriction for
-it: a restriction is the acting account's (AUTHZ-GATE-006), and a job acts for none; a
-record's data subject's restriction reaches a host's job as it reaches the host's own
-processing, through `RestrictionChanged` (PRIV-RIGHT-004) and the reads of round H2
-(D-203, D-207). The check, the list filter and the fragment take its context, and so do
-the operations called in process only (`IReadVolume`, `IDerivationMaterialiser`,
-LIB-API-005). It is refused `authz.denied` for anything else: the capability page and
-the explanation, which serve a person's surface and answer a person's question (its
-recorded refusals stay resolvable by their correlation identifier, AUTHZ-CONCEAL-004,
-D-207); every library operation that meets a gate, since each that changes a person's
-account is a person's step-up action; any permission while a request is being served,
-since a job is background work, the gate telling the two apart by whether an HTTP
-request is being served on the calling flow, in every scope opened within it, whoever
-built the context (`08` CONV-DESIGN-007, D-206), so a host's webhook that needs a host
-permission records what arrived and hands the work to a declared job; and any permission
-in an organization whose deletion is requested or which has been erased (IDN-ORG-003),
-each evaluation reading that state live. A materialiser's refresh asked with its context
-while a request is served, as the gate judges it (`08` CONV-DESIGN-007), is a fault of
-the calling code: it throws `InvalidOperationException` and writes nothing
-(AUTHZ-DERIVE-005, D-208). A principal naming no declared job is refused for every host
-permission, and its refresh of a materialised derivation is a fault of the calling code
-that throws `InvalidOperationException` and writes nothing (AUTHZ-DERIVE-005, D-208), as
-is a declared job's refresh of a record of an organization other than its own (D-209). A
-job is never declared with a permission not declared, a library-owned one, one bound to
-a step-up gate (no session proves a person) or one whose action is `export`
-(OPS-ALERT-006): startup fails with `model.startup.declarationinvalid`,
-`details.declaration` `job.<name>`, `details.field` `permissions`; nor under a name of
-`10` section 5.29 or `migrate` (`details.field` `name`, D-206).
+and from `migrate` (D-206), and the host permissions it exercises, with the library's
+reads IDN-READ-004 lets a job declare (D-218). Its principal is organization-scoped,
+`SystemPrincipal.ForOrganization(name, reason, organization)` naming a declared job. The
+gate admits it for the host permissions its declaration names, on the records of its
+organization and on the organization itself (the organization-wide check), as an
+organization-wide grant of them admits a person, with the consent the permission's
+purpose asks of the record's data subject (AUTHZ-GATE-005), a consent-based purpose
+being refused `privacy.consent.required` on the organization-wide check, which names no
+data subject. The gate judges no restriction for it: a restriction is the acting
+account's (AUTHZ-GATE-006), and a job acts for none; a record's data subject's
+restriction reaches a host's job as it reaches the host's own processing, through
+`RestrictionChanged` (PRIV-RIGHT-004) and the reads of round H2 (D-203, D-207). The
+check, the list filter and the fragment take its context, and so do the operations
+called in process only (`IReadVolume`, `IDerivationMaterialiser`, LIB-API-005). It is
+refused `authz.denied` for anything else: the capability page and the explanation, which
+serve a person's surface and answer a person's question (its recorded refusals stay
+resolvable by their correlation identifier, AUTHZ-CONCEAL-004, D-207); every library
+operation that meets a gate, since each that changes a person's account is a person's
+step-up action, save the reads it declares (IDN-READ-004) and the question of who may
+exercise a permission it declares (AUTHZ-GATE-007, D-218); any permission while a
+request is being served, since a job is background work, the gate telling the two apart
+by whether an HTTP request is being served on the calling flow, in every scope opened
+within it, whoever built the context (`08` CONV-DESIGN-007, D-206), so a host's webhook
+that needs a host permission records what arrived and hands the work to a declared job;
+and any permission in an organization whose deletion is requested or which has been
+erased (IDN-ORG-003), each evaluation reading that state live. A materialiser's refresh
+asked with its context while a request is served, as the gate judges it (`08`
+CONV-DESIGN-007), is a fault of the calling code: it throws `InvalidOperationException`
+and writes nothing (AUTHZ-DERIVE-005, D-208). A principal naming no declared job is
+refused for every host permission, and its refresh of a materialised derivation is a
+fault of the calling code that throws `InvalidOperationException` and writes nothing
+(AUTHZ-DERIVE-005, D-208), as is a declared job's refresh of a record of an organization
+other than its own (D-209). A job is never declared with a permission not declared, a
+library-owned one other than the four reads of IDN-READ-004, one bound to a step-up gate
+(no session proves a person) or one whose action is `export` (OPS-ALERT-006): startup
+fails with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`,
+`details.field` `permissions`; nor under a name of `10` section 5.29 or `migrate`
+(`details.field` `name`, D-206).
 
-*Source: D-079b, D-166, D-202, D-204, D-206, D-207, D-208, D-209*
+*Source: D-079b, D-166, D-202, D-204, D-206, D-207, D-208, D-209, D-218*
 
 **Acceptance criteria**
 1. Constructing a system context without a reason throws.
@@ -1515,15 +1518,179 @@ a step-up gate (no session proves a person) or one whose action is `export`
    its organization's records and on its organization, a modifying permission on a
    record whose data subject is restricted included, and refused `authz.denied` for any
    other, for the capability page and the explanation, for every library operation that
-   meets a gate, for any permission while a request is served (through either profile or
-   neither, and in a scope opened within the request), and in an organization whose
-   deletion is requested; a materialiser's refresh asked with its context while a
-   request is served throws `InvalidOperationException` and writes nothing (D-208); on
-   the organization-wide check a consent-based purpose is refused
-   `privacy.consent.required`, writing no refusal record (D-207, D-208).
-7. A job declared with a permission not declared, a library-owned one, one bound to a
-   step-up gate or one whose action is `export`, or under a name of `10` section 5.29 or
-   `migrate`, fails startup with `model.startup.declarationinvalid`.
+   meets a gate save the reads it declares (IDN-READ-004, D-218), for any permission
+   while a request is served (through either profile or neither, and in a scope opened
+   within the request), and in an organization whose deletion is requested; a
+   materialiser's refresh asked with its context while a request is served throws
+   `InvalidOperationException` and writes nothing (D-208); on the organization-wide
+   check a consent-based purpose is refused `privacy.consent.required`, writing no
+   refusal record (D-207, D-208).
+7. A job declared with a permission not declared, a library-owned one other than the
+   four reads of IDN-READ-004, one bound to a step-up gate or one whose action is
+   `export`, or under a name of `10` section 5.29 or `migrate`, fails startup with
+   `model.startup.declarationinvalid`.
+
+---
+
+## 6a. What a host reads (D-218)
+
+**IDN-READ-001** — A host SHALL be able to read the organizations the deployment holds,
+and the administrative organization's identifier.
+
+**Values (D-218).** `IOrganizations.ListAsync` answers the organizations a caller may
+read, ordered by identifier, at most `limit` (1 to 500, default 100) after the
+identifier `after`, with `next` the last identifier answered where more remain; each is
+`OrganizationSummary`: `{ id, name, administrative, deletionRequestedAt }`, the last
+null unless deletion is requested. An erased organization is not listed, and reading one
+answers `identity.organization.notfound` (404), as an identifier the deployment never
+held does. `IOrganizations.ReadAsync` answers one. Both ask `organization:read`, with
+the reach of IDN-READ-004: in the administrative organization every organization,
+elsewhere the organization itself. `IOrganizations.AdministrativeAsync` answers the
+administrative organization's identifier, or `identity.organization.notfound` before
+bootstrap made it; it takes no access context, meets no gate and has no endpoint, since
+a host needs it to name its jobs' principals and to register its records before anyone
+acts, and it reads no record of a person (`07` LIB-API-005). The endpoints are
+`GET /admin/organizations` and `GET /admin/organizations/{id}` (`09` section 8a).
+
+*Source: D-218*
+
+**Acceptance criteria**
+1. A holder of `organization:read` in the administrative organization lists every
+   organization the deployment holds but the erased ones, in pages; a holder in another
+   organization lists that organization alone.
+2. `AdministrativeAsync` answers the administrative organization's identifier with no
+   access context, and `identity.organization.notfound` before bootstrap.
+
+---
+
+**IDN-READ-002** — A host SHALL be able to read an organization's current members,
+whether one account is a member, and its standing invitations.
+
+**Values (D-218).** Each asks `membership:read` in the organization named, with the
+reach of IDN-READ-004. `IInvitations.MembersAsync` answers the organization's current
+memberships, ordered by subject, paged as IDN-READ-001 pages; each is `MemberSummary`:
+`{ subject, membership, beganAt, endsAt, invitation }`, `endsAt` the end set in advance
+or null (IDN-MEM-001), `invitation` the invitation whose acknowledgement began it or
+null where it began otherwise (bootstrap's attach). `IInvitations.MemberAsync` answers
+one account's current membership, or `identity.membership.notfound` (404) where it holds
+none, an ended one included. `IInvitations.StandingAsync` answers the organization's
+standing invitations (issued, and neither acknowledged, revoked nor expired), each with
+its identifier, the roles it names, when it was issued and expires, who issued it, and
+the email, phone and corporate address it binds. `MembershipChanged` names the
+invitation as `MemberSummary` does (`10` section 5b). The endpoints are
+`GET /admin/organizations/{id}/members`,
+`GET /admin/organizations/{id}/members/{subject}` and
+`GET /admin/organizations/{id}/invitations` (`09` section 8a).
+
+*Source: D-218*
+
+**Acceptance criteria**
+1. A member who joined through an invitation is listed with that invitation, and
+   `MembershipChanged` (began) names it; one bootstrap attached names none.
+2. An account whose membership ended answers `identity.membership.notfound`, and one
+   whose end is set in advance is listed with `endsAt`.
+3. An invitation acknowledged, revoked or past its lifetime is not listed.
+
+---
+
+**IDN-READ-003** — A host SHALL be able to read another person's account, find an
+account by an identifier, read the person's contact details and standing, list their
+sessions, and set their preferences as an administrator.
+
+**Values (D-218).** Each read but the sessions' is asked in the organization named, with
+the reach of IDN-READ-004:
+- `IAccounts.ReadAsync`, under `account:read`: `AccountView`, carrying `subject`,
+  `state`, `createdAt`, `profile` (`displayName`, `legalName`), `identifiers` (`emails`,
+  `phones`, `username`), `preferences` (`language`, `timeZone`, `declared`) and
+  `memberships`, each email and phone with its value and whether it is verified and
+  primary, `legalName` present only where `profile.legalname` is on (REG-PROF-001),
+  `memberships` the organizations the account is a current member of; never a
+  credential, the date of birth or the photo, which has its own read (IDN-ATTR-003).
+- `IAccounts.FindAsync`, under `account:read`: the subject bearing an email, phone or
+  username, read in the canonical form sign-in reads it in (IDN-ACCT-004), or
+  `identity.account.notfound` (404).
+- `IAccounts.ContactAsync`, under `contact:read`: `ContactDetail`,
+  `{ displayName, email, phone, language, timeZone, state }`, `email` and `phone` the
+  primary verified email and phone or null, for a host that writes to the person.
+- `IConsents.StandingAsync`, under `consent:read`: `SubjectStanding`,
+  `{ state, consents, objections }`, each consent and objection as the person's own read
+  answers it (`09` `GET /privacy/consents`, `GET /privacy/objections`), so a host's own
+  processing follows the person's restriction, consents and objections (PRIV-RIGHT-004,
+  D-203).
+- `ISessions.ListOfAsync`, under `session:revoke-account` in the administrative
+  organization, whatever organization the account belongs to: the account's live
+  sessions as the person's own list shows them, none marked current, for the offboarding
+  check (`16` section 4).
+
+An account `deleted`, and an account no person bears, answer `identity.account.notfound`
+(404) alike. `IAccounts.SetPreferencesAsync` sets another person's language, time zone
+and declared preferences, an administrator-only one included (REG-PREF-001), under
+`account:manage` in the administrative organization, with a `reason` (API-CONV-002) and
+no step-up, validated as the person's own setting is and recorded as
+`identity.preferences.changed` with the administrator acting and the reason. The
+endpoints are `GET /admin/accounts/{subject}`, `POST /admin/accounts/find`,
+`GET /admin/accounts/{subject}/contact`, `GET /admin/accounts/{subject}/standing`,
+`GET /admin/accounts/{subject}/sessions` and `PUT /admin/accounts/{subject}/preferences`
+(`09` section 8a); the finding is a `POST` so no identifier rides in an address a proxy
+logs.
+
+*Source: D-218*
+
+**Acceptance criteria**
+1. An account read answers no credential, date of birth or photo, and the legal name
+   only where `profile.legalname` is on.
+2. Finding an account by its email, written in another case or another Unicode form,
+   answers its subject; an identifier no account bears answers
+   `identity.account.notfound`.
+3. The contact read answers the primary verified email and phone, and null for a kind
+   the account holds no verified identifier of.
+4. The standing read answers a withdrawn consent as withdrawn and a restricted account
+   as `restricted`.
+5. An administrator's setting of another person's administrator-only preference is
+   admitted and recorded with the reason; the person's own setting of it is refused
+   `identity.preference.administratoronly` as before.
+
+---
+
+**IDN-READ-004** — Each read of IDN-READ-001 to IDN-READ-003 SHALL reach only the
+organizations and people its organization reaches, and SHALL be callable by a host's
+declared job where this item says so.
+
+**Values (D-218).** A read is asked in the organization it names (`organization`, the
+administrative organization where none is named), under its permission there. A holder
+in the administrative organization reaches every organization and every account, the
+deployment's operator acting there. A holder elsewhere reaches its own organization, and
+a person only where the account is tied to it: a current member of it, or the data
+subject of a record registered in it (`03` AUTHZ-INHERIT-002, `IResources`). An account
+outside that reach answers `identity.account.notfound` (404) as an account no person
+bears does, so the read discloses nothing of whether it exists. Each person record a
+person reads (an account, a contact, a standing, a member) counts toward their read
+volume (OPS-ALERT-005); a job's reads are not counted, as no system principal's are. A
+read is not audited; a refusal is recorded as every refusal is (AUTHZ-CONCEAL-004).
+
+A host's declared job (IDN-PRIN-001) MAY declare `organization:read`, `membership:read`,
+`contact:read` and `consent:read` beside its host permissions, the only library-owned
+permissions a job declares; it is then admitted for the reads they govern in its own
+organization, with the reach above, and refused them while a request is served and in an
+organization whose deletion is requested, as for any permission. `account:read`, the
+account finding, the sessions read and the preference setting stay a person's.
+
+*Source: D-218*
+
+The reach is the owner's choice of 2026-10-27: a host reads the people it deals with,
+and another organization's customers are not among them.
+
+**Acceptance criteria**
+1. A holder of `contact:read` in an organization reads a member's contact details and
+   those of the data subject of a record registered in it, and is answered
+   `identity.account.notfound` for an account tied to another organization alone, in
+   bytes identical to an account no person bears.
+2. A holder in the administrative organization reads any account.
+3. A job declaring `contact:read` reads the contact details of the data subject of its
+   organization's record outside a request, and is refused `authz.denied` while a
+   request is served; a job declaring `account:read` fails startup with
+   `model.startup.declarationinvalid`.
+4. A person's reads of IDN-READ-003 add to their read volume, and a job's do not.
 
 ---
 

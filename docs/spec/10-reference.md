@@ -233,24 +233,30 @@ Format `resource:action` — lowercase, singular resource.
 ### 2.1 Library-owned
 
 Shipped by the library because they govern its own endpoints and operations
-(LIB-API-005). Hosts do not declare these.
+(LIB-API-005). Hosts do not declare these; a host's job may declare the four reads
+`01` IDN-READ-004 names, and no other (D-218).
 
 | Permission | Governs |
 |---|---|
-| `grant:read` | Viewing grants (`GET /admin/grants`) and the "who can access this?" view |
+| `grant:read` | Viewing grants (`GET /admin/grants`), the "who can access this?" view, and which accounts may exercise a permission (`GET /admin/access/admitted`, AUTHZ-GATE-007, D-218) |
 | `grant:manage` | Creating and revoking grants; asked in the organization the grant is scoped to, and for a grant in an organization other than the administrative organization also met by `system:administer` held in the administrative organization, save for an invitation's roles, which need `grant:manage` held in the invitation's own organization (AUTHZ-SCOPE-001, D-207) |
 | `role:manage` | Reading, creating and changing roles, in the administrative organization |
 | `group:manage` | Creating groups, nesting them, and changing their members (D-106); asked in the organization the group belongs to (AUTHZ-SCOPE-001) |
 | `organization:manage` | Organization lifecycle, policy, and deletion cancellation; asked in the administrative organization, whatever organization the request names |
 | `membership:manage` | Adding and removing members; issuing and revoking invitations, bound or open (IDN-LIFE-009a, REG-INV-001) |
+| `organization:read` | Reading the organizations the deployment holds (`01` IDN-READ-001): in the administrative organization every one, elsewhere the organization itself. A host's job may declare it (IDN-READ-004, D-218) |
+| `membership:read` | Reading an organization's current members, one account's membership and the organization's standing invitations (`01` IDN-READ-002), asked in the organization named. A host's job may declare it (IDN-READ-004, D-218) |
 | `domain:manage` | Adding, verifying and removing an organization's locked email domains (REG-DOM-001, IDN-ORG-006, D-146). Asked in the administrative organization. Adding and verifying a domain, and removing the last one, are loosenings under OPS-CFG-002 and also need `system:administer`. A domain is added only where a DNS resolver is declared (`emailDomains`, section 4.1a) |
 | `restriction:edit` | Reading and editing the named restriction set (`GET/PUT/DELETE /admin/restrictions/{name}`, AUTH-ABUSE-004, D-146). Every edit is a step-up action and needs a reason; a loosening also needs `system:administer`, and alerts |
 | `restriction:grant` | Granting credit to one key under a restriction (`POST /admin/restrictions/{name}/grant`, AUTH-ABUSE-004, D-146): the support role's permission, stepped up, audited with a reason |
-| `account:manage` | Suspending and reactivating an account, lifting a restriction, cancelling a deletion on a subject's behalf (D-106) |
+| `account:manage` | Suspending and reactivating an account, lifting a restriction, cancelling a deletion on a subject's behalf (D-106), and setting another person's preferences (`01` IDN-READ-003, D-218) |
+| `account:read` | Reading another person's account and finding an account by an identifier (`01` IDN-READ-003), with the reach of IDN-READ-004; a person's alone (D-218) |
+| `contact:read` | Reading another person's display name, primary verified email and phone, language, time zone and state (`01` IDN-READ-003), with the reach of IDN-READ-004. A host's job may declare it (D-218) |
+| `consent:read` | Reading another person's state, consents and objections (`01` IDN-READ-003), with the reach of IDN-READ-004. A host's job may declare it (D-218) |
 | `takedown:execute` | The minor takedown operation: the trigger, the reversal and the read of its progress (IDN-LIFE-003). Its own permission because of what it does |
 | `recovery:approve` | Administrative re-enrolment |
 | `session:revoke` | Emergency revocation of all sessions, system-wide |
-| `session:revoke-account` | Revoking one account's sessions — offboarding, suspension |
+| `session:revoke-account` | Revoking one account's sessions (offboarding, suspension) and listing them (`01` IDN-READ-003, D-218) |
 | `config:read` | Reading configuration |
 | `config:manage` | Changing configuration |
 | `audit:read` | Reading the audit trail, querying it by subject, and resolving a concealed denial's correlation identifier (AUTHZ-GATE-004) |
@@ -1064,7 +1070,7 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `identity.organization.domainremoved` | security | A domain was removed from an organization's lock; its addresses stay refused until it is listed anew; `details.domain`, `details.reason`; filed under the organization | REG-DOM-001 |
 | `identity.organization.domainverified` | security | A listed domain was verified by its TXT record; `details.domain`, `details.reason`; filed under the organization | REG-DOM-001 |
 | `identity.organization.erased` | security | An organization's deletion window elapsed and the erasure executed; principal `organization-erasure`, reason `IDN-ORG-003`; `details.organization`, `details.deletingSince`, `details.membershipsEnded`; no subject; filed under the organization | IDN-ORG-003 |
-| `identity.preferences.changed` | routine | The account's preferences changed, recorded by key and never by value | REG-PREF-001, IDN-ATTR-001 |
+| `identity.preferences.changed` | routine | The account's preferences changed, recorded by key and never by value; where an administrator set them, the administrator acting, the account the `subject` and `details.reason` (`01` IDN-READ-003, D-218) | REG-PREF-001, IDN-ATTR-001, D-218 |
 | `identity.profile.changed` | routine | A profile field of the account changed, or its photo was set or removed | REG-PROF-001, IDN-ATTR-002 |
 | `identity.secondstep.preferred` | routine | The account's preferred second step changed | IDN-ATTR-008 |
 | `identity.takedown.executed` | security | Phase one of a takedown committed; `details.takedown`, `details.trigger` (section 5.12d), `details.reason`, `details.erasureDue` | IDN-LIFE-003 AC3 |
@@ -1340,9 +1346,18 @@ kinds: `string` · `boolean` · `integer` · `enum`.
 ### 5.39 Consent and membership changes
 
 `ConsentChanged` carries `granted` · `withdrawn` · `superseded`; `MembershipChanged`
-carries `began` · `ended`.
+carries `began` · `ended`. `GrantChanged` carries `made` · `revoked`;
+`GroupMembershipChanged` `added` · `removed`; `RoleChanged` `defined` · `changed` ·
+`removed` (D-218).
 
-*Source: PRIV-CONS-007, PRIV-CONS-008, IDN-MEM-001, section 5b, D-166*
+`SessionEnded` carries its `reason`: `signedout`, the person signed out of it; `ended`,
+the person ended it from another session or everywhere, or a change to their
+credentials or identifiers ended their other sessions; `revoked`, an administrator
+revoked the account's sessions or every session; `account`, the account was suspended,
+deactivated, deleted, taken down or erased; `organization`, its organization's deletion
+was requested (IDN-ORG-003) (D-218).
+
+*Source: PRIV-CONS-007, PRIV-CONS-008, IDN-MEM-001, section 5b, D-166, D-218*
 
 ### 5.40 Hosting location
 
@@ -1579,6 +1594,12 @@ transaction that makes it true (CONV-DESIGN-002, IDN-LIFE-003a).
 | `AccountRegistered` | The one transaction of the terms step has committed (REG-SESS-001, REG-SESS-007): the account exists, `active`, once per account; nothing fires for a registration session that is abandoned or expires | Host welcome — **no mailbox**: provisioning follows the invitation and enabling the membership (REG-MAIL-001) (INT-MAIL-006, IDN-LIFE-009b) |
 | `TakedownReversed` | A takedown reversed inside its window; the account is back in the state it held at the trigger (section 5.12b) | Host: whatever the host did on `TakedownExecuted`, or on the trigger's `AccountSuspended`, is the host's to reconsider against that state |
 | `OrganizationErased` | An organization's grace window elapsed and its erasure committed; carries the organization and the number of memberships ended, and names no subject | Host |
+| `OrganizationCreated` | An organization was created (`POST /admin/organizations`); carries the organization and names no subject (D-218) | Host |
+| `OrganizationDeletionRequested` · `OrganizationDeletionCancelled` | An organization's deletion was requested, suspending it, or cancelled inside its window (IDN-ORG-003); carries the organization and names no subject (D-218) | Host (stop, or resume, its own processing for the organization) |
+| `GrantChanged` | A grant was made or revoked, a materialised derivation's grant written or taken back included; carries the grant, its kind, its holder (`subjectType`, `subjectId`), role, whether it denies, its organization and record, and `change` (`made` · `revoked`, section 5.39); the holder is the `subject` where it is an account (D-218) | Host |
+| `GroupMembershipChanged` | An account or a group was added to or taken out of a group, by a person or by a membership's end; carries the group, its organization, the member (`subjectType`, `subjectId`) and `change` (`added` · `removed`, section 5.39); the member is the `subject` where it is an account (D-218) | Host |
+| `RoleChanged` | A role was defined, changed or removed, a declared role's seeding included; carries the role and `change` (`defined` · `changed` · `removed`, section 5.39), and names no subject (D-218) | Host |
+| `SessionEnded` | A session ended before its expiry; carries the session and `reason` (section 5.39); not raised for a session that expires by time, which ends at its next use (D-218) | Host |
 | `IdentifierChanged` | *Retired by D-146. See `IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`.* | |
 | `IdentifierAdded` | An added email or phone was verified and counts (REG-IDENT-004); also a replace that completed (REG-IDENT-007), and a corporate address taken on at an invitation's acknowledgement (REG-INV-001) | Host |
 | `IdentifierRemoved` | An identifier was removed (REG-IDENT-006), or a corporate address was retired when a membership ended (REG-MAIL-003); a later undo fires `IdentifierAdded` | Host |
@@ -1592,7 +1613,7 @@ transaction that makes it true (CONV-DESIGN-002, IDN-LIFE-003a).
 | `DeviceVerified` | A new-device check completed (AUTH-FACT-016); carries the browser identifier and no personal data | Host (optional) |
 | ~~`ExportRequested`~~ | *Retired by D-203.* What the host holds reaches an export through its export contributors when the export is assembled (`IExportContributor`, PRIV-RIGHT-003) | |
 | `TakedownExecuted` | Phase one of a takedown has committed; fires with `AccountSuspended`; `AccountDeletionRequested` does **not** fire for a takedown | Host (stop its own processing for the subject, as a required subscriber) |
-| `MembershipChanged` | A membership begins or ends, one bootstrap attaches included; carries `change` (`began` · `ended`, section 5.39) | Host |
+| `MembershipChanged` | A membership begins or ends, one bootstrap attaches included; carries `change` (`began` · `ended`, section 5.39) and `invitation`, the invitation whose acknowledgement began it, null otherwise (`01` IDN-READ-002, D-218) | Host |
 | `ConsentChanged` | A consent granted, withdrawn or superseded; carries the purpose and `change` (`granted` · `withdrawn` · `superseded`, section 5.39); on `withdrawn`, handlers erase data held solely for the purpose (PRIV-CONS-008) | Every registered handler for the purpose — **required** |
 | `ObjectionChanged` | An objection recorded or withdrawn for a purpose on an objectable basis (PRIV-RIGHT-001a) | Every registered handler for the purpose — **required** |
 | `CredentialEnrolled` | An authenticator reached `active`, or a password was set on an existing account, by the person, by recovery or by an invitation, with the enrolment notification to every other recorded channel (AUTH-STEP-007); carries the credential identifier (absent for the password), the catalogue entry and the subject | Host (optional) |
@@ -1604,7 +1625,7 @@ Mail provisioning consumes no event: it reads the state these events announce
 (INT-MAIL-006).
 
 *Source: LIB-API-001, IDN-LIFE-003a, PRIV-RIGHT-005b, CONV-DESIGN-002, D-022, D-132,
-D-141, D-146, D-162, D-166, D-168, D-177, D-183, D-187, D-197*
+D-141, D-146, D-162, D-166, D-168, D-177, D-183, D-187, D-197, D-218*
 
 ## 6. Status code usage
 

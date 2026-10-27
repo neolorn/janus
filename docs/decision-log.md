@@ -18261,6 +18261,105 @@ end's row); `10` section 5.24 (`identity.membership.ended`, `authz.grant.revoked
 
 ---
 
+## D-218 — Round H2: what a host reads and is told
+
+**Date:** 2026-10-27 · **Status:** accepted · **Follows from:** D-202, D-203, D-207
+
+**TL;DR.** The decision round H2 waits for (plan, section 3a). A host reads, through the
+library's operations, the organizations, members and invitations it administers and the
+people tied to it, from a staff member's request or from its own declared jobs, and asks
+which accounts may exercise a permission on a record; it is told of the organizations,
+grants, groups, roles and sessions that change. Each read reaches the people its
+organization deals with, and the administrative organization reaches everyone (rule 7,
+the owner's choice). The gaps are the host review's H16 to H22 and H28 (2026-10-19),
+Cura's third point and the three reads its feedback lists as planned (2026-10-26), and
+the reads D-203 rule 8 and D-207 left to this round.
+
+1. **Organizations (H16).** `organization:read` lists and reads organizations: every one
+   in the administrative organization, the organization itself elsewhere, an erased one
+   answering as none (`01` IDN-READ-001). The administrative organization's identifier is
+   read with no access context and meets no gate, a fourth operation called in process
+   only (`07` LIB-API-005): a host names its jobs' principals with it before anyone acts,
+   and it reads no record of a person.
+2. **Members and invitations (H17, H28, "still a member").** `membership:read` lists an
+   organization's current members, reads one account's membership, and lists its
+   standing invitations (`01` IDN-READ-002). A member carries the invitation it began
+   from, and `MembershipChanged` names it, so a host that made its staff record before
+   inviting links the two. Lists page by identifier, at most 500 rows.
+3. **Another person's account (H18).** `account:read` reads an account (state, profile,
+   identifiers, preferences, memberships; never a credential, the date of birth or the
+   photo) and finds one by an email, phone or username in canonical form (`01`
+   IDN-READ-003). Finding is a `POST`, so no identifier rides in an address a proxy
+   logs.
+4. **Contact details (Cura; H22).** `contact:read` reads the display name, the primary
+   verified email and phone, the language, the time zone and the state: what a host
+   needs to write to a person through its own messaging, a declared job's send included.
+5. **Standing (D-203 rule 8, D-207).** `consent:read` reads a person's state, consents
+   and objections, so a host's own processing, a job's included, follows them; it is
+   the read a messaging library's consent source answers from.
+6. **Sessions and preferences (H19, H22).** Another person's live sessions are listed
+   under `session:revoke-account`, the permission that ends them, for the offboarding
+   check (`16` section 4). An administrator sets another person's preferences, an
+   administrator-only one included (REG-PREF-001), under `account:manage` with a reason
+   and no step-up: it changes nothing the person signs in or is admitted with.
+7. **The reach (the owner's choice).** A read is asked in an organization. A holder in
+   the administrative organization reaches every organization and every account, as the
+   deployment's operator. A holder elsewhere reaches its own organization, and a person
+   only where tied to it: a current member, or the data subject of a record registered
+   in it. Outside the reach, an account answers `identity.account.notfound` in the bytes
+   of an account no person bears. A person's reads of people count toward their read
+   volume (OPS-ALERT-005); reads are not audited, refusals are. The owner chose this, on
+   the recommendation put to him, over every account in the deployment (2026-10-27).
+   *Rejected:* every account in the deployment (another
+   organization's staff could look up this one's customers); each read bound to a stated
+   purpose (the messaging library already checks consent and suppressions per message,
+   and a purpose per read would gate the same thing twice).
+8. **Jobs.** A declared job MAY declare `organization:read`, `membership:read`,
+   `contact:read` and `consent:read`, the only library-owned permissions a job declares,
+   and reads with its organization's reach, outside a request (`01` IDN-READ-004,
+   IDN-PRIN-001). `account:read`, finding, the sessions and the preference setting stay
+   a person's. The `system-administrator` role, which holds every library-owned
+   permission (`10` section 3), takes the five new ones where a deployment already holds
+   it. *Rejected:* a separate read contract for jobs (two ways to read one thing);
+   letting a job declare every library-owned permission (each that changes an account
+   is a person's step-up action, D-202).
+9. **Who may (Cura's third point, H20).** `IAccessGate.WhoMayAsync` answers the accounts
+   the single check would admit for a permission on a record, or across an organization:
+   stored, materialised and live derived grants, through groups and containment, allows
+   less denies, active accounts (restricted ones for a reading permission), current
+   members only in the administrative organization, live derivations within
+   `authz.reverselookup.budget` (`03` AUTHZ-GATE-007). A person asks it under
+   `grant:read`; a declared job asks it for a permission its declaration names, so a job
+   that may read a record asks who else may. *Rejected:* who holds a role (it misses
+   denies, containment and derived access, and makes the host keep a copy of role
+   holders that drifts); the grants view of AUTHZ-DERIVE-007 (it reports grants, not
+   the accounts they admit).
+10. **Events (H21).** `OrganizationCreated`, `OrganizationDeletionRequested`,
+    `OrganizationDeletionCancelled`, `GrantChanged`, `GroupMembershipChanged`,
+    `RoleChanged` and `SessionEnded` are added (`10` section 5b), each written in the
+    transaction that makes it true. `SessionEnded` is raised for a session ended before
+    its expiry, with its reason; a session expiring by time raises none, since nothing
+    ends it at an instant.
+11. **The sample host.** It grows with the round: a declared job that asks which
+    accounts may read one of its records and reads each one's contact details outside a
+    request, and a staff page listing its organization's members (LIB-TEST-004).
+12. **Not here.** Lists across organizations stay the host's own union of
+    per-organization reads (AUTHZ-SCOPE-001). Ending a membership still leaves the
+    account's sessions (D-213).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` section 6a (IDN-READ-001 to IDN-READ-004, new), IDN-PRIN-001
+(statement, criteria 6 and 7); `03` AUTHZ-GATE-007 (new); `07` LIB-API-005 (the
+operations covered, the operations called in process only), LIB-HOST-001 (jobs); `09`
+section 8a (the reads, and the preference setting among the operations not gated); `10`
+section 2.1 (`organization:read`, `membership:read`, `account:read`, `contact:read`,
+`consent:read`, `grant:read`, `account:manage`, `session:revoke-account`), section 5.24
+(`identity.preferences.changed`), section 5.39, section 5b; `implementation-plan.md`
+(section 3a, round H2).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18488,6 +18587,7 @@ end's row); `10` section 5.24 (`identity.membership.ended`, `authz.grant.revoked
 | Round H1 questions 53 and 54: a package another brings, and the page case | D-215 |
 | Round H1 questions 55 and 56: the reason a membership's end records, and what holding admits | D-216 |
 | Round H1 question 57 and the review: who a set end's records name, and two denies kept | D-217 |
+| Round H2: what a host reads and is told | D-218 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

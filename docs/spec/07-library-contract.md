@@ -192,10 +192,10 @@ the response SHALL carry `Content-Language: en`, which that section requires.
 
 **LIB-API-005** — Every library-owned operation SHALL exist **once**, as a service
 contract in `Janus.Core`, and SHALL be exposed **twice**: callable in-process by a
-host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The three
+host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The four
 operations named below as called in process only have no endpoint.
 
-*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208*
+*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208, D-218*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -203,17 +203,20 @@ service; the frontends reach the same operation over HTTP. This is the pattern t
 gate already uses — one rule rendered two ways (AUTHZ-GATE-002) — applied to
 operations. An endpoint is a mapping, never a second implementation.
 
-**The operations covered** — each required by a SHALL elsewhere: organization
-lifecycle and policy; memberships and invitations; groups; account suspension,
-reactivation, restriction lift and deletion cancel; the takedown; the data-subject
-request queue; consent and objection records; erasure progress and manual completion; audit query by subject;
-explanation resolution; compliance-text publishing; licence, permit and assessment
-records; credential and factor management; profile photo and language preference; the
-registration session; identifier, preference and session management; the restriction
-set and grants; mail app passwords; domain lock (D-146); the generation of the
-break-glass credential and whether one stands (OPS-BOOT-004, OPS-BOOT-001 AC3).
-The endpoints are enumerated in `09-api-contract`; the permissions in `10-reference`
-§2.1.
+**The operations covered** — each required by a SHALL elsewhere: organization lifecycle
+and policy; memberships and invitations; groups; account suspension, reactivation,
+restriction lift and deletion cancel; the takedown; the data-subject request queue;
+consent and objection records; erasure progress and manual completion; audit query by
+subject; explanation resolution; compliance-text publishing; licence, permit and
+assessment records; credential and factor management; profile photo and language
+preference; the registration session; identifier, preference and session management; the
+restriction set and grants; mail app passwords; domain lock (D-146); the generation of
+the break-glass credential and whether one stands (OPS-BOOT-004, OPS-BOOT-001 AC3); the
+reads of organizations, members, invitations, another person's account, contact details,
+standing and sessions, the setting of another person's preferences (`01` IDN-READ-001 to
+IDN-READ-003), and which accounts may exercise a permission (`03` AUTHZ-GATE-007,
+D-218). The endpoints are enumerated in `09-api-contract`; the permissions in
+`10-reference` §2.1.
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
@@ -257,7 +260,7 @@ the outermost commit or rollback (AUTHZ-INHERIT-002, D-207); a host asks the gat
 action bound to a step-up gate before it begins the unit of work it joins (`08`
 CONV-DESIGN-003, D-207).
 
-**Operations called in process only.** Three operations are called in process only, and
+**Operations called in process only.** Four operations are called in process only, and
 none has an endpoint or meets a gate (CONV-DESIGN-002 AC3): read-volume counting
 (`IReadVolume`, OPS-ALERT-005), which reports what the host's own gate-filtered queries
 and exports returned, which no HTTP caller has to report; derivation refresh
@@ -266,8 +269,11 @@ operation that changes a relationship or from a declared job outside a request, 
 which records each grant it writes or takes back naming who called it, a job's context
 calling it while a request is served being a fault of the calling code, as is every
 other call by a system principal AUTHZ-DERIVE-005 does not admit (`01` IDN-PRIN-001,
-D-207, D-208); and the conformance suite's provider probes (LIB-TEST-001), which the
-suite calls and which read no record of a person (D-172).
+D-207, D-208); the conformance suite's provider probes (LIB-TEST-001), which the suite
+calls and which read no record of a person (D-172); and the administrative
+organization's identifier (`IOrganizations.AdministrativeAsync`, `01` IDN-READ-001),
+which takes no access context, since a host names its jobs' principals with it before
+anyone acts, and reads no record of a person (D-218).
 
 **Acceptance criteria**
 1. Each endpoint in `09` other than those named above resolves to exactly one service in
@@ -305,7 +311,7 @@ suite calls and which read no record of a person (D-172).
 | **Purpose handlers** | For every purpose resting on consent or on an objectable basis, a registered `IPurposeHandler` naming it (`Purposes`), under a name distinct among the purpose handlers and the subject-event subscribers (`Name`, IDN-LIFE-003a), which handles each `ConsentChanged` and `ObjectionChanged` of the purposes it names, delivered through the outbox (PRIV-RIGHT-001a, PRIV-CONS-008, D-203). **Startup fails otherwise** (PRIV-RIGHT-001a AC3), `details.handler` naming the purpose |
 | **Export contributors** | Each registered `IExportContributor` names the types whose records it holds (`Covers`) and answers its sections of a subject's export (PRIV-RIGHT-003); every type that declares an encrypted field or a sensitive category SHALL be covered by at least one. **Startup fails otherwise** with `model.startup.declarationmissing`, `details.handler` naming the type; contributor names are distinct, each under INT-SMS-003's name rule, a name outside it or given twice failing startup with `model.startup.declarationinvalid`, `details.declaration` `contributor.<name>`, `details.field` `name` (D-203, D-206); the names of the sections and values a contributor answers follow that rule without `.`, judged by `Janus.Hosting` before the assembly takes them (PRIV-RIGHT-003, D-206) |
 | **Cookies** | Every cookie the host sets: `Cookie(name, lifetime, thirdPartyReadable, purpose)`, its lifetime none for one that ends with the browser's session, its purpose none for one strictly necessary and the consent-based purpose it serves for one that is not (PRIV-CONS-006a); a purpose not declared or not resting on consent, a name the library's own cookies take, or a cookie declared twice fails startup with `model.startup.declarationinvalid`, `details.declaration` `cookie.<name>` (D-203) |
-| **Jobs** | Optional: each of the host's background jobs, `Job(name, permissions)`, its name under INT-SMS-003's rule, distinct, and no name of `10` section 5.29 nor `migrate` (D-206), with the host permissions it exercises; its principal is `SystemPrincipal.ForOrganization` naming it (IDN-PRIN-001). A permission not declared, a library-owned one, one bound to a step-up gate or one whose action is `export` fails startup with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`, `details.field` `permissions` (D-202) |
+| **Jobs** | Optional: each of the host's background jobs, `Job(name, permissions)`, its name under INT-SMS-003's rule, distinct, and no name of `10` section 5.29 nor `migrate` (D-206), with the host permissions it exercises; its principal is `SystemPrincipal.ForOrganization` naming it (IDN-PRIN-001). A permission not declared, a library-owned one other than `organization:read`, `membership:read`, `contact:read` and `consent:read` (`01` IDN-READ-004, D-218), one bound to a step-up gate or one whose action is `export` fails startup with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`, `details.field` `permissions` (D-202) |
 | **Governing language** | `legal.governinglanguage`: the default governing language of every legal document version (PRIV-CONS-005). Required, no default; protected once set (OPS-CFG-004) |
 | **Preference declaration** | Each host-declared preference: name, type (`string` · `boolean` · `integer` · `enum` with its values), default, and whether the person or only an administrator may edit it (REG-PREF-001). The declaration MAY be empty; a malformed one fails startup |
 | **Restriction key suppliers** | Optional: for each `host:<name>` restriction key the host uses (AUTH-ABUSE-004), a per-send callback registered under that name that returns the key value the restriction is evaluated against. A restriction naming a `host:<name>` key with no registered supplier fails startup, and a change of the restriction set naming one is refused with `config.value.notallowed`, `details.supplier` naming it. The callback is `Func<SendContext, CancellationToken, ValueTask<string>>`; `SendContext` is a sealed record of `Purpose` (`10` section 5.15), `Kind` (`email` · `sms`), `SubjectId` (nullable) and `Source` (nullable: a send no request asked for has none) (D-153) |
