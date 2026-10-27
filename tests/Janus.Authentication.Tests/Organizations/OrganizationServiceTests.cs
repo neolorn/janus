@@ -149,7 +149,8 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     /// IDN-ORG-003 AC8: the sessions of the organization's current members end inside
     /// the unit of work that suspends it: nothing has ended when the organization's row
     /// is held, and the one commit that follows carries the suspension, the ended
-    /// sessions and the record together. A session of someone who is no member stands.
+    /// sessions, their announcements (D-218) and the record together. A session of
+    /// someone who is no member stands.
     /// </summary>
     [Fact]
     public async Task IDN_ORG_003_AC8_TheMemberSessionsEndInTheUnitOfWorkThatSuspendsAsync()
@@ -174,6 +175,13 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
         Assert.Equal((1, 0, false), (_work.Committed, _work.RolledBack, _work.Open));
         Assert.Equal(Noon, theirs.EndedAt);
         Assert.Null(own.EndedAt);
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (theirs.Id, SessionEndReason.Organization, member, _administrator),
+            (ended.Session, ended.Reason, ended.Subject, ended.Actor));
+        Assert.Contains(ended, _events.PublishedInTransaction);
         Assert.Equal(
             Noon,
             (await _organizations.FindAsync(Customer, TestContext.Current.CancellationToken))?.DeletionRequestedAt);

@@ -239,6 +239,37 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-008 (D-218): a password set in a session ends the account's other
+    /// sessions, each announced as ended by the person, and the one that set it stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_008_APasswordSetEndsAndAnnouncesTheOtherSessionsAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IssuedSession other = Value(await Sessions.BeginAsync(
+            subject,
+            [Factor.Password],
+            Somewhere,
+            TestContext.Current.CancellationToken));
+
+        _events.Published.Clear();
+
+        Assert.True(Succeeded(await Service.SetPasswordAsync(
+            Authority(subject, session),
+            Another,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (other.Id, SessionEndReason.Ended, subject, subject),
+            (ended.Session, ended.Reason, ended.Subject, ended.Actor));
+        Assert.Null((await _live.FindAsync(session, TestContext.Current.CancellationToken))!.EndedAt);
+    }
+
+    /// <summary>
     /// AUTH-STEP-007 AC5: a social-only account whose session began longer ago than
     /// the maximum age the policy gives <c>factor:enrol</c> sets a password with no
     /// presentation, the gate's level being <c>delegated</c>, which asks no maximum
@@ -2559,6 +2590,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
             new OidcClientStoreInMemory(),
+            _events,
             _work,
             _clock,
             _randomness);

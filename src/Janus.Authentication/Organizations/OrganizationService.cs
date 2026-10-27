@@ -272,7 +272,20 @@ internal sealed class OrganizationService(
         // is refused, because the sessions end in the transaction that suspends.
         foreach (SubjectId member in await directory.MembersAsync(organization, cancellationToken).ConfigureAwait(false))
         {
-            await sessions.EndAccountAsync(member, now, cancellationToken).ConfigureAwait(false);
+            if (await SessionEnds
+                    .AnnouncedAsync(
+                        events,
+                        await sessions.EndAccountAsync(member, now, cancellationToken).ConfigureAwait(false),
+                        SessionEndReason.Organization,
+                        now,
+                        context,
+                        cancellationToken)
+                    .ConfigureAwait(false) is Error unended)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure(unended);
+            }
         }
 
         if (await AnnouncedAsync(

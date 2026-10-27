@@ -240,7 +240,9 @@ internal sealed class RecoveryService(
 
         // IDN-LIFE-008: a changed password ends every session that was held under the
         // old one, wherever it is held.
-        _ = (await sessions.EndAccountAsync(link.Subject, cancellationToken).ConfigureAwait(false))
+        _ = (await sessions
+                .EndAccountAsync(link.Subject, SessionEndReason.Ended, cancellationToken)
+                .ConfigureAwait(false))
             .Match(() => true, error => Withheld<bool>(error, ref failure));
 
         if (failure is not null)

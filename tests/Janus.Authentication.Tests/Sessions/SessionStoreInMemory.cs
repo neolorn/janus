@@ -139,42 +139,40 @@ internal sealed class SessionStoreInMemory : ISessionStore
     }
 
     /// <inheritdoc/>
-    public ValueTask EndSpineAsync(
+    public ValueTask<IReadOnlyList<EndedSession>> EndSpineAsync(
         SessionId spine,
         DateTimeOffset at,
-        CancellationToken cancellationToken)
-    {
-        foreach (Session session in _sessions.Values.Where(session => session.Spine == spine))
-        {
-            session.End(at);
-        }
-
-        return ValueTask.CompletedTask;
-    }
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<EndedSession>>(Ended(_sessions.Values.Where(session => session.Spine == spine), at));
 
     /// <inheritdoc/>
-    public ValueTask EndAccountAsync(
+    public ValueTask<IReadOnlyList<EndedSession>> EndAccountAsync(
         SubjectId subject,
         DateTimeOffset at,
-        CancellationToken cancellationToken)
-    {
-        foreach (Session session in _sessions.Values.Where(session => session.Subject == subject))
-        {
-            session.End(at);
-        }
-
-        return ValueTask.CompletedTask;
-    }
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<EndedSession>>(Ended(_sessions.Values.Where(session => session.Subject == subject), at));
 
     /// <inheritdoc/>
-    public ValueTask EndEveryAsync(DateTimeOffset at, CancellationToken cancellationToken)
+    public ValueTask<IReadOnlyList<EndedSession>> EndEveryAsync(DateTimeOffset at, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<EndedSession>>(Ended(_sessions.Values, at));
+
+    // As the store does: each session not yet ended is ended, and the ones still inside
+    // both lifetimes are handed back to be announced (AUTH-SESS-005, D-218).
+    private static List<EndedSession> Ended(IEnumerable<Session> reached, DateTimeOffset at)
     {
-        foreach (Session session in _sessions.Values)
+        List<EndedSession> ended = [];
+
+        foreach (Session session in reached.Where(session => session.EndedAt is null).ToList())
         {
+            if (session.IdleExpiry > at && session.AbsoluteExpiry > at)
+            {
+                ended.Add(new EndedSession(session.Id, session.Subject));
+            }
+
             session.End(at);
         }
 
-        return ValueTask.CompletedTask;
+        return ended;
     }
 
     /// <inheritdoc/>

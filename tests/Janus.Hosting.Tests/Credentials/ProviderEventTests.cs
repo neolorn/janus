@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
@@ -545,7 +546,8 @@ public sealed class ProviderEventTests : IAsyncDisposable
     /// <summary>
     /// IDN-LIFE-012a AC2 and IDN-LIFE-012 AC3: where the withdrawn identity is the
     /// account's last way in, the credential stays and the account is suspended by the
-    /// administrator's hand, its sessions end, and the security-notice set is told.
+    /// administrator's hand, its sessions end, each announced as ended by the account's change
+    /// (D-218), and the security-notice set is told.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -559,6 +561,21 @@ public sealed class ProviderEventTests : IAsyncDisposable
         _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, address);
 
         Authenticator linked = await LinkAsync(subject, Factor.Apple, AppleSubject);
+        var session = Session.Begin(
+            SessionId.New(_deployment.Clock),
+            subject,
+            new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Fedora")),
+            _deployment.Clock.GetUtcNow(),
+            TimeSpan.FromDays(1),
+            TimeSpan.FromDays(30),
+            breakGlassReason: null);
+
+        await _deployment.Sessions.AddAsync(
+            session,
+            OpaqueToken.Draw(_randomness).Fingerprint(),
+            OpaqueToken.Draw(_randomness).Fingerprint(),
+            CancellationToken.None);
 
         Answer answered = await DeliveredAsync(
             Apple,
@@ -570,6 +587,13 @@ public sealed class ProviderEventTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, answered.Status);
         Assert.Contains(_deployment.Authenticators.All, held => held.Id == linked.Id);
         Assert.Equal(AccountState.Suspended, await StateAsync(subject));
+        Assert.Empty(Live(subject));
+
+        SessionEnded ended = Assert.Single(_deployment.Events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (session.Id, SessionEndReason.Account, subject, (SubjectId?)null),
+            (ended.Session, ended.Reason, ended.Subject, ended.Actor));
         Assert.Equal(
             SuspensionOrigin.Administrator,
             await _deployment.Accounts.SuspendedByAsync(subject, CancellationToken.None));

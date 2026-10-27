@@ -31,6 +31,7 @@ namespace Janus.Authentication.Sessions;
 /// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="concurrent">The watch over sessions used implausibly far apart at once.</param>
 /// <param name="clients">Where the client a registration captured is read, for the return it answers.</param>
+/// <param name="events">Where each session an end takes is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a session secret is drawn from.</param>
@@ -53,6 +54,7 @@ internal sealed class SessionService(
     ILocationResolver locations,
     ConcurrentSessions concurrent,
     IOidcClientStore clients,
+    IEvents events,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : ISessions
@@ -704,9 +706,26 @@ internal sealed class SessionService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        return context.Effective is SubjectId subject
-            ? await EndAccountAsync(subject, cancellationToken).ConfigureAwait(false)
-            : Result.Failure(Error.From(ErrorCodes.Denied));
+        if (context.Effective is not SubjectId subject)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        _ = await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     /// <inheritdoc/>
@@ -763,8 +782,22 @@ internal sealed class SessionService(
             return Result.Failure(since);
         }
 
-        await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Revoked,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -823,7 +856,22 @@ internal sealed class SessionService(
             return Result.Failure(since);
         }
 
-        await sessions.EndEveryAsync(time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndEveryAsync(now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Revoked,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -836,13 +884,16 @@ internal sealed class SessionService(
 
     /// <summary>
     /// Ends every session of an account, which is what a transition out of
-    /// <c>active</c> does in the same operation as the transition.
+    /// <c>active</c> does in the same operation as the transition, announcing each
+    /// (chapter 10 section 5b, D-218).
     /// </summary>
     /// <param name="subject">Whose sessions.</param>
+    /// <param name="reason">Why they end.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success.</returns>
+    /// <returns>Success, or the failure where an end was not announced.</returns>
     public async ValueTask<Result> EndAccountAsync(
         SubjectId subject,
+        SessionEndReason reason,
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -851,8 +902,22 @@ internal sealed class SessionService(
             return Result.Failure(notBegun);
         }
 
-        await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    reason,
+                    now,
+                    actor: null,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)

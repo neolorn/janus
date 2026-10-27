@@ -202,6 +202,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
             new OidcClientStoreInMemory(),
+            _events,
             _work,
             _clock,
             _randomness);

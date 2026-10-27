@@ -1296,7 +1296,8 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     /// <summary>
     /// AUTH-SESS-010 AC3: the subject's sessions end before anything of theirs is
-    /// made unreadable, so no request arrives on one afterwards.
+    /// made unreadable, so no request arrives on one afterwards; each end is
+    /// announced (D-218).
     /// </summary>
     [Fact]
     public async Task AUTH_SESS_010_AC3_DeletionEndsSessionsBeforeThePersonalDataGoesAsync()
@@ -1339,6 +1340,22 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             .SingleAsync(session => session.Subject == subject, TestContext.Current.CancellationToken);
 
         Assert.Equal(Noon.AddHours(1), ended.EndedAt);
+        Assert.Equal(1, await EndsAnnouncedAsync(subject));
+    }
+
+    // The announcements that a session of the account ended because the account did,
+    // naming no actor, since no person acted (chapter 10 section 5b, D-218).
+    private async ValueTask<int> EndsAnnouncedAsync(SubjectId subject)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'SessionEnded' AND payload->>'Reason' = 'account'
+              AND payload->>'Actor' IS NULL AND payload->'Subject'->>'Value' = @subject
+            """,
+            new { subject = subject.Value.ToString() });
     }
 
     private async ValueTask<SubjectId> DeletingAccountAsync()

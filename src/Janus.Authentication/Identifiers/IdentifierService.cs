@@ -1012,7 +1012,13 @@ internal sealed class IdentifierService(
 
             // REG-IDENT-006 AC4: every verified identifier signs in, so the account's
             // other sessions end with it. The one asking is left alone.
-            await EndOthersAsync(subject, session, now, cancellationToken).ConfigureAwait(false);
+            if (await EndOthersAsync(context, subject, session, now, cancellationToken).ConfigureAwait(false)
+                is Error unannounced)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure(unannounced);
+            }
         }
         else
         {
@@ -1170,7 +1176,13 @@ internal sealed class IdentifierService(
         // restores or displaces, so every session of the account ends with it. It is
         // the owner's answer to a change that may have come from a stolen session,
         // which the removal or the replace left live.
-        await EndOthersAsync(given.Subject, keeping: null, now, cancellationToken).ConfigureAwait(false);
+        if (await EndOthersAsync(AccessContext.Of(given.Subject), given.Subject, keeping: null, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         var undo = OpaqueToken.Draw(randomness);
 
@@ -2320,8 +2332,10 @@ internal sealed class IdentifierService(
     }
 
     // IDN-LIFE-008: the session that made the change is kept, where there is one; a
-    // change made from no browser, and an undo, keeps none.
-    private async ValueTask EndOthersAsync(
+    // change made from no browser, and an undo, keeps none. Each session ended is
+    // announced in the change's transaction (chapter 10 section 5b, D-218).
+    private async ValueTask<Error?> EndOthersAsync(
+        AccessContext actor,
         SubjectId subject,
         SessionId? keeping,
         DateTimeOffset now,
@@ -2341,16 +2355,21 @@ internal sealed class IdentifierService(
             }
         }
 
-        var ended = new HashSet<SessionId>();
+        var spines = new HashSet<SessionId>();
+        List<EndedSession> ended = [];
 
         foreach (Session session in live)
         {
-            if (session.Spine != kept && ended.Add(session.Spine))
+            if (session.Spine != kept && spines.Add(session.Spine))
             {
-                await sessions.EndSpineAsync(session.Spine, now, cancellationToken)
-                    .ConfigureAwait(false);
+                ended.AddRange(await sessions.EndSpineAsync(session.Spine, now, cancellationToken)
+                    .ConfigureAwait(false));
             }
         }
+
+        return await SessionEnds
+            .AnnouncedAsync(events, ended, SessionEndReason.Ended, now, actor, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // What a completed verification does to the account: an add writes its identifier,
@@ -2502,8 +2521,11 @@ internal sealed class IdentifierService(
 
         // IDN-LIFE-008 AC1: the value that signed in is gone, so every session but the
         // one the change completes under ends with it, the one that staged it included.
-        await EndOthersAsync(waiting.Subject, completing, now, cancellationToken)
-            .ConfigureAwait(false);
+        if (await EndOthersAsync(AccessContext.Of(waiting.Subject), waiting.Subject, completing, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure<IReadOnlyList<LossReport>>(unannounced);
+        }
 
         await directory
             .ReplaceAsync(

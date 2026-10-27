@@ -286,7 +286,7 @@ public sealed class VocabularyContractTests
 
     /// <summary>
     /// LIB-API-001, chapter 10 section 5.39 (D-218): the change each event of section 5b
-    /// carries, spelled as section 5.39 spells it.
+    /// carries, and the reason a session ended, spelled as section 5.39 spells them.
     /// </summary>
     [Fact]
     public void LIB_API_001_TheChangesTheEventsCarryAreTheContract()
@@ -295,6 +295,7 @@ public sealed class VocabularyContractTests
         Assert.Equal(["added", "removed"], WireNames<GroupMembershipChange>());
         Assert.Equal(["began", "ended"], WireNames<MembershipChange>());
         Assert.Equal(["changed", "defined", "removed"], WireNames<RoleChange>());
+        Assert.Equal(["account", "ended", "organization", "revoked", "signedout"], WireNames<SessionEndReason>());
     }
 
     /// <summary>
@@ -392,6 +393,7 @@ public sealed class VocabularyContractTests
             typeof(GroupMembershipChange),
             typeof(MembershipChange),
             typeof(RoleChange),
+            typeof(SessionEndReason),
         ];
 
         foreach (Type vocabulary in vocabularies)

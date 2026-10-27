@@ -218,6 +218,37 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-008 (D-218): the password recovery set ends every session held under the
+    /// old one, each announced as ended, naming nobody as its actor, since the link names
+    /// nobody.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_008_ARecoveredPasswordEndsAndAnnouncesEverySessionAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+        IssuedSession held = Value(await Sessions.BeginAsync(
+            subject,
+            [Factor.Password],
+            Somewhere,
+            TestContext.Current.CancellationToken))!;
+
+        _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        Assert.True(Succeeded(await Service.CompleteAsync(
+            Sent(),
+            Secret,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (held.Id, SessionEndReason.Ended, subject, (SubjectId?)null),
+            (ended.Session, ended.Reason, ended.Subject, ended.Actor));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-005 AC3: the password recovery set is enough on its own to report the
     /// passkey that was lost, which is the whole point of having set it.
     /// </summary>
@@ -1186,6 +1217,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
             new OidcClientStoreInMemory(),
+            _events,
             _work,
             _clock,
             _randomness);

@@ -327,7 +327,18 @@ internal sealed class ProviderEvents(
         }
 
         // AUTH-SESS-010: the sessions end in the transaction that suspends.
-        await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false);
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Account,
+                    now,
+                    actor: null,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure<ProviderEventOutcome>(unannounced);
+        }
 
         if (state is not AccountState.Suspended)
         {

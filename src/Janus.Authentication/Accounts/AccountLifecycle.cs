@@ -156,7 +156,20 @@ internal sealed class AccountLifecycle(
 
         // AUTH-SESS-010: the transition out of active ends every session in the
         // operation that makes it, so nothing of the account's is still live after.
-        await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false);
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Account,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         _ = await TellAsync(
                 subject,
@@ -356,7 +369,20 @@ internal sealed class AccountLifecycle(
 
         // AUTH-SESS-010 AC3: the sessions end before anything of the person's is
         // removed, and the window runs with nothing of theirs still live.
-        await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false);
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Account,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<DateTimeOffset>(unannounced);
+        }
 
         _ = await TellAsync(subject, MessageKind.DeletionNotice, source, landing.Of(LinkKind.DeletionCancel, token.Value), cancellationToken)
             .ConfigureAwait(false);

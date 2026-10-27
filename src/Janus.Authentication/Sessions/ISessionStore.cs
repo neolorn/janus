@@ -107,8 +107,11 @@ internal interface ISessionStore
     /// <param name="spine">The record.</param>
     /// <param name="at">When they ended.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of ending them.</returns>
-    ValueTask EndSpineAsync(SessionId spine, DateTimeOffset at, CancellationToken cancellationToken);
+    /// <returns>The sessions it ended before their expiry, to be announced (D-218).</returns>
+    ValueTask<IReadOnlyList<EndedSession>> EndSpineAsync(
+        SessionId spine,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Ends every session of an account, which is the operation an account's
@@ -117,8 +120,11 @@ internal interface ISessionStore
     /// <param name="subject">Whose sessions.</param>
     /// <param name="at">When they ended.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of ending them.</returns>
-    ValueTask EndAccountAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken);
+    /// <returns>The sessions it ended before their expiry, to be announced (D-218).</returns>
+    ValueTask<IReadOnlyList<EndedSession>> EndAccountAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Ends every session in the deployment, which is the emergency operation and
@@ -126,8 +132,8 @@ internal interface ISessionStore
     /// </summary>
     /// <param name="at">When they ended.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of ending them.</returns>
-    ValueTask EndEveryAsync(DateTimeOffset at, CancellationToken cancellationToken);
+    /// <returns>The sessions it ended before their expiry, to be announced (D-218).</returns>
+    ValueTask<IReadOnlyList<EndedSession>> EndEveryAsync(DateTimeOffset at, CancellationToken cancellationToken);
 
     /// <summary>
     /// Removes the sessions that have passed their absolute expiry, which no request

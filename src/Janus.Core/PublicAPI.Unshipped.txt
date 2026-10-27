@@ -2809,6 +2809,20 @@ Janus.Core.SessionDetail.PhishingResistant.init -> void
 Janus.Core.SessionDetail.SessionDetail(Janus.Core.SubjectId Subject, Janus.Core.AssuranceLevel AssuranceLevel, bool PhishingResistant, System.DateTimeOffset? LastStrongAuthAt, System.DateTimeOffset ExpiresAt, string? Landing) -> void
 Janus.Core.SessionDetail.Subject.get -> Janus.Core.SubjectId
 Janus.Core.SessionDetail.Subject.init -> void
+Janus.Core.SessionEndReason
+Janus.Core.SessionEndReason.Account = 3 -> Janus.Core.SessionEndReason
+Janus.Core.SessionEndReason.Ended = 1 -> Janus.Core.SessionEndReason
+Janus.Core.SessionEndReason.Organization = 4 -> Janus.Core.SessionEndReason
+Janus.Core.SessionEndReason.Revoked = 2 -> Janus.Core.SessionEndReason
+Janus.Core.SessionEndReason.SignedOut = 0 -> Janus.Core.SessionEndReason
+Janus.Core.SessionEnded
+Janus.Core.SessionEnded.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.SessionId Session, out Janus.Core.SessionEndReason Reason) -> void
+Janus.Core.SessionEnded.Equals(Janus.Core.SessionEnded? other) -> bool
+Janus.Core.SessionEnded.Reason.get -> Janus.Core.SessionEndReason
+Janus.Core.SessionEnded.Reason.init -> void
+Janus.Core.SessionEnded.Session.get -> Janus.Core.SessionId
+Janus.Core.SessionEnded.Session.init -> void
+Janus.Core.SessionEnded.SessionEnded(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.SessionId Session, Janus.Core.SessionEndReason Reason) -> void
 Janus.Core.SessionId
 Janus.Core.SessionId.Deconstruct(out System.Guid Value) -> void
 Janus.Core.SessionId.Equals(Janus.Core.SessionId other) -> bool
@@ -3714,6 +3728,10 @@ override Janus.Core.SendingRestrictionGranted.ToString() -> string!
 override Janus.Core.SessionDetail.Equals(object? obj) -> bool
 override Janus.Core.SessionDetail.GetHashCode() -> int
 override Janus.Core.SessionDetail.ToString() -> string!
+override Janus.Core.SessionEnded.<Clone>$() -> Janus.Core.SessionEnded!
+override Janus.Core.SessionEnded.Equals(object? obj) -> bool
+override Janus.Core.SessionEnded.GetHashCode() -> int
+override Janus.Core.SessionEnded.ToString() -> string!
 override Janus.Core.SessionId.GetHashCode() -> int
 override Janus.Core.SessionId.ToString() -> string!
 override Janus.Core.SessionLocation.Equals(object? obj) -> bool
@@ -3818,6 +3836,7 @@ override sealed Janus.Core.RestrictionChanged.Equals(Janus.Core.SubjectEvent? ot
 override sealed Janus.Core.RoleChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.SendingRestrictionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.SendingRestrictionGranted.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.SessionEnded.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.SubjectEvent.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.TakedownExecuted.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.TakedownReversed.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -4710,6 +4729,8 @@ static Janus.Core.SendingRestrictionGranted.operator ==(Janus.Core.SendingRestri
 static Janus.Core.SensitiveCategories.Default.get -> System.Collections.Generic.IReadOnlyList<string!>!
 static Janus.Core.SessionDetail.operator !=(Janus.Core.SessionDetail? left, Janus.Core.SessionDetail? right) -> bool
 static Janus.Core.SessionDetail.operator ==(Janus.Core.SessionDetail? left, Janus.Core.SessionDetail? right) -> bool
+static Janus.Core.SessionEnded.operator !=(Janus.Core.SessionEnded? left, Janus.Core.SessionEnded? right) -> bool
+static Janus.Core.SessionEnded.operator ==(Janus.Core.SessionEnded? left, Janus.Core.SessionEnded? right) -> bool
 static Janus.Core.SessionId.New(System.TimeProvider! time) -> Janus.Core.SessionId
 static Janus.Core.SessionId.operator !=(Janus.Core.SessionId left, Janus.Core.SessionId right) -> bool
 static Janus.Core.SessionId.operator ==(Janus.Core.SessionId left, Janus.Core.SessionId right) -> bool

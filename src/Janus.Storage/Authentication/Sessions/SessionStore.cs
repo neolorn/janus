@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
@@ -30,6 +31,45 @@ internal sealed class SessionStore(
     IKeyRing ring,
     RandomNumberGenerator randomness) : ISessionStore
 {
+    // Chapter 10 section 5b (D-218): the end and the reading of what it took are one
+    // statement, so two ends at once never both hand one session back. A session past
+    // its inactivity or absolute lifetime (AUTH-SESS-005) had already expired by time,
+    // so it is marked ended and not handed back.
+    private const string EndSpine =
+        """
+        WITH ended AS (
+            UPDATE identity.sessions SET ended_at = @at
+            WHERE spine = @spine AND ended_at IS NULL
+            RETURNING id, subject, idle_expiry, absolute_expiry)
+        SELECT id, subject FROM ended
+        WHERE idle_expiry > @at AND absolute_expiry > @at
+        ORDER BY id;
+        """;
+
+    private const string EndAccount =
+        """
+        WITH ended AS (
+            UPDATE identity.sessions SET ended_at = @at
+            WHERE subject = @subject AND ended_at IS NULL
+            RETURNING id, subject, idle_expiry, absolute_expiry)
+        SELECT id, subject FROM ended
+        WHERE idle_expiry > @at AND absolute_expiry > @at
+        ORDER BY id;
+        """;
+
+    private const string EndEvery =
+        """
+        WITH ended AS (
+            UPDATE identity.sessions SET ended_at = @at
+            WHERE ended_at IS NULL
+            RETURNING id, subject, idle_expiry, absolute_expiry)
+        SELECT id, subject FROM ended
+        WHERE idle_expiry > @at AND absolute_expiry > @at
+        ORDER BY id;
+        """;
+
+    private readonly DataConnections _connections = new(context);
+
     /// <inheritdoc/>
     public async ValueTask<Session?> FindAsync(SessionId id, CancellationToken cancellationToken)
     {
@@ -225,37 +265,22 @@ internal sealed class SessionStore(
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
-    public async ValueTask EndSpineAsync(
+    public ValueTask<IReadOnlyList<EndedSession>> EndSpineAsync(
         SessionId spine,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await context.Sessions
-            .Where(session => session.Spine == spine && session.EndedAt == null)
-            .ExecuteUpdateAsync(
-                session => session.SetProperty(row => row.EndedAt, at),
-                cancellationToken)
-            .ConfigureAwait(false);
+        EndedAsync(EndSpine, new { spine = spine.Value, at }, cancellationToken);
 
     /// <inheritdoc/>
-    public async ValueTask EndAccountAsync(
+    public ValueTask<IReadOnlyList<EndedSession>> EndAccountAsync(
         SubjectId subject,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await context.Sessions
-            .Where(session => session.Subject == subject && session.EndedAt == null)
-            .ExecuteUpdateAsync(
-                session => session.SetProperty(row => row.EndedAt, at),
-                cancellationToken)
-            .ConfigureAwait(false);
+        EndedAsync(EndAccount, new { subject = subject.Value, at }, cancellationToken);
 
     /// <inheritdoc/>
-    public async ValueTask EndEveryAsync(DateTimeOffset at, CancellationToken cancellationToken) =>
-        await context.Sessions
-            .Where(session => session.EndedAt == null)
-            .ExecuteUpdateAsync(
-                session => session.SetProperty(row => row.EndedAt, at),
-                cancellationToken)
-            .ConfigureAwait(false);
+    public ValueTask<IReadOnlyList<EndedSession>> EndEveryAsync(DateTimeOffset at, CancellationToken cancellationToken) =>
+        EndedAsync(EndEvery, new { at }, cancellationToken);
 
     /// <inheritdoc/>
     public async ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
@@ -263,6 +288,26 @@ internal sealed class SessionStore(
             .Where(session => session.AbsoluteExpiry <= now)
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    private async ValueTask<IReadOnlyList<EndedSession>> EndedAsync(
+        string statement,
+        object parameters,
+        CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await _connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        return
+        [
+            .. (await ambient.Connection
+                    .QueryAsync<(Guid Session, Guid Subject)>(new CommandDefinition(
+                        statement,
+                        parameters,
+                        ambient.Transaction,
+                        cancellationToken: cancellationToken))
+                    .ConfigureAwait(false))
+                .Select(row => new EndedSession(new SessionId(row.Session), new SubjectId(row.Subject))),
+        ];
+    }
 
     private byte[] Written(
         ReadOnlySpan<byte> dataKey,

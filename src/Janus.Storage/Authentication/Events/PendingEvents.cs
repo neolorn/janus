@@ -57,6 +57,7 @@ internal sealed class PendingEvents(StoreContext context) : IPendingEvents
         EventJson.Default.RoleChanged,
         EventJson.Default.SendingRestrictionChanged,
         EventJson.Default.SendingRestrictionGranted,
+        EventJson.Default.SessionEnded,
         EventJson.Default.TakedownExecuted,
         EventJson.Default.TakedownReversed,
     }.ToFrozenDictionary(info => info.Type.Name, StringComparer.Ordinal);

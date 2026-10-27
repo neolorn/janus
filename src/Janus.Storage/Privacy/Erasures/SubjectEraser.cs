@@ -30,7 +30,7 @@ namespace Janus.Storage.Privacy.Erasures;
 /// <param name="configuration">Where the username hold's length is read.</param>
 /// <param name="connections">Where the grant counter statement takes its connection from.</param>
 /// <param name="identifiers">Where the subject's username is read and its lock is taken.</param>
-/// <param name="events">Where each grant the erasure revokes is announced.</param>
+/// <param name="events">Where each session the erasure ends, and each grant it revokes, is announced.</param>
 /// <remarks>
 /// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, REG-IDENT-009,
 /// IDN-LIFE-003b, IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003 and DR-016. Every write here is made on one
@@ -85,7 +85,7 @@ internal sealed class SubjectEraser(
             throw new InvalidOperationException("The subject has already been erased.");
         }
 
-        await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
+        await EndSessionsAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await MarkErasedAsync(subject, erased, cancellationToken).ConfigureAwait(false);
         await RevokeGrantsAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await HoldUsernameAsync(subject, at, cancellationToken).ConfigureAwait(false);
@@ -109,6 +109,24 @@ internal sealed class SubjectEraser(
             .ConfigureAwait(false);
 
         return erasure;
+    }
+
+    // Chapter 10 section 5b (D-218): no person erases the account, so no actor is named.
+    // An event not taken fails the erasure, as its unit of work failing does.
+    private async ValueTask EndSessionsAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Account,
+                    at,
+                    actor: null,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            throw new InvalidOperationException(unannounced.Code.ToString());
+        }
     }
 
     private async ValueTask MarkErasedAsync(

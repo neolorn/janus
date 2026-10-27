@@ -1434,6 +1434,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<IAdministrativeOrganization>(new AdministrativeOrganizationInMemory());
         services.AddScoped<AdministrativeScope>();
         services.AddSingleton<IAlertChannels, EventsInMemory>();
+        services.AddSingleton<IEvents, EventsInMemory>();
         services.AddScoped<ConcurrentSessions>();
         services.AddSingleton<IOidcClientStore, OidcClientStoreInMemory>();
         services.AddSingleton<IPasswordStore, PasswordStoreInMemory>();

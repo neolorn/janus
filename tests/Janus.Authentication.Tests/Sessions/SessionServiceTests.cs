@@ -53,6 +53,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly EventsInMemory _alerts = new();
+    private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
@@ -80,6 +81,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             _locations,
             new ConcurrentSessions(_sessions, _configuration, _alerts),
             new OidcClientStoreInMemory(),
+            _events,
             _work,
             _clock,
             _randomness);
@@ -1337,9 +1339,113 @@ public sealed class SessionServiceTests : IAsyncDisposable
         SubjectId subject = Subject();
         IssuedSession issued = await BegunAsync(subject, [Factor.Password]);
 
-        await Service.EndAccountAsync(subject, TestContext.Current.CancellationToken);
+        _ = await Service.EndAccountAsync(subject, SessionEndReason.Account, TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(issued.Secret));
+    }
+
+    /// <summary>
+    /// LIB-API-001 (D-218): each session a revocation ends is announced, with its account,
+    /// the reason <c>revoked</c> and the administrator who revoked it.
+    /// </summary>
+    [Fact]
+    public async Task LIB_API_001_EachSessionARevocationEndsIsAnnouncedAsync()
+    {
+        SubjectId leaving = Subject();
+        SubjectId staying = Subject();
+        var organization = OrganizationId.New(_clock);
+        SubjectId administrator = Subject();
+        IssuedSession theirs = await BegunAsync(leaving, [Factor.Password]);
+        IssuedSession others = await BegunAsync(staying, [Factor.Password]);
+
+        _administrative.Organization = organization;
+        _gate.Grant(administrator, organization, Permissions.SessionRevokeAccount);
+        _gate.Grant(administrator, organization, Permissions.SessionRevoke);
+        _accounts.Stands(leaving, AccountState.Active);
+
+        IssuedSession mine = await AdministeringAsync(administrator);
+
+        Assert.Null(Refusal(await Service.RevokeAccountAsync(
+            AccessContext.Of(administrator),
+            mine.Id,
+            leaving,
+            TestContext.Current.CancellationToken)));
+
+        SessionEnded revoked = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (theirs.Id, SessionEndReason.Revoked, leaving, administrator, administrator),
+            (revoked.Session, revoked.Reason, revoked.Subject, revoked.Actor, revoked.Effective));
+
+        Assert.Null(Refusal(await Service.RevokeEveryAsync(
+            AccessContext.Of(administrator),
+            mine.Id,
+            TestContext.Current.CancellationToken)));
+
+        IReadOnlyList<SessionEnded> every = [.. _events.Of<SessionEnded>().Skip(1)];
+
+        Assert.All(every, ended => Assert.Equal((SessionEndReason.Revoked, administrator), (ended.Reason, ended.Actor)));
+        Assert.Equal(
+            new[] { mine.Id.Value, others.Id.Value }.Order(),
+            every.Select(ended => ended.Session.Value).Order());
+    }
+
+    /// <summary>
+    /// LIB-API-001 (D-218): a session already past its expiry was ended by time, so an end
+    /// that reaches it afterwards announces only the sessions still live.
+    /// </summary>
+    [Fact]
+    public async Task LIB_API_001_ASessionPastItsExpiryIsNotAnnouncedAsync()
+    {
+        SubjectId subject = Subject();
+        _ = await BegunAsync(subject, [Factor.Password]);
+
+        _clock.Advance(TimeSpan.FromDays(91));
+
+        IssuedSession live = await BegunAsync(subject, [Factor.Password]);
+
+        Assert.Null(Refusal(await Service.EndAccountAsync(
+            subject,
+            SessionEndReason.Account,
+            TestContext.Current.CancellationToken)));
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (live.Id, SessionEndReason.Account, subject, (SubjectId?)null),
+            (ended.Session, ended.Reason, ended.Subject, ended.Actor));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5 (D-218): a revocation whose ends could not be announced ends
+    /// nothing, and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ARevocationWhoseEndIsNotAnnouncedIsRolledBackAsync()
+    {
+        SubjectId leaving = Subject();
+        var organization = OrganizationId.New(_clock);
+        SubjectId administrator = Subject();
+        _ = await BegunAsync(leaving, [Factor.Password]);
+
+        _administrative.Organization = organization;
+        _gate.Grant(administrator, organization, Permissions.SessionRevokeAccount);
+        _accounts.Stands(leaving, AccountState.Active);
+
+        IssuedSession mine = await AdministeringAsync(administrator);
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await Service.RevokeAccountAsync(
+                AccessContext.Of(administrator),
+                mine.Id,
+                leaving,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
     }
 
     /// <summary>

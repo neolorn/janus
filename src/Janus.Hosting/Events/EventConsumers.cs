@@ -63,6 +63,7 @@ internal sealed class EventConsumers(IServiceProvider services)
         RoleChanged each => Registered(each),
         SendingRestrictionChanged each => Registered(each),
         SendingRestrictionGranted each => Registered(each),
+        SessionEnded each => Registered(each),
         TakedownExecuted each => Registered(each),
         TakedownReversed each => Registered(each),
         _ => throw new InvalidOperationException(string.Create(

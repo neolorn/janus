@@ -131,7 +131,20 @@ internal sealed class AccountAdministration(
 
         // AUTH-SESS-010: the sessions end in the transaction that suspends, so the
         // first request on any of them after the commit is refused.
-        await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false);
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Account,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         // An account its owner deactivated is already suspended, so taking it over
         // changes who reverses it and announces nothing: the state did not change.

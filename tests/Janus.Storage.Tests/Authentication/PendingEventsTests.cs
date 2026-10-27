@@ -398,6 +398,12 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
         new RoleChanged(Noon, "role", "editor", RoleChange.Changed) { Actor = Actor },
         new SendingRestrictionChanged(Noon, "sending-restriction", "sms-per-number", Loosening: true) { Actor = Actor },
         new SendingRestrictionGranted(Noon, "sending-grant", "sms-per-number", 2, "a support request") { Actor = Actor },
+        new SessionEnded(Noon, "session-ended", new SessionId(Guid.CreateVersion7(Noon)), SessionEndReason.Revoked)
+        {
+            Subject = Subject,
+            Actor = Actor,
+            Effective = Actor,
+        },
         new TakedownExecuted(Noon, "takedown") { Subject = Subject },
         new TakedownReversed(Noon, "takedown-reversed") { Subject = Subject },
     ];
