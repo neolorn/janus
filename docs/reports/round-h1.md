@@ -950,7 +950,7 @@ base".
 - Q51, OPS-DEP-004 AC7: decided by running the step's script against repositories built
   at run time, as criteria 1 to 6 are; verified so under D-210 (above). No committed test.
 
-**Built under D-212 to D-216**
+**Built under D-212 to D-217**
 
 - The roles a role hands out, AUTHZ-GRANT-004, AUTHZ-GRANT-005 (`44a3a518`):
   - a role's `handsOut`, defined, declared and seeded with it, kept by name in the
@@ -1041,7 +1041,8 @@ base".
   - `InvitationEndpointTests.IDN_MEM_001_AC7_AnEndIsSetAndCancelledAsync`;
   - `InvitationServiceTests.IDN_MEM_001_AC7_AnEndSetIsKeptOnTheMembershipAsync`
     (`Janus.Hosting.Tests`, integration);
-  - not built: the job's pass that ends the membership at its instant (Q57).
+  - the job's pass that ends the membership at its instant is built under D-217
+    (below).
 - The principal `membership-ends` reserved, IDN-PRIN-001 (`b5cdfb36`):
   - `AuthorizationModelTests.IDN_PRIN_001_AC7_AJobDeclaredUnderAReservedNameFailsStartup`
     with `membership-ends`;
@@ -1062,6 +1063,46 @@ base".
   them had left them as they were, which the pipeline's runs on `f90c4460` refused.
 - D-215 answer 53: nothing to build. D-215 answer 54: the page case verified in review
   (below, under criteria no test decides).
+- The documents of D-217 (`7cd28834`): chapters 01, 03, 09, 10 and 16, the plan and the
+  decision log, each file's `git hash-object` checked against the owner's message.
+- A deny of a role defeats the roles it hands out, AUTHZ-GRANT-005 (`0502d022`, D-217,
+  the review's first finding):
+  - a role's `handsOut` counts only where no live deny grant of that role to the actor,
+    or to a group it belongs to, covers the change;
+  - `HandOutTests.AUTHZ_GRANT_005_AC8_ADenyOfARoleDefeatsTheRolesItHandsOutAsync`;
+  - truth table: "a grant of a role a role of the caller lists, the caller denied the
+    listing role, by a caller managing grants", `NotAssignable`.
+- An end leaves the account's deny grants standing, IDN-MEM-001 (`8eda3e8f`, D-217, the
+  review's second finding):
+  - an end revokes the account's live allow grants a person gave, and is judged on their
+    roles and on every role, allow or deny, the groups it leaves reach; the job's pass
+    reaches the same;
+  - `InvitationServiceTests.IDN_MEM_001_AC3_EndingAMembershipRevokesWhatAPersonGaveAndLeavesItsGroupsAsync`
+    (`Janus.Hosting.Tests`, integration), amended: a deny of a role the administrator
+    does not hand out stands and refuses nothing;
+  - no truth-table row: the change touches no watched place.
+- The job `membership-ends`, IDN-MEM-001 AC7, INF-BG-001, INF-BG-002 (`ff19481e`, D-217,
+  Q57):
+  - each pass ends every current membership whose end set in advance it has reached, one
+    transaction each, as an end now would, without asking the hand-out rule; an end moved
+    or cancelled since the pass read its list is followed as it then stands, and the
+    reserved account's membership of the administrative organization is kept;
+  - each record it writes (`identity.membership.ended`, `authz.grant.revoked`,
+    `authz.group.memberremoved`) carries the nil subject in both identities, the
+    principal `membership-ends` with the reason `IDN-MEM-001`, `details.endSetBy` and
+    `details.reason`; a grant it revokes carries the nil subject as revoker;
+  - `InvitationServiceTests.IDN_MEM_001_AC7_TheJobEndsAMembershipAtItsFirstPassAfterTheInstantAsync`,
+    `..._AC7_AnEndMovedOrCancelledIsCarriedOutAsItNowStandsAsync`,
+    `..._AC7_TheJobEndsAsAnAdministratorWouldAndKeepsTheReservedMembershipAsync` and
+    `InvitationServiceTests.INF_BG_002_AC1_ThePassRunsOnlyAsAPrincipalThatMaySweepAsync`
+    (`Janus.Authentication.Tests`);
+  - `InvitationServiceTests.IDN_MEM_001_AC7_TheJobEndsAMembershipAtItsInstantUnderItsPrincipalAsync`
+    (`Janus.Hosting.Tests`, integration);
+  - `BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync` runs the job
+    with every other;
+  - truth table: "the end of a membership at the instant a caller managing memberships
+    set, reaching a role no role of the caller hands out, by the job membership-ends",
+    `Allowed`, the membership ended and both grants revoked.
 
 **Items the round proves that this section did not list**
 
@@ -1347,9 +1388,6 @@ base".
 - **`11` section 5, `13` R-M20, `15` sections 3.7 and 6.3, and `19` INF-HOST-003:**
   documentation, runbook and infrastructure; no code in this round. INF-HOST-003's
   `migrate` document is proven by OPS-MIG-001 AC4.
-- **IDN-MEM-001 AC7, the end at the job's first pass after its instant, and `19`
-  INF-BG-001's `membership-ends`:** parked on Q57 (section 4). The end set in advance,
-  its move and its cancellation are built.
 - **`13` R-M23, `15` section 3.5 and `16` sections 2 and 3:** documentation; no code.
 
 ## 3. Resolved by rule
@@ -2110,7 +2148,7 @@ base".
   - Answered by D-216 answer 56 (reading A); built in `f0c28e87` with AUTHZ-GRANT-005
     AC7 (section 1).
 
-**Unanswered.**
+**Answered by D-217.**
 
 - **Q57 (Tier 3). Whom the audit rows of the job `membership-ends` name (IDN-MEM-001
   AC7, `10` sections 5.24 and 5.29, IDN-PRIN-001, INF-BG-002 AC2).**
@@ -2129,8 +2167,36 @@ base".
   - Parked: the job's pass (IDN-MEM-001 AC7, the end at the job's first pass after its
     instant, and `19` INF-BG-001's `membership-ends`). The principal is reserved, and
     the end set in advance, its move and its cancellation are built.
+  - Answered by D-217: the job's records are the job's, under its principal with the
+    reason `IDN-MEM-001` and the nil subject in both identities, naming the
+    administrator who set the end in `details.endSetBy` and the reason given; a grant it
+    revokes carries the nil subject as revoker; the pass does not ask the hand-out rule.
+    Built in `ff19481e` (section 1).
 
 ## 5. Gate result
+
+**The run under D-217 (D-214).**
+
+- Fast checks on every commit from `0502d022` to `ff19481e`: build with warnings as
+  errors, the analysers and `dotnet format --verify-no-changes` over `Janus.slnx`, and
+  the unit tests of the projects each commit changes, all green; the truth-table change,
+  changelog and forbidden-marker gates over each commit, green.
+- Run here while their tests were written: `HandOutTests`, 11 of 11; the hosting
+  `InvitationServiceTests`, 5 of 5; `TruthTableTests`, 205 of 205.
+- Before the push of this commit:
+  - every unit test of every test project, 4746 of 4746: `Janus.Analyzers.Tests` 23,
+    `Janus.Authentication.Tests` 1656, `Janus.Authorization.Tests` 235,
+    `Janus.Cli.Tests` 76, `Janus.Conformance.Tests` 23, `Janus.Core.Tests` 506,
+    `Janus.Hosting.Tests` 1645, `Janus.Identity.Tests` 106, `Janus.Privacy.Tests` 402,
+    `Janus.Storage.Tests` 59, `Janus.Testing.Tests` 15;
+  - the commit-message gate over `c1d7a831` to this commit, green;
+  - the full-history secret scan, gitleaks 8.30.1 as the script runs it, over every
+    commit of every branch and tag: no finding.
+- No full gate ran on the development machine (D-214). The pipeline's runs on this
+  commit, the push run and the pull request run, are the gate of record; their
+  identifiers and result are given in the run's last message.
+- The pipeline's runs on `c1d7a831`, the tip of the push before this run, were green:
+  the push run 40453491058 and the pull request run 40453497604.
 
 **The run under D-212 to D-216 (D-214).**
 
