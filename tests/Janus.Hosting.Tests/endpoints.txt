@@ -551,6 +551,21 @@ POST /admin/accounts/{subject}/restriction/lift
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   404 identity.account.notfound
   409 identity.account.stateconflict
+GET /admin/accounts/{subject}/sessions
+  200
+    application/json
+      [].id: string
+      [].signedInAt: DateTimeOffset
+      [].lastUsedAt: DateTimeOffset
+      [].device.browser: string
+      [].device.os: string
+      [].location.city: string
+      [].location.country: string
+      [].current: boolean
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound
 POST /admin/accounts/{subject}/sessions/revoke
   204
   400 api.request.malformed

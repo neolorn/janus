@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Hosting.Accounts;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -10,13 +13,13 @@ using Microsoft.AspNetCore.Routing;
 namespace Janus.Hosting.Sessions;
 
 /// <summary>
-/// The two revocations of chapter 09 section 8: one account's sessions, and every
-/// session in the deployment.
+/// The two revocations of chapter 09 section 8, one account's sessions and every
+/// session in the deployment, and the read of one account's sessions of section 8a.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-SESS-009, AUTH-SESS-011, LIB-API-005 and CONV-DESIGN-006. Each is
-/// one line to <see cref="ISessions"/>, which judges the permission, so a host calling
-/// it in process meets the same refusal.
+/// Implements AUTH-SESS-009, AUTH-SESS-011, IDN-READ-003, LIB-API-005 and
+/// CONV-DESIGN-006. Each is one line to <see cref="ISessions"/>, which judges the
+/// permission, so a host calling it in process meets the same refusal.
 /// </remarks>
 internal static class SessionRevocationEndpoints
 {
@@ -32,6 +35,11 @@ internal static class SessionRevocationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
+        _ = SessionRequired.On(endpoints.MapGet("/admin/accounts/{subject}/sessions", ListOfAsync))
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.Denied, ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces<IReadOnlyList<SessionView>>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/accounts/{subject}/sessions/revoke", RevokeAccountAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -46,6 +54,26 @@ internal static class SessionRevocationEndpoints
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> ListOfAsync(
+        ISessions sessions,
+        RequestSession browser,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await sessions
+                .ListOfAsync(browser.Asking, subject, cancellationToken)
+                .ConfigureAwait(false),
+            held => TypedResults.Json<IReadOnlyList<SessionView>>(
+                [.. held.Select(SessionView.Of)],
+                AccountJson.Default.IReadOnlyListSessionView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> RevokeAccountAsync(

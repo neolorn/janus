@@ -36,7 +36,8 @@ namespace Janus.Authentication.Sessions;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a session secret is drawn from.</param>
 /// <remarks>
-/// Implements AUTH-SESS-001 to AUTH-SESS-013, IDN-LIFE-012a and OPS-ALERT-007.
+/// Implements AUTH-SESS-001 to AUTH-SESS-013, IDN-LIFE-012a, IDN-READ-003 and
+/// OPS-ALERT-007.
 /// Lifetimes are read from the assurance the principal's policy requires and from
 /// nothing else, so the session a passkey opened lives exactly as long as the one a
 /// password opened.
@@ -640,20 +641,34 @@ internal sealed class SessionService(
             return Result.Failure<IReadOnlyList<SessionSummary>>(Error.From(ErrorCodes.Denied));
         }
 
-        IReadOnlyList<Session> live = await sessions
-            .LiveOfAsync(subject, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        return Result.Success(await SummariesAsync(subject, current, cancellationToken).ConfigureAwait(false));
+    }
 
-        return Result.Success<IReadOnlyList<SessionSummary>>(
-        [
-            .. live.Select(session => new SessionSummary(
-                session.Id,
-                session.CreatedAt,
-                session.LastSeenAt,
-                session.LastSeen.Device,
-                session.LastSeen.Location,
-                session.Id == current)),
-        ]);
+    /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<SessionSummary>>> ListOfAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevokeAccount, cancellationToken)
+                .ConfigureAwait(false) is Error refused)
+        {
+            return Result.Failure<IReadOnlyList<SessionSummary>>(refused);
+        }
+
+        // IDN-READ-003: a deleted account is answered as an account no person bears.
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is null or AccountState.Deleted)
+        {
+            return Result.Failure<IReadOnlyList<SessionSummary>>(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        // 16 section 4: the offboarding check reads the list from no session of the
+        // account's, so none is marked current.
+        return Result.Success(await SummariesAsync(subject, current: null, cancellationToken).ConfigureAwait(false));
     }
 
     /// <inheritdoc/>
@@ -1016,6 +1031,29 @@ internal sealed class SessionService(
         CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+    // AUTH-SESS-008: the account's live sessions as its list shows them, the one asking
+    // marked where there is one.
+    private async ValueTask<IReadOnlyList<SessionSummary>> SummariesAsync(
+        SubjectId subject,
+        SessionId? current,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Session> live = await sessions
+            .LiveOfAsync(subject, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. live.Select(session => new SessionSummary(
+                session.Id,
+                session.CreatedAt,
+                session.LastSeenAt,
+                session.LastSeen.Device,
+                session.LastSeen.Location,
+                session.Id == current)),
+        ];
+    }
 
     // INT-GEN-006: the address is the session's own and the city is what the local
     // database makes of it, so nothing outside the library writes a place into one.

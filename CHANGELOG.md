@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An administrator holding `session:revoke-account` lists another account's live
+  sessions (`ISessions.ListOfAsync`, `GET /admin/accounts/{subject}/sessions`) as the
+  account's own list shows them, none marked current, to check an offboarding before
+  revoking them.
 - A host reads where another person stands (`IConsents.StandingAsync`,
   `GET /admin/accounts/{subject}/standing`) under `consent:read`, which a declared job
   may hold: the account's state, its consents and its objections, each as the person's

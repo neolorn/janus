@@ -1257,6 +1257,52 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-READ-003 (D-218): a holder of <c>session:revoke-account</c> in the
+    /// administrative organization lists another account's live sessions with none marked
+    /// current; a subject no account bears and an account deleted are not found, and a
+    /// caller without the permission is refused before either is judged.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_003_AnotherAccountsSessionsAreListedWithNoneCurrentAsync()
+    {
+        SubjectId leaving = Subject();
+        SubjectId deleted = Subject();
+        var organization = OrganizationId.New(_clock);
+        SubjectId administrator = Subject();
+        IssuedSession first = await BegunAsync(leaving, [Factor.Password]);
+        IssuedSession second = await BegunAsync(leaving, [Factor.Password]);
+
+        _administrative.Organization = organization;
+        _gate.Grant(administrator, organization, Permissions.SessionRevokeAccount);
+        _accounts.Stands(leaving, AccountState.Active);
+        _accounts.Stands(deleted, AccountState.Deleted);
+
+        IReadOnlyList<SessionSummary> listed = (await Service.ListOfAsync(
+                AccessContext.Of(administrator),
+                leaving,
+                TestContext.Current.CancellationToken))
+            .Match(held => held, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal(
+            new HashSet<SessionId> { first.Id, second.Id },
+            listed.Select(summary => summary.Id).ToHashSet());
+        Assert.All(listed, summary => Assert.False(summary.Current));
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refusal(await Service.ListOfAsync(
+                AccessContext.Of(administrator), Subject(), TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refusal(await Service.ListOfAsync(
+                AccessContext.Of(administrator), deleted, TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refusal(await Service.ListOfAsync(
+                AccessContext.Of(Subject()), Subject(), TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-SESS-009 AC3: the explicit revocation operation terminates every session.
     /// </summary>
     [Fact]
