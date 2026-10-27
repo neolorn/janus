@@ -19,6 +19,7 @@ namespace Janus.Authentication.Organizations;
 /// an administrator.
 /// </summary>
 /// <param name="scope">Whether the caller may manage organizations.</param>
+/// <param name="administrative">Which organization administers the deployment.</param>
 /// <param name="stepUp">What a deletion request or its cancellation asks of the caller's session.</param>
 /// <param name="directory">Where organizations are written and their members read.</param>
 /// <param name="sessions">What a deletion request ends for every member.</param>
@@ -35,14 +36,15 @@ namespace Janus.Authentication.Organizations;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements LIB-API-005, IDN-ACCT-004, IDN-ACCT-005, IDN-ORG-002, IDN-ORG-003,
-/// IDN-ORG-004 and OPS-ALERT-001. An organization is the deployment's, and its own
-/// grants confer nothing while it is suspended, so <c>organization:manage</c> is asked
-/// in the administrative organization: that is the one place a suspended organization
-/// can still be restored from. A name is judged on its comparison key, as every
-/// identifier is.
+/// IDN-ORG-004, IDN-READ-001 and OPS-ALERT-001. An organization is the deployment's,
+/// and its own grants confer nothing while it is suspended, so <c>organization:manage</c>
+/// is asked in the administrative organization: that is the one place a suspended
+/// organization can still be restored from. A name is judged on its comparison key, as
+/// every identifier is.
 /// </remarks>
 internal sealed class OrganizationService(
     AdministrativeScope scope,
+    IAdministrativeOrganization administrative,
     StepUpGuard stepUp,
     IOrganizationDirectory directory,
     ISessionStore sessions,
@@ -641,6 +643,12 @@ internal sealed class OrganizationService(
 
         return Result.Success();
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<OrganizationId>> AdministrativeAsync(CancellationToken cancellationToken) =>
+        await administrative.FindAsync(cancellationToken).ConfigureAwait(false) is OrganizationId found
+            ? Result.Success(found)
+            : Result.Failure<OrganizationId>(Error.From(ErrorCodes.OrganizationNotFound));
 
     // AUTH-STEP-002a, AUTH-SESS-005b, OPS-CFG-002: what a replacement would make of the
     // policy in force, or the refusal it meets: below the system policy, below the

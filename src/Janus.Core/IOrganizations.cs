@@ -8,12 +8,12 @@ namespace Janus.Core;
 /// under <c>organization:manage</c> in the administrative organization.
 /// </summary>
 /// <remarks>
-/// Implements LIB-API-005, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, AUTH-STEP-002a and
-/// chapter 09 section 8a. Every change carries a reason and is audited. A deletion
-/// request and its cancellation are the <c>organization:delete</c> step-up action: the
-/// request suspends the organization, so no grant of it confers anything, and ends
-/// every session of its members in the same transaction. A change of policy is the
-/// <c>policy:change</c> step-up action.
+/// Implements LIB-API-005, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, AUTH-STEP-002a,
+/// IDN-READ-001 and chapter 09 section 8a. Every change carries a reason and is
+/// audited. A deletion request and its cancellation are the <c>organization:delete</c>
+/// step-up action: the request suspends the organization, so no grant of it confers
+/// anything, and ends every session of its members in the same transaction. A change of
+/// policy is the <c>policy:change</c> step-up action.
 /// </remarks>
 public interface IOrganizations
 {
@@ -123,4 +123,16 @@ public interface IOrganizations
         PolicyOverride replacement,
         string reason,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The administrative organization's identifier, which a host needs to name its
+    /// jobs' principals and to register its records before anyone acts. It takes no
+    /// access context and meets no gate, since it reads no record of a person.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The identifier, or <c>identity.organization.notfound</c> before bootstrap made the
+    /// organization.
+    /// </returns>
+    ValueTask<Result<OrganizationId>> AdministrativeAsync(CancellationToken cancellationToken);
 }

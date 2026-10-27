@@ -203,6 +203,7 @@ internal static class AuthenticationRegistration
         // was registered.
         services.AddScoped<IOrganizations>(provider => new OrganizationService(
             provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<IAdministrativeOrganization>(),
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<IOrganizationDirectory>(),
             provider.GetRequiredService<ISessionStore>(),

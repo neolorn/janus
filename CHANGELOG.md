@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host reads the administrative organization's identifier
+  (`IOrganizations.AdministrativeAsync`) with no access context, to name its jobs'
+  principals and register its records before anyone acts; before bootstrap it answers
+  `identity.organization.notfound`.
 - An administrator holding `account:manage` in the administrative organization sets
   another person's language, time zone and declared preferences, an administrator-only
   one included (`IAccounts.SetPreferencesAsync`,

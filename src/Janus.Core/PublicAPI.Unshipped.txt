@@ -1900,6 +1900,7 @@ Janus.Core.IAccounts.FindAsync(Janus.Core.AccessContext! context, string! identi
 Janus.Core.IAccounts.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccountView!>>
 Janus.Core.IAccounts.SetPreferencesAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, string? language, string? timeZone, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! declared, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IConsents.StandingAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectStanding!>>
+Janus.Core.IOrganizations.AdministrativeAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationId>>
 Janus.Core.ISessions.ListOfAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.SessionSummary!>!>>
 Janus.Core.MailboxState
 Janus.Core.MailboxState.Disabled = 0 -> Janus.Core.MailboxState

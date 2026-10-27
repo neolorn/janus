@@ -80,6 +80,7 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
 
             return new OrganizationService(
                 scope,
+                _administrative,
                 new StepUpGuard(
                     _sessions,
                     _authenticators,
@@ -118,6 +119,26 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     {
         await _work.DisposeAsync();
         _randomness.Dispose();
+    }
+
+    /// <summary>
+    /// IDN-READ-001 AC2 (D-218): the administrative organization's identifier is answered
+    /// with no access context, and <c>identity.organization.notfound</c> before bootstrap
+    /// made the organization.
+    /// </summary>
+    [Fact]
+    public async Task IDN_READ_001_AC2_TheAdministrativeOrganizationIsAnsweredWithNoContextAsync()
+    {
+        OrganizationId found = (await Service.AdministrativeAsync(TestContext.Current.CancellationToken))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        _administrative.Organization = null;
+
+        Assert.Equal(Staff, found);
+        Assert.Equal(
+            ErrorCodes.OrganizationNotFound,
+            (await Service.AdministrativeAsync(TestContext.Current.CancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
     }
 
     /// <summary>

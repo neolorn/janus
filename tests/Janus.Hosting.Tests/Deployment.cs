@@ -1259,6 +1259,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationAudit>(OrganizationChanges);
         _ = services.AddScoped<IOrganizations>(provider => new Janus.Authentication.Organizations.OrganizationService(
             provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<IAdministrativeOrganization>(),
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationDirectory>(),
             provider.GetRequiredService<ISessionStore>(),
