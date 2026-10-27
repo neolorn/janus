@@ -459,7 +459,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // organization the permission there alone admits. The list answers a holder in the
     // administrative organization every organization, any other caller the organizations
     // of its current memberships it holds the permission in, and is refused where it
-    // holds it in none, the one refusal recorded in the administrative organization
+    // holds it in none, the one refusal recorded in the administrative organization. A
+    // declared job is admitted in its own organization alone, and lists it alone
     // (IDN-READ-001, IDN-READ-004 AC5, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004, D-219).
     private static readonly (string Scenario, Decided Decided)[] OrganizationReads =
     [
@@ -474,6 +475,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("the list, by a member of another organization holding the permission there", Decided.Allowed),
         ("the list, by a caller holding the permission in another organization it is no member of", Decided.Denied),
         ("the list, by a caller holding the permission nowhere", Decided.Denied),
+        ("a read of its organization, by a declared job of it", Decided.Allowed),
+        ("a read of another organization, by a declared job of the administrative organization", Decided.Denied),
+        ("the list, by a declared job of another organization", Decided.Allowed),
     ];
 
     /// <summary>
@@ -811,8 +815,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Decided decided)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        (SubjectId caller, OrganizationId organization, OrganizationId administrative) = await ReadingAsync(scenario);
-        var context = AccessContext.Of(caller);
+        (AccessContext context, OrganizationId organization, OrganizationId administrative) = await ReadingAsync(scenario);
 
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
 
@@ -825,7 +828,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Result<ListedOrganizations> listed = await admission.ListedAsync(
                 context,
                 Permissions.OrganizationRead,
-                await scope.ServiceProvider.GetRequiredService<IMembershipLookup>().OfAsync(caller, cancellationToken),
+                context.Effective is SubjectId caller
+                    ? await scope.ServiceProvider.GetRequiredService<IMembershipLookup>().OfAsync(caller, cancellationToken)
+                    : [],
                 cancellationToken);
 
             admitted = listed.Match(_ => Result.Success(), Result.Failure);
@@ -3699,8 +3704,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // names that, and the administrative organization. The caller holds organization:read
     // where the case says, as a member of the organization it holds it in save where the
     // case says it is no member; one holding it in neither or nowhere is a member of the
-    // organization the path names, so membership alone is seen to admit nothing.
-    private async Task<(SubjectId Caller, OrganizationId Organization, OrganizationId Administrative)> ReadingAsync(
+    // organization the path names, so membership alone is seen to admit nothing. A
+    // declared job acts for the case's organization, or for the administrative
+    // organization where the case says so.
+    private async Task<(AccessContext Context, OrganizationId Organization, OrganizationId Administrative)> ReadingAsync(
         string scenario)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -3709,6 +3716,19 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         _ = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
 
         OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+
+        if (scenario.Contains("a declared job", StringComparison.Ordinal))
+        {
+            OrganizationId acting = scenario.EndsWith("of the administrative organization", StringComparison.Ordinal)
+                ? administrative
+                : deployment.Organization;
+
+            return (
+                AccessContext.Of(SystemPrincipal.ForOrganization(HostFixture.Digest, "the nightly digest", acting)),
+                deployment.Organization,
+                administrative);
+        }
+
         OrganizationId organization = scenario.StartsWith("a read of the administrative organization", StringComparison.Ordinal)
             ? administrative
             : deployment.Organization;
@@ -3739,7 +3759,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             await deployment.MemberAsync(caller, organization, cancellationToken);
         }
 
-        return (caller, organization, administrative);
+        return (AccessContext.Of(caller), organization, administrative);
     }
 
     // AUTHZ-CONCEAL-004: the refusals a case's caller left recorded: a person's wherever

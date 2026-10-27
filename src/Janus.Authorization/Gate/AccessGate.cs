@@ -303,10 +303,11 @@ internal sealed class AccessGate(
     /// Implements IDN-READ-004, AUTHZ-SCOPE-001 and AUTHZ-SEAM-001 (D-219). In the
     /// administrative organization, and before bootstrap has marked one, the admission is
     /// the single check of the permission there. Elsewhere the permission is decided in
-    /// the organization the path names and then in the administrative organization, as
-    /// the single check decides it, recording nothing: one that admits admits the read,
-    /// and where neither does, the single check in the organization the path names
-    /// answers, so its refusal is the one recorded and counted.
+    /// the organization the path names and then, for a person, in the administrative
+    /// organization, as the single check decides it, recording nothing: one that admits
+    /// admits the read, and where neither does, the single check in the organization the
+    /// path names answers, so its refusal is the one recorded and counted. A job is
+    /// admitted for its reads in its own organization alone.
     /// </remarks>
     public async ValueTask<Result> AdmitAsync(
         AccessContext context,
@@ -332,6 +333,12 @@ internal sealed class AccessGate(
             .ConfigureAwait(false);
 
         if (held.Admits)
+        {
+            return await AnsweredAsync(context, permission, organization, held, cancellationToken).ConfigureAwait(false);
+        }
+
+        // IDN-READ-004: a job is admitted for its reads in its own organization alone.
+        if (IsJob(context))
         {
             return await AnsweredAsync(context, permission, organization, held, cancellationToken).ConfigureAwait(false);
         }

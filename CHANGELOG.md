@@ -34,9 +34,10 @@ against the public contract of LIB-API-001.
   began from; each invitation its roles, when it was issued and expires, who issued it
   and the identifiers it binds. Each member a person reads counts toward their read
   volume.
-- A read whose path names an organization is admitted where its permission is held in
-  that organization or in the administrative organization, with one refusal, naming
-  the organization the path names, recorded where neither admits it.
+- A person's read whose path names an organization is admitted where its permission is
+  held in that organization or in the administrative organization, with one refusal,
+  naming the organization the path names, recorded where neither admits it. A declared
+  job is admitted for these reads in its own organization alone.
 - A host reads the administrative organization's identifier
   (`IOrganizations.AdministrativeAsync`) with no access context, to name its jobs'
   principals and register its records before anyone acts; before bootstrap it answers

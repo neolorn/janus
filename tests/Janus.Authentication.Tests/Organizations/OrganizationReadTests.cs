@@ -141,6 +141,34 @@ public sealed class OrganizationReadTests
     }
 
     /// <summary>
+    /// IDN-READ-004 (D-219): a declared job reads its own organization's members, and is
+    /// refused another's, even acting for the administrative organization.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_READ_004_AJobReadsItsOwnOrganizationAloneAsync()
+    {
+        OrganizationId own = Seeded();
+        MemberSummary member = Joined(own, invitation: null);
+
+        MemberPage read = Succeeded(await Reads.MembersAsync(
+            AccessContext.Of(SystemPrincipal.ForOrganization("digest", "the weekly digest", own)),
+            own,
+            after: null,
+            limit: null,
+            TestContext.Current.CancellationToken));
+        Error refused = Failed(await Reads.MembersAsync(
+            AccessContext.Of(SystemPrincipal.ForOrganization("digest", "the weekly digest", _staff)),
+            own,
+            after: null,
+            limit: null,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal([member], read.Members);
+        Assert.Equal(ErrorCodes.Denied, refused.Code);
+    }
+
+    /// <summary>
     /// <c>09</c> section 8a: a <c>limit</c> outside 1 to 500 is refused
     /// <c>api.request.malformed</c> naming <c>limit</c>, before anything is asked, and the
     /// bounds themselves are read.

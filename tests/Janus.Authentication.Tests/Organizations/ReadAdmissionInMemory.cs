@@ -13,8 +13,8 @@ namespace Janus.Authentication.Tests.Organizations;
 /// The read admission over a test's gate: a read naming an organization is admitted where
 /// the permission is held there or in the administrative organization, and the list is
 /// every organization to a holder in the administrative organization, the caller's
-/// current memberships it is held in to anyone else, and a job's own organization
-/// (IDN-READ-001, IDN-READ-004, D-219).
+/// current memberships it is held in to anyone else, and a job's own organization; a
+/// job is admitted in its own organization alone (IDN-READ-001, IDN-READ-004, D-219).
 /// </summary>
 /// <param name="gate">The test's gate, which holds what a test granted and records refusals.</param>
 /// <param name="administrative">The organization that administers the deployment.</param>
@@ -38,10 +38,16 @@ internal sealed class ReadAdmissionInMemory(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (administrative.Organization is OrganizationId administering
+        if (!context.IsSystem
+            && administrative.Organization is OrganizationId administering
             && Admits(context, permission, administering))
         {
             return null;
+        }
+
+        if (context.Principal is SystemPrincipal principal)
+        {
+            return principal.ActsFor(organization) ? null : Error.From(ErrorCodes.Denied);
         }
 
         return (await gate.RequireAsync(context, permission, organization, cancellationToken).ConfigureAwait(false))
