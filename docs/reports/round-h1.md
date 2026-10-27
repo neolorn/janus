@@ -950,6 +950,105 @@ base".
 - Q51, OPS-DEP-004 AC7: decided by running the step's script against repositories built
   at run time, as criteria 1 to 6 are; verified so under D-210 (above). No committed test.
 
+**Built under D-212 to D-216**
+
+- The roles a role hands out, AUTHZ-GRANT-004, AUTHZ-GRANT-005 (`44a3a518`):
+  - a role's `handsOut`, defined, declared and seeded with it, kept by name in the
+    migration `AddRoleHandsOut`, and in `authz.role.defined`'s `before` and `after`;
+  - `AuthorizationModelTests.AUTHZ_GRANT_005_ADeclaredRoleHandsOutOnlyARoleTheDeploymentWillHold`;
+  - `RoleEndpointTests.AUTHZ_GRANT_004_AC6_ARoleAnotherRolesHandsOutNamesIsNotRemovedAsync`,
+    `RoleEndpointTests.AUTHZ_GRANT_005_ARoleCarriesTheRolesItsHoldersHandOutAsync` and
+    `RoleEndpointTests.AUTHZ_GRANT_005_AHandsOutOutsideTheRuleOrNamingNoRoleIsRefusedAsync`;
+  - `RoleStoreTests.AUTHZ_GRANT_005_TheRolesARoleHandsOutAreKeptWithItAsync`;
+  - truth table: "a role handing itself out defined, on a session that has not proved
+    its gate, by a caller managing roles", `StepUpRequired`.
+- `authz.handout.byholding`, AUTHZ-GRANT-005, `10` section 4.5a (`7eccc884`):
+  `SettingDirectionTests.AUTHZ_GRANT_005_HandingOutByHoldingShipsOffAndTurningItOnLoosens`.
+- A grant, a deny and a revocation held to the hand-out rule, AUTHZ-GRANT-005
+  (`f0c28e87`):
+  - `authz.role.notassignable` and `authz.grant.self`, each refusal judged at the gate
+    step and again inside the unit of work;
+  - with `authz.handout.byholding` on, the actor's stored grants and materialised
+    derivations count and a live derivation admits nothing (D-216 answer 56);
+  - `HandOutTests.AUTHZ_GRANT_005_AC1_ARoleTheActorsRoleListsIsHandedOutAndNoOtherAsync`,
+    `..._AC2_ByHoldingARoleIsHandedOutWhereTheGrantsAdmitAllItCarriesAsync`,
+    `..._AC3_AGrantWideningTheActorsOwnAccessIsRefusedAsync`,
+    `..._AC5_ADenyAndARevocationAreJudgedAsAGrantIsAsync`,
+    `..._AC6_ASystemAdministratorHandsOutAnyRoleToItselfIncludedAsync` and
+    `..._AC7_ALiveDerivationAdmitsNothingAndAMaterialisedOneDoesAsync`;
+  - truth table: "a grant of a role no role of the caller hands out, by a caller
+    managing grants" and "a revocation of a grant of a role no role of the caller hands
+    out, by a caller managing grants", `NotAssignable`; "an allow grant to the caller
+    itself, of a role the caller hands out", `WidensOwnAccess`.
+- A change of a group's members, AUTHZ-GRANT-005, AUTHZ-GROUP-001 (`f9449284`):
+  - `HandOutTests.AUTHZ_GRANT_005_AC1_AGroupReachingOnlyRolesTheActorHandsOutTakesAMemberAsync`,
+    `..._AC3_JoiningAGroupOrLeavingADenyIsRefusedAsync` and
+    `..._AC5_ARemovalFromAGroupIsJudgedAsAGrantIsAsync`;
+  - truth table: "a member added to a group holding a role no role of the caller hands
+    out, by a caller managing groups" and "a member taken out of a group holding a role
+    no role of the caller hands out, by a caller managing groups", `NotAssignable`; "the
+    caller added to a group, by a caller managing groups" and "the caller taken out of a
+    group holding a deny, by a caller managing groups", `WidensOwnAccess`.
+- An invitation's roles, AUTHZ-GRANT-005, REG-INV-001, REG-INV-002 (`eb4ea421`):
+  `InvitationServiceTests.AUTHZ_GRANT_005_AC1_AnInvitationNamesOnlyARoleTheInviterHandsOutAsync`
+  and `InvitationServiceTests.AUTHZ_GRANT_005_AC3_AcknowledgingAnInvitationOneIssuedIsRefusedAsync`
+  (`Janus.Authentication.Tests`).
+- A role change within its actor's reach, AUTHZ-GRANT-005, AUTHZ-GRANT-004 (`60734c0d`,
+  `1a6ed945`):
+  - the permissions and `handsOut` a role carries before the change and after it, a
+    removal included;
+  - `HandOutTests.AUTHZ_GRANT_005_AC4_ARoleChangeBeyondTheActorsReachIsRefusedAsync`;
+    `HandOutTests.AUTHZ_GRANT_005_AC6_ASystemAdministratorHandsOutAnyRoleToItselfIncludedAsync`
+    covers a system administrator's role change beyond the reach of its other roles;
+  - truth table: "a role carrying a permission the caller's grants do not admit
+    defined, by a caller managing roles" and "a role handing out a role no role of the
+    caller hands out defined, by a caller managing roles", `NotAssignable`.
+- What an ended membership reached, IDN-MEM-001, AUTHZ-GRANT-005 (`739c8962`):
+  - the end now takes `{ reason }` (D-216 answer 55); in the end's unit of work, the
+    grants a person gave the account in the organization are revoked and the account
+    leaves its groups, and where the organization is the administrative one, its grants
+    in every organization it is no member of are revoked too, each record with the end's
+    reason and actor; the end is judged as those revocations and removals are;
+  - `InvitationServiceTests.IDN_MEM_001_AC3_AnEndRevokesWhatItReachesWithItsReasonAsync`,
+    `..._AC8_AnEndReachingARoleTheActorDoesNotHandOutIsRefusedAsync` and
+    `..._AC9_AnEndWithoutAReasonIsRefusedAsync` (`Janus.Authentication.Tests`);
+  - `InvitationEndpointTests.IDN_MEM_001_AC9_AnEndWithoutAReasonIsMalformedAsync`;
+  - `InvitationServiceTests.IDN_MEM_001_AC4_EndingTheAdministrativeMembershipStopsItsGrantsAsync`,
+    `..._AC3_EndingAMembershipRevokesWhatAPersonGaveAndLeavesItsGroupsAsync` and
+    `..._AC3_EndingTheAdministrativeMembershipRevokesGrantsWhereTheAccountIsNoMemberAsync`
+    (`Janus.Hosting.Tests`, integration);
+  - truth table: "a grant of a role carrying system administration that a role of the
+    caller lists, by a caller managing grants", `NotAssignable`.
+- A membership's end set in advance, IDN-MEM-001 (`c17ce71e`):
+  - `PUT` and `DELETE /admin/organizations/{id}/memberships/{subject}/end`, the
+    membership's `ends_at`, `end_set_by` and `end_reason` in the migration
+    `AddMembershipEnds`, and `identity.membership.endset`;
+  - `MembershipTests.IDN_MEM_001_AC7_AnEndSetInAdvanceIsMovedAndCancelled` and
+    `MembershipTests.SetEnd_AMembershipThatHasEnded_Throws`;
+  - `InvitationServiceTests.IDN_MEM_001_AC7_AnEndIsSetMovedAndCancelledAsync`,
+    `..._AC7_AnEndNotAfterThePresentIsInvalidAsync`,
+    `..._AC8_AnEndSetReachingARoleTheActorDoesNotHandOutIsRefusedAsync` and
+    `..._AnEndSetTakesTheRefusalsOfAnEndNowAsync` (`Janus.Authentication.Tests`);
+  - `InvitationEndpointTests.IDN_MEM_001_AC7_AnEndIsSetAndCancelledAsync`;
+  - `InvitationServiceTests.IDN_MEM_001_AC7_AnEndSetIsKeptOnTheMembershipAsync`
+    (`Janus.Hosting.Tests`, integration);
+  - not built: the job's pass that ends the membership at its instant (Q57).
+- The principal `membership-ends` reserved, IDN-PRIN-001 (`b5cdfb36`):
+  - `AuthorizationModelTests.IDN_PRIN_001_AC7_AJobDeclaredUnderAReservedNameFailsStartup`
+    with `membership-ends`;
+  - truth table: "a declared job under a name no library principal takes, asking a
+    permission its declaration names, outside a request", `Allowed`, a row restating an
+    unchanged decision.
+- IDN-MEM-001's other criteria stand on the tests that proved them before:
+  - AC1: `MembershipTests.IDN_MEM_001_AC1_EndingAMembershipLeavesBothSidesNamed` and
+    `OrganizationStoreTests.IDN_MEM_001_AC1_EndingAMembershipLeavesBothSidesAndTheRowAsync`;
+  - AC2: `MembershipTests.IDN_MEM_001_AC2_TheRecordCarriesItsBeginningAndItsEnd` and
+    `MembershipEndingTests.IDN_MEM_001_AC2_TheMembershipEndsAndItsRecordStaysAsync`;
+  - AC5 and AC6: their tests in `InvitationServiceTests` (`Janus.Authentication.Tests`),
+    each now ending with a reason.
+- D-215 answer 53: nothing to build. D-215 answer 54: the page case verified in review
+  (below, under criteria no test decides).
+
 **Items the round proves that this section did not list**
 
 - AUTH-SESS-005b:
@@ -1217,6 +1316,13 @@ base".
 - CONV-TEST-001 AC1: verified by review of the tree: each test project is named for its
   source project and mirrors its folders; no job decides it.
 - CONV-VCS-004 AC1: `truth-table-change.sh` in the "Truth-table suite" job.
+- BFF-HOST-002 AC6, a Razor page reached through `MapFallbackToPage`: verified in review,
+  as D-215 answer 54 decides. `SessionRequired.Asks` reads the metadata of the endpoint
+  routing selects whatever its type, so a page's endpoint carrying no mark is held to a
+  session, and `AllowNoSessionAttribute` on the page is read as on an action, the nearer
+  mark standing; `SessionRequirementPolicy.AppliesToEndpoints` answers true where the
+  candidates hold a dynamic endpoint, which a page fallback is. The controller tests
+  under D-211 prove the rule.
 
 ## 2. Items in the round not implemented
 
@@ -1227,6 +1333,10 @@ base".
 - **`11` section 5, `13` R-M20, `15` sections 3.7 and 6.3, and `19` INF-HOST-003:**
   documentation, runbook and infrastructure; no code in this round. INF-HOST-003's
   `migrate` document is proven by OPS-MIG-001 AC4.
+- **IDN-MEM-001 AC7, the end at the job's first pass after its instant, and `19`
+  INF-BG-001's `membership-ends`:** parked on Q57 (section 4). The end set in advance,
+  its move and its cancellation are built.
+- **`13` R-M23, `15` section 3.5 and `16` sections 2 and 3:** documentation; no code.
 
 ## 3. Resolved by rule
 
@@ -1365,6 +1475,24 @@ base".
       `Janus.Testing`, `Janus.Cli`, `Janus.Conformance`, `Janus.Analyzers`) for the feed
       and `*` for nuget.org, which takes every one of the library's packages from the
       feed alone.
+23. **`DELETE /admin/roles/{name}`, judged for reach (`60734c0d`).**
+    - Out of step: AUTHZ-GRANT-005 holds "a change to a role" to its actor's reach, and
+      its criterion 4 names a definition alone; whether a removal is such a change is
+      not said there.
+    - Governing: `09` section 8, `GET|POST|DELETE /admin/roles`, which calls every
+      change, the `DELETE` included, a change carrying a reason, and says a change stays
+      within the actor's reach, the permissions the role carries before and after.
+    - Rule: a role's removal is judged as a change whose "after" carries nothing, so the
+      permissions and `handsOut` the role carried before are held to the actor's reach.
+24. **The permission an acknowledgement's `authz.grant.self` refusal is recorded under
+    (`eb4ea421`).**
+    - Out of step: AUTHZ-GRANT-005 refuses the acknowledgement of an invitation its
+      acknowledger issued, and names no permission for the refusal's record.
+    - Governing: AUTHZ-GRANT-005 and AUTHZ-CONCEAL-004, which record every hand-out
+      refusal under the permission its change is admitted under, and IDN-MEM-001 and
+      REG-INV-001, which govern a membership by `membership:manage`.
+    - Rule: the refusal is recorded under `membership:manage`, the permission an
+      acknowledgement is admitted under.
 
 ## 4. Open questions
 
@@ -1893,7 +2021,7 @@ base".
   - Answered by D-211 answer 52; built (section 1), save the tests of a Razor page
     (Q54).
 
-**Unanswered.**
+**Answered by D-215.**
 
 - **Q53 (Tier 2). The Microsoft packages that follow the runtime and reach the solution
   only transitively (CONV-DESIGN-008 AC1, CONV-DEP-004, D-211 answer 49).**
@@ -1911,6 +2039,8 @@ base".
     - **B:** they are pinned at 10.0.14 with `CentralPackageTransitivePinningEnabled`,
       `08` naming the pins and AC1 setting them apart from the direct references.
   - Parked: the move of those two packages alone.
+  - Answered by D-215 answer 53 (reading A): both stay where their parents put them;
+    nothing to build.
 - **Q54 (Tier 2). The tests of a Razor page under stage 8 (BFF-HOST-002, D-211 answer
   52).**
   - D-211 answer 52 and BFF-HOST-002's values name `MapFallbackToPage` and a Razor page
@@ -1926,14 +2056,92 @@ base".
     - **B:** no page test: the rule reads the endpoint's metadata whatever its type,
       criterion 6 names the controller case, and the page case is verified by review.
   - Parked: the two page tests alone; the rule they would test is built.
+  - Answered by D-215 answer 54 (reading B): no page test; the page case is verified in
+    review (section 1, criteria no test decides).
+
+**Answered by D-216.**
+
+- **Q55 (Tier 2). The reason an immediate end of a membership records (IDN-MEM-001,
+  D-213, `09` section 8a, `DELETE /admin/organizations/{id}/memberships/{subject}`).**
+  - D-213 and IDN-MEM-001 record each revocation as `authz.grant.revoked` and each
+    removal as `authz.group.memberremoved` "with the end's reason", and `10` gives
+    `identity.membership.ended` a `details.reason`. The `09` row for ending a membership
+    named no body, and the endpoint took none; only `PUT .../end` (`{ endsAt, reason }`)
+    and `DELETE .../end` (`{ reason }`) carried a reason.
+  - The code needs a reason for each revocation and removal an immediate end writes.
+  - Readings, with the smallest fix for each:
+    - **A:** the immediate `DELETE` takes `{ reason }`, required, as the other admin
+      `DELETE`s do; a blank one is 400 `api.request.malformed` naming `reason`, and `09`
+      gains the body;
+    - **B:** the immediate end takes no body, and its records carry a fixed reason (for
+      example `IDN-MEM-001`), as the start principals' writes do.
+  - Parked: the revocations and group removals an immediate end makes, and the
+    `details.reason` of its `identity.membership.ended`.
+  - Answered by D-216 answer 55 (reading A); built in `739c8962` (section 1).
+- **Q56 (Tier 2). `authz.handout.byholding` on a record a live derivation reaches
+  (AUTHZ-GRANT-005, D-212).**
+  - With the setting on, the actor's grants had to admit every permission of the role at
+    the change's scope, "as the gate's grant terms decide it (... derived grants
+    included)".
+  - A library operation holds no host relationship sources: the library's single check
+    refuses a type a live derivation reaches (`authz.derivation.sourcesmissing`), so
+    library code sees stored and materialised grants and not live derived ones.
+  - Readings, with the smallest fix for each:
+    - **A:** the check counts stored and materialised grants alone, so it admits less
+      than the rule stated, never more;
+    - **B:** a change on a record of such a type is never admitted through the setting,
+      only through a `handsOut` list or `system:administer`.
+  - Parked: admission through a live derived grant alone; the check over stored and
+    materialised grants was built.
+  - Answered by D-216 answer 56 (reading A); built in `f0c28e87` with AUTHZ-GRANT-005
+    AC7 (section 1).
+
+**Unanswered.**
+
+- **Q57 (Tier 3). Whom the audit rows of the job `membership-ends` name (IDN-MEM-001
+  AC7, `10` sections 5.24 and 5.29, IDN-PRIN-001, INF-BG-002 AC2).**
+  - IDN-MEM-001 has the job end a membership at its instant "as the administrator who
+    set it would have, recording that administrator and reason", and its criterion 7 has
+    the end "recorded with the administrator who set it"; `10` section 5.24 has
+    `identity.membership.ended` name "the administrator acting or who set the end".
+  - `10` section 5.29 has every background job write the audit rows it writes under its
+    principal, with the principal's reason, and INF-BG-002 AC2 has a job's actions
+    audited with the principal's name and the stated reason. The audit table's check
+    `ck_audit_records_principal` holds a row naming a principal to the empty acting
+    subject, so no row names both the job's principal and the administrator as actor.
+  - The two chapters contradict each other on whom the rows of the job's pass name, for
+    `identity.membership.ended` and for each `authz.grant.revoked` and
+    `authz.group.memberremoved` the pass writes.
+  - Parked: the job's pass (IDN-MEM-001 AC7, the end at the job's first pass after its
+    instant, and `19` INF-BG-001's `membership-ends`). The principal is reserved, and
+    the end set in advance, its move and its cancellation are built.
 
 ## 5. Gate result
 
-Fast checks on every commit: build with warnings as errors, the analysers and
-`dotnet format --verify-no-changes` over `Janus.slnx`, the unit and contract tests, all
-green.
+**The run under D-212 to D-216 (D-214).**
 
-The pipeline's runs on `c82b09ad`, the tip of the push before this run, were green: the
+- Fast checks on every commit from `44a3a518` to `1a6ed945`: build with warnings as
+  errors, the analysers and `dotnet format --verify-no-changes` over `Janus.slnx`, and
+  the unit tests of the projects each commit changes, all green; the truth-table change,
+  changelog and forbidden-marker gates over each commit, green.
+- Before the push of this commit:
+  - every unit test of every test project, 4742 of 4742: `Janus.Analyzers.Tests` 23,
+    `Janus.Authentication.Tests` 1652, `Janus.Authorization.Tests` 235,
+    `Janus.Cli.Tests` 76, `Janus.Conformance.Tests` 23, `Janus.Core.Tests` 506,
+    `Janus.Hosting.Tests` 1645, `Janus.Identity.Tests` 106, `Janus.Privacy.Tests` 402,
+    `Janus.Storage.Tests` 59, `Janus.Testing.Tests` 15;
+  - the commit-message gate over `caba5a50` to this commit, green;
+  - the full-history secret scan, gitleaks 8.30.1 as the script runs it, over every
+    commit of every branch and tag: no finding.
+- No full gate ran on the development machine (D-214). The pipeline's runs on this
+  commit, the push run and the pull request run, are the gate of record; their
+  identifiers and result are given in the run's last message.
+- The pipeline's runs on `caba5a50`, the tip of the push before this run, were green:
+  the push run 40418972145 and the pull request run 40418975216.
+
+**The run under D-211.**
+
+The pipeline's runs on `c82b09ad`, the tip of the push before that run, were green: the
 push run 40285851951 and the pull request run 40285853376.
 
 The full gate ran once on the development machine at `bd065aee`, the last commit of code,
@@ -1961,6 +2169,6 @@ on SDK 10.0.403 of the machine's system install, with its runtimes 10.0.14, job 
 - The full-history secret scan (OPS-DEP-004) ran after the gate, gitleaks 8.30.1 as the
   script runs it (`.gitleaks.toml`, `--ignore-gitleaks-allow`, an empty ignore path, no
   baseline, no `.gitleaksignore` in the tree), over every commit of every branch and tag
-  (1584 commits): no finding. It runs again before the push of this commit.
+  (1584 commits): no finding.
 - The protection of `main` requires 23 checks, the sample host's job among them.
-- The pipeline run, the gate of record, runs on the push of this commit.
+- That run's gate of record is the pipeline's runs on `caba5a50`, green (above).
