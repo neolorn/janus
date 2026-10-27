@@ -641,7 +641,11 @@ table memberships
   column ended_at timestamp with time zone
   column acknowledged_at timestamp with time zone
   column acknowledged_documents jsonb
+  column end_reason text
+  column end_set_by uuid
+  column ends_at timestamp with time zone
   constraint ck_memberships_acknowledged CHECK (((acknowledged_at IS NULL) = (acknowledged_documents IS NULL)))
+  constraint ck_memberships_end_set CHECK ((((ends_at IS NULL) AND (end_set_by IS NULL) AND (end_reason IS NULL)) OR ((ends_at IS NOT NULL) AND (end_set_by IS NOT NULL) AND ((length(btrim(end_reason)) >= 1) AND (length(btrim(end_reason)) <= 1024)))))
   constraint ck_memberships_ended CHECK (((ended_at IS NULL) OR (ended_at >= created_at)))
   constraint ck_memberships_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_memberships_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT
@@ -1034,6 +1038,7 @@ table role_permissions
   constraint pk_role_permissions PRIMARY KEY (role, permission)
 table roles
   column name text not null
+  column hands_out text[] not null default '{}'::text[]
   constraint pk_roles PRIMARY KEY (name)
 table seeded_roles
   column name text not null
