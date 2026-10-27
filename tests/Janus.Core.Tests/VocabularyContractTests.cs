@@ -285,6 +285,17 @@ public sealed class VocabularyContractTests
             WireNames<DeliveryChange>());
 
     /// <summary>
+    /// LIB-API-001, chapter 10 section 5.39 (D-218): the change each event of section 5b
+    /// carries, spelled as section 5.39 spells it.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_TheChangesTheEventsCarryAreTheContract()
+    {
+        Assert.Equal(["began", "ended"], WireNames<MembershipChange>());
+        Assert.Equal(["changed", "defined", "removed"], WireNames<RoleChange>());
+    }
+
+    /// <summary>
     /// REG-PREF-001: the four types a host declares a preference key with, spelled as
     /// the item spells them, because a host writes the declaration in those words.
     /// </summary>
@@ -375,6 +386,8 @@ public sealed class VocabularyContractTests
             typeof(PreferenceKind),
             typeof(SendKind),
             typeof(RegistrationStep),
+            typeof(MembershipChange),
+            typeof(RoleChange),
         ];
 
         foreach (Type vocabulary in vocabularies)

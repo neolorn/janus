@@ -157,6 +157,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         (
             "a role handing out a role no role of the caller hands out defined, by a caller managing roles",
             Decided.NotAssignable),
+        (
+            "a role defined, changed and removed, each announced in its transaction, by a caller managing roles",
+            Decided.Allowed),
         ("a grant written and then revoked, by a caller managing grants", Decided.Allowed),
         ("a grant of a role no role of the caller hands out, by a caller managing grants", Decided.NotAssignable),
         (
@@ -1744,6 +1747,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a role handing out a role no role of the caller hands out defined, by a caller managing roles":
                 return await RoleReachedAsync(deployment, caller, scenario);
 
+            // Chapter 10 section 5b (D-218): announcing a change decides nothing of it; a
+            // role is defined, changed and removed as before, each change announced.
+            case "a role defined, changed and removed, each announced in its transaction, by a caller managing roles":
+                return await RoleAnnouncedAsync(deployment, caller);
+
             case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
                 return await ViewedAsync(deployment, caller);
 
@@ -2557,6 +2565,55 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             cancellationToken: cancellationToken)));
 
         return decided;
+    }
+
+    // Chapter 10 section 5b (D-218): a role defined, changed and removed, on a session
+    // that meets the gate, by a member of the administrative organization managing roles
+    // there and holding what the role reads; each change is admitted as before, and
+    // announced once as RoleChanged in the transaction that makes it, at one instant of
+    // the host's clock, so the three are read by what they announce.
+    private async Task<Decided> RoleAnnouncedAsync(Deployment deployment, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        RoleName managing = await deployment.RoleAsync([Permissions.RoleManage, HostPermissions.Read], cancellationToken);
+        var drafter = RoleName.Parse("drafter-" + Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4)));
+        var context = AccessContext.Of(caller);
+
+        await deployment.MemberAsync(caller, administrative, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), managing, null, false, null, administrative, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IRoles roles = scope.ServiceProvider.GetRequiredService<IRoles>();
+        SessionId session = await SteppedUpAsync(scope.ServiceProvider, caller);
+        var defined = new DefinedRole(drafter, [HostPermissions.Read], []);
+        var changed = new DefinedRole(drafter, [HostPermissions.Read, Permissions.RoleManage], []);
+        var outcomes = new List<Decided>
+        {
+            (await roles.DefineAsync(context, session, defined, "A role for the drafters.", cancellationToken))
+                .Match(_ => Decided.Allowed, Refused),
+            (await roles.DefineAsync(context, session, changed, "The drafters manage roles.", cancellationToken))
+                .Match(_ => Decided.Allowed, Refused),
+            (await roles.RemoveAsync(context, session, drafter, "The drafters are gone.", cancellationToken))
+                .Match(() => Decided.Allowed, Refused),
+        };
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(
+            ["changed", "defined", "removed"],
+            await connection.QueryAsync<string>(new CommandDefinition(
+                """
+                SELECT payload->>'Change' FROM identity.events
+                WHERE kind = 'RoleChanged' AND payload->>'Role' = @name
+                ORDER BY 1
+                """,
+                new { name = drafter.ToString() },
+                cancellationToken: cancellationToken)));
+
+        return outcomes.Distinct().Single();
     }
 
     // AUTHZ-GRANT-005 (D-212, D-213, D-217): a grant across the organization of a role the

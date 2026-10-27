@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The event `RoleChanged`, carrying the role and `change` (`defined`, `changed` or
+  `removed`), written when an administrator defines, changes or removes a role and when
+  a declared role is seeded.
 - The events `OrganizationCreated`, `OrganizationDeletionRequested` and
   `OrganizationDeletionCancelled`, each written in the transaction that makes it true,
   naming the organization and no subject.

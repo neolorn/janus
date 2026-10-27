@@ -2655,6 +2655,18 @@ Janus.Core.Result<TValue>.Equals(Janus.Core.Result<TValue> other) -> bool
 Janus.Core.Result<TValue>.Match<TOutcome>(System.Func<TValue, TOutcome>! onSuccess, System.Func<Janus.Core.Error!, TOutcome>! onFailure) -> TOutcome
 Janus.Core.Result<TValue>.Result() -> void
 Janus.Core.Result<TValue>.Switch(System.Action<TValue>! onSuccess, System.Action<Janus.Core.Error!>! onFailure) -> void
+Janus.Core.RoleChange
+Janus.Core.RoleChange.Changed = 1 -> Janus.Core.RoleChange
+Janus.Core.RoleChange.Defined = 0 -> Janus.Core.RoleChange
+Janus.Core.RoleChange.Removed = 2 -> Janus.Core.RoleChange
+Janus.Core.RoleChanged
+Janus.Core.RoleChanged.Change.get -> Janus.Core.RoleChange
+Janus.Core.RoleChanged.Change.init -> void
+Janus.Core.RoleChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out string! Role, out Janus.Core.RoleChange Change) -> void
+Janus.Core.RoleChanged.Equals(Janus.Core.RoleChanged? other) -> bool
+Janus.Core.RoleChanged.Role.get -> string!
+Janus.Core.RoleChanged.Role.init -> void
+Janus.Core.RoleChanged.RoleChanged(System.DateTimeOffset RaisedAt, string! IdempotencyKey, string! Role, Janus.Core.RoleChange Change) -> void
 Janus.Core.RoleDeclaration
 Janus.Core.RoleDeclaration.<Clone>$() -> Janus.Core.RoleDeclaration!
 Janus.Core.RoleDeclaration.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<string!>! HandsOut) -> void
@@ -3619,6 +3631,10 @@ override Janus.Core.Result.GetHashCode() -> int
 override Janus.Core.Result<TValue>.GetHashCode() -> int
 override Janus.Core.RestrictionName.GetHashCode() -> int
 override Janus.Core.RestrictionName.ToString() -> string!
+override Janus.Core.RoleChanged.<Clone>$() -> Janus.Core.RoleChanged!
+override Janus.Core.RoleChanged.Equals(object? obj) -> bool
+override Janus.Core.RoleChanged.GetHashCode() -> int
+override Janus.Core.RoleChanged.ToString() -> string!
 override Janus.Core.RoleDeclaration.Equals(object? obj) -> bool
 override Janus.Core.RoleDeclaration.GetHashCode() -> int
 override Janus.Core.RoleDeclaration.ToString() -> string!
@@ -3745,6 +3761,7 @@ override sealed Janus.Core.OrganizationDeletionCancelled.Equals(Janus.Core.Domai
 override sealed Janus.Core.OrganizationDeletionRequested.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.OrganizationErased.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.RestrictionChanged.Equals(Janus.Core.SubjectEvent? other) -> bool
+override sealed Janus.Core.RoleChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.SendingRestrictionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.SendingRestrictionGranted.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.SubjectEvent.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -4607,6 +4624,8 @@ static Janus.Core.RestrictionName.Parse(string! value) -> Janus.Core.Restriction
 static Janus.Core.RestrictionName.TryParse(string? value, out Janus.Core.RestrictionName name) -> bool
 static Janus.Core.RestrictionName.operator !=(Janus.Core.RestrictionName left, Janus.Core.RestrictionName right) -> bool
 static Janus.Core.RestrictionName.operator ==(Janus.Core.RestrictionName left, Janus.Core.RestrictionName right) -> bool
+static Janus.Core.RoleChanged.operator !=(Janus.Core.RoleChanged? left, Janus.Core.RoleChanged? right) -> bool
+static Janus.Core.RoleChanged.operator ==(Janus.Core.RoleChanged? left, Janus.Core.RoleChanged? right) -> bool
 static Janus.Core.RoleDeclaration.operator !=(Janus.Core.RoleDeclaration? left, Janus.Core.RoleDeclaration? right) -> bool
 static Janus.Core.RoleDeclaration.operator ==(Janus.Core.RoleDeclaration? left, Janus.Core.RoleDeclaration? right) -> bool
 static Janus.Core.RoleName.Parse(string! value) -> Janus.Core.RoleName

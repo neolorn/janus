@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,6 +16,7 @@ namespace Janus.Authorization.Roles;
 /// <param name="seeded">Which of them a start has seeded.</param>
 /// <param name="roles">Where roles are read and written.</param>
 /// <param name="audit">Where each definition is written down.</param>
+/// <param name="events">Where each definition is announced.</param>
 /// <param name="work">The one transaction each role is seeded in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -30,6 +32,7 @@ internal sealed class DeclaredRoleSeed(
     ISeededRoles seeded,
     IRoleStore roles,
     IRoleAudit audit,
+    IEvents events,
     IUnitOfWork work,
     TimeProvider time)
 {
@@ -66,6 +69,8 @@ internal sealed class DeclaredRoleSeed(
                 // it, so one an administrator made is the one left standing.
                 if (await roles.FindForUpdateAsync(declared.Name, cancellationToken).ConfigureAwait(false) is null)
                 {
+                    DateTimeOffset now = time.GetUtcNow();
+
                     await roles
                         .CreateAsync(Role.Of(declared.Name, declared.Permissions, declared.HandsOut), cancellationToken)
                         .ConfigureAwait(false);
@@ -76,9 +81,18 @@ internal sealed class DeclaredRoleSeed(
                                 [.. declared.Permissions.OrderBy(permission => permission.ToString(), StringComparer.Ordinal)],
                                 [.. declared.HandsOut.OrderBy(handed => handed.ToString(), StringComparer.Ordinal)]),
                             Principal,
-                            time.GetUtcNow(),
+                            now,
                             cancellationToken)
                         .ConfigureAwait(false);
+
+                    // Chapter 10 section 5b (D-218): a declared role's seeding is a
+                    // definition, announced in the transaction that makes it.
+                    (await events
+                            .PublishAsync(
+                                new RoleChanged(now, Key(declared.Name, now), declared.Name.ToString(), RoleChange.Defined),
+                                cancellationToken)
+                            .ConfigureAwait(false))
+                        .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
                 }
 
                 await seeded.RecordAsync(declared.Name, cancellationToken).ConfigureAwait(false);
@@ -88,4 +102,7 @@ internal sealed class DeclaredRoleSeed(
                 .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
     }
+
+    private static string Key(RoleName role, DateTimeOffset at) =>
+        string.Create(CultureInfo.InvariantCulture, $"role-defined:{role}@{at.UtcTicks}");
 }

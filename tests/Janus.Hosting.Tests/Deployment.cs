@@ -190,6 +190,8 @@ internal sealed class Deployment : IAsyncDisposable
         Action<IApplicationBuilder>? routing = null,
         Action<IServiceCollection>? services = null)
     {
+        Events = new EventsInMemory { Work = Work };
+
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
@@ -626,7 +628,7 @@ internal sealed class Deployment : IAsyncDisposable
     /// <summary>
     /// The events the operations published.
     /// </summary>
-    public EventsInMemory Events { get; } = new();
+    public EventsInMemory Events { get; }
 
     /// <summary>
     /// The audit trail as the privacy area reads it by subject.
