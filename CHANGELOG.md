@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host reads where another person stands (`IConsents.StandingAsync`,
+  `GET /admin/accounts/{subject}/standing`) under `consent:read`, which a declared job
+  may hold: the account's state, its consents and its objections, each as the person's
+  own read answers it, so the host's own processing can follow a restriction, a
+  withdrawn consent or an objection. It reaches the same people as the account reads, and
+  each standing a person reads counts toward their read volume.
 - A host reads another person's account (`IAccounts.ReadAsync`,
   `GET /admin/accounts/{subject}`) under `account:read`, finds an account by its email
   address, phone number or username as sign-in reads it (`IAccounts.FindAsync`,

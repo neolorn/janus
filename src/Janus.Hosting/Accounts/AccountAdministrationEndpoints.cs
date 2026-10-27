@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Privacy;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -18,8 +19,9 @@ namespace Janus.Hosting.Accounts;
 /// <remarks>
 /// Implements CONV-DESIGN-006, LIB-API-005, IDN-LIFE-003, IDN-LIFE-013, AUTH-SESS-010,
 /// PRIV-RIGHT-004, IDN-ATTR-003 and IDN-READ-003. Each is one line to
-/// <see cref="IAccounts"/>; the permission, the step-up and the state are the service's
-/// to judge, so a host calling it in process meets the same refusals.
+/// <see cref="IAccounts"/>, the standing to <see cref="IConsents"/>; the permission, the
+/// step-up and the state are the service's to judge, so a host calling it in process
+/// meets the same refusals.
 /// </remarks>
 internal static class AccountAdministrationEndpoints
 {
@@ -89,6 +91,13 @@ internal static class AccountAdministrationEndpoints
                     ErrorCodes.AccountNotFound)
                 .Binding<SubjectId>("subject"))
             .Produces<ContactView>();
+        _ = SessionRequired.On(group.MapGet("/standing", StandingAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.OrganizationNotFound,
+                    ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces<StandingView>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/accounts/find", FindAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -253,6 +262,32 @@ internal static class AccountAdministrationEndpoints
             contact => TypedResults.Json(
                 ContactView.Of(contact),
                 AccountJson.Default.ContactView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> StandingAsync(
+        IConsents consents,
+        RequestSession browser,
+        SubjectId subject,
+        string? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(consents);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        if (!Asked(organization, out OrganizationId? named))
+        {
+            return Answers.Malformed(nameof(organization));
+        }
+
+        return Answers.Of(
+            await consents
+                .StandingAsync(browser.Asking, subject, named, cancellationToken)
+                .ConfigureAwait(false),
+            standing => TypedResults.Json(
+                StandingView.Of(standing),
+                PrivacyJson.Default.StandingView,
                 contentType: null,
                 StatusCodes.Status200OK));
     }

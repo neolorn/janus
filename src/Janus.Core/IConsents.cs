@@ -12,7 +12,8 @@ namespace Janus.Core;
 /// Implements LIB-API-005, PRIV-CONS-001, PRIV-CONS-002, PRIV-CONS-008,
 /// PRIV-CONS-011, PRIV-RIGHT-001a and chapter 09 section 7. Granting and withdrawing
 /// are the same shape and the same number of steps, and none of the four waits on a
-/// human.
+/// human. Implements IDN-READ-003 and IDN-READ-004 for the standing a host reads of
+/// another person, asked in an organization and reaching the people tied to it.
 /// </remarks>
 public interface IConsents
 {
@@ -105,5 +106,29 @@ public interface IConsents
     ValueTask<Result> WithdrawObjectionAsync(
         AccessContext context,
         string purpose,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Where another person stands for a host's own processing: whether it is
+    /// restricted, and the consents and objections they hold, under <c>consent:read</c>,
+    /// which a host's declared job may hold.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="subject">Whom.</param>
+    /// <param name="organization">
+    /// The organization the read is asked in, the administrative organization where
+    /// nothing is named.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The standing, or the refusal: <c>identity.organization.notfound</c> where the
+    /// deployment holds no such organization or erased it, <c>authz.denied</c> where the
+    /// caller does not hold the permission there, <c>identity.account.notfound</c> where
+    /// no account bears the subject, the account is deleted or it is beyond the reach.
+    /// </returns>
+    ValueTask<Result<SubjectStanding>> StandingAsync(
+        AccessContext context,
+        SubjectId subject,
+        OrganizationId? organization,
         CancellationToken cancellationToken);
 }

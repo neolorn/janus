@@ -288,6 +288,7 @@ internal static class StorageRegistration
         services.AddScoped<IConsentStore, ConsentStore>();
         services.AddScoped<Janus.Privacy.IPrivacyAudit, PrivacyAudit>();
         services.AddScoped<Janus.Privacy.Policies.IAdministrativeOrganization, PrivacyAdministrativeOrganization>();
+        services.AddScoped<Janus.Privacy.Policies.IReachedSubjects, ReachedSubjects>();
         services.AddScoped<IAuditTrailStore, AuditTrailStore>();
 
         services.AddScoped<IRoleStore, RoleStore>();

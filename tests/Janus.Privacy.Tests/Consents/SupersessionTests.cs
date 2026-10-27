@@ -11,6 +11,7 @@ using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Tests.Documents;
 using Janus.Privacy.Tests.Outbox;
+using Janus.Privacy.Tests.Requests;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Consents;
@@ -69,7 +70,18 @@ public sealed class SupersessionTests : IAsyncDisposable
     }
 
     private ConsentService Consents =>
-        new(_consents, _documents, Declaration.Processing, _events, _outbox, _audit, _work, _clock);
+        new(
+            _consents,
+            _documents,
+            Declaration.Processing,
+            _events,
+            _outbox,
+            _audit,
+            new SubjectReach(_gate, _administrative, new ReachedSubjectsInMemory()),
+            new AccountStatesInMemory(),
+            new ReadVolumeInMemory(),
+            _work,
+            _clock);
 
     private LegalDocumentService Documents =>
         new(

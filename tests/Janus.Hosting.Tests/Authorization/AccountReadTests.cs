@@ -190,6 +190,57 @@ public sealed class AccountReadTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.Equal(before + 2, await AllVolumeAsync(cancellationToken));
     }
 
+    /// <summary>
+    /// IDN-READ-004 AC1 and AC4 (D-218): a holder of <c>consent:read</c> in an
+    /// organization reads the standing of a member and of the data subject of a record
+    /// registered in it, each counted toward their read volume, and is answered
+    /// <c>identity.account.notfound</c> for an account tied to another organization alone,
+    /// exactly as for a subject no account bears.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_004_AC1_AStandingReachesThePeopleTiedToTheOrganizationAloneAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+        var elsewhere = new Deployment(host);
+
+        RoleName reading = await deployment.BeginAsync([Permissions.ConsentRead], cancellationToken);
+        _ = await elsewhere.BeginAsync([], cancellationToken);
+
+        SubjectId clerk = await deployment.AccountAsync(cancellationToken);
+        SubjectId member = await deployment.AccountAsync(cancellationToken);
+        SubjectId customer = await deployment.AccountAsync(cancellationToken);
+        SubjectId stranger = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.MemberAsync(member, deployment.Organization, cancellationToken);
+        await deployment.RegisterAsync(Reference(), containedIn: null, cancellationToken, customer);
+        await elsewhere.MemberAsync(stranger, elsewhere.Organization, cancellationToken);
+        _ = await deployment.GrantAsync(
+            GrantSubject.Of(clerk), reading, null, false, null, null, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IConsents consents = scope.ServiceProvider.GetRequiredService<IConsents>();
+        var asking = AccessContext.Of(clerk);
+
+        Assert.Equal(
+            AccountState.Active,
+            Read(await consents.StandingAsync(asking, member, deployment.Organization, cancellationToken)).State);
+        Assert.Equal(
+            AccountState.Active,
+            Read(await consents.StandingAsync(asking, customer, deployment.Organization, cancellationToken)).State);
+
+        Error beyond = Refusal(
+            await consents.StandingAsync(asking, stranger, deployment.Organization, cancellationToken));
+        Error nobody = Refusal(await consents.StandingAsync(
+            asking, new SubjectId(Guid.NewGuid()), deployment.Organization, cancellationToken));
+
+        Assert.Equal(ErrorCodes.AccountNotFound, beyond.Code);
+        Assert.Equal(nobody.Code, beyond.Code);
+        Assert.Equal(nobody.Details, beyond.Details);
+        Assert.Equal(2, await VolumeAsync(clerk, cancellationToken));
+    }
+
     private static ResourceReference Reference() => new(Document, ResourceId.Parse(Guid.NewGuid().ToString()));
 
     private static TValue Read<TValue>(Result<TValue> result) =>

@@ -115,6 +115,14 @@ internal sealed class ConsentsInMemory : IConsents
         ValueTask.FromResult(Result.Success<IReadOnlyList<ObjectionRecord>>([]));
 
     /// <inheritdoc/>
+    public ValueTask<Result<SubjectStanding>> StandingAsync(
+        AccessContext context,
+        SubjectId subject,
+        OrganizationId? organization,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Result.Failure<SubjectStanding>(Error.From(ErrorCodes.Denied)));
+
+    /// <inheritdoc/>
     public ValueTask<Result> ObjectAsync(
         AccessContext context,
         string purpose,

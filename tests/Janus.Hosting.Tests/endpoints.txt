@@ -557,6 +557,27 @@ POST /admin/accounts/{subject}/sessions/revoke
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   404 identity.account.notfound
+GET /admin/accounts/{subject}/standing
+  200
+    application/json
+      state: AccountState
+      consents[].purpose: string
+      consents[].document: string
+      consents[].noticeVersion: string
+      consents[].mechanism: ConsentMechanism
+      consents[].grantedAt: DateTimeOffset
+      consents[].withdrawnAt: DateTimeOffset?
+      consents[].supersededAt: DateTimeOffset?
+      objections[].purpose: string
+      objections[].document: string
+      objections[].noticeVersion: string
+      objections[].mechanism: ConsentMechanism
+      objections[].recordedAt: DateTimeOffset
+      objections[].withdrawnAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.organization.notfound
 POST /admin/accounts/{subject}/suspend
   204
   400 api.request.malformed

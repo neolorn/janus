@@ -631,6 +631,12 @@ internal sealed class Deployment : IAsyncDisposable
     public AccountTiesInMemory Ties { get; } = new();
 
     /// <summary>
+    /// Which organizations are held, and whom each reaches, for the privacy reads
+    /// (IDN-READ-004).
+    /// </summary>
+    public Janus.Privacy.Tests.ReachedSubjectsInMemory Reached { get; } = new();
+
+    /// <summary>
     /// The records each person was given (OPS-ALERT-005).
     /// </summary>
     public ReadVolumeInMemory Volume { get; } = new();
@@ -1166,6 +1172,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IConsentStore>(Consents);
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Processing);
         _ = services.AddScoped<Supersession>();
+        _ = services.AddSingleton<Janus.Privacy.Policies.IReachedSubjects>(Reached);
+        _ = services.AddScoped<Janus.Privacy.Policies.SubjectReach>();
         _ = services.AddScoped<IConsents, ConsentService>();
         _ = services.AddSingleton<IPrivacyRequestStore>(Requests);
         _ = services.AddSingleton<IAccountStates>(AccountStates);

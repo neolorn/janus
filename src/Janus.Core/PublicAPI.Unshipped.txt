@@ -1898,6 +1898,7 @@ Janus.Core.GroupMembershipChanged.SubjectType.init -> void
 Janus.Core.IAccounts.ContactAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ContactDetail!>>
 Janus.Core.IAccounts.FindAsync(Janus.Core.AccessContext! context, string! identifier, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectId>>
 Janus.Core.IAccounts.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccountView!>>
+Janus.Core.IConsents.StandingAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectStanding!>>
 Janus.Core.MailboxState
 Janus.Core.MailboxState.Disabled = 0 -> Janus.Core.MailboxState
 Janus.Core.MailboxState.Enabled = 1 -> Janus.Core.MailboxState
@@ -3112,6 +3113,17 @@ Janus.Core.SubjectId.Equals(Janus.Core.SubjectId other) -> bool
 Janus.Core.SubjectId.SubjectId() -> void
 Janus.Core.SubjectId.SubjectId(System.Guid value) -> void
 Janus.Core.SubjectId.Value.get -> System.Guid
+Janus.Core.SubjectStanding
+Janus.Core.SubjectStanding.<Clone>$() -> Janus.Core.SubjectStanding!
+Janus.Core.SubjectStanding.Consents.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ConsentRecord!>!
+Janus.Core.SubjectStanding.Consents.init -> void
+Janus.Core.SubjectStanding.Deconstruct(out Janus.Core.AccountState State, out System.Collections.Generic.IReadOnlyList<Janus.Core.ConsentRecord!>! Consents, out System.Collections.Generic.IReadOnlyList<Janus.Core.ObjectionRecord!>! Objections) -> void
+Janus.Core.SubjectStanding.Equals(Janus.Core.SubjectStanding? other) -> bool
+Janus.Core.SubjectStanding.Objections.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ObjectionRecord!>!
+Janus.Core.SubjectStanding.Objections.init -> void
+Janus.Core.SubjectStanding.State.get -> Janus.Core.AccountState
+Janus.Core.SubjectStanding.State.init -> void
+Janus.Core.SubjectStanding.SubjectStanding(Janus.Core.AccountState State, System.Collections.Generic.IReadOnlyList<Janus.Core.ConsentRecord!>! Consents, System.Collections.Generic.IReadOnlyList<Janus.Core.ObjectionRecord!>! Objections) -> void
 Janus.Core.SubjectType
 Janus.Core.SubjectType.Group = 1 -> Janus.Core.SubjectType
 Janus.Core.SubjectType.User = 0 -> Janus.Core.SubjectType
@@ -3864,6 +3876,9 @@ override Janus.Core.SubjectExport.GetHashCode() -> int
 override Janus.Core.SubjectExport.ToString() -> string!
 override Janus.Core.SubjectId.GetHashCode() -> int
 override Janus.Core.SubjectId.ToString() -> string!
+override Janus.Core.SubjectStanding.Equals(object? obj) -> bool
+override Janus.Core.SubjectStanding.GetHashCode() -> int
+override Janus.Core.SubjectStanding.ToString() -> string!
 override Janus.Core.SubscriberConfirmation.Equals(object? obj) -> bool
 override Janus.Core.SubscriberConfirmation.GetHashCode() -> int
 override Janus.Core.SubscriberConfirmation.ToString() -> string!
@@ -4864,6 +4879,8 @@ static Janus.Core.SubjectId.operator !=(Janus.Core.SubjectId left, Janus.Core.Su
 static Janus.Core.SubjectId.operator ==(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
 static Janus.Core.SubjectId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.SubjectId
 static Janus.Core.SubjectId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.SubjectId result) -> bool
+static Janus.Core.SubjectStanding.operator !=(Janus.Core.SubjectStanding? left, Janus.Core.SubjectStanding? right) -> bool
+static Janus.Core.SubjectStanding.operator ==(Janus.Core.SubjectStanding? left, Janus.Core.SubjectStanding? right) -> bool
 static Janus.Core.SubscriberConfirmation.operator !=(Janus.Core.SubscriberConfirmation? left, Janus.Core.SubscriberConfirmation? right) -> bool
 static Janus.Core.SubscriberConfirmation.operator ==(Janus.Core.SubscriberConfirmation? left, Janus.Core.SubscriberConfirmation? right) -> bool
 static Janus.Core.SystemPrincipal.ForDeployment(string! name, string! reason, params System.Collections.Generic.IReadOnlyList<Janus.Core.SystemOperation>! operations) -> Janus.Core.SystemPrincipal!

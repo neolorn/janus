@@ -28,4 +28,25 @@ internal sealed record ConsentView(
     ConsentMechanism Mechanism,
     DateTimeOffset GrantedAt,
     DateTimeOffset? WithdrawnAt,
-    DateTimeOffset? SupersededAt);
+    DateTimeOffset? SupersededAt)
+{
+    /// <summary>
+    /// Reads one consent record.
+    /// </summary>
+    /// <param name="record">The record.</param>
+    /// <returns>The view.</returns>
+    /// <exception cref="ArgumentNullException">The record is absent.</exception>
+    public static ConsentView Of(ConsentRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        return new ConsentView(
+            record.Purpose,
+            record.Document,
+            record.NoticeVersion,
+            record.Mechanism,
+            record.GrantedAt,
+            record.WithdrawnAt,
+            record.SupersededAt);
+    }
+}

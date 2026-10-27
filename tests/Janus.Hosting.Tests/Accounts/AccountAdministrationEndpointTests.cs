@@ -383,6 +383,49 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), unheld.Text("code"));
     }
 
+    /// <summary>
+    /// IDN-READ-003 AC4 and chapter 09 section 8a (D-218): the standing read answers the
+    /// account's state and each consent as the person's own read answers it, a withdrawn
+    /// one with when it was taken back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_READ_003_AC4_TheStandingIsReadAsThePersonsOwnReadAnswersItAsync()
+    {
+        var shop = OrganizationId.New(_deployment.Clock);
+        Session member = await MemberAsync();
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId clerk = _deployment.Directory.Created[^1].Subject;
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        _deployment.Reached.Hold(shop);
+        _deployment.Reached.Tie(member.Subject, shop);
+        _deployment.AccountStates.Hold(member.Subject, AccountState.Restricted);
+        _deployment.Consents.Keep(
+            member.Subject,
+            new ConsentRecord(
+                "recommendations", "privacy-notice", "1", ConsentMechanism.Dashboard, ConsentKind.Ordinary,
+                now, now, null));
+        _deployment.Gate.Grant(clerk, shop, Permissions.ConsentRead);
+
+        Answer standing = await browser.SendAsync(
+            "GET", PathOf(member.Subject, "standing?organization=" + shop.Value));
+        Answer beyond = await browser.SendAsync(
+            "GET", PathOf(SubjectId.New(_randomness), "standing?organization=" + shop.Value));
+
+        Assert.Equal(StatusCodes.Status200OK, standing.Status);
+        Assert.Equal("restricted", standing.Text("state"));
+        Assert.Equal(
+            "recommendations",
+            standing.Json().GetProperty("consents")[0].GetProperty("purpose").GetString());
+        Assert.NotEqual(
+            System.Text.Json.JsonValueKind.Null,
+            standing.Json().GetProperty("consents")[0].GetProperty("withdrawnAt").ValueKind);
+        Assert.Equal(0, standing.Json().GetProperty("objections").GetArrayLength());
+        Assert.Equal(StatusCodes.Status404NotFound, beyond.Status);
+        Assert.Equal(ErrorCodes.AccountNotFound.ToString(), beyond.Text("code"));
+    }
+
     private static string PathOf(SubjectId subject, string operation) =>
         "/admin/accounts/" + subject.Value + "/" + operation;
 
