@@ -66,12 +66,15 @@ internal sealed class DeclaredRoleSeed(
                 // it, so one an administrator made is the one left standing.
                 if (await roles.FindForUpdateAsync(declared.Name, cancellationToken).ConfigureAwait(false) is null)
                 {
-                    await roles.CreateAsync(Role.Of(declared.Name, declared.Permissions), cancellationToken)
+                    await roles
+                        .CreateAsync(Role.Of(declared.Name, declared.Permissions, declared.HandsOut), cancellationToken)
                         .ConfigureAwait(false);
                     await audit
                         .DefinedAsync(
-                            declared.Name,
-                            [.. declared.Permissions.OrderBy(permission => permission.ToString(), StringComparer.Ordinal)],
+                            new DefinedRole(
+                                declared.Name,
+                                [.. declared.Permissions.OrderBy(permission => permission.ToString(), StringComparer.Ordinal)],
+                                [.. declared.HandsOut.OrderBy(handed => handed.ToString(), StringComparer.Ordinal)]),
                             Principal,
                             time.GetUtcNow(),
                             cancellationToken)

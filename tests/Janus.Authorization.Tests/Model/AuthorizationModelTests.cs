@@ -421,6 +421,43 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-004, AUTHZ-GRANT-005 (D-212): a declared role hands out the roles it
+    /// names where each is declared or a role chapter 10 section 3 seeds; one naming any
+    /// other stops the deployment with <c>model.startup.declarationinvalid</c>, naming
+    /// <c>role.&lt;name&gt;</c> and <c>handsOut</c>.
+    /// </summary>
+    /// <param name="handed">The role the declared role hands out.</param>
+    /// <param name="admitted">Whether the declaration starts.</param>
+    [Theory]
+    [InlineData("writer", true)]
+    [InlineData("auditor", true)]
+    [InlineData("system-administrator", true)]
+    [InlineData("accountant", false)]
+    [InlineData("Writer", false)]
+    public void AUTHZ_GRANT_005_ADeclaredRoleHandsOutOnlyARoleTheDeploymentWillHold(string handed, bool admitted)
+    {
+        AuthorizationDeclaration declaration = HostDomain.Declared()
+            .Role("writer", "article:read")
+            .Role("lead", ["article:read"], [handed])
+            .Build();
+
+        if (admitted)
+        {
+            DefinedRole lead = AuthorizationModel.Of(declaration).DeclaredRoles[^1];
+
+            Assert.Equal([RoleName.Parse(handed)], lead.HandsOut);
+
+            return;
+        }
+
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(declaration));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("role.lead", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("handsOut", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
     /// IDN-PRIN-001 AC7, OPS-ALERT-006 (D-202): a job declared with a permission the
     /// model does not declare, one of the library's own, one bound to a step-up gate or
     /// one whose action is <c>export</c> stops the deployment with

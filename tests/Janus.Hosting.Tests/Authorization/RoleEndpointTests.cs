@@ -92,7 +92,8 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Assert.Equal(AuditActions.RoleDefined, change.Action);
         Assert.Equal(Editor, change.Role);
         Assert.Null(change.Before);
-        Assert.Equal(2, change.After!.Count);
+        Assert.Equal(2, change.After!.Permissions.Count);
+        Assert.Empty(change.After.HandsOut);
         Assert.Equal("Needs it.", change.Reason);
         Assert.Equal(actor, change.Actor);
     }
@@ -119,8 +120,8 @@ public sealed class RoleEndpointTests : IAsyncLifetime
 
         RoleAuditInMemory.RoleChange change = _deployment.RoleChanges.Changes[^1];
 
-        Assert.Equal(2, change.Before!.Count);
-        Assert.Equal([Permission.Parse("article:read")], change.After);
+        Assert.Equal(2, change.Before!.Permissions.Count);
+        Assert.Equal([Permission.Parse("article:read")], change.After!.Permissions);
     }
 
     /// <summary>
@@ -312,6 +313,94 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         }
 
         Assert.DoesNotContain(_deployment.RoleChanges.Changes, change => change.Action == AuditActions.RoleRemoved);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC6 (D-212): a role another role's <c>handsOut</c> names is not
+    /// removed while that role names it, and is removed once it no longer does.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC6_ARoleAnotherRolesHandsOutNamesIsNotRemovedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Reading, name: "proofreader");
+        _ = await DefinedAsync(administrator, Editing, handsOut: ["proofreader"]);
+
+        Answer refused = await RemovedAsync(administrator, "proofreader");
+
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.RoleInUse.ToString(), refused.Text("code"));
+        Assert.NotNull(await _deployment.Roles.FindAsync(RoleName.Parse("proofreader"), CancellationToken.None));
+
+        Answer emptied = await DefinedAsync(administrator, Editing);
+
+        Assert.Equal(StatusCodes.Status204NoContent, emptied.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, (await RemovedAsync(administrator, "proofreader")).Status);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-005 (D-212): a role is defined with the roles its holders hand out,
+    /// which read back with it and are recorded before and after; a body naming none
+    /// gives it none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_ARoleCarriesTheRolesItsHoldersHandOutAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Reading, name: "reader");
+        Answer created = await DefinedAsync(administrator, Editing, handsOut: ["reader", "editor"]);
+        Answer read = await administrator.SendAsync("GET", "/admin/roles");
+
+        Assert.Equal(StatusCodes.Status201Created, created.Status);
+        Assert.Equal(
+            ["editor", "reader"],
+            read.Json()
+                .EnumerateArray()
+                .Single(role => role.GetProperty("name").GetString() == "editor")
+                .GetProperty("handsOut")
+                .EnumerateArray()
+                .Select(handed => handed.GetString()));
+        Assert.Empty(
+            read.Json()
+                .EnumerateArray()
+                .Single(role => role.GetProperty("name").GetString() == "reader")
+                .GetProperty("handsOut")
+                .EnumerateArray());
+
+        Answer changed = await DefinedAsync(administrator, Editing);
+        RoleAuditInMemory.RoleChange change = _deployment.RoleChanges.Changes[^1];
+
+        Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
+        Assert.Equal([RoleName.Parse("editor"), RoleName.Parse("reader")], change.Before!.HandsOut);
+        Assert.Empty(change.After!.HandsOut);
+        Assert.Empty((await _deployment.Roles.FindAsync(Editor, CancellationToken.None))!.HandsOut);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-005 (D-212): a <c>handsOut</c> naming what is not a role name is
+    /// refused as malformed naming it, and one naming a role the deployment does not hold
+    /// is refused <c>authz.grant.unresolved</c> naming it; neither defines the role or
+    /// records anything.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AHandsOutOutsideTheRuleOrNamingNoRoleIsRefusedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
+
+        Answer malformed = await DefinedAsync(administrator, Reading, handsOut: ["Reader"]);
+        Answer unresolved = await DefinedAsync(administrator, Reading, handsOut: ["accountant"]);
+
+        Assert.Equal("handsOut", Member(malformed));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unresolved.Status);
+        Assert.Equal(ErrorCodes.GrantUnresolved.ToString(), unresolved.Text("code"));
+        Assert.Equal("handsOut", unresolved.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+        Assert.Empty(_deployment.RoleChanges.Changes);
     }
 
     /// <summary>
@@ -699,7 +788,7 @@ public sealed class RoleEndpointTests : IAsyncLifetime
             refusals.Add((await roles.DefineAsync(
                     context,
                     session,
-                    new DefinedRole(Editor, [Permission.Parse("article:read")]),
+                    new DefinedRole(Editor, [Permission.Parse("article:read")], []),
                     "Seeded at the start.",
                     CancellationToken.None))
                 .Match<Error?>(_ => null, error => error));
@@ -726,13 +815,22 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Browser administrator,
         string[] permissions,
         string name = "editor",
-        string reason = "Needs it.") =>
-        administrator.SendAsync(
-            "POST",
-            "/admin/roles",
-            ("name", name),
-            ("permissions", permissions),
-            ("reason", reason));
+        string reason = "Needs it.",
+        string[]? handsOut = null) =>
+        handsOut is null
+            ? administrator.SendAsync(
+                "POST",
+                "/admin/roles",
+                ("name", name),
+                ("permissions", permissions),
+                ("reason", reason))
+            : administrator.SendAsync(
+                "POST",
+                "/admin/roles",
+                ("name", name),
+                ("permissions", permissions),
+                ("handsOut", handsOut),
+                ("reason", reason));
 
     private static Task<Answer> RemovedAsync(Browser administrator, string name) =>
         administrator.SendAsync("DELETE", "/admin/roles/" + name, ("reason", "No longer used."));

@@ -815,10 +815,12 @@ public sealed class ModelTests
             "resources.resource_type",
             "resources.subject",
 
-            // Authorization: what a role allows (AUTHZ-GRANT-004), read live so that
-            // editing it takes effect at once.
+            // Authorization: what a role allows (AUTHZ-GRANT-004) and the roles its
+            // holders hand out (AUTHZ-GRANT-005), read live so that editing it takes
+            // effect at once.
             "role_permissions.permission",
             "role_permissions.role",
+            "roles.hands_out",
             "roles.name",
 
             // Not an account field: the names of the declared roles a start has seeded,

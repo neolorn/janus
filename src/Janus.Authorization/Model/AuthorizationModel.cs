@@ -969,7 +969,28 @@ internal sealed class AuthorizationModel
                 }
             }
 
-            declared.Add(new DefinedRole(name, [.. role.Permissions.Distinct()]));
+            // AUTHZ-GRANT-005 (D-212): a declared role hands out a role the deployment will
+            // hold, one the host declares or one bootstrap seeds.
+            var handsOut = new List<RoleName>(role.HandsOut.Count);
+
+            foreach (string handed in role.HandsOut)
+            {
+                bool held = declaration.Roles.Any(other => string.Equals(other.Name, handed, StringComparison.Ordinal))
+                    || Administrative.Contains(handed, StringComparer.Ordinal);
+
+                if (!held || !RoleName.TryParse(handed, out RoleName handedName))
+                {
+                    throw Invalid(
+                        at,
+                        "handsOut",
+                        "the declared role " + role.Name + " hands out " + handed
+                        + ", which is neither declared nor a role bootstrap seeds");
+                }
+
+                handsOut.Add(handedName);
+            }
+
+            declared.Add(new DefinedRole(name, [.. role.Permissions.Distinct()], [.. handsOut.Distinct()]));
         }
 
         return declared;

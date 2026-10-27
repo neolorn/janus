@@ -145,6 +145,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a member taken out of a group, on a session that has not proved its gate, by a caller managing groups",
             Decided.StepUpRequired),
         ("a role defined, on a session that has not proved its gate, by a caller managing roles", Decided.StepUpRequired),
+        (
+            "a role handing itself out defined, on a session that has not proved its gate, by a caller managing roles",
+            Decided.StepUpRequired),
         ("a grant written and then revoked, by a caller managing grants", Decided.Allowed),
         (
             "a grant written and then revoked in another organization, by a system administrator of the administrative organization",
@@ -1650,6 +1653,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a role defined, on a session that has not proved its gate, by a caller managing roles":
                 return await RoleDefinedUnprovedAsync(deployment, caller);
 
+            // AUTHZ-GRANT-005 (D-212): the roles a role hands out are part of its definition,
+            // which judges its step-up as before.
+            case "a role handing itself out defined, on a session that has not proved its gate, by a caller managing roles":
+                return await RoleDefinedUnprovedAsync(deployment, caller, handsItselfOut: true);
+
             case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
                 return await ViewedAsync(deployment, caller);
 
@@ -1737,7 +1745,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                         .DefineAsync(
                             AccessContext.Of(DeclaredRoleSeed.Principal),
                             SessionId.New(TimeProvider.System),
-                            new DefinedRole(RoleName.Parse("declared"), [HostPermissions.Read]),
+                            new DefinedRole(RoleName.Parse("declared"), [HostPermissions.Read], []),
                             "Seeded at the start.",
                             cancellationToken))
                     .Match(_ => Decided.Allowed, Refused);
@@ -2394,8 +2402,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     // AUTHZ-GRANT-004, OPS-CFG-007: a role defined by a member of the administrative
     // organization managing roles there, on a session the store holds no record of,
-    // which has proved no gate.
-    private async Task<Decided> RoleDefinedUnprovedAsync(Deployment deployment, SubjectId caller)
+    // which has proved no gate; where asked, the role hands itself out (D-212).
+    private async Task<Decided> RoleDefinedUnprovedAsync(Deployment deployment, SubjectId caller, bool handsItselfOut = false)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
@@ -2411,7 +2419,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 .DefineAsync(
                     AccessContext.Of(caller),
                     SessionId.New(TimeProvider.System),
-                    new DefinedRole(RoleName.Parse("drafter"), [HostPermissions.Read]),
+                    new DefinedRole(
+                        RoleName.Parse("drafter"),
+                        [HostPermissions.Read],
+                        handsItselfOut ? [RoleName.Parse("drafter")] : []),
                     "A role for the drafters.",
                     cancellationToken))
             .Match(_ => Decided.Allowed, Refused);

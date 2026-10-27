@@ -45,7 +45,7 @@ internal static class RoleEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired))
+                    ErrorCodes.StepUpRequired, ErrorCodes.GrantUnresolved))
             .Accepts<RoleBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status204NoContent);

@@ -18,7 +18,7 @@ namespace Janus.Authorization.Roles;
 /// <param name="stepUp">What defining and removing ask of the caller's session.</param>
 /// <param name="roles">Where roles are read and written.</param>
 /// <param name="grants">Which grants the reserved account holds.</param>
-/// <param name="references">Whether any grant or standing invitation names a role.</param>
+/// <param name="references">Whether any grant, standing invitation or other role names a role.</param>
 /// <param name="administrative">Which organization administers the deployment.</param>
 /// <param name="emergency">Which account the break-glass session belongs to.</param>
 /// <param name="model">Which permissions exist, and which roles a derivation confers.</param>
@@ -26,9 +26,9 @@ namespace Janus.Authorization.Roles;
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, AUTHZ-GRANT-004, OPS-CFG-007 and OPS-BOOT-002. A role is the
-/// deployment's rather than one organization's, so it is managed in the administrative
-/// organization.
+/// Implements LIB-API-005, AUTHZ-GRANT-004, AUTHZ-GRANT-005, OPS-CFG-007 and OPS-BOOT-002.
+/// A role is the deployment's rather than one organization's, so it is managed in the
+/// administrative organization, with the roles its holders may hand out (D-212).
 /// Its permissions are read live wherever access is worked out, so a change takes
 /// effect on the next request with nothing to invalidate.
 /// </remarks>
@@ -82,6 +82,7 @@ internal sealed class RoleService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(role);
         ArgumentNullException.ThrowIfNull(role.Permissions);
+        ArgumentNullException.ThrowIfNull(role.HandsOut);
 
         // A change is made by a person, in their own session: a system principal has
         // none to step up.
@@ -108,7 +109,7 @@ internal sealed class RoleService(
             return Result.Failure<bool>(Malformed("reason"));
         }
 
-        var defined = Role.Of(role.Name, role.Permissions);
+        var defined = Role.Of(role.Name, role.Permissions, role.HandsOut);
 
         // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
         // on the role as it stands without a lock, so the step-up, which may ask the
@@ -119,6 +120,7 @@ internal sealed class RoleService(
                 defined,
                 cancellationToken)
             .ConfigureAwait(false)
+            ?? await UnresolvedAsync(defined, cancellationToken).ConfigureAwait(false)
             ?? await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false);
 
         if (unmet is not null)
@@ -144,10 +146,12 @@ internal sealed class RoleService(
         }
 
         // D-166 X3: the role is read again under its row's lock, so two definitions at once
-        // are made one after the other and the second is judged on what the first left.
-        Role? held = await roles.FindForUpdateAsync(role.Name, cancellationToken).ConfigureAwait(false);
+        // are made one after the other and the second is judged on what the first left; the
+        // roles it hands out are held with it, in one order, so none is removed meanwhile.
+        Role? held = await HeldAsync(defined, cancellationToken).ConfigureAwait(false);
 
-        if (await DefinitionRefusedAsync(context, held, defined, cancellationToken).ConfigureAwait(false)
+        if ((await DefinitionRefusedAsync(context, held, defined, cancellationToken).ConfigureAwait(false)
+                ?? await UnresolvedAsync(defined, cancellationToken).ConfigureAwait(false))
             is Error refusedSince)
         {
             await work.RollbackAsync().ConfigureAwait(false);
@@ -166,9 +170,8 @@ internal sealed class RoleService(
 
         await audit
             .DefinedAsync(
-                role.Name,
-                held is null ? null : Defined(held).Permissions,
-                Defined(defined).Permissions,
+                held is null ? null : Defined(held),
+                Defined(defined),
                 stated,
                 acting,
                 context.BreakGlassReason,
@@ -259,8 +262,7 @@ internal sealed class RoleService(
         await roles.RemoveAsync(role, cancellationToken).ConfigureAwait(false);
         await audit
             .RemovedAsync(
-                role,
-                Defined(held!).Permissions,
+                Defined(held!),
                 stated,
                 acting,
                 context.BreakGlassReason,
@@ -278,7 +280,49 @@ internal sealed class RoleService(
     }
 
     private static DefinedRole Defined(Role role) =>
-        new(role.Name, [.. role.Permissions.OrderBy(permission => permission.ToString(), StringComparer.Ordinal)]);
+        new(
+            role.Name,
+            [.. role.Permissions.OrderBy(permission => permission.ToString(), StringComparer.Ordinal)],
+            [.. role.HandsOut.OrderBy(handed => handed.ToString(), StringComparer.Ordinal)]);
+
+    // AUTHZ-GRANT-005 (D-212): a role hands out roles the deployment holds; one naming
+    // itself names a role that stands once it is defined. Inside the unit of work the
+    // roles are read once their rows are held.
+    private async ValueTask<Error?> UnresolvedAsync(Role defined, CancellationToken cancellationToken)
+    {
+        foreach (RoleName handed in defined.HandsOut.Where(handed => handed != defined.Name))
+        {
+            if (await roles.FindAsync(handed, cancellationToken).ConfigureAwait(false) is null)
+            {
+                return Error.From(ErrorCodes.GrantUnresolved, "member", JsonSerializer.SerializeToElement("handsOut"));
+            }
+        }
+
+        return null;
+    }
+
+    // D-166 X3: the role and the roles it hands out are taken under their rows' locks in
+    // the order of their names, so two definitions naming each other at once are made one
+    // after the other; the role as it stood is what is answered.
+    private async ValueTask<Role?> HeldAsync(Role defined, CancellationToken cancellationToken)
+    {
+        Role? held = null;
+
+        foreach (RoleName name in defined.HandsOut
+            .Append(defined.Name)
+            .Distinct()
+            .OrderBy(name => name.ToString(), StringComparer.Ordinal))
+        {
+            Role? read = await roles.FindForUpdateAsync(name, cancellationToken).ConfigureAwait(false);
+
+            if (name == defined.Name)
+            {
+                held = read;
+            }
+        }
+
+        return held;
+    }
 
     // API-CONV-002: a free-text field is 1 to 1024 characters after trimming.
     private static string? Stated(string reason) =>

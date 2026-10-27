@@ -8,9 +8,14 @@ namespace Janus.Hosting.Authorization;
 /// </summary>
 /// <param name="Name">The role's name.</param>
 /// <param name="Permissions">What holding it is to permit.</param>
+/// <param name="HandsOut">The roles its holders may hand out, or nothing for none.</param>
 /// <param name="Reason">Why, which every change to a role records.</param>
-/// <remarks>Implements chapter 09 section 8 and AUTHZ-GRANT-004.</remarks>
-internal sealed record RoleBody(string? Name, IReadOnlyList<string?>? Permissions, string? Reason)
+/// <remarks>Implements chapter 09 section 8, AUTHZ-GRANT-004 and AUTHZ-GRANT-005.</remarks>
+internal sealed record RoleBody(
+    string? Name,
+    IReadOnlyList<string?>? Permissions,
+    IReadOnlyList<string?>? HandsOut,
+    string? Reason)
 {
     /// <summary>
     /// The role the body describes, or the member it cannot be read at.
@@ -40,6 +45,19 @@ internal sealed record RoleBody(string? Name, IReadOnlyList<string?>? Permission
             permissions.Add(permission);
         }
 
-        return (new DefinedRole(name, permissions), string.Empty);
+        // D-212: the list is optional, and a role whose body names none hands out none.
+        var handsOut = new List<RoleName>(HandsOut?.Count ?? 0);
+
+        foreach (string? written in HandsOut ?? [])
+        {
+            if (!RoleName.TryParse(written, out RoleName handed))
+            {
+                return (null, "handsOut");
+            }
+
+            handsOut.Add(handed);
+        }
+
+        return (new DefinedRole(name, permissions, handsOut), string.Empty);
     }
 }

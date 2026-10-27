@@ -31,7 +31,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
 
     /// <summary>
     /// AUTHZ-GRANT-004 and IDN-AUD-001 AC1: a definition is recorded with the role, what
-    /// it permitted, what it permits, the reason, and the actor as both identities.
+    /// it permitted and handed out, what it permits and hands out (D-212), the reason, and the actor as both identities.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -43,9 +43,11 @@ public sealed class RoleAuditTests(DatabaseFixture database)
         await using (StoreContext writing = database.Context())
         {
             await Audit(writing).DefinedAsync(
-                Editor,
-                [Permission.Parse("document:read")],
-                [Permission.Parse("document:edit"), Permission.Parse("document:read")],
+                new DefinedRole(Editor, [Permission.Parse("document:read")], []),
+                new DefinedRole(
+                    Editor,
+                    [Permission.Parse("document:edit"), Permission.Parse("document:read")],
+                    [RoleName.Parse("reviewer")]),
                 "Editors now edit.",
                 actor,
                 breakGlassReason: null,
@@ -62,8 +64,10 @@ public sealed class RoleAuditTests(DatabaseFixture database)
         Assert.Equal(actor, read.EffectiveSubject);
         Assert.Null(read.Organization);
         Assert.Equal("editor", read.Details["role"].GetString());
-        Assert.Equal("document:read", read.Details["before"][0].GetString());
-        Assert.Equal(2, read.Details["after"].GetArrayLength());
+        Assert.Equal("document:read", read.Details["before"].GetProperty("permissions")[0].GetString());
+        Assert.Equal(0, read.Details["before"].GetProperty("handsOut").GetArrayLength());
+        Assert.Equal(2, read.Details["after"].GetProperty("permissions").GetArrayLength());
+        Assert.Equal("reviewer", read.Details["after"].GetProperty("handsOut")[0].GetString());
         Assert.Equal("Editors now edit.", read.Details["reason"].GetString());
     }
 
@@ -81,8 +85,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
         await using (StoreContext writing = database.Context())
         {
             await Audit(writing).RemovedAsync(
-                Editor,
-                [Permission.Parse("document:read")],
+                new DefinedRole(Editor, [Permission.Parse("document:read")], []),
                 "No longer used.",
                 actor,
                 breakGlassReason: null,
@@ -95,7 +98,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
         AuditRecord read = Assert.Single(await RecordsAsync(actor));
 
         Assert.Equal(AuditActions.RoleRemoved, read.Action);
-        Assert.Equal(1, read.Details["before"].GetArrayLength());
+        Assert.Equal(1, read.Details["before"].GetProperty("permissions").GetArrayLength());
         Assert.Equal(JsonValueKind.Null, read.Details["after"].ValueKind);
     }
 

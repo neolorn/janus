@@ -679,8 +679,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     /// of its name stands for, recorded <c>authz.role.defined</c> under the start
     /// principal <c>role-declaration</c> with the reason <c>AUTHZ-GRANT-004</c>, and
     /// leaves one an administrator made before it was declared as it stands; each name
-    /// is kept as seeded. A role an administrator changed or removed afterwards is not
-    /// defined again at the next start.
+    /// is kept as seeded, and the roles each hands out are seeded with it (D-212). A role an
+    /// administrator changed or removed afterwards is not defined again at the next start.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -693,9 +693,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         string premade = "premade-" + suffix;
         RoleDeclaration[] roles =
         [
-            new(changed, [HostPermissions.Read, HostPermissions.Edit]),
-            new(removed, [HostPermissions.Read]),
-            new(premade, [HostPermissions.Read]),
+            new(changed, [HostPermissions.Read, HostPermissions.Edit], ["auditor"]),
+            new(removed, [HostPermissions.Read], []),
+            new(premade, [HostPermissions.Read], []),
         ];
 
         await WriteAsync(
@@ -715,6 +715,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal("document:read", await PermissionsOfAsync(removed));
         Assert.Equal("document:edit", await PermissionsOfAsync(premade));
         Assert.Equal(["document:edit document:read"], await SeedingsRecordedAsync(changed));
+        Assert.Equal("auditor", await HandedOutAsync(changed));
         Assert.Equal(["document:read"], await SeedingsRecordedAsync(removed));
         Assert.Empty(await SeedingsRecordedAsync(premade));
         Assert.Equal(3, await SeededAsync(suffix));
@@ -2410,6 +2411,24 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             new { role });
     }
 
+    // AUTHZ-GRANT-005 (D-212): the roles a role hands out, as its row and the record of
+    // its seeding both carry them, or nothing where they differ.
+    private async Task<string?> HandedOutAsync(string role)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<string?>(
+            """
+            SELECT array_to_string(roles.hands_out, ' ')
+            FROM identity.roles
+            JOIN identity.audit_records AS seeded
+              ON seeded.action = 'authz.role.defined' AND seeded.details ->> 'role' = roles.name
+            WHERE roles.name = @role
+              AND seeded.details -> 'after' -> 'handsOut' = to_jsonb(roles.hands_out)
+            """,
+            new { role });
+    }
+
     // AUTHZ-GRANT-004 (D-204): what each definition the role declaration made of a role
     // records it permitted, as chapter 10 section 5.24 writes it.
     private async Task<IReadOnlyList<string>> SeedingsRecordedAsync(string role)
@@ -2420,7 +2439,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             .. await connection.QueryAsync<string>(
                 """
                 SELECT (SELECT string_agg(listed.value, ' ' ORDER BY listed.ordinality)
-                        FROM jsonb_array_elements_text(details -> 'after') WITH ORDINALITY AS listed)
+                        FROM jsonb_array_elements_text(details -> 'after' -> 'permissions') WITH ORDINALITY AS listed)
                 FROM identity.audit_records
                 WHERE action = 'authz.role.defined'
                   AND details ->> 'role' = @role

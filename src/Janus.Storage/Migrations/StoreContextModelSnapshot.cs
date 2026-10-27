@@ -19,7 +19,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
         modelBuilder
             .HasDefaultSchema("identity")
             .HasAnnotation("Npgsql:CollationDefinition:identity.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
-            .HasAnnotation("ProductVersion", "10.0.12")
+            .HasAnnotation("ProductVersion", "10.0.14")
             .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
         NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -2932,6 +2932,13 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("Name")
                     .HasColumnType("text")
                     .HasColumnName("name");
+
+                b.PrimitiveCollection<string[]>("HandsOut")
+                    .IsRequired()
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("text[]")
+                    .HasColumnName("hands_out")
+                    .HasDefaultValueSql("'{}'");
 
                 b.HasKey("Name")
                     .HasName("pk_roles");

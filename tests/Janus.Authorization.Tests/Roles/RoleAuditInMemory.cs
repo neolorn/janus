@@ -27,20 +27,21 @@ internal sealed class RoleAuditInMemory : IRoleAudit
     /// <summary>
     /// Every role a system principal created, oldest first.
     /// </summary>
-    public List<(RoleName Role, IReadOnlyList<Permission> After, SystemPrincipal Principal)> Principals { get; } = [];
+    public List<(DefinedRole After, SystemPrincipal Principal)> Principals { get; } = [];
 
     /// <inheritdoc/>
     public ValueTask DefinedAsync(
-        RoleName role,
-        IReadOnlyList<Permission>? before,
-        IReadOnlyList<Permission> after,
+        DefinedRole? before,
+        DefinedRole after,
         string reason,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _changes.Add(new RoleChange(AuditActions.RoleDefined, role, before, after, reason, actor, at)
+        ArgumentNullException.ThrowIfNull(after);
+
+        _changes.Add(new RoleChange(AuditActions.RoleDefined, after.Name, before, after, reason, actor, at)
         {
             BreakGlassReason = breakGlassReason,
         });
@@ -50,28 +51,28 @@ internal sealed class RoleAuditInMemory : IRoleAudit
 
     /// <inheritdoc/>
     public ValueTask DefinedAsync(
-        RoleName role,
-        IReadOnlyList<Permission> after,
+        DefinedRole after,
         SystemPrincipal principal,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Principals.Add((role, after, principal));
+        Principals.Add((after, principal));
 
         return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc/>
     public ValueTask RemovedAsync(
-        RoleName role,
-        IReadOnlyList<Permission> before,
+        DefinedRole before,
         string reason,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _changes.Add(new RoleChange(AuditActions.RoleRemoved, role, before, After: null, reason, actor, at)
+        ArgumentNullException.ThrowIfNull(before);
+
+        _changes.Add(new RoleChange(AuditActions.RoleRemoved, before.Name, before, After: null, reason, actor, at)
         {
             BreakGlassReason = breakGlassReason,
         });
@@ -84,16 +85,16 @@ internal sealed class RoleAuditInMemory : IRoleAudit
     /// </summary>
     /// <param name="Action">Whether the role was defined or removed.</param>
     /// <param name="Role">Which role.</param>
-    /// <param name="Before">What it permitted, or nothing where it was new.</param>
-    /// <param name="After">What it permits, or nothing where it was removed.</param>
+    /// <param name="Before">The role as it stood, or nothing where it was new.</param>
+    /// <param name="After">The role as it stands, or nothing where it was removed.</param>
     /// <param name="Reason">Why.</param>
     /// <param name="Actor">Who.</param>
     /// <param name="At">When.</param>
     internal sealed record RoleChange(
         AuditAction Action,
         RoleName Role,
-        IReadOnlyList<Permission>? Before,
-        IReadOnlyList<Permission>? After,
+        DefinedRole? Before,
+        DefinedRole? After,
         string Reason,
         SubjectId Actor,
         DateTimeOffset At)

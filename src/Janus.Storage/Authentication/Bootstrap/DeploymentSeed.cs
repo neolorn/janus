@@ -113,7 +113,9 @@ internal sealed class DeploymentSeed(
             if (await roles.FindAsync(name, cancellationToken).ConfigureAwait(false) is null)
             {
                 await roles.CreateAsync(Role.Of(name, permissions), cancellationToken).ConfigureAwait(false);
-                await roleAudit.DefinedAsync(name, permissions, principal, at, cancellationToken).ConfigureAwait(false);
+                await roleAudit
+                    .DefinedAsync(new DefinedRole(name, permissions, []), principal, at, cancellationToken)
+                    .ConfigureAwait(false);
             }
         }
 

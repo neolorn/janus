@@ -357,6 +357,7 @@ Janus.Core.AuthorizationDeclarationBuilder.Resource<TResource>(string! name, Sys
 Janus.Core.AuthorizationDeclarationBuilder.Cookie(string! name, System.TimeSpan? lifetime, bool thirdPartyReadable, string? purpose) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.RetentionFloor(string! category, System.TimeSpan floor) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Role(string! name, params System.Collections.Generic.IReadOnlyList<string!>! permissions) -> Janus.Core.AuthorizationDeclarationBuilder!
+Janus.Core.AuthorizationDeclarationBuilder.Role(string! name, System.Collections.Generic.IReadOnlyList<string!>! permissions, System.Collections.Generic.IReadOnlyList<string!>! handsOut) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.SensitiveCategory(string! category) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.ServesPurpose(string! permission, string! purpose) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.StepUpGate(string! permission, string! gate) -> Janus.Core.AuthorizationDeclarationBuilder!
@@ -754,8 +755,10 @@ Janus.Core.DefinedGroup.Name.get -> string!
 Janus.Core.DefinedGroup.Name.init -> void
 Janus.Core.DefinedRole
 Janus.Core.DefinedRole.<Clone>$() -> Janus.Core.DefinedRole!
-Janus.Core.DefinedRole.Deconstruct(out Janus.Core.RoleName Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
-Janus.Core.DefinedRole.DefinedRole(Janus.Core.RoleName Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
+Janus.Core.DefinedRole.Deconstruct(out Janus.Core.RoleName Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! HandsOut) -> void
+Janus.Core.DefinedRole.DefinedRole(Janus.Core.RoleName Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! HandsOut) -> void
+Janus.Core.DefinedRole.HandsOut.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
+Janus.Core.DefinedRole.HandsOut.init -> void
 Janus.Core.DefinedRole.Equals(Janus.Core.DefinedRole? other) -> bool
 Janus.Core.DefinedRole.Name.get -> Janus.Core.RoleName
 Janus.Core.DefinedRole.Name.init -> void
@@ -2634,13 +2637,15 @@ Janus.Core.Result<TValue>.Result() -> void
 Janus.Core.Result<TValue>.Switch(System.Action<TValue>! onSuccess, System.Action<Janus.Core.Error!>! onFailure) -> void
 Janus.Core.RoleDeclaration
 Janus.Core.RoleDeclaration.<Clone>$() -> Janus.Core.RoleDeclaration!
-Janus.Core.RoleDeclaration.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
+Janus.Core.RoleDeclaration.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<string!>! HandsOut) -> void
+Janus.Core.RoleDeclaration.HandsOut.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.RoleDeclaration.HandsOut.init -> void
 Janus.Core.RoleDeclaration.Equals(Janus.Core.RoleDeclaration? other) -> bool
 Janus.Core.RoleDeclaration.Name.get -> string!
 Janus.Core.RoleDeclaration.Name.init -> void
 Janus.Core.RoleDeclaration.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
 Janus.Core.RoleDeclaration.Permissions.init -> void
-Janus.Core.RoleDeclaration.RoleDeclaration(string! Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
+Janus.Core.RoleDeclaration.RoleDeclaration(string! Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<string!>! HandsOut) -> void
 Janus.Core.RoleName
 Janus.Core.RoleName.Equals(Janus.Core.RoleName other) -> bool
 Janus.Core.RoleName.RoleName() -> void

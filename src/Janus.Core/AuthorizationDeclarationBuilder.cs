@@ -340,10 +340,42 @@ public sealed class AuthorizationDeclarationBuilder
     /// Implements AUTHZ-GRANT-004 and LIB-HOST-001 (D-204). A name outside the rule or
     /// given twice, or a permission not declared, is refused as the model is built.
     /// </remarks>
-    public AuthorizationDeclarationBuilder Role(string name, params IReadOnlyList<string> permissions)
+    public AuthorizationDeclarationBuilder Role(string name, params IReadOnlyList<string> permissions) =>
+        Role(name, permissions, handsOut: []);
+
+    /// <summary>
+    /// Declares a role the deployment starts with, and the roles its holders may hand
+    /// out. It is defined at the first start that finds it not yet seeded, where no role
+    /// of its name exists, and is the administrators' to change or remove from then on.
+    /// </summary>
+    /// <param name="name">
+    /// The role's name, as <c>POST /admin/roles</c> takes one and never a role chapter
+    /// 10 section 3 seeds.
+    /// </param>
+    /// <param name="permissions">
+    /// What holding it permits, each as <c>resource:action</c>: permissions the host
+    /// declares, or the library's own other than <c>system:administer</c>.
+    /// </param>
+    /// <param name="handsOut">
+    /// The roles a holder may hand out where the role is held, each one this builder
+    /// declares or one chapter 10 section 3 seeds.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The name, the permissions or the roles handed out are absent.</exception>
+    /// <exception cref="ArgumentException">A permission is not well-formed.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-004, AUTHZ-GRANT-005 and LIB-HOST-001 (D-204, D-212). A
+    /// name outside the rule or given twice, a permission not declared, or a role handed
+    /// out that is neither declared nor seeded, is refused as the model is built.
+    /// </remarks>
+    public AuthorizationDeclarationBuilder Role(
+        string name,
+        IReadOnlyList<string> permissions,
+        IReadOnlyList<string> handsOut)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(permissions);
+        ArgumentNullException.ThrowIfNull(handsOut);
 
         var parsed = new List<Permission>(permissions.Count);
 
@@ -352,7 +384,7 @@ public sealed class AuthorizationDeclarationBuilder
             parsed.Add(Core.Permission.Parse(permission));
         }
 
-        _roles.Add(new RoleDeclaration(name, parsed));
+        _roles.Add(new RoleDeclaration(name, parsed, [.. handsOut]));
 
         return this;
     }

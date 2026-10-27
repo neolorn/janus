@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A role carries `handsOut`, the roles its holders may hand out: `POST /admin/roles` takes
+  it, optional and none where absent (`api.request.malformed` naming `handsOut` for a name
+  outside the rule, `authz.grant.unresolved` naming it for a role the deployment does not
+  hold), `GET /admin/roles` answers it, `AuthorizationDeclarationBuilder.Role(name,
+  permissions, handsOut)` declares it (a name neither declared nor seeded by bootstrap
+  fails startup naming `handsOut`), `authz.role.defined` records it before and after
+  beside the permissions, and a role another role's `handsOut` names is not removed
+  (`authz.role.inuse`).
 - `POST /admin/grants` and `DELETE /admin/grants/{id}` admit a grant, or its revocation,
   in an organization other than the administrative organization under `system:administer`
   held in the administrative organization as well as under `grant:manage` held in the

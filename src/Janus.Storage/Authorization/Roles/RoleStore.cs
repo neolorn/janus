@@ -10,7 +10,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Storage.Authorization.Roles;
 
 /// <summary>
-/// Roles, over the <c>roles</c> and <c>role_permissions</c> tables.
+/// Roles, over the <c>roles</c> and <c>role_permissions</c> tables, each role's row
+/// carrying the roles it hands out.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <remarks>
@@ -23,7 +24,10 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
     /// <inheritdoc/>
     public async ValueTask<Role?> FindAsync(RoleName name, CancellationToken cancellationToken)
     {
+        // Read untracked, so a role read again under its lock is the row as committed and
+        // never one an earlier read left in the context.
         RoleRecord? role = await context.Roles
+            .AsNoTracking()
             .FirstOrDefaultAsync(row => row.Name == name, cancellationToken)
             .ConfigureAwait(false);
 
@@ -38,7 +42,7 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return Role.Of(name, permissions);
+        return Role.Of(name, permissions, Handed(role));
     }
 
     /// <inheritdoc/>
@@ -77,7 +81,8 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
         [
             .. roles.Select(role => Role.Of(
                 role.Name,
-                permissions.Where(row => row.Role == role.Name).Select(row => row.Permission))),
+                permissions.Where(row => row.Role == role.Name).Select(row => row.Permission),
+                Handed(role))),
         ];
     }
 
@@ -87,7 +92,7 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
         ArgumentNullException.ThrowIfNull(role);
 
         await context.Roles
-            .AddAsync(new RoleRecord { Name = role.Name }, cancellationToken)
+            .AddAsync(new RoleRecord { Name = role.Name, HandsOut = Written(role) }, cancellationToken)
             .ConfigureAwait(false);
 
         await context.RolePermissions
@@ -100,14 +105,12 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
     {
         ArgumentNullException.ThrowIfNull(role);
 
-        bool exists = await context.Roles
-            .AnyAsync(row => row.Name == role.Name, cancellationToken)
-            .ConfigureAwait(false);
+        RoleRecord held = await context.Roles
+                .FirstOrDefaultAsync(row => row.Name == role.Name, cancellationToken)
+                .ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The role has no row to carry it onto.");
 
-        if (!exists)
-        {
-            throw new InvalidOperationException("The role has no row to carry it onto.");
-        }
+        held.HandsOut = Written(role);
 
         List<RolePermissionRecord> stored = await context.RolePermissions
             .Where(row => row.Role == role.Name)
@@ -136,6 +139,13 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
             context.Roles.Remove(role);
         }
     }
+
+    // The names are kept in one order, so a list written twice reads as one.
+    private static string[] Written(Role role) =>
+        [.. role.HandsOut.Select(handed => handed.ToString()).Order(StringComparer.Ordinal)];
+
+    // A name the row holds was a role name when it was written, so it reads as one.
+    private static IEnumerable<RoleName> Handed(RoleRecord role) => role.HandsOut.Select(RoleName.Parse);
 
     private static IEnumerable<RolePermissionRecord> Rows(Role role) =>
         role.Permissions.Select(permission => new RolePermissionRecord

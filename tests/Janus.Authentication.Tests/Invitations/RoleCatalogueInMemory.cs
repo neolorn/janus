@@ -24,7 +24,7 @@ internal sealed class RoleCatalogueInMemory : IRoleCatalogue
     {
         var role = RoleName.Parse(name);
 
-        _roles[role] = new DefinedRole(role, permissions);
+        _roles[role] = new DefinedRole(role, permissions, []);
 
         return role;
     }
