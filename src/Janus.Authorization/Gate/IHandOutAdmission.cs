@@ -29,4 +29,17 @@ internal interface IHandOutAdmission
     /// it touches, each recorded as a refusal.
     /// </returns>
     ValueTask<Result> AdmitAsync(AccessContext context, HandOut change, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Admits a change to a role: the actor's grants in the administrative organization
+    /// admit, across it, every permission the role carries before and after the change,
+    /// and the actor may hand out there every role the role hands out after it.
+    /// </summary>
+    /// <param name="context">Who is acting.</param>
+    /// <param name="change">The role before and after the change, and what it then hands out.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success; otherwise <c>authz.role.notassignable</c>, recorded as a refusal.
+    /// </returns>
+    ValueTask<Result> AdmitAsync(AccessContext context, RoleChange change, CancellationToken cancellationToken);
 }

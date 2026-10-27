@@ -150,6 +150,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         (
             "a role handing itself out defined, on a session that has not proved its gate, by a caller managing roles",
             Decided.StepUpRequired),
+        (
+            "a role carrying a permission the caller's grants do not admit defined, by a caller managing roles",
+            Decided.NotAssignable),
+        (
+            "a role handing out a role no role of the caller hands out defined, by a caller managing roles",
+            Decided.NotAssignable),
         ("a grant written and then revoked, by a caller managing grants", Decided.Allowed),
         ("a grant of a role no role of the caller hands out, by a caller managing grants", Decided.NotAssignable),
         (
@@ -1694,6 +1700,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a role handing itself out defined, on a session that has not proved its gate, by a caller managing roles":
                 return await RoleDefinedUnprovedAsync(deployment, caller, handsItselfOut: true);
 
+            // AUTHZ-GRANT-005 (D-212): a role change stays within the caller's reach.
+            case "a role carrying a permission the caller's grants do not admit defined, by a caller managing roles":
+            case "a role handing out a role no role of the caller hands out defined, by a caller managing roles":
+                return await RoleReachedAsync(deployment, caller, scenario);
+
             case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
                 return await ViewedAsync(deployment, caller);
 
@@ -2438,16 +2449,19 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     // AUTHZ-GRANT-004, OPS-CFG-007: a role defined by a member of the administrative
     // organization managing roles there, on a session the store holds no record of,
-    // which has proved no gate; where asked, the role hands itself out (D-212).
+    // which has proved no gate; where asked, the role hands itself out (D-212). The
+    // caller reaches what the role carries and hands out (AUTHZ-GRANT-005).
     private async Task<Decided> RoleDefinedUnprovedAsync(Deployment deployment, SubjectId caller, bool handsItselfOut = false)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
-        RoleName managing = await deployment.RoleAsync([Permissions.RoleManage], cancellationToken);
+        RoleName managing = await deployment.RoleAsync([Permissions.RoleManage, HostPermissions.Read], cancellationToken);
+        var drafter = RoleName.Parse("drafter");
 
         await deployment.MemberAsync(caller, administrative, cancellationToken);
         await deployment.GrantAsync(
             GrantSubject.Of(caller), managing, null, false, null, administrative, cancellationToken);
+        await deployment.HandsOutAsync(managing, [drafter], cancellationToken);
 
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
 
@@ -2455,13 +2469,51 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 .DefineAsync(
                     AccessContext.Of(caller),
                     SessionId.New(TimeProvider.System),
-                    new DefinedRole(
-                        RoleName.Parse("drafter"),
-                        [HostPermissions.Read],
-                        handsItselfOut ? [RoleName.Parse("drafter")] : []),
+                    new DefinedRole(drafter, [HostPermissions.Read], handsItselfOut ? [drafter] : []),
                     "A role for the drafters.",
                     cancellationToken))
             .Match(_ => Decided.Allowed, Refused);
+    }
+
+    // AUTHZ-GRANT-005 (D-212): a role defined, on a session that meets the gate, by a
+    // member of the administrative organization managing roles there and holding what
+    // the role reads, where the role also carries a permission the caller's grants do
+    // not admit, or hands out a role no role of the caller lists; nothing is defined.
+    private async Task<Decided> RoleReachedAsync(Deployment deployment, SubjectId caller, string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        RoleName managing = await deployment.RoleAsync([Permissions.RoleManage, HostPermissions.Read], cancellationToken);
+        RoleName unlisted = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        var drafter = RoleName.Parse("drafter");
+        bool widened = scenario.StartsWith("a role carrying", StringComparison.Ordinal);
+
+        await deployment.MemberAsync(caller, administrative, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), managing, null, false, null, administrative, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Decided decided = (await scope.ServiceProvider.GetRequiredService<IRoles>()
+                .DefineAsync(
+                    AccessContext.Of(caller),
+                    await SteppedUpAsync(scope.ServiceProvider, caller),
+                    new DefinedRole(
+                        drafter,
+                        widened ? [HostPermissions.Read, HostPermissions.Edit] : [HostPermissions.Read],
+                        widened ? [] : [unlisted]),
+                    "A role for the drafters.",
+                    cancellationToken))
+            .Match(_ => Decided.Allowed, Refused);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.roles WHERE name = @name;",
+            new { name = drafter.ToString() },
+            cancellationToken: cancellationToken)));
+
+        return decided;
     }
 
     // AUTHZ-GRANT-005 (D-212): a grant across the organization of a role the managing role

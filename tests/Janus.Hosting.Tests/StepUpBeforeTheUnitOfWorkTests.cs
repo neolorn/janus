@@ -228,6 +228,8 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
     {
         (Browser administrator, SubjectId subject) = await AuthorisedAsync(Administration, Permissions.RoleManage);
 
+        Reaching(subject);
+
         Texted(subject);
 
         Refused(await RoleDefinedAsync(administrator), subject);
@@ -244,6 +246,8 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
     public async Task CONV_DESIGN_003_AC13_ARoleRemovedAsksTheSignalWithNoUnitOfWorkBegunAsync()
     {
         (Browser administrator, SubjectId subject) = await AuthorisedAsync(Administration, Permissions.RoleManage);
+
+        Reaching(subject);
 
         Assert.Equal(StatusCodes.Status201Created, (await RoleDefinedAsync(administrator)).Status);
 
@@ -394,6 +398,8 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
     public async Task CONV_DESIGN_002_ARoleInUseIsRefusedBeforeTheStepUpAndAgainUnderTheLockAsync()
     {
         (Browser administrator, SubjectId subject) = await AuthorisedAsync(Administration, Permissions.RoleManage);
+
+        Reaching(subject);
         var editor = RoleName.Parse("editor");
 
         Assert.Equal(StatusCodes.Status201Created, (await RoleDefinedAsync(administrator)).Status);
@@ -1646,6 +1652,16 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
             ("subjectType", member.Type is SubjectType.User ? "user" : "group"),
             ("subjectId", member.Value),
             ("reason", "Needs it."));
+
+    // AUTHZ-GRANT-005 (D-212): a role change stays within the actor's reach, so an
+    // administrator of roles holds what the roles these cases define carry.
+    private void Reaching(SubjectId subject)
+    {
+        foreach (string permission in Editing)
+        {
+            _deployment.Gate.Grant(subject, Administration, Permission.Parse(permission));
+        }
+    }
 
     private static Task<Answer> RoleDefinedAsync(Browser administrator, string name = "editor") =>
         administrator.SendAsync(

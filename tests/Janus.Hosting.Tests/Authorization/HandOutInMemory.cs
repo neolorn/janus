@@ -17,7 +17,9 @@ namespace Janus.Hosting.Tests.Authorization;
 /// the actor's own access is refused <c>authz.grant.self</c>, and each role is admitted
 /// where a test said the actor hands it out in the organization, or, with
 /// <c>authz.handout.byholding</c> on, where the gate admits every permission it carries
-/// there (AUTHZ-GRANT-005, D-212).
+/// there; a change to a role is admitted where the gate admits in the administrative
+/// organization every permission it carries before and after and the roles it hands out
+/// pass (AUTHZ-GRANT-005, D-212).
 /// </summary>
 /// <param name="gate">The deployment's gate, which holds what a test granted.</param>
 /// <param name="groups">The deployment's groups, which hold whom each group holds.</param>
@@ -80,6 +82,37 @@ internal sealed class HandOutInMemory(
         return change.Roles.All(role => _handsOut.Contains((acting, change.Organization, role.Name))
             || (byHolding && role.Permissions.All(permission => gate.Admits(context, permission, change.Organization))))
             ? Result.Success()
+            : Result.Failure(Error.From(ErrorCodes.RoleNotAssignable));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> AdmitAsync(
+        AccessContext context,
+        RoleChange change,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(change);
+
+        if (context.Acting is null || gate.Administrative is not OrganizationId administrative)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (gate.Admits(context, Permissions.SystemAdminister, administrative))
+        {
+            return Result.Success();
+        }
+
+        IEnumerable<Permission> carried = (change.Before?.Permissions ?? [])
+            .Concat(change.After?.Permissions ?? []);
+
+        return carried.All(permission => gate.Admits(context, permission, administrative))
+            ? await AdmitAsync(
+                    context,
+                    new HandOut(Permissions.RoleManage, administrative, Resource: null, change.HandedOut, Widened: []),
+                    cancellationToken)
+                .ConfigureAwait(false)
             : Result.Failure(Error.From(ErrorCodes.RoleNotAssignable));
     }
 }

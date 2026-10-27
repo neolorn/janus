@@ -919,6 +919,21 @@ public sealed class RoleEndpointTests : IAsyncLifetime
             _deployment.Gate.Grant(subject, Administration, permission);
         }
 
+        // AUTHZ-GRANT-005 (D-212): an administrator of roles reaches what the roles these
+        // cases define carry and hand out.
+        if (permissions.Contains(Permissions.RoleManage))
+        {
+            foreach (string permission in Editing)
+            {
+                _deployment.Gate.Grant(subject, Administration, Permission.Parse(permission));
+            }
+
+            foreach (string role in (string[])["editor", "reader", "proofreader"])
+            {
+                _deployment.HandOuts.HandsOut(subject, Administration, RoleName.Parse(role));
+            }
+        }
+
         return (browser, subject);
     }
 }

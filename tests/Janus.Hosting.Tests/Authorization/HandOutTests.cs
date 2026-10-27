@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -210,6 +211,40 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-005 AC4: a role change adding a permission the actor's grants in the
+    /// administrative organization do not admit, and one whose <c>handsOut</c> names a
+    /// role the actor may not hand out there, are refused
+    /// <c>authz.role.notassignable</c> and change nothing; a change within the actor's
+    /// reach is made.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC4_ARoleChangeBeyondTheActorsReachIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName listed = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        RoleName managing = await deployment.RoleAsync([Permissions.RoleManage, HostPermissions.Read], cancellationToken);
+        RoleName unlisted = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        SubjectId actor = await deployment.AccountAsync(cancellationToken);
+        var drafted = RoleName.Parse("drafted-" + Guid.NewGuid().ToString("n", CultureInfo.InvariantCulture));
+
+        await deployment.MemberAsync(actor, administrative, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(actor), managing, null, false, null, administrative, cancellationToken);
+        await deployment.HandsOutAsync(managing, [listed], cancellationToken);
+
+        Result<bool> widened = await DefinedAsync(actor, new DefinedRole(drafted, [HostPermissions.Read, HostPermissions.Edit], []));
+        Result<bool> unassignable = await DefinedAsync(actor, new DefinedRole(drafted, [HostPermissions.Read], [unlisted]));
+        Result<bool> reached = await DefinedAsync(actor, new DefinedRole(drafted, [HostPermissions.Read], [listed]));
+
+        Assert.Equal(ErrorCodes.RoleNotAssignable, widened.Match<ErrorCode?>(_ => null, error => error.Code));
+        Assert.Equal(ErrorCodes.RoleNotAssignable, unassignable.Match<ErrorCode?>(_ => null, error => error.Code));
+        Assert.True(reached.Match(created => created, error => throw new InvalidOperationException(error.Code.ToString())));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-005 AC5: a deny of a role, and the revocation of a grant of it, are
     /// judged as a grant is, so an actor no role of whose lists the role is refused both
     /// and nothing changes.
@@ -418,6 +453,20 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
             session,
             grant,
             "No longer needed.",
+            TestContext.Current.CancellationToken);
+    }
+
+    private async Task<Result<bool>> DefinedAsync(SubjectId actor, DefinedRole role)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        SessionId session = await SteppedUpAsync(scope.ServiceProvider, actor);
+
+        return await scope.ServiceProvider.GetRequiredService<IRoles>().DefineAsync(
+            AccessContext.Of(actor),
+            session,
+            role,
+            "A role for the drafters.",
             TestContext.Current.CancellationToken);
     }
 

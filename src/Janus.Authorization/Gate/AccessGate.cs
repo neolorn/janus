@@ -378,6 +378,71 @@ internal sealed class AccessGate(
         return Result.Success();
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-005 (D-212). A holder of <c>system:administer</c> in the
+    /// administrative organization is admitted, recording nothing. Otherwise each
+    /// permission the role carries before or after the change is decided across the
+    /// administrative organization as the single check decides it, and the roles it hands
+    /// out after the change are admitted there as any change handing them out is. A
+    /// refusal is recorded under <c>role:manage</c> in the administrative organization.
+    /// </remarks>
+    public async ValueTask<Result> AdmitAsync(
+        AccessContext context,
+        RoleChange change,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(change);
+
+        OrganizationId? administering = await administrative.FindAsync(cancellationToken).ConfigureAwait(false);
+
+        // Only a person changes a role, and only where an organization administers the
+        // deployment.
+        if (context.Acting is null || IsJob(context) || administering is not OrganizationId reaching)
+        {
+            return await RefusedAsync(
+                context,
+                Permissions.RoleManage,
+                OrganizationWide,
+                administering,
+                grant: null,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if ((await DecidedOnAsync(context, Permissions.SystemAdminister, reaching, cancellationToken)
+                .ConfigureAwait(false)).Conferred)
+        {
+            return Result.Success();
+        }
+
+        IEnumerable<Permission> carried = (change.Before?.Permissions ?? [])
+            .Concat(change.After?.Permissions ?? [])
+            .Distinct();
+
+        foreach (Permission permission in carried)
+        {
+            if (await HoldsAsync(context, permission, reaching, cancellationToken).ConfigureAwait(false)
+                is not { Deny: false })
+            {
+                return Result.Failure(await RecordedAsync(
+                        context,
+                        Permissions.RoleManage,
+                        OrganizationWide,
+                        reaching,
+                        grant: null,
+                        ErrorCodes.RoleNotAssignable,
+                        cancellationToken)
+                    .ConfigureAwait(false));
+            }
+        }
+
+        return await AdmitAsync(
+            context,
+            new HandOut(Permissions.RoleManage, reaching, Resource: null, change.HandedOut, Widened: []),
+            cancellationToken).ConfigureAwait(false);
+    }
+
     // AUTHZ-GRANT-005: the holder is the actor's account or a group holding it at any
     // depth.
     private static bool Holds(SubjectSet held, GrantSubject holder) =>

@@ -45,7 +45,7 @@ internal static class RoleEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired, ErrorCodes.GrantUnresolved))
+                    ErrorCodes.StepUpRequired, ErrorCodes.GrantUnresolved, ErrorCodes.RoleNotAssignable))
             .Accepts<RoleBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status204NoContent);
@@ -53,7 +53,8 @@ internal static class RoleEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired, ErrorCodes.RoleNotFound, ErrorCodes.RoleInUse)
+                    ErrorCodes.StepUpRequired, ErrorCodes.RoleNotFound, ErrorCodes.RoleInUse,
+                    ErrorCodes.RoleNotAssignable)
                 .Binding<RoleName>("name"))
             .Accepts<RoleRemovalBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);

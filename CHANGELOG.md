@@ -26,6 +26,11 @@ against the public contract of LIB-API-001.
   hand out with `authz.role.notassignable`, and `POST /account/invitation/acknowledge`
   refuses the account that issued the invitation with `authz.grant.self`; each refusal
   writes nothing and is recorded as a refusal.
+- `POST /admin/roles` and `DELETE /admin/roles/{name}` stay within the actor's reach: unless
+  the actor holds `system:administer` in the administrative organization, its grants there
+  must admit every permission the role carries before and after the change, and it must
+  be able to hand out there every role the role's `handsOut` names after it, or the
+  change is refused `authz.role.notassignable`.
 - `authz.handout.byholding` (runtime, off by default; turning it on is loosening) lets an
   actor whose stored grants admit every permission a role carries hand the role out with
   no role of theirs listing it.

@@ -21,6 +21,7 @@ namespace Janus.Authorization.Roles;
 /// <param name="references">Whether any grant, standing invitation or other role names a role.</param>
 /// <param name="administrative">Which organization administers the deployment.</param>
 /// <param name="emergency">Which account the break-glass session belongs to.</param>
+/// <param name="handOut">Whether a change stays within the reach of the caller making it.</param>
 /// <param name="model">Which permissions exist, and which roles a derivation confers.</param>
 /// <param name="audit">Where every change is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -40,6 +41,7 @@ internal sealed class RoleService(
     IRoleReferences references,
     IAdministrativeOrganization administrative,
     IEmergencyAccount emergency,
+    IHandOutAdmission handOut,
     AuthorizationModel model,
     IRoleAudit audit,
     IUnitOfWork work,
@@ -114,13 +116,10 @@ internal sealed class RoleService(
         // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
         // on the role as it stands without a lock, so the step-up, which may ask the
         // carrier's signal, is judged before the unit of work begins.
-        Error? unmet = await DefinitionRefusedAsync(
-                context,
-                await roles.FindAsync(role.Name, cancellationToken).ConfigureAwait(false),
-                defined,
-                cancellationToken)
-            .ConfigureAwait(false)
+        Role? found = await roles.FindAsync(role.Name, cancellationToken).ConfigureAwait(false);
+        Error? unmet = await DefinitionRefusedAsync(context, found, defined, cancellationToken).ConfigureAwait(false)
             ?? await UnresolvedAsync(defined, cancellationToken).ConfigureAwait(false)
+            ?? await ReachRefusedAsync(context, found, defined, cancellationToken).ConfigureAwait(false)
             ?? await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false);
 
         if (unmet is not null)
@@ -151,7 +150,8 @@ internal sealed class RoleService(
         Role? held = await HeldAsync(defined, cancellationToken).ConfigureAwait(false);
 
         if ((await DefinitionRefusedAsync(context, held, defined, cancellationToken).ConfigureAwait(false)
-                ?? await UnresolvedAsync(defined, cancellationToken).ConfigureAwait(false))
+                ?? await UnresolvedAsync(defined, cancellationToken).ConfigureAwait(false)
+                ?? await ReachRefusedAsync(context, held, defined, cancellationToken).ConfigureAwait(false))
             is Error refusedSince)
         {
             await work.RollbackAsync().ConfigureAwait(false);
@@ -217,12 +217,9 @@ internal sealed class RoleService(
         // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
         // on the role as it stands without a lock, so the step-up, which may ask the
         // carrier's signal, is judged before the unit of work begins.
-        Error? unmet = await RemovalRefusedAsync(
-                context,
-                role,
-                await roles.FindAsync(role, cancellationToken).ConfigureAwait(false),
-                cancellationToken)
-            .ConfigureAwait(false)
+        Role? found = await roles.FindAsync(role, cancellationToken).ConfigureAwait(false);
+        Error? unmet = await RemovalRefusedAsync(context, role, found, cancellationToken).ConfigureAwait(false)
+            ?? await ReachRefusedAsync(context, found, defined: null, cancellationToken).ConfigureAwait(false)
             ?? await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false);
 
         if (unmet is not null)
@@ -251,7 +248,8 @@ internal sealed class RoleService(
         // too, so none comes to name a role removed meanwhile.
         Role? held = await roles.FindForUpdateAsync(role, cancellationToken).ConfigureAwait(false);
 
-        if (await RemovalRefusedAsync(context, role, held, cancellationToken).ConfigureAwait(false)
+        if ((await RemovalRefusedAsync(context, role, held, cancellationToken).ConfigureAwait(false)
+                ?? await ReachRefusedAsync(context, held, defined: null, cancellationToken).ConfigureAwait(false))
             is Error refusedSince)
         {
             await work.RollbackAsync().ConfigureAwait(false);
@@ -402,6 +400,39 @@ internal sealed class RoleService(
         return Derived(role) || await references.NamedAsync(role, cancellationToken).ConfigureAwait(false)
             ? Error.From(ErrorCodes.RoleInUse)
             : null;
+    }
+
+    // AUTHZ-GRANT-005 (D-212): a change stays within the caller's reach, what the role
+    // carries before and after it and the roles it hands out after it, each as the
+    // deployment holds it; a role handing itself out hands out what the change leaves.
+    private async ValueTask<Error?> ReachRefusedAsync(
+        AccessContext context,
+        Role? held,
+        Role? defined,
+        CancellationToken cancellationToken)
+    {
+        List<DefinedRole> handedOut = [];
+
+        foreach (RoleName name in (defined?.HandsOut ?? Enumerable.Empty<RoleName>())
+            .OrderBy(name => name.ToString(), StringComparer.Ordinal))
+        {
+            Role read = defined is Role after && name == after.Name
+                ? after
+                : await roles.FindAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
+
+            handedOut.Add(Defined(read));
+        }
+
+        return (await handOut
+                .AdmitAsync(
+                    context,
+                    new RoleChange(
+                        held is null ? null : Defined(held),
+                        defined is null ? null : Defined(defined),
+                        handedOut),
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
     }
 
     // OPS-CFG-007: a role that carries system administration before or after the change
