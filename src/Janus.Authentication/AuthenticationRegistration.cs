@@ -210,6 +210,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<ConfigurationAdministration>(),
             provider.GetRequiredService<PolicyResolution>(),
             provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IEvents>(),
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));

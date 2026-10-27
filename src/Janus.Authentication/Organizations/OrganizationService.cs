@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,6 +27,7 @@ namespace Janus.Authentication.Organizations;
 /// <param name="administration">Where an organization's policy key is written and recorded.</param>
 /// <param name="policies">Where what a change of policy raised is recorded.</param>
 /// <param name="alerts">Where a change of policy that weakens a step-up gate is told.</param>
+/// <param name="events">Where a creation, a deletion request and its cancellation are announced.</param>
 /// <param name="codec">
 /// What the deployment reads uploaded images with, or nothing where it declared none.
 /// </param>
@@ -49,10 +51,17 @@ internal sealed class OrganizationService(
     ConfigurationAdministration administration,
     PolicyResolution policies,
     IAlertChannels alerts,
+    IEvents events,
     ImageCodec? codec,
     IUnitOfWork work,
     TimeProvider time) : IOrganizations
 {
+    private const string Created = "organization-created";
+
+    private const string DeletionRequested = "organization-deletion-requested";
+
+    private const string DeletionCancelled = "organization-deletion-cancelled";
+
     /// <inheritdoc/>
     public async ValueTask<Result<OrganizationId>> CreateAsync(
         AccessContext context,
@@ -140,6 +149,20 @@ internal sealed class OrganizationService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<OrganizationId>(unwritten);
+        }
+
+        // Chapter 10 section 5b (D-218): the event is written in the transaction that
+        // creates the organization, so a host hears of none that did not commit.
+        if (await AnnouncedAsync(
+                new OrganizationCreated(now, Key(Created, organization, now), organization),
+                context,
+                cancellationToken)
+                .ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<OrganizationId>(unannounced);
         }
 
         await audit
@@ -250,6 +273,18 @@ internal sealed class OrganizationService(
         foreach (SubjectId member in await directory.MembersAsync(organization, cancellationToken).ConfigureAwait(false))
         {
             await sessions.EndAccountAsync(member, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await AnnouncedAsync(
+                new OrganizationDeletionRequested(now, Key(DeletionRequested, organization, now), organization),
+                context,
+                cancellationToken)
+                .ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
         }
 
         await audit
@@ -365,6 +400,19 @@ internal sealed class OrganizationService(
         }
 
         await directory.CancelDeletionAsync(organization, cancellationToken).ConfigureAwait(false);
+
+        if (await AnnouncedAsync(
+                new OrganizationDeletionCancelled(now, Key(DeletionCancelled, organization, now), organization),
+                context,
+                cancellationToken)
+                .ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
         await audit
             .RecordedAsync(AuditActions.OrganizationDeletionCancelled, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
@@ -660,6 +708,20 @@ internal sealed class OrganizationService(
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
+    // Chapter 10 section 5b: an organization's event names no subject, and carries the
+    // person who acted as the context gives them.
+    private async ValueTask<Error?> AnnouncedAsync(
+        DomainEvent raised,
+        AccessContext context,
+        CancellationToken cancellationToken) =>
+        (await events
+            .PublishAsync(raised with { Actor = context.Acting, Effective = context.Effective }, cancellationToken)
+            .ConfigureAwait(false))
+        .Match(() => (Error?)null, error => error);
+
+    private static string Key(string kind, OrganizationId organization, DateTimeOffset at) =>
+        string.Create(CultureInfo.InvariantCulture, $"{kind}:{organization.Value}@{at.UtcTicks}");
 
     private sealed record Replacement(
         PolicyOverride Before,

@@ -1948,6 +1948,24 @@ Janus.Core.OidcClient.Scopes.init -> void
 Janus.Core.OidcClientKind
 Janus.Core.OidcClientKind.BrowserApplication = 0 -> Janus.Core.OidcClientKind
 Janus.Core.OidcClientKind.Protocol = 1 -> Janus.Core.OidcClientKind
+Janus.Core.OrganizationCreated
+Janus.Core.OrganizationCreated.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.OrganizationId Organization) -> void
+Janus.Core.OrganizationCreated.Equals(Janus.Core.OrganizationCreated? other) -> bool
+Janus.Core.OrganizationCreated.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.OrganizationCreated.Organization.init -> void
+Janus.Core.OrganizationCreated.OrganizationCreated(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.OrganizationId Organization) -> void
+Janus.Core.OrganizationDeletionCancelled
+Janus.Core.OrganizationDeletionCancelled.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.OrganizationId Organization) -> void
+Janus.Core.OrganizationDeletionCancelled.Equals(Janus.Core.OrganizationDeletionCancelled? other) -> bool
+Janus.Core.OrganizationDeletionCancelled.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.OrganizationDeletionCancelled.Organization.init -> void
+Janus.Core.OrganizationDeletionCancelled.OrganizationDeletionCancelled(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.OrganizationId Organization) -> void
+Janus.Core.OrganizationDeletionRequested
+Janus.Core.OrganizationDeletionRequested.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.OrganizationId Organization) -> void
+Janus.Core.OrganizationDeletionRequested.Equals(Janus.Core.OrganizationDeletionRequested? other) -> bool
+Janus.Core.OrganizationDeletionRequested.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.OrganizationDeletionRequested.Organization.init -> void
+Janus.Core.OrganizationDeletionRequested.OrganizationDeletionRequested(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.OrganizationId Organization) -> void
 Janus.Core.OrganizationDomain
 Janus.Core.OrganizationDomain.<Clone>$() -> Janus.Core.OrganizationDomain!
 Janus.Core.OrganizationDomain.AddedAt.get -> System.DateTimeOffset
@@ -3463,6 +3481,18 @@ override Janus.Core.OidcClaims.ToString() -> string!
 override Janus.Core.OidcClient.Equals(object? obj) -> bool
 override Janus.Core.OidcClient.GetHashCode() -> int
 override Janus.Core.OidcClient.ToString() -> string!
+override Janus.Core.OrganizationCreated.<Clone>$() -> Janus.Core.OrganizationCreated!
+override Janus.Core.OrganizationCreated.Equals(object? obj) -> bool
+override Janus.Core.OrganizationCreated.GetHashCode() -> int
+override Janus.Core.OrganizationCreated.ToString() -> string!
+override Janus.Core.OrganizationDeletionCancelled.<Clone>$() -> Janus.Core.OrganizationDeletionCancelled!
+override Janus.Core.OrganizationDeletionCancelled.Equals(object? obj) -> bool
+override Janus.Core.OrganizationDeletionCancelled.GetHashCode() -> int
+override Janus.Core.OrganizationDeletionCancelled.ToString() -> string!
+override Janus.Core.OrganizationDeletionRequested.<Clone>$() -> Janus.Core.OrganizationDeletionRequested!
+override Janus.Core.OrganizationDeletionRequested.Equals(object? obj) -> bool
+override Janus.Core.OrganizationDeletionRequested.GetHashCode() -> int
+override Janus.Core.OrganizationDeletionRequested.ToString() -> string!
 override Janus.Core.OrganizationDomain.Equals(object? obj) -> bool
 override Janus.Core.OrganizationDomain.GetHashCode() -> int
 override Janus.Core.OrganizationDomain.ToString() -> string!
@@ -3710,6 +3740,9 @@ override sealed Janus.Core.IdentifierPrimaryChanged.Equals(Janus.Core.DomainEven
 override sealed Janus.Core.IdentifierRemoved.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.MembershipChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.ObjectionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.OrganizationCreated.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.OrganizationDeletionCancelled.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.OrganizationDeletionRequested.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.OrganizationErased.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.RestrictionChanged.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.SendingRestrictionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -4414,6 +4447,12 @@ static Janus.Core.OidcClaims.operator !=(Janus.Core.OidcClaims? left, Janus.Core
 static Janus.Core.OidcClaims.operator ==(Janus.Core.OidcClaims? left, Janus.Core.OidcClaims? right) -> bool
 static Janus.Core.OidcClient.operator !=(Janus.Core.OidcClient? left, Janus.Core.OidcClient? right) -> bool
 static Janus.Core.OidcClient.operator ==(Janus.Core.OidcClient? left, Janus.Core.OidcClient? right) -> bool
+static Janus.Core.OrganizationCreated.operator !=(Janus.Core.OrganizationCreated? left, Janus.Core.OrganizationCreated? right) -> bool
+static Janus.Core.OrganizationCreated.operator ==(Janus.Core.OrganizationCreated? left, Janus.Core.OrganizationCreated? right) -> bool
+static Janus.Core.OrganizationDeletionCancelled.operator !=(Janus.Core.OrganizationDeletionCancelled? left, Janus.Core.OrganizationDeletionCancelled? right) -> bool
+static Janus.Core.OrganizationDeletionCancelled.operator ==(Janus.Core.OrganizationDeletionCancelled? left, Janus.Core.OrganizationDeletionCancelled? right) -> bool
+static Janus.Core.OrganizationDeletionRequested.operator !=(Janus.Core.OrganizationDeletionRequested? left, Janus.Core.OrganizationDeletionRequested? right) -> bool
+static Janus.Core.OrganizationDeletionRequested.operator ==(Janus.Core.OrganizationDeletionRequested? left, Janus.Core.OrganizationDeletionRequested? right) -> bool
 static Janus.Core.OrganizationDomain.operator !=(Janus.Core.OrganizationDomain? left, Janus.Core.OrganizationDomain? right) -> bool
 static Janus.Core.OrganizationDomain.operator ==(Janus.Core.OrganizationDomain? left, Janus.Core.OrganizationDomain? right) -> bool
 static Janus.Core.OrganizationErased.operator !=(Janus.Core.OrganizationErased? left, Janus.Core.OrganizationErased? right) -> bool

@@ -48,8 +48,8 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly ConfigurationAuditInMemory _changes = new();
     private readonly OrganizationAuditInMemory _audit = new();
-    private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly EventsInMemory _events;
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly OrganizationsInMemory _organizations;
@@ -61,6 +61,7 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     /// </summary>
     public OrganizationServiceTests()
     {
+        _events = new EventsInMemory { Work = _work };
         _organizations = new OrganizationsInMemory(_memberships);
         _organizations.Seed(Staff, administrative: true);
         _organizations.Seed(Customer);
@@ -102,6 +103,7 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
                     _work,
                     _clock),
                 policies,
+                _events,
                 _events,
                 new ImageCodecInMemory().Declared,
                 _work,
@@ -287,6 +289,83 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
         Assert.Equal(0, _work.Opened);
         Assert.Equal(0, _work.RolledBack);
         Assert.Empty(_changes.Written);
+    }
+
+    /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-218): a created organization is announced
+    /// once, in the transaction that creates it, naming the organization and no subject,
+    /// with the administrator who acted.
+    /// </summary>
+    [Fact]
+    public async Task LIB_API_001_ACreatedOrganizationIsAnnouncedInItsTransactionAsync()
+    {
+        Result<OrganizationId> created = await Service.CreateAsync(
+            Acting,
+            "Northwind Freight",
+            Reason,
+            TestContext.Current.CancellationToken);
+
+        OrganizationId organization = created.Match(
+            id => id,
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+        OrganizationCreated announced = Assert.Single(_events.Of<OrganizationCreated>());
+
+        Assert.Equal(organization, announced.Organization);
+        Assert.Equal(Noon, announced.RaisedAt);
+        Assert.Null(announced.Subject);
+        Assert.Equal((_administrator, _administrator), (announced.Actor, announced.Effective));
+        Assert.Contains(announced, _events.PublishedInTransaction);
+    }
+
+    /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-218): a deletion request and its
+    /// cancellation are each announced once, in the transaction that makes it true, and a
+    /// request for an organization whose deletion is already requested announces nothing.
+    /// </summary>
+    [Fact]
+    public async Task LIB_API_001_ADeletionRequestAndItsCancellationAreAnnouncedInTheirTransactionsAsync()
+    {
+        Assert.True((await Service.RequestDeletionAsync(Acting, Stepped(), Customer, Reason, TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
+        Assert.True((await Service.RequestDeletionAsync(Acting, Stepped(), Customer, Reason, TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
+
+        OrganizationDeletionRequested requested = Assert.Single(_events.Of<OrganizationDeletionRequested>());
+
+        Assert.Equal((Customer, (SubjectId?)null), (requested.Organization, requested.Subject));
+        Assert.Contains(requested, _events.PublishedInTransaction);
+
+        Assert.True((await Service.CancelDeletionAsync(Acting, Stepped(), Customer, Reason, TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
+
+        OrganizationDeletionCancelled cancelled = Assert.Single(_events.Of<OrganizationDeletionCancelled>());
+
+        Assert.Equal((Customer, (SubjectId?)null), (cancelled.Organization, cancelled.Subject));
+        Assert.Equal(_administrator, cancelled.Actor);
+        Assert.Contains(cancelled, _events.PublishedInTransaction);
+        Assert.NotEqual(requested.IdempotencyKey, cancelled.IdempotencyKey);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 (D-218): an organization whose event is not taken is not created:
+    /// the unit of work rolls back with the failure, and nothing is recorded.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_AnOrganizationWhoseEventIsNotTakenIsNotCreatedAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<OrganizationId> created = await Service.CreateAsync(
+            Acting,
+            "Northwind Freight",
+            Reason,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            created.Match(_ => throw new Xunit.Sdk.XunitException("The organization was created."), error => error.Code));
+        Assert.Equal((1, false), (_work.RolledBack, _work.Open));
+        Assert.Empty(_audit.Changes);
     }
 
     private static ErrorCode Refused(Result outcome) =>
