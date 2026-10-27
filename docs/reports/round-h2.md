@@ -218,6 +218,14 @@ base". Where two test classes share a name, the project is given.
   previous push for want of the event outbox a takedown writes to: `ErasureReplayTests`
   (Cli), at base, now composed with it.
 
+**The documents taken in**
+
+Each file's `git hash-object` was checked against the owner's message.
+
+- D-218 (`f030cb09`): the chapters it names, the plan and the decision log.
+- D-219 (`c3a39214`): the chapters it names, the plan and the decision log.
+- D-220 (`666c736e`): the plan and the decision log. The round builds nothing from it.
+
 ## 2. Items not implemented
 
 None.
