@@ -311,6 +311,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IMembershipAttachment, MembershipAttachment>();
         services.AddScoped<IMembershipEnding, MembershipEnding>();
+        services.AddScoped<IMembershipRevocations, MembershipRevocations>();
         services.AddScoped<IRoleCatalogue, RoleCatalogue>();
         services.AddScoped<IRoleHandOut, RoleHandOut>();
         services.AddScoped<IResourceStore, ResourceStore>();

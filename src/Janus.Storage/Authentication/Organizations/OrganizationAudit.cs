@@ -148,6 +148,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         OrganizationId organization,
         MembershipId membership,
         SubjectId member,
+        string reason,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,
@@ -163,9 +164,10 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     member,
                     breakGlassReason,
                     organization,
-                    new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
+                    new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {
                         ["membership"] = JsonSerializer.SerializeToElement(membership.Value),
+                        ["reason"] = JsonSerializer.SerializeToElement(reason),
                     }),
                 cancellationToken)
             .ConfigureAwait(false);

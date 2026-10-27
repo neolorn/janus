@@ -93,6 +93,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly MembershipAttachmentInMemory _attachments;
     private readonly MembershipEndingInMemory _ending;
     private readonly RoleHandOutInMemory _handOut;
+    private readonly MembershipRevocationsInMemory _revocations;
     private readonly SubjectId _inviter;
 
     /// <summary>
@@ -106,6 +107,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _attachments = new MembershipAttachmentInMemory(_memberships);
         _ending = new MembershipEndingInMemory(_memberships);
         _handOut = new RoleHandOutInMemory(_gate, _administrative);
+        _revocations = new MembershipRevocationsInMemory(_handOut, _memberships);
         _organizations.Seed(Staff, administrative: true);
         _organizations.Seed(Customer, name: "Northern branch");
 
@@ -2180,6 +2182,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 Stepped(),
                 Customer,
                 holder,
+                Why,
                 Source,
                 TestContext.Current.CancellationToken)).Code);
         Assert.Equal(
@@ -2189,6 +2192,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 Stepped(),
                 Customer,
                 holder,
+                Why,
                 Source,
                 TestContext.Current.CancellationToken)).Code);
         Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Staff, holder)).Code);
@@ -2201,6 +2205,120 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, holder)).Code);
         Assert.Single(_ending.Ended);
         Assert.Single(_audit.Changes);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC3 (D-213): ending a membership revokes, with the end's reason and
+    /// actor, what a person gave the account in the organization and nothing beyond it;
+    /// ending one of the administrative organization revokes too what the account holds
+    /// where it is no member, and leaves what it holds where it still is.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC3_AnEndRevokesWhatItReachesWithItsReasonAsync()
+    {
+        var clerk = new DefinedRole(_roles.Define("clerk", Permissions.MembershipManage), [Permissions.MembershipManage], []);
+        var elsewhere = new OrganizationId(Guid.NewGuid());
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+        _memberships.Place(holder, Staff);
+        _revocations.Give(holder, Customer, clerk);
+        _revocations.Give(holder, Staff, clerk);
+        _revocations.Give(holder, elsewhere, clerk);
+
+        foreach (OrganizationId organization in new[] { Customer, Staff, elsewhere })
+        {
+            _handOut.HandsOut(_inviter, organization, clerk.Name);
+        }
+
+        Accepted(await EndAsync(Customer, holder));
+
+        MembershipRevocationsInMemory.Revocation revoked = Assert.Single(_revocations.Revoked);
+
+        Assert.Equal((Customer, _inviter, Why), (revoked.Organization, revoked.Actor, revoked.Reason));
+        Assert.Equal([clerk.Name], _revocations.HeldBy(holder, Staff));
+        Assert.Equal([clerk.Name], _revocations.HeldBy(holder, elsewhere));
+
+        _memberships.Place(holder, Customer);
+        _revocations.Give(holder, Customer, clerk);
+
+        Accepted(await EndAsync(Staff, holder));
+
+        Assert.Equal(
+            new HashSet<OrganizationId> { Staff, elsewhere },
+            _revocations.Revoked.Skip(1).Select(revocation => revocation.Organization).ToHashSet());
+        Assert.Equal([clerk.Name], _revocations.HeldBy(holder, Customer));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC8, AUTHZ-GRANT-005 (D-213): ending the membership of an account
+    /// holding a role the actor may not hand out is refused with
+    /// <c>authz.role.notassignable</c>, with no transaction begun and nothing changed.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC8_AnEndReachingARoleTheActorDoesNotHandOutIsRefusedAsync()
+    {
+        var clerk = new DefinedRole(_roles.Define("clerk", Permissions.MembershipManage), [Permissions.MembershipManage], []);
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+        _revocations.Give(holder, Customer, clerk);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Failure(await EndAsync(Customer, holder)).Code);
+        Assert.Empty(_ending.Ended);
+        Assert.Empty(_revocations.Revoked);
+        Assert.Empty(_audit.Changes);
+        Assert.Equal(0, _work.Opened);
+        Assert.Contains(Customer, await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+
+        _handOut.HandsOut(_inviter, Customer, clerk.Name);
+
+        Accepted(await EndAsync(Customer, holder));
+
+        Assert.Single(_revocations.Revoked);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC9 (D-216): an end whose reason is blank or longer than 1024
+    /// characters after trimming is refused with <c>api.request.malformed</c> naming
+    /// <c>reason</c>, and the membership stays current; the reason an end takes is the
+    /// trimmed one its record carries.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC9_AnEndWithoutAReasonIsRefusedAsync()
+    {
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+
+        foreach (string reason in new[] { " ", new string('a', 1025) })
+        {
+            Error refused = Failure(await Service.EndMembershipAsync(
+                AccessContext.Of(_inviter),
+                Stepped(),
+                Customer,
+                holder,
+                reason,
+                Source,
+                TestContext.Current.CancellationToken));
+
+            Assert.Equal(ErrorCodes.RequestMalformed, refused.Code);
+            Assert.Equal("reason", refused.Details["member"].GetString());
+        }
+
+        Assert.Empty(_ending.Ended);
+
+        Accepted(await Service.EndMembershipAsync(
+            AccessContext.Of(_inviter),
+            Stepped(),
+            Customer,
+            holder,
+            "  " + Why + " ",
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Why, Assert.Single(_audit.Changes).Reason);
     }
 
     private InvitationService Service => Serving(_server);
@@ -2293,6 +2411,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 stepUp,
                 _organizations,
                 _ending,
+                _revocations,
                 _emergency,
                 _identifiers,
                 _mailboxes,
@@ -2462,6 +2581,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             session,
             organization,
             member,
+            Why,
             Source,
             TestContext.Current.CancellationToken);
 

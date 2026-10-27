@@ -66,7 +66,8 @@ internal sealed class RoleHandOutInMemory(
         }
 
         return ValueTask.FromResult<Error?>(
-            roles.All(role => _handsOut.Contains((acting, organization, role.Name)))
+            roles.All(role => !role.Permissions.Contains(Permissions.SystemAdminister)
+                && _handsOut.Contains((acting, organization, role.Name)))
                 ? null
                 : Error.From(ErrorCodes.RoleNotAssignable));
     }

@@ -163,6 +163,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Decided.NotAssignable),
         ("an allow grant to the caller itself, of a role the caller hands out", Decided.WidensOwnAccess),
         (
+            "a grant of a role carrying system administration that a role of the caller lists, by a caller managing grants",
+            Decided.NotAssignable),
+        (
             "a member added to a group holding a role no role of the caller hands out, by a caller managing groups",
             Decided.NotAssignable),
         (
@@ -1646,10 +1649,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 return await GrantedAndRevokedAsync(deployment, role, caller);
 
             // AUTHZ-GRANT-005 (D-212): a grant, and a revocation, hand out the role they
-            // name; and an allow grant to the caller widens its own access whatever it may
-            // hand out.
+            // name; an allow grant to the caller widens its own access whatever it may hand
+            // out; and a role carrying system administration is handed out by no list
+            // (OPS-CFG-007).
             case "a grant of a role no role of the caller hands out, by a caller managing grants":
             case "a revocation of a grant of a role no role of the caller hands out, by a caller managing grants":
+            case "a grant of a role carrying system administration that a role of the caller lists, by a caller managing grants":
             case "an allow grant to the caller itself, of a role the caller hands out":
                 return await HandedOutAsync(deployment, role, caller, scenario);
 
@@ -2516,8 +2521,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         return decided;
     }
 
-    // AUTHZ-GRANT-005 (D-212): a grant across the organization of a role the managing role
-    // does not list, the revocation of one, or a grant to the caller of the role it lists,
+    // AUTHZ-GRANT-005 (D-212, D-213): a grant across the organization of a role the managing
+    // role does not list, the revocation of one, a grant to the caller of the role it lists,
+    // or a grant of a role carrying system administration that a role of the caller lists,
     // on a session that meets the gate.
     private async Task<Decided> HandedOutAsync(
         Deployment deployment,
@@ -2543,6 +2549,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
             return (await grants.RevokeAsync(context, session, held, "No longer needed.", cancellationToken))
                 .Match(() => Decided.Allowed, Refused);
+        }
+
+        if (scenario.StartsWith("a grant of a role carrying system administration", StringComparison.Ordinal))
+        {
+            RoleName administering = await deployment.RoleAsync([Permissions.SystemAdminister], cancellationToken);
+            RoleName listing = await deployment.RoleAsync([Permissions.GrantManage], cancellationToken);
+
+            await deployment.HandsOutAsync(listing, [administering], cancellationToken);
+            await deployment.GrantAsync(GrantSubject.Of(caller), listing, null, false, null, null, cancellationToken);
+
+            unlisted = administering;
         }
 
         bool own = scenario.StartsWith("an allow grant to the caller", StringComparison.Ordinal);

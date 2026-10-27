@@ -1288,6 +1288,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationAcknowledgement>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipEnding>(Endings);
+        _ = services.AddScoped<Janus.Authentication.Invitations.IMembershipRevocations>(provider =>
+            new Janus.Authentication.Tests.Invitations.MembershipRevocationsInMemory(
+                provider.GetRequiredService<Janus.Authentication.Invitations.IRoleHandOut>(),
+                Memberships));
         _ = services.AddScoped<Janus.Authentication.Invitations.MembershipEnd>();
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationOpening>();
         _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();

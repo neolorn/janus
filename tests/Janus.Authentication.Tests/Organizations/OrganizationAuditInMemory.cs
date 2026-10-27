@@ -104,12 +104,13 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         OrganizationId organization,
         MembershipId membership,
         SubjectId member,
+        string reason,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _changes.Add(new OrganizationChange(AuditActions.MembershipEnded, organization, string.Empty, actor, at)
+        _changes.Add(new OrganizationChange(AuditActions.MembershipEnded, organization, reason, actor, at)
         {
             Membership = membership,
             Member = member,

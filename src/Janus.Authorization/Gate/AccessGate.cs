@@ -300,8 +300,9 @@ internal sealed class AccessGate(
     /// Implements AUTHZ-GRANT-005 (D-212, D-216). A holder of <c>system:administer</c> in
     /// the administrative organization is admitted, deciding that permission as the single
     /// check decides it and recording nothing. Otherwise a change that widens the actor's
-    /// own access is refused, whatever the actor may hand out; then each role is admitted
-    /// where a role the actor holds hands it out at a scope covering the change, or, with
+    /// own access is refused, whatever the actor may hand out, and so is a role carrying
+    /// <c>system:administer</c> (OPS-CFG-007); then each role is admitted where a role the
+    /// actor holds hands it out at a scope covering the change, or, with
     /// <c>authz.handout.byholding</c> on, where the actor's stored grants admit every
     /// permission it carries there. A live derivation is never asked, so it admits nothing
     /// and raises no fault. A refusal is recorded and counted as every refusal is, under
@@ -345,6 +346,14 @@ internal sealed class AccessGate(
         if (change.Roles.Count == 0)
         {
             return Result.Success();
+        }
+
+        // OPS-CFG-007 stands over the rule: a role carrying system administration is
+        // handed out only by a system administrator, whatever list names it.
+        if (change.Roles.Any(role => role.Permissions.Contains(Permissions.SystemAdminister)))
+        {
+            return Result.Failure(await HandOutRefusedAsync(context, change, ErrorCodes.RoleNotAssignable, cancellationToken)
+                .ConfigureAwait(false));
         }
 
         IReadOnlySet<RoleName> listed = await evaluator

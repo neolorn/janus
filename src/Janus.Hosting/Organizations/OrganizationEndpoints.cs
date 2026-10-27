@@ -151,10 +151,12 @@ internal static class OrganizationEndpoints
             EndMembershipAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.OrganizationNotFound,
-                    ErrorCodes.StepUpRequired, ErrorCodes.MembershipNotFound)
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired, ErrorCodes.MembershipNotFound,
+                    ErrorCodes.RoleNotAssignable)
                 .Binding<OrganizationId>("id")
                 .Binding<SubjectId>("subject"))
+            .Accepts<OrganizationReasonBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
@@ -538,6 +540,15 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
 
+        OrganizationReasonBody body = await JsonBody
+            .ReadAsync<OrganizationReasonBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await invitations
                 .EndMembershipAsync(
@@ -545,6 +556,7 @@ internal static class OrganizationEndpoints
                     browser.Required.Id,
                     id,
                     subject,
+                    reason,
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
                 .ConfigureAwait(false),

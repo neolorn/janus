@@ -74,6 +74,11 @@ internal sealed class HandOutInMemory(
             return Result.Failure(Error.From(ErrorCodes.GrantSelf));
         }
 
+        if (change.Roles.Any(role => role.Permissions.Contains(Permissions.SystemAdminister)))
+        {
+            return Result.Failure(Error.From(ErrorCodes.RoleNotAssignable));
+        }
+
         bool byHolding = (await configuration
                 .ReadAsync(Settings.AuthzHandoutByHolding, cancellationToken)
                 .ConfigureAwait(false))

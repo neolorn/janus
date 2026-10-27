@@ -10,6 +10,19 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `DELETE /admin/organizations/{id}/memberships/{subject}` takes `{ reason }`, required
+  (400 `api.request.malformed` naming `reason` where it is absent, blank or longer than
+  1024 characters after trimming), and so does `IInvitations.EndMembershipAsync`. In the
+  same transaction the end revokes every live grant a person gave the account in the
+  organization and takes the account out of the organization's groups; an end of the
+  administrative organization does the same in every organization the account is no
+  member of. A grant a derivation wrote or materialised stands. Each revocation
+  (`authz.grant.revoked`), each removal (`authz.group.memberremoved`) and the
+  `identity.membership.ended` record carry the reason, and the end is refused
+  `authz.role.notassignable` where the actor may not hand out a role it reaches.
+- A role carrying `system:administer` is handed out by no `handsOut` list and no holding:
+  only a holder of `system:administer` in the administrative organization grants it, adds
+  a member to a group reaching it, or names it in an invitation.
 - `POST /admin/grants` and `DELETE /admin/grants/{id}` hand out the grant's role: unless the
   actor holds `system:administer` in the administrative organization, the role must be one
   a role the actor holds at a scope covering the grant lists in its `handsOut`, or, with

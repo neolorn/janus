@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.BreakGlass;
@@ -16,14 +17,16 @@ using Janus.Core.Configuration;
 namespace Janus.Authentication.Invitations;
 
 /// <summary>
-/// The end of a membership by an administrator: the membership ends, and where it gave
-/// the account a corporate address the address and its mailbox are retired and the
-/// personal email becomes the primary.
+/// The end of a membership by an administrator: the membership ends, the grants a person
+/// gave the account there are revoked and the account leaves the organization's groups,
+/// and where it gave the account a corporate address the address and its mailbox are
+/// retired and the personal email becomes the primary.
 /// </summary>
 /// <param name="gate">The one place a permission is evaluated.</param>
 /// <param name="stepUp">What judges the session against the <c>membership:end</c> gate.</param>
 /// <param name="directory">Where the organization's standing is read.</param>
 /// <param name="memberships">Where the membership is ended.</param>
+/// <param name="revocations">Where the grants the end reaches are revoked and its groups left.</param>
 /// <param name="emergency">Which account the break-glass session belongs to.</param>
 /// <param name="identifiers">Where the account's identifiers are read and the corporate address retired.</param>
 /// <param name="mailboxes">Where the mailbox the account holds is retired.</param>
@@ -35,15 +38,17 @@ namespace Janus.Authentication.Invitations;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements REG-MAIL-003, IDN-MEM-001, INT-MAIL-006a, OPS-BOOT-002 and chapter 09
-/// section 8a. The account's state and its grants are left as they are: suspension and
-/// the removal of grants are separate steps of offboarding. Everything is written in one
-/// transaction, so no instant exists at which the account holds no primary email.
+/// section 8a (D-213, D-216). The account's state is left as it is: suspension is a
+/// separate step of offboarding. Everything is written in one transaction, so no instant
+/// exists at which the account holds no primary email, or holds a grant of an
+/// organization it no longer belongs to.
 /// </remarks>
 internal sealed class MembershipEnd(
     IAccessGate gate,
     StepUpGuard stepUp,
     IOrganizationDirectory directory,
     IMembershipEnding memberships,
+    IMembershipRevocations revocations,
     IEmergencyAccount emergency,
     IIdentifierDirectory identifiers,
     IMailboxStore mailboxes,
@@ -66,6 +71,7 @@ internal sealed class MembershipEnd(
     /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="organization">Of which organization.</param>
     /// <param name="member">Whose membership.</param>
+    /// <param name="reason">Why, which each record the end writes carries.</param>
     /// <param name="source">The address the request came from, which a notice counts against.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the refusal of <see cref="IInvitations.EndMembershipAsync"/>.</returns>
@@ -75,10 +81,12 @@ internal sealed class MembershipEnd(
         SessionId session,
         OrganizationId organization,
         SubjectId member,
+        string reason,
         string source,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(reason);
         ArgumentNullException.ThrowIfNull(source);
 
         // A change is made by a person, whose identity the record carries.
@@ -102,6 +110,14 @@ internal sealed class MembershipEnd(
             return Result.Failure(refused);
         }
 
+        // API-CONV-002, D-216: every record the end writes carries its reason, of 1 to 1024
+        // characters after trimming.
+        if (reason.Trim() is not { Length: > 0 and <= 1024 } stated)
+        {
+            return Result.Failure(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")));
+        }
+
         // IDN-MEM-001, X9 of D-166: a membership the account does not hold is told before
         // any transaction begins, and before a step-up is asked for what cannot happen.
         if (await memberships.FindAsync(member, organization, cancellationToken).ConfigureAwait(false) is null)
@@ -123,6 +139,16 @@ internal sealed class MembershipEnd(
             && await emergency.FindAsync(cancellationToken).ConfigureAwait(false) == member)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // AUTHZ-GRANT-005 (D-213): the end is judged as the revocations and removals it
+        // makes are, before the step-up, and again inside the unit of work.
+        if (await revocations
+                .RefusedAsync(context, member, organization, standing.IsAdministrative, cancellationToken)
+                .ConfigureAwait(false)
+            is Error unassignable)
+        {
+            return Result.Failure(unassignable);
         }
 
         // REG-MAIL-003: ending a membership changes another person's account, so it is
@@ -164,6 +190,16 @@ internal sealed class MembershipEnd(
             return Result.Failure(since);
         }
 
+        if (await revocations
+                .RefusedAsync(context, member, organization, standing.IsAdministrative, cancellationToken)
+                .ConfigureAwait(false)
+            is Error unassignableSince)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unassignableSince);
+        }
+
         // A second end that read the membership before this one committed finds none
         // here, and is answered as the find would answer it.
         if (await memberships.EndAsync(member, organization, now, cancellationToken).ConfigureAwait(false)
@@ -173,6 +209,20 @@ internal sealed class MembershipEnd(
 
             return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
         }
+
+        // IDN-MEM-001 (D-213): in the transaction that ends the membership, recorded with
+        // the end's reason and actor.
+        await revocations
+            .RevokeAsync(
+                member,
+                organization,
+                standing.IsAdministrative,
+                acting,
+                stated,
+                context.BreakGlassReason,
+                now,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         List<DomainEvent> announced =
         [
@@ -196,6 +246,7 @@ internal sealed class MembershipEnd(
                 organization,
                 ended,
                 member,
+                stated,
                 acting,
                 context.BreakGlassReason,
                 now,

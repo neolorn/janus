@@ -1377,7 +1377,7 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
 
         Texted(subject);
 
-        Refused(await administrator.SendAsync("DELETE", OrganizationOf(Branch) + "/memberships/" + member), subject);
+        Refused(await administrator.SendAsync("DELETE", OrganizationOf(Branch) + "/memberships/" + member, Reasoned), subject);
         Assert.Empty(_deployment.Endings.Ended);
     }
 
