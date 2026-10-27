@@ -2902,6 +2902,7 @@ Janus.Core.SessionEndReason.Account = 3 -> Janus.Core.SessionEndReason
 Janus.Core.SessionEndReason.Ended = 1 -> Janus.Core.SessionEndReason
 Janus.Core.SessionEndReason.Organization = 4 -> Janus.Core.SessionEndReason
 Janus.Core.SessionEndReason.Revoked = 2 -> Janus.Core.SessionEndReason
+Janus.Core.SessionEndReason.Security = 5 -> Janus.Core.SessionEndReason
 Janus.Core.SessionEndReason.SignedOut = 0 -> Janus.Core.SessionEndReason
 Janus.Core.SessionEnded
 Janus.Core.SessionEnded.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.SessionId Session, out Janus.Core.SessionEndReason Reason) -> void

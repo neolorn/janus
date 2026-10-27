@@ -50,14 +50,15 @@ against the public contract of LIB-API-001.
   names none. A membership standing before this release is matched to the invitation it
   began from when the migration runs.
 - The event `SessionEnded`, carrying the session and `reason` (`signedout`, `ended`,
-  `revoked`, `account` or `organization`), written for each session ended before its
-  expiry: by an administrator's revocation of an account's sessions or of every session,
-  by the suspension, deactivation, deletion, takedown or erasure of the account, by a
-  request to delete its organization, and where a changed password, a changed identifier
-  or a recovery ends the person's other sessions; the account is the event's subject. A
-  session past its expiry raises none. It is not raised for a sign-out, from one session
-  or everywhere, for an end of one session from another, for a refresh token replayed,
-  for a provider's event that ends the sessions, or for a restriction of processing.
+  `revoked`, `security`, `account` or `organization`), written for each session ended
+  before its expiry: by a sign-out (`signedout`, every session it ends), by an end
+  through the session list (`ended`, the asking session included), by an
+  administrator's revocation of an account's sessions or of every session, by a refresh
+  token presented twice or a provider's security event (`security`), by the
+  restriction, suspension, deactivation, deletion, takedown or erasure of the account,
+  by a request to delete its organization, and where a changed password, a changed
+  identifier or a recovery ends the person's other sessions; the account is the event's
+  subject. A session past its expiry raises none.
 - The event `GrantChanged`, carrying the grant, its kind, holder, role, whether it denies,
   its organization and record, and `change` (`made` or `revoked`), written whenever a
   grant is made or revoked: by an administrator, by an acknowledged invitation or

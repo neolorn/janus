@@ -64,7 +64,9 @@ public sealed class ProviderEventTests : IAsyncDisposable
     /// <summary>
     /// IDN-LIFE-012a AC1: a signed event saying the provider account was compromised,
     /// disabled or signed out everywhere ends every session of the linked account and
-    /// holds the credential; the provider is answered as RFC 8935 asks.
+    /// holds the credential; the provider is answered as RFC 8935 asks. Each session is
+    /// announced as ended on a sign of compromise, naming no actor (chapter 10 section
+    /// 5.39, D-219).
     /// </summary>
     /// <param name="type">The event's type.</param>
     /// <returns>The work of the test.</returns>
@@ -74,8 +76,9 @@ public sealed class ProviderEventTests : IAsyncDisposable
     public async Task IDN_LIFE_012a_AC1_ASignedCompromiseEndsEverySessionAndHoldsTheCredentialAsync(string type)
     {
         (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Google, GoogleSubject);
+        IReadOnlyList<Session> live = Live(subject);
 
-        Assert.NotEmpty(Live(subject));
+        Assert.NotEmpty(live);
 
         Answer answered = await DeliveredAsync(
             Google,
@@ -83,6 +86,13 @@ public sealed class ProviderEventTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status202Accepted, answered.Status);
         Assert.Empty(Live(subject));
+        Assert.Equal(
+            live
+                .Select(session => (session.Id, SessionEndReason.Security, (SubjectId?)subject, (SubjectId?)null))
+                .OrderBy(each => each.Id.Value),
+            _deployment.Events.Of<SessionEnded>()
+                .Select(ended => (ended.Session, ended.Reason, ended.Subject, ended.Actor))
+                .OrderBy(each => each.Session.Value));
         Assert.True(Held(linked).IsHeldByProvider);
         Assert.Equal(
             (AuditActions.ProviderEventTaken, linked.Id, Risc + type, ProviderEventOutcome.SessionsEnded),

@@ -43,6 +43,7 @@ public sealed class OidcServiceTests : IAsyncDisposable
     private readonly IdentifierDirectoryInMemory _identifiers = new();
     private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
     private readonly OidcAuditInMemory _audit = new();
+    private readonly EventsInMemory _events = new();
     private readonly OidcGrantStoreInMemory _grants;
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
@@ -190,6 +191,26 @@ public sealed class OidcServiceTests : IAsyncDisposable
         Assert.Equal(
             ErrorCodes.SessionExpired,
             Refused(await Service.MintAsync(session, Cancellation)));
+    }
+
+    /// <summary>
+    /// LIB-API-001 (D-219): each session a reuse ends is announced with the reason
+    /// <c>security</c>, naming no actor.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_001_EachSessionAReuseEndsIsAnnouncedAsSecurityAsync()
+    {
+        SessionId session = await SignedInAsync();
+        SubjectId subject = _sessions.All.Single(live => live.Id == session).Subject;
+
+        await Service.ReuseAsync(subject, session, Protocol, Grant, Cancellation);
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (session, SessionEndReason.Security, subject, (SubjectId?)null),
+            (ended.Session, ended.Reason, ended.Subject, ended.Actor));
     }
 
     /// <summary>
@@ -457,6 +478,7 @@ public sealed class OidcServiceTests : IAsyncDisposable
         _accounts,
         _grants,
         _audit,
+        _events,
         _configuration,
         _work,
         _clock);

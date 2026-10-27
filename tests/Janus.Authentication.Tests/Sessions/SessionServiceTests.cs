@@ -1463,6 +1463,42 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// LIB-API-001 (D-219): an end through the session list announces the session it
+    /// names as <c>ended</c>, the asking one included, and a sign-out announces every
+    /// session it ends as <c>signedout</c>, each naming the person.
+    /// </summary>
+    [Fact]
+    public async Task LIB_API_001_AnEndFromTheListIsEndedAndASignOutSignedOutAsync()
+    {
+        SubjectId subject = Subject();
+        IssuedSession asking = await BegunAsync(subject, [Factor.Password]);
+        IssuedSession other = await BegunAsync(subject, [Factor.Password]);
+        IssuedSession third = await BegunAsync(subject, [Factor.Password]);
+
+        Assert.Null(Refusal(await Service.EndAsync(
+            AccessContext.Of(subject),
+            asking.Id,
+            TestContext.Current.CancellationToken)));
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (asking.Id, SessionEndReason.Ended, subject, subject),
+            (ended.Session, ended.Reason, ended.Subject, ended.Actor));
+
+        Assert.Null(Refusal(await Service.EndEverywhereAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken)));
+
+        IReadOnlyList<SessionEnded> signedOut = [.. _events.Of<SessionEnded>().Skip(1)];
+
+        Assert.All(signedOut, each => Assert.Equal((SessionEndReason.SignedOut, subject), (each.Reason, each.Actor)));
+        Assert.Equal(
+            new[] { other.Id.Value, third.Id.Value }.Order(),
+            signedOut.Select(each => each.Session.Value).Order());
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC5 (D-218): a revocation whose ends could not be announced ends
     /// nothing, and its transaction is rolled back and left closed.
     /// </summary>

@@ -99,7 +99,8 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     /// <summary>
     /// AUTH-SESS-010, IDN-ACCT-007 (D-166): the restriction and the end of every session
     /// are one transaction, so a restriction that does not commit leaves the account
-    /// active and its sessions live, and one that does leaves it restricted with none.
+    /// active and its sessions live, and one that does leaves it restricted with none,
+    /// each end announced as <c>account</c> (chapter 10 section 5.39, D-219).
     /// </summary>
     [Fact]
     public async Task AUTH_SESS_010_AC4_RestrictingAnAccountEndsItsSessionsAsync()
@@ -122,6 +123,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         Assert.Equal(AccountState.Active, (await StandingAsync(subject)).State);
         Assert.Equal(2, await LiveAsync(subject));
+        Assert.Equal(0, await EndsAnnouncedAsync(subject));
 
         await using (StoreContext restricting = database.Context())
         {
@@ -139,6 +141,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         Assert.Equal(AccountState.Restricted, (await StandingAsync(subject)).State);
         Assert.Equal(0, await LiveAsync(subject));
+        Assert.Equal(2, await EndsAnnouncedAsync(subject));
     }
 
     /// <summary>

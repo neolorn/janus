@@ -702,8 +702,24 @@ internal sealed class SessionService(
             return Result.Failure(notBegun);
         }
 
-        await sessions.EndSpineAsync(ending.Spine, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        // Chapter 10 section 5.39 (D-219): an end through the session list is ended,
+        // whichever session it names, the asking one included.
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndSpineAsync(ending.Spine, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Ended,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -732,7 +748,24 @@ internal sealed class SessionService(
             return Result.Failure(notBegun);
         }
 
-        _ = await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        // Chapter 10 section 5.39 (D-219): a sign-out is signedout for every session it
+        // ends.
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.SignedOut,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)

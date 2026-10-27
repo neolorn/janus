@@ -22,6 +22,7 @@ namespace Janus.Authentication.Oidc;
 /// <param name="accounts">Where the display name is read.</param>
 /// <param name="grants">Where the provider's grant and its tokens are revoked.</param>
 /// <param name="audit">Where a revoked family is recorded.</param>
+/// <param name="events">Where each session a revoked family ends is announced.</param>
 /// <param name="configuration">Where the lifetime comes from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -38,6 +39,7 @@ internal sealed class OidcService(
     IAccountDirectory accounts,
     IOidcGrantStore grants,
     IOidcAudit audit,
+    IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time) : IOidc, ITokenMinting
@@ -123,7 +125,20 @@ internal sealed class OidcService(
                 recorded = named.Subject;
             }
 
-            await sessions.EndSpineAsync(spine, now, cancellationToken).ConfigureAwait(false);
+            // Chapter 10 section 5.39 (D-219): the library ends the family on a sign of
+            // compromise, so each session is announced as security and names no actor.
+            if (await SessionEnds
+                    .AnnouncedAsync(
+                        events,
+                        await sessions.EndSpineAsync(spine, now, cancellationToken).ConfigureAwait(false),
+                        SessionEndReason.Security,
+                        now,
+                        actor: null,
+                        cancellationToken)
+                    .ConfigureAwait(false) is Error unannounced)
+            {
+                throw new InvalidOperationException(unannounced.Code.ToString());
+            }
         }
 
         await audit.ReusedAsync(recorded, clientId, session, now, cancellationToken).ConfigureAwait(false);
