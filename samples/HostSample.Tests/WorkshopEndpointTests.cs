@@ -27,6 +27,37 @@ public sealed class WorkshopEndpointTests(WorkshopHost host) : IClassFixture<Wor
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     /// <summary>
+    /// LIB-TEST-004 AC2, IDN-READ-002 (D-218): the workshop's staff page lists the current
+    /// members of the organization that runs it, read through the library, to its
+    /// manager, the technician among them; the technician, who holds no
+    /// <c>membership:read</c>, is refused it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_004_AC2_TheStaffPageListsTheOrganizationsMembersAsync()
+    {
+        Answered listed = await Exchanges.SendAsync(
+            host.Administrator,
+            HttpMethod.Get,
+            "workshops/" + host.Workshop + "/staff",
+            null,
+            Cancellation);
+        Answered refused = await Exchanges.SendAsync(
+            host.Technician,
+            HttpMethod.Get,
+            "workshops/" + host.Workshop + "/staff",
+            null,
+            Cancellation);
+
+        Assert.Equal(HttpStatusCode.OK, listed.Status);
+        Assert.Contains(
+            listed.Body!.Value.GetProperty("members").EnumerateArray(),
+            member => member.GetProperty("subject").GetGuid() == host.Technician.Subject.Value);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.Status);
+        Assert.Equal("authz.denied", refused.Code);
+    }
+
+    /// <summary>
     /// LIB-TEST-004 AC2: a repair booked by a customer is read back with its contact
     /// name, which the workshop's table holds only encrypted under the customer's key.
     /// </summary>

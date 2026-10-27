@@ -143,6 +143,7 @@ internal static class WorkshopModel
             .Role(
                 WorkshopRoles.Manager,
                 Permissions.MembershipManage.ToString(),
+                Permissions.MembershipRead.ToString(),
                 Permissions.GrantManage.ToString(),
                 Permissions.GrantRead.ToString())
             .Role(

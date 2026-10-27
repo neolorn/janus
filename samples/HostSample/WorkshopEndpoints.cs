@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
@@ -42,6 +43,7 @@ internal static class WorkshopEndpoints
         _ = endpoints.MapGet("/workshops", CatalogueAsync).AllowNoSession();
         _ = endpoints.MapPost("/workshops", OpenAsync);
         _ = endpoints.MapGet("/workshops/{workshop}/repairs", ListAsync);
+        _ = endpoints.MapGet("/workshops/{workshop}/staff", StaffAsync);
         _ = endpoints.MapPost("/workshops/{workshop}/repairs", BookAsync);
         _ = endpoints.MapGet("/repairs/{ticket}", ReadAsync);
         _ = endpoints.MapDelete("/repairs/{ticket}", CancelAsync);
@@ -230,6 +232,62 @@ internal static class WorkshopEndpoints
 
     // A workshop's repairs, filtered by the gate in the workshop's own query, each with
     // the capabilities its reader holds on it, computed for the whole list at once.
+    // The staff page: the current members of the organization that runs a workshop,
+    // read through the library under membership:read, a page at a time (IDN-READ-002).
+    private static Task<IResult> StaffAsync(
+        string workshop,
+        string? after,
+        IRequestAccess access,
+        IInvitations invitations,
+        WorkshopContext context,
+        CancellationToken cancellationToken) =>
+        access.Current().Match(
+            async held =>
+            {
+                Workshop? running = await context.Workshops
+                    .SingleOrDefaultAsync(row => row.Id == workshop, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (running is null)
+                {
+                    return Results.NotFound();
+                }
+
+                SubjectId? from = null;
+
+                if (after is not null)
+                {
+                    if (!SubjectId.TryParse(after, CultureInfo.InvariantCulture, out SubjectId read))
+                    {
+                        return Results.BadRequest();
+                    }
+
+                    from = read;
+                }
+
+                Result<MemberPage> members = await invitations
+                    .MembersAsync(
+                        held.Context,
+                        new OrganizationId(running.Organization),
+                        from,
+                        limit: null,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (members.Refusal() is Error denied)
+                {
+                    return Answers.Refused(denied);
+                }
+
+                return Results.Ok(new StaffPage(
+                    [
+                        .. members.Value().Members
+                            .Select(member => new StaffMember(member.Subject.Value, member.BeganAt, member.EndsAt)),
+                    ],
+                    members.Value().Next?.Value));
+            },
+            Refused);
+
     private static Task<IResult> ListAsync(
         string workshop,
         IRequestAccess access,
