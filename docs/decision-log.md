@@ -18271,9 +18271,9 @@ people tied to it, from a staff member's request or from its own declared jobs, 
 which accounts may exercise a permission on a record; it is told of the organizations,
 grants, groups, roles and sessions that change. Each read reaches the people its
 organization deals with, and the administrative organization reaches everyone (rule 7,
-the owner's choice). The gaps are the host review's H16 to H22 and H28 (2026-10-19),
-Cura's third point and the three reads its feedback lists as planned (2026-10-26), and
-the reads D-203 rule 8 and D-207 left to this round.
+the owner's choice). The gaps are the host review's H16 to H22 and H28 (2026-10-19), a
+host's review of its own (2026-10-26), which asked who may act on a record and listed
+three reads as planned, and the reads D-203 rule 8 and D-207 left to this round.
 
 1. **Organizations (H16).** `organization:read` lists and reads organizations: every one
    in the administrative organization, the organization itself elsewhere, an erased one
@@ -18291,9 +18291,10 @@ the reads D-203 rule 8 and D-207 left to this round.
    photo) and finds one by an email, phone or username in canonical form (`01`
    IDN-READ-003). Finding is a `POST`, so no identifier rides in an address a proxy
    logs.
-4. **Contact details (Cura; H22).** `contact:read` reads the display name, the primary
-   verified email and phone, the language, the time zone and the state: what a host
-   needs to write to a person through its own messaging, a declared job's send included.
+4. **Contact details (a host's review; H22).** `contact:read` reads the display name,
+   the primary verified email and phone, the language, the time zone and the state: what
+   a host needs to write to a person through its own messaging, a declared job's send
+   included.
 5. **Standing (D-203 rule 8, D-207).** `consent:read` reads a person's state, consents
    and objections, so a host's own processing, a job's included, follows them; it is
    the read a messaging library's consent source answers from.
@@ -18323,7 +18324,7 @@ the reads D-203 rule 8 and D-207 left to this round.
    it. *Rejected:* a separate read contract for jobs (two ways to read one thing);
    letting a job declare every library-owned permission (each that changes an account
    is a person's step-up action, D-202).
-9. **Who may (Cura's third point, H20).** `IAccessGate.WhoMayAsync` answers the accounts
+9. **Who may (a host's review, H20).** `IAccessGate.WhoMayAsync` answers the accounts
    the single check would admit for a permission on a record, or across an organization:
    stored, materialised and live derived grants, through groups and containment, allows
    less denies, active accounts (restricted ones for a reading permission), current
@@ -18332,8 +18333,8 @@ the reads D-203 rule 8 and D-207 left to this round.
    `grant:read`; a declared job asks it for a permission its declaration names, so a job
    that may read a record asks who else may. *Rejected:* who holds a role (it misses
    denies, containment and derived access, and makes the host keep a copy of role
-   holders that drifts); the grants view of AUTHZ-DERIVE-007 (it reports grants, not
-   the accounts they admit).
+   holders that drifts); the grants view of AUTHZ-DERIVE-007 (it reports grants, not the
+   accounts they admit).
 10. **Events (H21).** `OrganizationCreated`, `OrganizationDeletionRequested`,
     `OrganizationDeletionCancelled`, `GrantChanged`, `GroupMembershipChanged`,
     `RoleChanged` and `SessionEnded` are added (`10` section 5b), each written in the
@@ -18412,6 +18413,39 @@ malformed (5).
 **Propagated to:** `01` IDN-READ-001 (values), IDN-READ-004 (values, criterion 5); `03`
 AUTHZ-GATE-007 (values, criterion 5); `10` section 5b (`RoleChanged`), section 5.39
 (`SessionEnded`'s reasons); `implementation-plan.md` (section 3a, round H2).
+
+---
+
+## D-220 — A standalone library: Milestone 2 is the release, and the deployment is a host's
+
+**Date:** 2026-10-28 · **Status:** accepted · **Amends:** D-218
+
+The owner's rule: this library, the messaging library and every host are standalone, and
+none knows another. A host that uses two of them connects them in its own code, and its
+deployment (its server and its secrets, its package feed, its mail server and SMS
+gateway, its configuration, its bootstrap and backups, and the frontends people sign in
+and manage their accounts with) is its own project.
+
+Milestone 2 of the plan was that deployment, a checklist of the owner's actions with the
+implementer's work between them, and one step named the shared messaging library. It is
+now the library's release alone: the repository workflows (the gates, the release
+workflow, which packs the packages, attaches them to the tag's release and publishes
+them to a private feed only where the owner names one, LIB-PKG-003) and version 1.0.0,
+after the host rounds and once every known issue the plan carries is answered. The
+chapters that state what a deployment and its frontends meet (`11`, `12`, `14`, `16`,
+`18`, `19`) stay: they are what a host's deployment is held to, not steps of this
+repository. The rounds come before the release, the sample host H1 made being what its
+workflow builds.
+
+D-218 named the host whose review led to it; it now says "a host's review", as no
+document of this library names a host. *Rejected:* keeping the deployment steps here
+with a host's project doing them (the plan would order work outside the repository it
+governs).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `implementation-plan.md` (section 1, section 3a, the H1 row, section
+4); the decision log (D-218's wording).
 
 ---
 
@@ -18644,6 +18678,7 @@ AUTHZ-GATE-007 (values, criterion 5); `10` section 5b (`RoleChanged`), section 5
 | Round H1 question 57 and the review: who a set end's records name, and two denies kept | D-217 |
 | Round H2: what a host reads and is told | D-218 |
 | Round H2 questions 1 to 5: where an organization's reads are asked, and what events and refusals say | D-219 |
+| A standalone library: Milestone 2 is the release, and the deployment is a host's | D-220 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
