@@ -3453,6 +3453,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_memberships_end_set", "(ends_at IS NULL AND end_set_by IS NULL AND end_reason IS NULL)\nOR (ends_at IS NOT NULL AND end_set_by IS NOT NULL\n    AND length(btrim(end_reason)) BETWEEN 1 AND 1024)");
 
+                        t.HasCheckConstraint("ck_memberships_end_set_by_not_max_uuid", "end_set_by <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
 
                         t.HasCheckConstraint("ck_memberships_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");

@@ -646,6 +646,7 @@ table memberships
   column ends_at timestamp with time zone
   constraint ck_memberships_acknowledged CHECK (((acknowledged_at IS NULL) = (acknowledged_documents IS NULL)))
   constraint ck_memberships_end_set CHECK ((((ends_at IS NULL) AND (end_set_by IS NULL) AND (end_reason IS NULL)) OR ((ends_at IS NOT NULL) AND (end_set_by IS NOT NULL) AND ((length(btrim(end_reason)) >= 1) AND (length(btrim(end_reason)) <= 1024)))))
+  constraint ck_memberships_end_set_by_not_max_uuid CHECK ((end_set_by <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_memberships_ended CHECK (((ended_at IS NULL) OR (ended_at >= created_at)))
   constraint ck_memberships_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_memberships_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT

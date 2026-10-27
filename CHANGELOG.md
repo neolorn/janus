@@ -10,6 +10,8 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The administrator a membership's end set in advance names refuses the max UUID by a
+  check constraint, as every other column holding a subject identifier does.
 - `membership-ends` is a library principal's name: a host job declared under it stops
   the deployment with `model.startup.declarationinvalid`.
 - `PUT /admin/organizations/{id}/memberships/{subject}/end` (`{ endsAt, reason }`) sets a

@@ -47,6 +47,9 @@ internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Members
             table.HasCheckConstraint(
                 "ck_memberships_subject_not_max_uuid",
                 MaxUuid.Refused("subject"));
+            table.HasCheckConstraint(
+                "ck_memberships_end_set_by_not_max_uuid",
+                MaxUuid.Refused("end_set_by"));
         });
 
         builder.HasKey(membership => membership.Id).HasName("pk_memberships");
