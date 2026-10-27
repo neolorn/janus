@@ -13,7 +13,8 @@ namespace Janus.Core;
 /// </summary>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-002, AUTHZ-GATE-001,
-/// AUTHZ-GATE-002, AUTHZ-GATE-004, AUTHZ-GATE-005, OPS-ALERT-006 and LIB-SEAM-001.
+/// AUTHZ-GATE-002, AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-GATE-007, OPS-ALERT-006 and
+/// LIB-SEAM-001.
 /// Every evaluation is scoped to the organization owning the record, resolved from the
 /// record and never from a session (AUTHZ-SCOPE-001), and every path fails closed
 /// (AUTHZ-PRIN-003). A permission the host declares with the action <c>export</c> is an
@@ -278,6 +279,44 @@ public interface IAccessGate
         AccessContext context,
         ResourceReference resource,
         FilterSources<TResource> sources,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Which accounts may exercise a permission on a record, or across an organization,
+    /// as the single check would admit each of them.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permission">What the accounts would be doing.</param>
+    /// <param name="resource">
+    /// Which record, or the organization itself under the type <c>organization</c>.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The accounts, in state active or, for a reading permission, restricted, that the
+    /// record's stored and materialised grants, its live derivations evaluated over the
+    /// relationship sources the host declared (LIB-HOST-001), its containers and its
+    /// organization admit, directly or through a group, a deny defeating them, and in the
+    /// administrative organization only while each is a current member; for the
+    /// organization, those its organization-wide grants admit. None where the
+    /// permission's purpose asks a consent the record's data subject has not given.
+    /// Evaluation stops at <c>authz.reverselookup.budget</c>, and what it did not reach
+    /// is named. Or <c>authz.denied</c> for a person without <c>grant:read</c> in the
+    /// organization the record belongs to, for a job whose declaration does not name the
+    /// permission or the organization, for a job's context asked while a request is
+    /// served, and for a record the registry does not hold, or an organization
+    /// identifier that is not one; and <c>authz.derivation.sourcesmissing</c> where a
+    /// derivation the host's rows decide reaches the type and no source is declared for
+    /// its relationship.
+    /// </returns>
+    /// <remarks>
+    /// AUTHZ-GATE-007 (D-218): a step-up is a session's and not an account's, so none is
+    /// judged; nothing is recorded or counted for the accounts judged, only a refusal of
+    /// the one asking.
+    /// </remarks>
+    ValueTask<Result<AdmittedAccounts>> WhoMayAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
         CancellationToken cancellationToken);
 
     /// <summary>

@@ -322,6 +322,7 @@ internal static class StorageRegistration
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();
         services.AddScoped<IIndexCatalogue, IndexCatalogue>();
         services.AddScoped<ISubjectRestrictions, SubjectRestrictions>();
+        services.AddScoped<IExercisingAccounts, ExercisingAccounts>();
         services.AddScoped<IOrganizationSuspensions, OrganizationSuspensions>();
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();

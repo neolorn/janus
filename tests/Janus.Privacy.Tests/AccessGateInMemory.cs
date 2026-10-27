@@ -148,6 +148,14 @@ internal sealed class AccessGateInMemory : IAccessGate
         WhoCanAccessAsync(context, resource, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<Result<AdmittedAccounts>> WhoMayAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Result.Failure<AdmittedAccounts>(Error.From(ErrorCodes.Denied)));
+
+    /// <inheritdoc/>
     public ValueTask<Result<AccessExplanation>> ResolveAsync(
         AccessContext context,
         AuditRecordId correlation,

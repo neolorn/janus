@@ -134,6 +134,17 @@ Janus.Core.AccountViewProfile.DisplayName.init -> void
 Janus.Core.AccountViewProfile.Equals(Janus.Core.AccountViewProfile? other) -> bool
 Janus.Core.AccountViewProfile.LegalName.get -> string?
 Janus.Core.AccountViewProfile.LegalName.init -> void
+Janus.Core.AdmittedAccounts
+Janus.Core.AdmittedAccounts.<Clone>$() -> Janus.Core.AdmittedAccounts!
+Janus.Core.AdmittedAccounts.AdmittedAccounts(System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>! Subjects, bool Partial, System.Collections.Generic.IReadOnlyList<string!>! Unevaluated) -> void
+Janus.Core.AdmittedAccounts.Deconstruct(out System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>! Subjects, out bool Partial, out System.Collections.Generic.IReadOnlyList<string!>! Unevaluated) -> void
+Janus.Core.AdmittedAccounts.Equals(Janus.Core.AdmittedAccounts? other) -> bool
+Janus.Core.AdmittedAccounts.Partial.get -> bool
+Janus.Core.AdmittedAccounts.Partial.init -> void
+Janus.Core.AdmittedAccounts.Subjects.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>!
+Janus.Core.AdmittedAccounts.Subjects.init -> void
+Janus.Core.AdmittedAccounts.Unevaluated.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.AdmittedAccounts.Unevaluated.init -> void
 Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Adult = 1 -> Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Minor = 0 -> Janus.Core.AgeGroup
@@ -1895,6 +1906,7 @@ Janus.Core.GroupMembershipChanged.SubjectId.get -> System.Guid
 Janus.Core.GroupMembershipChanged.SubjectId.init -> void
 Janus.Core.GroupMembershipChanged.SubjectType.get -> Janus.Core.SubjectType
 Janus.Core.GroupMembershipChanged.SubjectType.init -> void
+Janus.Core.IAccessGate.WhoMayAsync(Janus.Core.AccessContext! context, Janus.Core.Permission permission, Janus.Core.ResourceReference resource, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AdmittedAccounts!>>
 Janus.Core.IAccounts.ContactAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ContactDetail!>>
 Janus.Core.IAccounts.FindAsync(Janus.Core.AccessContext! context, string! identifier, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectId>>
 Janus.Core.IAccounts.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccountView!>>
@@ -3310,6 +3322,9 @@ override Janus.Core.AccountViewIdentifiers.ToString() -> string!
 override Janus.Core.AccountViewProfile.Equals(object? obj) -> bool
 override Janus.Core.AccountViewProfile.GetHashCode() -> int
 override Janus.Core.AccountViewProfile.ToString() -> string!
+override Janus.Core.AdmittedAccounts.Equals(object? obj) -> bool
+override Janus.Core.AdmittedAccounts.GetHashCode() -> int
+override Janus.Core.AdmittedAccounts.ToString() -> string!
 override Janus.Core.AlertRaised.<Clone>$() -> Janus.Core.AlertRaised!
 override Janus.Core.AlertRaised.Equals(object? obj) -> bool
 override Janus.Core.AlertRaised.GetHashCode() -> int
@@ -3971,6 +3986,8 @@ static Janus.Core.AccountViewIdentifiers.operator !=(Janus.Core.AccountViewIdent
 static Janus.Core.AccountViewIdentifiers.operator ==(Janus.Core.AccountViewIdentifiers? left, Janus.Core.AccountViewIdentifiers? right) -> bool
 static Janus.Core.AccountViewProfile.operator !=(Janus.Core.AccountViewProfile? left, Janus.Core.AccountViewProfile? right) -> bool
 static Janus.Core.AccountViewProfile.operator ==(Janus.Core.AccountViewProfile? left, Janus.Core.AccountViewProfile? right) -> bool
+static Janus.Core.AdmittedAccounts.operator !=(Janus.Core.AdmittedAccounts? left, Janus.Core.AdmittedAccounts? right) -> bool
+static Janus.Core.AdmittedAccounts.operator ==(Janus.Core.AdmittedAccounts? left, Janus.Core.AdmittedAccounts? right) -> bool
 static Janus.Core.AlertRaised.operator !=(Janus.Core.AlertRaised? left, Janus.Core.AlertRaised? right) -> bool
 static Janus.Core.AlertRaised.operator ==(Janus.Core.AlertRaised? left, Janus.Core.AlertRaised? right) -> bool
 static Janus.Core.AncestryEntry.operator !=(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Grants;
+using Janus.Authorization.Groups;
 using Janus.Authorization.Resources;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -18,6 +19,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="derived">Which derivations reach the record, with what each confers.</param>
 /// <param name="records">Where what contains the record is read.</param>
 /// <param name="grants">Where the grants on the record and its containers are read.</param>
+/// <param name="groups">Where a group holding a grant is read for its members.</param>
 /// <param name="sources">Where a relationship's rows are read through the source the host declared.</param>
 /// <param name="configuration">Where the bound on evaluating the derivations is read.</param>
 /// <param name="time">The clock liveness and the bound are read against.</param>
@@ -37,6 +39,7 @@ internal sealed class ReverseLookup(
     Derivations derived,
     IResourceStore records,
     IGrantStore grants,
+    IGroupStore groups,
     IRelationshipSources sources,
     IConfigurationStore configuration,
     TimeProvider time)
@@ -87,15 +90,106 @@ internal sealed class ReverseLookup(
             return new ResourceAccess(resource, reaching, Partial: false, Unevaluated: []);
         }
 
+        // A grant that confers nothing is not reported (AUTHZ-DERIVE-007), and a
+        // derivation whose role allows nothing produces only such grants.
         List<string> unevaluated = await DerivedAsync(
             resource,
             organization,
             ancestry,
             relationships,
             reaching,
+            each => each.Confers.Count > 0,
             cancellationToken).ConfigureAwait(false);
 
         return new ResourceAccess(resource, reaching, unevaluated.Count > 0, unevaluated);
+    }
+
+    /// <summary>
+    /// The accounts that could be admitted for a permission on a record, or across an
+    /// organization, before the single check judges each of them.
+    /// </summary>
+    /// <param name="resource">The record, or the organization itself.</param>
+    /// <param name="organization">The organization the record sits in.</param>
+    /// <param name="permission">What the accounts would be doing.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Every account an allowing grant on the record, on what contains it or on the whole
+    /// organization names, directly or through a group at any depth; every holder of a
+    /// relationship row a derivation conferring the permission follows from, read through
+    /// the source the host declared; and the derivations the bound stopped.
+    /// </returns>
+    /// <remarks>
+    /// AUTHZ-GATE-007 (D-218): what a role allows, a deny, an expiry and a membership of
+    /// the administrative organization are the single check's to judge, so an account
+    /// named here is a candidate and no more.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">No source is declared for a relationship that is read through one.</exception>
+    public async ValueTask<Admissible> AdmissibleAsync(
+        ResourceReference resource,
+        OrganizationId organization,
+        Permission permission,
+        CancellationToken cancellationToken)
+    {
+        bool organizationWide = resource.Type == OrganizationWide;
+
+        IReadOnlyList<Grant> stored = await grants
+            .OnAsync(resource, organization, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlySet<SubjectId> holding = await AccountsAsync(
+            stored.Where(grant => !grant.Deny).Select(grant => grant.Subject),
+            cancellationToken).ConfigureAwait(false);
+
+        if (organizationWide)
+        {
+            return new Admissible(holding, new HashSet<SubjectId>(), Unevaluated: []);
+        }
+
+        var derivedGrants = new List<ExplainedGrant>();
+
+        List<string> unevaluated = await DerivedAsync(
+            resource,
+            organization,
+            ancestry: [],
+            relationships: null,
+            derivedGrants,
+            each => each.Confers.Contains(permission),
+            cancellationToken).ConfigureAwait(false);
+
+        return new Admissible(
+            holding,
+            derivedGrants.Select(grant => new SubjectId(grant.SubjectId)).ToHashSet(),
+            unevaluated);
+    }
+
+    // AUTHZ-GROUP-002: a group holds a grant for every member at any depth, and a group
+    // met twice is read once, so a cycle the store refuses to write cannot loop here.
+    private async ValueTask<IReadOnlySet<SubjectId>> AccountsAsync(
+        IEnumerable<GrantSubject> holders,
+        CancellationToken cancellationToken)
+    {
+        var accounts = new HashSet<SubjectId>();
+        var read = new HashSet<GroupId>();
+        var pending = new Queue<GrantSubject>(holders);
+
+        while (pending.TryDequeue(out GrantSubject holder))
+        {
+            if (holder.Type == SubjectType.User)
+            {
+                accounts.Add(new SubjectId(holder.Value));
+            }
+            else if (read.Add(new GroupId(holder.Value)))
+            {
+                foreach (GrantSubject member in await groups
+                    .MembersAsync(new GroupId(holder.Value), cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    pending.Enqueue(member);
+                }
+            }
+        }
+
+        return accounts;
     }
 
     /// <summary>
@@ -224,6 +318,7 @@ internal sealed class ReverseLookup(
         IReadOnlyList<ResourceReference> ancestry,
         IReadOnlyDictionary<string, RelationshipRows>? relationships,
         List<ExplainedGrant> reaching,
+        Func<ConferredDerivation, bool> evaluated,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<ConferredDerivation> conferring = await derived
@@ -244,9 +339,7 @@ internal sealed class ReverseLookup(
 
         using var bounded = new CancellationTokenSource(budget, time);
 
-        // A grant that confers nothing is not reported (AUTHZ-DERIVE-007), and a
-        // derivation whose role allows nothing produces only such grants.
-        foreach (ConferredDerivation each in conferring.Where(each => each.Confers.Count > 0))
+        foreach (ConferredDerivation each in conferring.Where(evaluated))
         {
             List<ExplainedGrant>? held = relationships is null
                 ? await HeldAsync(each, resource, bounded.Token, cancellationToken).ConfigureAwait(false)

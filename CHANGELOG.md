@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host asks which accounts may exercise a permission on a record, or across an
+  organization (`IAccessGate.WhoMayAsync`), and is answered as the single check would
+  admit each account, through groups, containers and derived access, a deny excluding;
+  a person asks under `grant:read`, a declared job for a permission it declares.
 - A host reads the administrative organization's identifier
   (`IOrganizations.AdministrativeAsync`) with no access context, to name its jobs'
   principals and register its records before anyone acts; before bootstrap it answers
