@@ -457,6 +457,46 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-MEM-001 AC7 and 09 section 8a (D-213): <c>PUT</c> of a membership's end sets it
+    /// and answers <c>204</c>; an <c>endsAt</c> absent is <c>400</c>
+    /// <c>api.request.malformed</c> and one not after the present <c>422</c>
+    /// <c>api.request.invalid</c>, each naming <c>endsAt</c>; <c>DELETE</c> cancels it,
+    /// and again finds none, <c>404</c> <c>identity.membership.notfound</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AC7_AnEndIsSetAndCancelledAsync()
+    {
+        var member = new SubjectId(Guid.NewGuid());
+
+        _deployment.Memberships.Place(member, Branch);
+
+        Browser administrator = await AuthorisedAsync();
+        DateTimeOffset later = _deployment.Clock.GetUtcNow().AddDays(30);
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        Answer absent = await administrator.SendAsync("PUT", EndOf(Branch, member), Ended);
+        Answer past = await administrator.SendAsync("PUT", EndOf(Branch, member), ("endsAt", now), ("reason", "The contract ends."));
+        Answer set = await administrator.SendAsync("PUT", EndOf(Branch, member), ("endsAt", later), ("reason", "The contract ends."));
+        Answer cancelled = await administrator.SendAsync("DELETE", EndOf(Branch, member), Ended);
+        Answer again = await administrator.SendAsync("DELETE", EndOf(Branch, member), Ended);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, absent.Status);
+        Assert.Equal("endsAt", absent.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, past.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), past.Text("code"));
+        Assert.Equal("endsAt", past.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status204NoContent, set.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(ErrorCodes.MembershipNotFound.ToString(), again.Text("code"));
+        Assert.Empty(_deployment.Endings.Ended);
+        Assert.Equal(
+            [AuditActions.MembershipEndSet, AuditActions.MembershipEndSet],
+            _deployment.OrganizationChanges.Changes.Select(change => change.Action));
+    }
+
+    /// <summary>
     /// OPS-BOOT-002 AC7, IDN-MEM-001 AC6 and 09 section 8a (D-202): ending the reserved
     /// account's membership of the administrative organization is <c>403</c>
     /// <c>authz.denied</c> for an administrator holding <c>membership:manage</c> there,
@@ -596,6 +636,9 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
     private static string MembershipOf(OrganizationId organization, SubjectId member) =>
         "/admin/organizations/" + organization + "/memberships/" + member;
+
+    private static string EndOf(OrganizationId organization, SubjectId member) =>
+        MembershipOf(organization, member) + "/end";
 
     private static string PathOf(OrganizationId organization) =>
         "/admin/organizations/" + organization + "/invitations";

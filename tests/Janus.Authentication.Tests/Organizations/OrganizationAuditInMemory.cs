@@ -120,6 +120,29 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc/>
+    public ValueTask MembershipEndSetAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        DateTimeOffset? endsAt,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _changes.Add(new OrganizationChange(AuditActions.MembershipEndSet, organization, reason, actor, at)
+        {
+            Membership = membership,
+            Member = member,
+            EndsAt = endsAt,
+            BreakGlassReason = breakGlassReason,
+        });
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <summary>
     /// One change as it was written down.
     /// </summary>
@@ -159,6 +182,11 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         /// Whose membership ended, where one did.
         /// </summary>
         public SubjectId? Member { get; init; }
+
+        /// <summary>
+        /// The instant a membership was set to end at, where an end was set or moved.
+        /// </summary>
+        public DateTimeOffset? EndsAt { get; init; }
 
         /// <summary>
         /// The reason given at the use of the break-glass credential, where the change

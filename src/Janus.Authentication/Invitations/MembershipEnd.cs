@@ -273,6 +273,201 @@ internal sealed class MembershipEnd(
         return Result.Success();
     }
 
+    /// <summary>
+    /// Sets an account's membership of an organization to end at a later instant, or
+    /// moves the instant set.
+    /// </summary>
+    /// <param name="context">Who is setting it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="member">Whose membership.</param>
+    /// <param name="endsAt">The instant it ends.</param>
+    /// <param name="reason">Why, which the end is recorded with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal of <see cref="IInvitations.SetMembershipEndAsync"/>.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public ValueTask<Result> SetEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        DateTimeOffset endsAt,
+        string reason,
+        CancellationToken cancellationToken) =>
+        ChangeEndAsync(context, session, organization, member, endsAt, reason, cancellationToken);
+
+    /// <summary>
+    /// Cancels the end an account's membership of an organization is set to reach.
+    /// </summary>
+    /// <param name="context">Who is cancelling it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="member">Whose membership.</param>
+    /// <param name="reason">Why, which the cancellation is recorded with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal of <see cref="IInvitations.CancelMembershipEndAsync"/>.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public ValueTask<Result> CancelEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        string reason,
+        CancellationToken cancellationToken) =>
+        ChangeEndAsync(context, session, organization, member, endsAt: null, reason, cancellationToken);
+
+    // IDN-MEM-001 (D-213): an end set, moved or cancelled takes the permission, the
+    // step-up and the refusals of an end now, judged when it is set; a cancellation is
+    // an end set to no instant.
+    private async ValueTask<Result> ChangeEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        DateTimeOffset? endsAt,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(reason);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await ScopeOfAsync(organization, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
+        if ((await gate
+                    .RequireAsync(context, Permissions.MembershipManage, organization, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
+        if (reason.Trim() is not { Length: > 0 and <= 1024 } stated)
+        {
+            return Result.Failure(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")));
+        }
+
+        // 09 section 8a: an end is set to a later instant; one not after the present is
+        // an end now, which is its own operation.
+        if (endsAt is DateTimeOffset instant && instant <= time.GetUtcNow())
+        {
+            return Result.Failure(
+                Error.From(ErrorCodes.RequestInvalid, "member", JsonSerializer.SerializeToElement("endsAt")));
+        }
+
+        if (await memberships.FindAsync(member, organization, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
+        }
+
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
+            is not OrganizationStanding standing)
+        {
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
+        if (standing.IsAdministrative
+            && await emergency.FindAsync(cancellationToken).ConfigureAwait(false) == member)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // 09 section 8a: a cancellation finds an end set, or there is nothing to cancel.
+        if (endsAt is null
+            && await memberships.EndSetAsync(member, organization, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
+        }
+
+        if (await revocations
+                .RefusedAsync(context, member, organization, standing.IsAdministrative, cancellationToken)
+                .ConfigureAwait(false)
+            is Error unassignable)
+        {
+            return Result.Failure(unassignable);
+        }
+
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.MembershipEnd, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: as for an end now.
+        if ((await gate
+                    .RequireAsync(context, Permissions.MembershipManage, organization, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        if (await revocations
+                .RefusedAsync(context, member, organization, standing.IsAdministrative, cancellationToken)
+                .ConfigureAwait(false)
+            is Error unassignableSince)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unassignableSince);
+        }
+
+        // An end at the same moment, or a cancellation that came first, leaves nothing
+        // here, and is answered as the find would answer it.
+        MembershipId? changed = endsAt is DateTimeOffset set
+            ? await memberships.SetEndAsync(member, organization, set, acting, stated, cancellationToken)
+                .ConfigureAwait(false)
+            : await memberships.CancelEndAsync(member, organization, cancellationToken).ConfigureAwait(false);
+
+        if (changed is not MembershipId membership)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
+        }
+
+        await audit
+            .MembershipEndSetAsync(
+                organization,
+                membership,
+                member,
+                endsAt,
+                stated,
+                acting,
+                context.BreakGlassReason,
+                now,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
+    }
+
     // CONV-DESIGN-002 AC3: the organization the path names is where the gate is asked,
     // and resolving it, read alone, is part of the gate step.
     private async ValueTask<OrganizationId?> ScopeOfAsync(

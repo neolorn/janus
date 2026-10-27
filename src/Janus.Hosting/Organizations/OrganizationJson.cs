@@ -18,6 +18,7 @@ namespace Janus.Hosting.Organizations;
 [JsonSerializable(typeof(CreatedOrganizationView))]
 [JsonSerializable(typeof(OrganizationBody))]
 [JsonSerializable(typeof(OrganizationReasonBody))]
+[JsonSerializable(typeof(MembershipEndBody))]
 [JsonSerializable(typeof(OrganizationPolicyView))]
 [JsonSerializable(typeof(OrganizationDomainBody))]
 [JsonSerializable(typeof(OrganizationDomainView))]

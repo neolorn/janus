@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `PUT /admin/organizations/{id}/memberships/{subject}/end` (`{ endsAt, reason }`) sets a
+  membership to end at a later instant, or moves the instant, and
+  `DELETE /admin/organizations/{id}/memberships/{subject}/end` (`{ reason }`) cancels it;
+  `IInvitations.SetMembershipEndAsync` and `CancelMembershipEndAsync` do the same. Each
+  takes the permission, the `membership:end` step-up and the refusals of an end now,
+  judged when it is set; an `endsAt` not after the present is refused 422
+  `api.request.invalid` naming `endsAt`, and a cancellation with no end set 404
+  `identity.membership.notfound`. Each is recorded as `identity.membership.endset`, with
+  `details.endsAt` where an end was set or moved. The memberships table carries the
+  instant, the administrator who set it and the reason.
 - `DELETE /admin/organizations/{id}/memberships/{subject}` takes `{ reason }`, required
   (400 `api.request.malformed` naming `reason` where it is absent, blank or longer than
   1024 characters after trimming), and so does `IInvitations.EndMembershipAsync`. In the

@@ -275,6 +275,13 @@ public static class AuditActions
         AuditAction.Parse("identity.membership.ended");
 
     /// <summary>
+    /// An administrator set, moved or cancelled the instant a membership ends.
+    /// </summary>
+    /// <remarks>Implements IDN-MEM-001 and IDN-AUD-001 (D-213).</remarks>
+    public static AuditAction MembershipEndSet { get; } =
+        AuditAction.Parse("identity.membership.endset");
+
+    /// <summary>
     /// A takedown was triggered, naming what raised it and the reason written for it.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>

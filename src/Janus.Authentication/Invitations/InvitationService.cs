@@ -819,6 +819,27 @@ internal sealed class InvitationService(
         end.EndAsync(context, session, organization, member, reason, source, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<Result> SetMembershipEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        DateTimeOffset endsAt,
+        string reason,
+        CancellationToken cancellationToken) =>
+        end.SetEndAsync(context, session, organization, member, endsAt, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> CancelMembershipEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        string reason,
+        CancellationToken cancellationToken) =>
+        end.CancelEndAsync(context, session, organization, member, reason, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Result> AcknowledgeAsync(
         AccessContext context,
         InvitationId invitation,

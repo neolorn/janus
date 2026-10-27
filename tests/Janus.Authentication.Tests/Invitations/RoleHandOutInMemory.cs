@@ -36,6 +36,16 @@ internal sealed class RoleHandOutInMemory(
     public void HandsOut(SubjectId subject, OrganizationId organization, RoleName role) =>
         _handsOut.Add((subject, organization, role));
 
+    /// <summary>
+    /// Takes back a role an account was let hand out, as a change of its roles would.
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="organization">Where.</param>
+    /// <param name="role">The role it no longer hands out.</param>
+    /// <returns>Whether it handed the role out.</returns>
+    public bool Withdraws(SubjectId subject, OrganizationId organization, RoleName role) =>
+        _handsOut.Remove((subject, organization, role));
+
     /// <inheritdoc/>
     public ValueTask<Error?> RefusedAsync(
         AccessContext context,

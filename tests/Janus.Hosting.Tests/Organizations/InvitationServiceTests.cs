@@ -195,6 +195,109 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal(Why, await RevocationReasonAsync(beyond));
     }
 
+    /// <summary>
+    /// IDN-MEM-001 AC7 (D-213): an end set in advance is kept on the membership with its
+    /// administrator and reason, which stays current, and is recorded with its instant;
+    /// cancelled, the row carries none and the record no instant.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AC7_AnEndSetIsKeptOnTheMembershipAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Authorization.Deployment(host);
+
+        RoleName managing = await deployment.BeginAsync([Permissions.MembershipManage], cancellationToken);
+        OrganizationId organization = deployment.Organization;
+        SubjectId administrator = await deployment.AccountAsync(cancellationToken);
+        SubjectId member = await deployment.AccountAsync(cancellationToken);
+        DateTimeOffset endsAt = host.Services.GetRequiredService<TimeProvider>().GetUtcNow().AddDays(30);
+
+        await deployment.MemberAsync(administrator, organization, cancellationToken);
+        await deployment.MemberAsync(member, organization, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(administrator),
+            managing,
+            null,
+            false,
+            null,
+            organization,
+            cancellationToken);
+
+        SessionId session = await SteppedUpAsync(administrator);
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            Result set = await scope.ServiceProvider.GetRequiredService<IInvitations>()
+                .SetMembershipEndAsync(
+                    AccessContext.Of(administrator),
+                    session,
+                    organization,
+                    member,
+                    endsAt,
+                    Why,
+                    cancellationToken);
+
+            Assert.True(set.Match(() => true, _ => false));
+        }
+
+        (DateTimeOffset? At, Guid? SetBy, string? Reason, DateTimeOffset? EndedAt) kept = await EndSetAsync(member, organization);
+
+        Assert.Equal(endsAt.ToUnixTimeMilliseconds(), kept.At?.ToUnixTimeMilliseconds());
+        Assert.Equal((administrator.Value, Why, (DateTimeOffset?)null), (kept.SetBy, kept.Reason, kept.EndedAt));
+        Assert.Equal(1, await EndsRecordedAsync(administrator, organization, withInstant: true));
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            Result cancelled = await scope.ServiceProvider.GetRequiredService<IInvitations>()
+                .CancelMembershipEndAsync(
+                    AccessContext.Of(administrator),
+                    session,
+                    organization,
+                    member,
+                    Why,
+                    cancellationToken);
+
+            Assert.True(cancelled.Match(() => true, _ => false));
+        }
+
+        Assert.Equal((null, null, null, null), await EndSetAsync(member, organization));
+        Assert.Equal(1, await EndsRecordedAsync(administrator, organization, withInstant: false));
+    }
+
+    // The end set on the account's membership of the organization, as its row carries it.
+    private async Task<(DateTimeOffset? At, Guid? SetBy, string? Reason, DateTimeOffset? EndedAt)> EndSetAsync(
+        SubjectId account,
+        OrganizationId organization)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<(DateTimeOffset?, Guid?, string?, DateTimeOffset?)>(new CommandDefinition(
+            """
+            SELECT ends_at, end_set_by, end_reason, ended_at FROM identity.memberships
+            WHERE subject = @account AND organization = @organization
+            """,
+            new { account = account.Value, organization = organization.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The ends the administrator set or cancelled in the organization, with the reason, an
+    // instant carried or none.
+    private async Task<int> EndsRecordedAsync(SubjectId administrator, OrganizationId organization, bool withInstant)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'identity.membership.endset' AND acting_subject = @administrator
+              AND organization = @organization AND details ->> 'reason' = @reason
+              AND (details ->> 'endsAt' IS NOT NULL) = @withInstant
+            """,
+            new { administrator = administrator.Value, organization = organization.Value, reason = Why, withInstant },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
     // The end of a membership as the administrator asks it, with a step-up of their own:
     // nothing where it succeeded, or the code it was refused with.
     private async Task<ErrorCode?> EndedAsync(SubjectId administrator, OrganizationId organization, SubjectId member)

@@ -82,6 +82,45 @@ public sealed class MembershipTests
     }
 
     /// <summary>
+    /// IDN-MEM-001 AC7 (D-213): an end set in advance leaves the membership current,
+    /// moving it keeps the latest instant, and cancelling it leaves none, telling whether
+    /// one was set.
+    /// </summary>
+    [Fact]
+    public void IDN_MEM_001_AC7_AnEndSetInAdvanceIsMovedAndCancelled()
+    {
+        Membership membership = Made(Id, Acme);
+        var set = new MembershipEndSet(Noon.AddDays(30), Fatma, "The contract ends.");
+        var moved = new MembershipEndSet(Noon.AddDays(60), Fatma, "The contract was extended.");
+
+        membership.SetEnd(set);
+
+        Assert.True(membership.IsCurrent);
+        Assert.Same(set, membership.EndSet);
+
+        membership.SetEnd(moved);
+
+        Assert.Same(moved, membership.EndSet);
+        Assert.True(membership.CancelEnd());
+        Assert.Null(membership.EndSet);
+        Assert.False(membership.CancelEnd());
+    }
+
+    /// <summary>
+    /// A membership that has ended takes no end in advance, and has none to cancel.
+    /// </summary>
+    [Fact]
+    public void SetEnd_AMembershipThatHasEnded_Throws()
+    {
+        Membership membership = Made(Id, Acme);
+        membership.End(Noon.AddDays(1));
+
+        Assert.Throws<InvalidOperationException>(
+            () => membership.SetEnd(new MembershipEndSet(Noon.AddDays(30), Fatma, "The contract ends.")));
+        Assert.Throws<InvalidOperationException>(() => membership.CancelEnd());
+    }
+
+    /// <summary>
     /// IDN-MEM-002 AC2: the deployment allows one membership unless it says otherwise,
     /// so a second one is refused by name and nothing is made.
     /// </summary>

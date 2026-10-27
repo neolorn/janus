@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -144,5 +145,53 @@ public interface IInvitations
         SubjectId member,
         string reason,
         string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sets an account's membership of the organization to end at a later instant, or
+    /// moves the instant set (IDN-MEM-001, D-213). The end is judged as an end now is,
+    /// when it is set.
+    /// </summary>
+    /// <param name="context">Who is setting it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="member">Whose membership.</param>
+    /// <param name="endsAt">The instant it ends, after the present.</param>
+    /// <param name="reason">Why, which the end is recorded with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal of <see cref="EndMembershipAsync"/> but its
+    /// <c>identity.membership.notfound</c> for a second end, or
+    /// <c>api.request.invalid</c> naming <c>endsAt</c> where it is not after the present.
+    /// </returns>
+    ValueTask<Result> SetMembershipEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        DateTimeOffset endsAt,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Cancels the end an account's membership of the organization is set to reach
+    /// (IDN-MEM-001, D-213).
+    /// </summary>
+    /// <param name="context">Who is cancelling it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="member">Whose membership.</param>
+    /// <param name="reason">Why, which the cancellation is recorded with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal of <see cref="EndMembershipAsync"/>, with
+    /// <c>identity.membership.notfound</c> too where no end is set.
+    /// </returns>
+    ValueTask<Result> CancelMembershipEndAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        string reason,
         CancellationToken cancellationToken);
 }

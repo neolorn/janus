@@ -3409,9 +3409,21 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
 
+                b.Property<string>("EndReason")
+                    .HasColumnType("text")
+                    .HasColumnName("end_reason");
+
+                b.Property<Guid?>("EndSetBy")
+                    .HasColumnType("uuid")
+                    .HasColumnName("end_set_by");
+
                 b.Property<DateTimeOffset?>("EndedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("ended_at");
+
+                b.Property<DateTimeOffset?>("EndsAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("ends_at");
 
                 b.Property<Guid>("Organization")
                     .HasColumnType("uuid")
@@ -3438,6 +3450,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_acknowledged", "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
+
+                        t.HasCheckConstraint("ck_memberships_end_set", "(ends_at IS NULL AND end_set_by IS NULL AND end_reason IS NULL)\nOR (ends_at IS NOT NULL AND end_set_by IS NOT NULL\n    AND length(btrim(end_reason)) BETWEEN 1 AND 1024)");
 
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
 

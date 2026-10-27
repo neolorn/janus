@@ -1383,6 +1383,8 @@ Janus.Core.IInvitations
 Janus.Core.IInvitations.AcknowledgeAsync(Janus.Core.AccessContext! context, Janus.Core.InvitationId invitation, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.AttachedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AttachedInvitation!>>
 Janus.Core.IInvitations.EndMembershipAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! reason, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IInvitations.SetMembershipEndAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, System.DateTimeOffset endsAt, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IInvitations.CancelMembershipEndAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.IssueAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.InvitationRequest! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedInvitation!>>
 Janus.Core.IInvitations.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.InvitationId invitation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IKeyRing
@@ -3800,6 +3802,7 @@ static Janus.Core.AuditActions.KeyRotationStarted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.MailCredentialCreated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.MailCredentialRevoked.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.MembershipEnded.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.MembershipEndSet.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionRecorded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionWithdrawn.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.OrganizationCreated.get -> Janus.Core.AuditAction

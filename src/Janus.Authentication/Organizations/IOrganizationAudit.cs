@@ -135,4 +135,33 @@ internal interface IOrganizationAudit
         string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records an end an administrator set a membership to reach at a later instant,
+    /// moved or cancelled, filed under the organization with the member as whom it was
+    /// done to.
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="membership">Which membership.</param>
+    /// <param name="member">Whose membership it is.</param>
+    /// <param name="endsAt">The instant set, or nothing where the end was cancelled.</param>
+    /// <param name="reason">Why.</param>
+    /// <param name="actor">Who set, moved or cancelled it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask MembershipEndSetAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        DateTimeOffset? endsAt,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
 }

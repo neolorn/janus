@@ -158,6 +158,30 @@ internal static class OrganizationEndpoints
                 .Binding<SubjectId>("subject"))
             .Accepts<OrganizationReasonBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapPut(
+            "/admin/organizations/{id}/memberships/{subject}/end",
+            SetMembershipEndAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.RequestInvalid, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired, ErrorCodes.MembershipNotFound,
+                    ErrorCodes.RoleNotAssignable)
+                .Binding<OrganizationId>("id")
+                .Binding<SubjectId>("subject"))
+            .Accepts<MembershipEndBody>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapDelete(
+            "/admin/organizations/{id}/memberships/{subject}/end",
+            CancelMembershipEndAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired, ErrorCodes.MembershipNotFound,
+                    ErrorCodes.RoleNotAssignable)
+                .Binding<OrganizationId>("id")
+                .Binding<SubjectId>("subject"))
+            .Accepts<OrganizationReasonBody>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -559,6 +583,67 @@ internal static class OrganizationEndpoints
                     reason,
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    private static async Task<IResult> SetMembershipEndAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        HttpContext context,
+        OrganizationId id,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        MembershipEndBody body = await JsonBody
+            .ReadAsync<MembershipEndBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (body.EndsAt is not DateTimeOffset endsAt)
+        {
+            return Answers.Malformed("endsAt");
+        }
+
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await invitations
+                .SetMembershipEndAsync(browser.Asking, browser.Required.Id, id, subject, endsAt, reason, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    private static async Task<IResult> CancelMembershipEndAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        HttpContext context,
+        OrganizationId id,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        OrganizationReasonBody body = await JsonBody
+            .ReadAsync<OrganizationReasonBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await invitations
+                .CancelMembershipEndAsync(browser.Asking, browser.Required.Id, id, subject, reason, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
