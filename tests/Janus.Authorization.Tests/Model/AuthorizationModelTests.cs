@@ -499,6 +499,7 @@ public sealed class AuthorizationModelTests
     [InlineData("loss-reports")]
     [InlineData("recovery-code-reminder")]
     [InlineData("domain-reverification")]
+    [InlineData("membership-ends")]
     [InlineData("outbox")]
     [InlineData("events")]
     [InlineData("sends")]

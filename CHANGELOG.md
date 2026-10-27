@@ -10,6 +10,8 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `membership-ends` is a library principal's name: a host job declared under it stops
+  the deployment with `model.startup.declarationinvalid`.
 - `PUT /admin/organizations/{id}/memberships/{subject}/end` (`{ endsAt, reason }`) sets a
   membership to end at a later instant, or moves the instant, and
   `DELETE /admin/organizations/{id}/memberships/{subject}/end` (`{ reason }`) cancels it;
