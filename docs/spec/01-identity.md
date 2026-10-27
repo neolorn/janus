@@ -1544,15 +1544,18 @@ identifier `after`, with `next` the last identifier answered where more remain; 
 null unless deletion is requested. An erased organization is not listed, and reading one
 answers `identity.organization.notfound` (404), as an identifier the deployment never
 held does. `IOrganizations.ReadAsync` answers one. Both ask `organization:read`, with
-the reach of IDN-READ-004: in the administrative organization every organization,
-elsewhere the organization itself. `IOrganizations.AdministrativeAsync` answers the
-administrative organization's identifier, or `identity.organization.notfound` before
-bootstrap made it; it takes no access context, meets no gate and has no endpoint, since
-a host needs it to name its jobs' principals and to register its records before anyone
-acts, and it reads no record of a person (`07` LIB-API-005). The endpoints are
-`GET /admin/organizations` and `GET /admin/organizations/{id}` (`09` section 8a).
+the reach of IDN-READ-004: the list answers a holder in the administrative organization
+every organization, any other person the organizations of their current memberships in
+which they hold it, and a job its own organization, and refuses `authz.denied` a caller
+holding it nowhere, the refusal recorded in the administrative organization (D-219).
+`IOrganizations.AdministrativeAsync` answers the administrative organization's
+identifier, or `identity.organization.notfound` before bootstrap made it; it takes no
+access context, meets no gate and has no endpoint, since a host needs it to name its
+jobs' principals and to register its records before anyone acts, and it reads no record
+of a person (`07` LIB-API-005). The endpoints are `GET /admin/organizations` and
+`GET /admin/organizations/{id}` (`09` section 8a).
 
-*Source: D-218*
+*Source: D-218, D-219*
 
 **Acceptance criteria**
 1. A holder of `organization:read` in the administrative organization lists every
@@ -1659,14 +1662,19 @@ declared job where this item says so.
 **Values (D-218).** A read is asked in the organization it names (`organization`, the
 administrative organization where none is named), under its permission there. A holder
 in the administrative organization reaches every organization and every account, the
-deployment's operator acting there. A holder elsewhere reaches its own organization, and
-a person only where the account is tied to it: a current member of it, or the data
-subject of a record registered in it (`03` AUTHZ-INHERIT-002, `IResources`). An account
-outside that reach answers `identity.account.notfound` (404) as an account no person
-bears does, so the read discloses nothing of whether it exists. Each person record a
-person reads (an account, a contact, a standing, a member) counts toward their read
-volume (OPS-ALERT-005); a job's reads are not counted, as no system principal's are. A
-read is not audited; a refusal is recorded as every refusal is (AUTHZ-CONCEAL-004).
+deployment's operator acting there. A read whose path names an organization
+(`/admin/organizations/{id}` and the reads under it) is admitted where its permission is
+held in that organization or in the administrative organization, judged as one
+admission: one refusal, naming the organization the path names, is recorded where
+neither admits (AUTHZ-SCOPE-001, D-219). A holder elsewhere reaches its own
+organization, and a person only where the account is tied to it: a current member of it,
+or the data subject of a record registered in it (`03` AUTHZ-INHERIT-002, `IResources`).
+An account outside that reach answers `identity.account.notfound` (404) as an account no
+person bears does, so the read discloses nothing of whether it exists. Each person
+record a person reads (an account, a contact, a standing, a member) counts toward their
+read volume (OPS-ALERT-005); a job's reads are not counted, as no system principal's
+are. A read is not audited; a refusal is recorded as every refusal is
+(AUTHZ-CONCEAL-004).
 
 A host's declared job (IDN-PRIN-001) MAY declare `organization:read`, `membership:read`,
 `contact:read` and `consent:read` beside its host permissions, the only library-owned
@@ -1675,7 +1683,7 @@ organization, with the reach above, and refused them while a request is served a
 organization whose deletion is requested, as for any permission. `account:read`, the
 account finding, the sessions read and the preference setting stay a person's.
 
-*Source: D-218*
+*Source: D-218, D-219*
 
 The reach is the owner's choice of 2026-10-27: a host reads the people it deals with,
 and another organization's customers are not among them.
@@ -1691,6 +1699,9 @@ and another organization's customers are not among them.
    request is served; a job declaring `account:read` fails startup with
    `model.startup.declarationinvalid`.
 4. A person's reads of IDN-READ-003 add to their read volume, and a job's do not.
+5. A holder of `membership:read` in the administrative organization lists the members of
+   another organization; a holder in neither organization is refused `authz.denied`
+   once, naming the organization the path names (D-219).
 
 ---
 

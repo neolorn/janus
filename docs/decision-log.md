@@ -18360,6 +18360,61 @@ section 2.1 (`organization:read`, `membership:read`, `account:read`, `contact:re
 
 ---
 
+## D-219 — Round H2 questions 1 to 5: where an organization's reads are asked, and what events and refusals say
+
+**Date:** 2026-10-27 · **Status:** accepted · **Follows from:** D-218
+
+**TL;DR.** The run under D-218 asked five questions, all Tier 2. A read whose path names
+an organization is admitted by the permission held there or in the administrative
+organization, as one admission (1). Bootstrap's roles raise no `RoleChanged` (2). A
+sign-out is `signedout`, an end through the session list is `ended`, with no change to
+the public surface (3). A refresh token presented twice and a provider's security event
+end sessions as `security`, and a restriction as `account` (4). `WhoMayAsync` refuses an
+undeclared permission or type, and an organization's identifier that is not one, as
+malformed (5).
+
+1. **Where an organization's reads are asked (Tier 2).** Reading A. A read under
+   `/admin/organizations/{id}` is admitted where its permission is held in that
+   organization or in the administrative organization, judged as one admission with one
+   refusal naming the organization the path names, as `grant:manage` with
+   `system:administer` is (AUTHZ-SCOPE-001, D-208); the list answers a holder in the
+   administrative organization every organization, any other person the organizations of
+   their current memberships in which they hold `organization:read`, and a job its own
+   (`01` IDN-READ-001, IDN-READ-004). `09` is unchanged. *Rejected:* an `organization`
+   member on each path read (reading B), which would make the operator name the
+   administrative organization on every read of another.
+2. **Bootstrap's roles (Tier 2).** Reading B. Bootstrap's three roles raise no
+   `RoleChanged`, as bootstrap's organization raises no `OrganizationCreated`: the events
+   tell a host of changes after its deployment exists, and a host reads what bootstrap
+   made. A declared role's seeding still raises one (`10` section 5b).
+3. **A person's own ends (Tier 2).** Reading C. `signedout` is a sign-out
+   (`EndEverywhereAsync`, `POST /auth/logout`), which ends every session of the sign-in;
+   `ended` is an end through the session list (`EndAsync`), whichever session it names,
+   the asking one included (`10` section 5.39). *Rejected:* the asking session as a new
+   parameter (readings A and B), a change to two public operations to tell apart two
+   reasons a host treats alike.
+4. **Three ends no reason named (Tier 2).** A refresh token presented twice
+   (AUTH-OIDC-003) and a provider's security event (IDN-LIFE-012a) end sessions as a
+   new reason, `security`, the library acting on a sign of compromise, which a host may
+   treat as neither the person's nor an administrator's act. A restriction of processing
+   is `account`, its list now naming `restricted`. *Rejected:* `revoked` for the replay
+   (it names an administrator's act).
+5. **An unreadable word in the question of who may (Tier 2).** Reading B. `WhoMayAsync`
+   refuses an undeclared permission or type, and an organization's identifier that is
+   not one, with `api.request.malformed` naming `permission`, `type` or `id`, writing no
+   refusal record, as `WhoCanAccessAsync` and `IRoles` answer theirs, so the endpoint
+   stays a mapping of one service (`03` AUTHZ-GATE-007, `07` LIB-API-005). *Rejected:*
+   raising, as the single check does (reading A), which leaves the endpoint no 400 to
+   give.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` IDN-READ-001 (values), IDN-READ-004 (values, criterion 5); `03`
+AUTHZ-GATE-007 (values, criterion 5); `10` section 5b (`RoleChanged`), section 5.39
+(`SessionEnded`'s reasons); `implementation-plan.md` (section 3a, round H2).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18588,6 +18643,7 @@ section 2.1 (`organization:read`, `membership:read`, `account:read`, `contact:re
 | Round H1 questions 55 and 56: the reason a membership's end records, and what holding admits | D-216 |
 | Round H1 question 57 and the review: who a set end's records name, and two denies kept | D-217 |
 | Round H2: what a host reads and is told | D-218 |
+| Round H2 questions 1 to 5: where an organization's reads are asked, and what events and refusals say | D-219 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

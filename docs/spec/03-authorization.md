@@ -1244,13 +1244,15 @@ evaluated within `authz.reverselookup.budget`; past it `partial` is true and
 person holding `grant:read` in the organization the record belongs to, or by a host's
 declared job whose declaration names the permission, on its organization's records and
 on its organization (`01` IDN-PRIN-001); a record the deployment holds no registration
-for is refused as AUTHZ-DERIVE-007 refuses it, and a permission the model does not
-declare as the single check refuses it. The endpoint is `GET /admin/access/admitted`
-(`09` section 8a). A host that tells the people who may act on a record asks this,
-rather than keeping its own copy of who holds a role, which misses denies and derived
-access.
+for is refused as AUTHZ-DERIVE-007 refuses it, and a permission or type the model does
+not declare, or an organization's identifier that is not one, with
+`api.request.malformed` naming `permission`, `type` or `id`, writing no refusal record,
+as the view of who can access a record answers an unreadable one (D-219). The endpoint
+is `GET /admin/access/admitted` (`09` section 8a). A host that tells the people who may
+act on a record asks this, rather than keeping its own copy of who holds a role, which
+misses denies and derived access.
 
-*Source: D-218*
+*Source: D-218, D-219*
 
 **Acceptance criteria**
 1. Accounts holding the permission through a group, through a container's grant and
@@ -1263,6 +1265,9 @@ access.
    `authz.denied`.
 4. Past `authz.reverselookup.budget` the answer carries `partial: true` and the
    relationships not evaluated.
+5. A permission or type the model does not declare, and an organization's identifier
+   that is not one, are refused `api.request.malformed` naming it, writing no refusal
+   record (D-219).
 
 ---
 

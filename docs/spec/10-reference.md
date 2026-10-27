@@ -1350,14 +1350,18 @@ carries `began` · `ended`. `GrantChanged` carries `made` · `revoked`;
 `GroupMembershipChanged` `added` · `removed`; `RoleChanged` `defined` · `changed` ·
 `removed` (D-218).
 
-`SessionEnded` carries its `reason`: `signedout`, the person signed out of it; `ended`,
-the person ended it from another session or everywhere, or a change to their
+`SessionEnded` carries its `reason`: `signedout`, the person signed out
+(`ISessions.EndEverywhereAsync`, `POST /auth/logout`), which ends every session of the
+sign-in; `ended`, the person ended it through their session list (`ISessions.EndAsync`,
+`DELETE /account/sessions/{id}`), whichever session it names, or a change to their
 credentials or identifiers ended their other sessions; `revoked`, an administrator
-revoked the account's sessions or every session; `account`, the account was suspended,
+revoked the account's sessions or every session; `security`, the library ended it on a
+sign of compromise: a refresh token presented twice (AUTH-OIDC-003) or a provider's
+security event (IDN-LIFE-012a); `account`, the account was restricted, suspended,
 deactivated, deleted, taken down or erased; `organization`, its organization's deletion
-was requested (IDN-ORG-003) (D-218).
+was requested (IDN-ORG-003) (D-218, D-219).
 
-*Source: PRIV-CONS-007, PRIV-CONS-008, IDN-MEM-001, section 5b, D-166, D-218*
+*Source: PRIV-CONS-007, PRIV-CONS-008, IDN-MEM-001, section 5b, D-166, D-218, D-219*
 
 ### 5.40 Hosting location
 
@@ -1598,7 +1602,7 @@ transaction that makes it true (CONV-DESIGN-002, IDN-LIFE-003a).
 | `OrganizationDeletionRequested` · `OrganizationDeletionCancelled` | An organization's deletion was requested, suspending it, or cancelled inside its window (IDN-ORG-003); carries the organization and names no subject (D-218) | Host (stop, or resume, its own processing for the organization) |
 | `GrantChanged` | A grant was made or revoked, a materialised derivation's grant written or taken back included; carries the grant, its kind, its holder (`subjectType`, `subjectId`), role, whether it denies, its organization and record, and `change` (`made` · `revoked`, section 5.39); the holder is the `subject` where it is an account (D-218) | Host |
 | `GroupMembershipChanged` | An account or a group was added to or taken out of a group, by a person or by a membership's end; carries the group, its organization, the member (`subjectType`, `subjectId`) and `change` (`added` · `removed`, section 5.39); the member is the `subject` where it is an account (D-218) | Host |
-| `RoleChanged` | A role was defined, changed or removed, a declared role's seeding included; carries the role and `change` (`defined` · `changed` · `removed`, section 5.39), and names no subject (D-218) | Host |
+| `RoleChanged` | A role was defined, changed or removed, a declared role's seeding included; bootstrap's three roles raise none, as bootstrap's organization raises no `OrganizationCreated` (D-219); carries the role and `change` (`defined` · `changed` · `removed`, section 5.39), and names no subject (D-218) | Host |
 | `SessionEnded` | A session ended before its expiry; carries the session and `reason` (section 5.39); not raised for a session that expires by time, which ends at its next use (D-218) | Host |
 | `IdentifierChanged` | *Retired by D-146. See `IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`.* | |
 | `IdentifierAdded` | An added email or phone was verified and counts (REG-IDENT-004); also a replace that completed (REG-IDENT-007), and a corporate address taken on at an invitation's acknowledgement (REG-INV-001) | Host |
