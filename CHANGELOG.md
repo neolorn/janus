@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A browser with no session collects a guest's details under `/records/collection`: it
+  begins a collection session (asking the age or not), answers the age where asked, and
+  stages and verifies at most one email and one phone with a code. An under-age date
+  locks the session; a signed-in browser is refused 409 `identity.record.signedin`; an
+  age asked and not answered refuses a contact 409 `identity.collection.incomplete`.
+  The session lives `records.collection.lifetime` (default one hour, at most a day),
+  keeps what it staged under a key of its own row, and is swept when it lapses.
 - A grant, or a group member, naming a subject no account bears, a person record's
   among them, is refused 422 `api.request.invalid` naming `subjectId`; a grant to such a
   subject failed as a fault before, and such a member was added.

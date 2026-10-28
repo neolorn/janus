@@ -15,6 +15,7 @@ using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Maintenance;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
+using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -361,6 +362,8 @@ internal static class BackgroundJobs
         _ = await services.GetRequiredService<IPendingEnrolmentStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IVerificationCodeStore>()
+            .SweepAsync(now, cancellationToken).ConfigureAwait(false);
+        _ = await services.GetRequiredService<ICollectionSessionStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
 
         if (await SweepPendingAsync(services, now, cancellationToken).ConfigureAwait(false) is Error unswept)

@@ -1,5 +1,7 @@
 using System;
+using Janus.Authentication.Records;
 using Janus.Core;
+using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Registration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -59,6 +61,10 @@ internal sealed class PreAuthenticationConfiguration
             .HasColumnName("enrolment")
             .HasConversion(id => id!.Value.Value, value => new EnrolmentSessionId(value));
 
+        builder.Property(contact => contact.Collection)
+            .HasColumnName("collection")
+            .HasConversion(id => id!.Value.Value, value => new CollectionSessionId(value));
+
         // BFF-SESS-006: the row holds what the state fingerprints to and the proof key
         // wrapped, so a database dump yields neither a usable state nor a usable
         // verifier, and the four move together or not at all.
@@ -90,6 +96,19 @@ internal sealed class PreAuthenticationConfiguration
             .WithMany()
             .HasForeignKey(contact => contact.Registration)
             .HasConstraintName("fk_preauthentication_sessions_registration")
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // REC-COL-001: one browser holds one collection session and a session belongs
+        // to one browser; an abandoned, spent or swept session releases the browser.
+        builder.HasIndex(contact => contact.Collection)
+            .HasDatabaseName("ux_preauthentication_sessions_collection")
+            .IsUnique()
+            .HasFilter("collection IS NOT NULL");
+
+        builder.HasOne<CollectionSessionRecord>()
+            .WithMany()
+            .HasForeignKey(contact => contact.Collection)
+            .HasConstraintName("fk_preauthentication_sessions_collection")
             .OnDelete(DeleteBehavior.SetNull);
     }
 }

@@ -240,6 +240,14 @@ public sealed class ModelTests
             "callbacks.rejected",
             "callbacks.source",
 
+            // Not an account field: the collection session of REC-COL-001, which reserves
+            // nothing: everything it stages is one blob under its own key, discarded whole
+            // when it ends.
+            "collection_sessions.enc_session",
+            "collection_sessions.expires_at",
+            "collection_sessions.id",
+            "collection_sessions.wrapped_key",
+
             // Not an account field: the three cells of the records of processing no
             // derivation can fill, held at one row because there is one register
             // (PRIV-ROPA-001).
@@ -711,8 +719,10 @@ public sealed class ModelTests
             "policy_raises.value",
 
             // Not an account field: what a browser carries before it holds a session,
-            // keyed as the session table is and carrying the registration session and
-            // the sign-on in flight (BFF-CSRF-005a, BFF-CSRF-005b, BFF-SESS-006).
+            // keyed as the session table is and carrying the registration session, the
+            // sign-on and the collection session in flight (BFF-CSRF-005a, BFF-CSRF-005b,
+            // BFF-SESS-006, REC-COL-001).
+            "preauthentication_sessions.collection",
             "preauthentication_sessions.created_at",
             "preauthentication_sessions.csrf_fingerprint",
             "preauthentication_sessions.enrolment",

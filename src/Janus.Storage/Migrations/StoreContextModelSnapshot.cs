@@ -1648,6 +1648,35 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Records.CollectionSessionRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<byte[]>("Session")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_session");
+
+                b.Property<byte[]>("WrappedKey")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("wrapped_key");
+
+                b.HasKey("Id")
+                    .HasName("pk_collection_sessions");
+
+                b.HasIndex("ExpiresAt")
+                    .HasDatabaseName("ix_collection_sessions_expires_at");
+
+                b.ToTable("collection_sessions", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Recovery.LossReportRecord", b =>
             {
                 b.Property<Guid>("Credential")
@@ -2192,6 +2221,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("fingerprint");
 
+                b.Property<Guid?>("Collection")
+                    .HasColumnType("uuid")
+                    .HasColumnName("collection");
+
                 b.Property<DateTimeOffset>("CreatedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
@@ -2229,6 +2262,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Fingerprint")
                     .HasName("pk_preauthentication_sessions");
+
+                b.HasIndex("Collection")
+                    .IsUnique()
+                    .HasDatabaseName("ux_preauthentication_sessions_collection")
+                    .HasFilter("collection IS NOT NULL");
 
                 b.HasIndex("Enrolment")
                     .IsUnique()
@@ -4797,6 +4835,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sessions.PreAuthenticationRecord", b =>
             {
+                b.HasOne("Janus.Storage.Authentication.Records.CollectionSessionRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Collection")
+                    .OnDelete(DeleteBehavior.SetNull)
+                    .HasConstraintName("fk_preauthentication_sessions_collection");
+
                 b.HasOne("Janus.Storage.Authentication.Registration.RegistrationSessionRecord", null)
                     .WithMany()
                     .HasForeignKey("Registration")

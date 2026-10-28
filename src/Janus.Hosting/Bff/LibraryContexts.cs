@@ -10,6 +10,7 @@ using Janus.Hosting.Credentials;
 using Janus.Hosting.Maintenance;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Privacy;
+using Janus.Hosting.Records;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
@@ -33,6 +34,7 @@ internal static class LibraryContexts
     public static IReadOnlyList<JsonSerializerContext> All { get; } =
     [
         RegistrationJson.Default,
+        RecordsJson.Default,
         AuthenticationJson.Default,
         BreakGlassJson.Default,
         MaintenanceJson.Default,

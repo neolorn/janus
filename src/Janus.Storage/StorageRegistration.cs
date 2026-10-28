@@ -18,6 +18,7 @@ using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -65,6 +66,7 @@ using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
+using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Recovery;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
@@ -216,6 +218,10 @@ internal static class StorageRegistration
         services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
+            provider.GetRequiredService<DeploymentDataKeyStore>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<ICollectionSessionStore>(provider => new CollectionSessionStore(
+            provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DeploymentDataKeyStore>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IRegistrationDirectory>(provider => new RegistrationDirectory(

@@ -1,4 +1,5 @@
 using System;
+using Janus.Authentication.Records;
 using Janus.Core;
 
 namespace Janus.Authentication.Sessions;
@@ -67,6 +68,11 @@ internal sealed class PreAuthentication
     public SignOnAttempt? SignOn { get; private set; }
 
     /// <summary>
+    /// The collection session this browser has in flight, where it has one (REC-COL-001).
+    /// </summary>
+    public CollectionSessionId? Collection { get; private set; }
+
+    /// <summary>
     /// Issues one for a browser that carried nothing.
     /// </summary>
     /// <param name="secret">The token the cookie carries.</param>
@@ -92,6 +98,7 @@ internal sealed class PreAuthentication
     /// <param name="registration">The registration in flight, where there is one.</param>
     /// <param name="enrolment">The enrolment in flight, where there is one.</param>
     /// <param name="signOn">The sign-on in flight, where there is one.</param>
+    /// <param name="collection">The collection session in flight, where there is one.</param>
     /// <returns>The pre-authentication session.</returns>
     /// <exception cref="ArgumentNullException">Either fingerprint is absent.</exception>
     public static PreAuthentication Existing(
@@ -101,7 +108,8 @@ internal sealed class PreAuthentication
         DateTimeOffset expiresAt,
         RegistrationSessionId? registration,
         EnrolmentSessionId? enrolment = null,
-        SignOnAttempt? signOn = null)
+        SignOnAttempt? signOn = null,
+        CollectionSessionId? collection = null)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(csrfFingerprint);
@@ -111,6 +119,7 @@ internal sealed class PreAuthentication
             Registration = registration,
             Enrolment = enrolment,
             SignOn = signOn,
+            Collection = collection,
         };
     }
 
@@ -151,6 +160,18 @@ internal sealed class PreAuthentication
     /// </summary>
     /// <param name="attempt">What the return is judged against.</param>
     public void Carry(SignOnAttempt attempt) => SignOn = attempt;
+
+    /// <summary>
+    /// Records the collection session this browser has just created, which binds the
+    /// two as a registration is bound (REC-COL-001, BFF-CSRF-005b).
+    /// </summary>
+    /// <param name="collection">Which collection session.</param>
+    /// <param name="expiresAt">When both stop answering, which is one instant.</param>
+    public void Carry(CollectionSessionId collection, DateTimeOffset expiresAt)
+    {
+        Collection = collection;
+        ExpiresAt = expiresAt;
+    }
 
     /// <summary>
     /// Forgets what the browser had in flight, which is what abandoning a

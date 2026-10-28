@@ -1,4 +1,5 @@
 using System;
+using Janus.Authentication.Records;
 using Janus.Core;
 
 namespace Janus.Storage.Authentication.Sessions;
@@ -33,6 +34,12 @@ internal sealed class PreAuthenticationRecord
 
     /// <summary>The <c>enrolment</c> column, where the browser has one in flight.</summary>
     public EnrolmentSessionId? Enrolment { get; set; }
+
+    /// <summary>
+    /// The <c>collection</c> column: the collection session the browser has in flight
+    /// (REC-COL-001).
+    /// </summary>
+    public CollectionSessionId? Collection { get; set; }
 
     /// <summary>
     /// The <c>signon_state</c> column: what the value handed to the browser

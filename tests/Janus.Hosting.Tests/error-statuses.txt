@@ -74,6 +74,7 @@ identity.account.stateconflict 409
 identity.affirmation.required 422
 identity.change.pending 409
 identity.change.windowelapsed 422
+identity.collection.incomplete 409
 identity.deletion.windowelapsed 422
 identity.domain.notfound 404
 identity.domain.unverified 422
@@ -109,6 +110,7 @@ identity.profile.invalid 422
 identity.profile.notaccepted 422
 identity.profile.underage 422
 identity.reactivation.tokeninvalid 422
+identity.record.signedin 409
 identity.registration.incomplete 409
 identity.registration.signedin 409
 identity.takedown.active 409

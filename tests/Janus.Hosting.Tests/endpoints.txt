@@ -1743,6 +1743,73 @@ POST /privacy/requests
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid
+GET /records/collection
+  200
+    application/json
+      age: string
+      expiresAt: DateTimeOffset
+      contacts[].kind: IdentifierKind
+      contacts[].value: string
+      contacts[].verified: boolean
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.record.signedin
+POST /records/collection
+  request application/json
+    age: boolean?
+  201
+    application/json
+      age: string
+      expiresAt: DateTimeOffset
+      contacts[].kind: IdentifierKind
+      contacts[].value: string
+      contacts[].verified: boolean
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  409 identity.record.signedin
+POST /records/collection/abandon
+  204
+  403 auth.session.csrfinvalid
+PUT /records/collection/age
+  request application/json
+    dateOfBirth: DateOnly?
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.collection.incomplete identity.record.signedin
+  422 identity.profile.underage
+PUT /records/collection/email
+  request application/json
+    value: string
+  202
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.collection.incomplete identity.record.signedin
+  422 identity.identifier.invalid
+  429 auth.restriction.exceeded auth.throttled
+PUT /records/collection/phone
+  request application/json
+    value: string
+  202
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.collection.incomplete identity.record.signedin
+  422 identity.identifier.invalid integration.sms.balancefloor
+  429 auth.restriction.exceeded auth.throttled
+POST /records/collection/verify
+  request application/json
+    kind: IdentifierKind?
+    code: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.record.signedin
+  422 auth.code.expired auth.code.invalid
+  429 auth.throttled
 POST /recovery/begin
   request application/json
     identifier: string

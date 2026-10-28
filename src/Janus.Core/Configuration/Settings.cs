@@ -617,6 +617,10 @@ public static class Settings
     public static DurationSetting AccountDeletionGrace { get; } =
         new("account.deletion.grace", SettingScope.Runtime, "P30D", floor: "P7D");
 
+    /// <summary>How long a collection session lives before it is swept, leaving nothing.</summary>
+    public static DurationSetting RecordsCollectionLifetime { get; } =
+        new("records.collection.lifetime", SettingScope.Runtime, "PT1H", ceiling: "PT24H");
+
     /// <summary>Whether one account may hold memberships in several organizations.</summary>
     public static FlagSetting OrganizationMultipleMemberships { get; } =
         new("organization.multiplememberships", SettingScope.Runtime, false);
@@ -1074,6 +1078,7 @@ public static class Settings
         OrganizationDeletionGrace,
         TakedownGrace,
         AccountDeletionGrace,
+        RecordsCollectionLifetime,
         OrganizationMultipleMemberships,
         IdentifierChangeCoolingOff,
         RegistrationPhone,

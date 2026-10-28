@@ -15,6 +15,7 @@ using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
+using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Recovery;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
@@ -387,6 +388,13 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         Set<RegistrationSessionRecord>();
 
     /// <summary>
+    /// The collection sessions in progress, each staging the age answer and the contacts
+    /// a host's screen collects (REC-COL-001).
+    /// </summary>
+    public DbSet<CollectionSessionRecord> CollectionSessions =>
+        Set<CollectionSessionRecord>();
+
+    /// <summary>
     /// The verification links a registration in progress has outstanding.
     /// </summary>
     public DbSet<RegistrationLinkRecord> RegistrationLinks =>
@@ -609,6 +617,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new RaisedAlertConfiguration());
         modelBuilder.ApplyConfiguration(new PendingEventConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
+        modelBuilder.ApplyConfiguration(new CollectionSessionConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());

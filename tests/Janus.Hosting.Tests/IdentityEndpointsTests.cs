@@ -53,6 +53,16 @@ public sealed class IdentityEndpointsTests
         "POST /auth/step-up",
         "POST /register/terms",
 
+        // The browser's own sessions of a person record, whose person holds no access
+        // context: the collection session and its steps (chapter 07, D-221).
+        "GET /records/collection/",
+        "POST /records/collection/",
+        "POST /records/collection/abandon",
+        "POST /records/collection/verify",
+        "PUT /records/collection/age",
+        "PUT /records/collection/email",
+        "PUT /records/collection/phone",
+
         // What a gateway or a provider sends, which no person and no host calls
         // (chapter 09 section 10, IDN-LIFE-012a AC3, entry 282).
         "GET /callbacks/sms/dlr",

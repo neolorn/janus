@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Records;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -130,6 +131,33 @@ internal sealed class PreAuthenticationService(
         ArgumentNullException.ThrowIfNull(preAuthentication);
 
         preAuthentication.Carry(enrolment, expiresAt);
+
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
+    /// Binds a collection session to the browser that created it (REC-COL-001,
+    /// BFF-CSRF-005b).
+    /// </summary>
+    /// <param name="preAuthentication">The browser's pre-authentication session.</param>
+    /// <param name="collection">The collection session it has in flight.</param>
+    /// <param name="expiresAt">When both stop answering, which is one instant.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of binding them.</returns>
+    /// <exception cref="ArgumentNullException">The session is absent.</exception>
+    public async ValueTask CarryAsync(
+        PreAuthentication preAuthentication,
+        CollectionSessionId collection,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(preAuthentication);
+
+        preAuthentication.Carry(collection, expiresAt);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));

@@ -126,6 +126,8 @@ internal static class ApiStatus
         [ErrorCodes.AccountStateConflict] = StatusCodes.Status409Conflict,
         [ErrorCodes.RegistrationSignedIn] = StatusCodes.Status409Conflict,
         [ErrorCodes.RegistrationIncomplete] = StatusCodes.Status409Conflict,
+        [ErrorCodes.CollectionIncomplete] = StatusCodes.Status409Conflict,
+        [ErrorCodes.RecordSignedIn] = StatusCodes.Status409Conflict,
         [ErrorCodes.NoticeUnpublished] = StatusCodes.Status409Conflict,
         [ErrorCodes.InvitationMailboxHeld] = StatusCodes.Status409Conflict,
         [ErrorCodes.MailboxTaken] = StatusCodes.Status409Conflict,

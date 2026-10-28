@@ -526,6 +526,21 @@ public static class ErrorCodes
     public static ErrorCode RegistrationSignedIn { get; } = ErrorCode.Parse("identity.registration.signedin");
 
     /// <summary>
+    /// A collection request arrived out of its order: a contact before the age the
+    /// session asks, or an age the session does not ask or already holds. Read the
+    /// session's state and answer what it asks next.
+    /// </summary>
+    /// <remarks>Implements REC-COL-001, REC-COL-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode CollectionIncomplete { get; } = ErrorCode.Parse("identity.collection.incomplete");
+
+    /// <summary>
+    /// The browser asking to give its details already holds a session. Nothing is
+    /// staged or sent for it; the person gives their data under their account.
+    /// </summary>
+    /// <remarks>Implements REC-COL-001, REC-ACC-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RecordSignedIn { get; } = ErrorCode.Parse("identity.record.signedin");
+
+    /// <summary>
     /// The date of birth is under eighteen where the deployment takes an adult
     /// affirmation. The registration session has ended; nothing further is accepted in
     /// it.

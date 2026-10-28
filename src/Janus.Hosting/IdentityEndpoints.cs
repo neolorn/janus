@@ -10,6 +10,7 @@ using Janus.Hosting.Credentials;
 using Janus.Hosting.Maintenance;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Privacy;
+using Janus.Hosting.Records;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
@@ -51,6 +52,7 @@ public static class IdentityEndpoints
             .WithMetadata(new SensitiveBodyAttribute()));
 
         _ = library.MapRegistration();
+        _ = library.MapCollection();
         _ = library.MapAuthentication();
         _ = library.MapBreakGlass();
         _ = library.MapSignOn();

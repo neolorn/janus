@@ -17,6 +17,7 @@ using Janus.Authentication.Identifiers;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -33,6 +34,7 @@ using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Records;
 using Janus.Authentication.Tests.Recovery;
 using Janus.Authentication.Tests.Registration;
 using Janus.Authentication.Tests.Sending;
@@ -372,6 +374,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// The registration sessions as they stand.
     /// </summary>
     public RegistrationSessionStoreInMemory Registrations { get; } = new();
+
+    /// <summary>
+    /// The collection sessions as they stand (REC-COL-001).
+    /// </summary>
+    public CollectionSessionStoreInMemory Collections { get; } = new();
 
     /// <summary>
     /// The datacenter ranges the bot defence reads (AUTH-ABUSE-008).
@@ -955,6 +962,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IEvents>(Events);
 
         _ = services.AddSingleton<IRegistrationSessionStore>(Registrations);
+        _ = services.AddSingleton<ICollectionSessionStore>(Collections);
         _ = services.AddSingleton<IRegistrationSignals>(Signals);
         _ = services.AddSingleton<IRegistrationDirectory>(Directory);
         _ = services.AddSingleton<IPreAuthenticationStore>(Contacts);
@@ -1130,6 +1138,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RegistrationService>();
         _ = services.AddScoped<IRegistration>(provider =>
             provider.GetRequiredService<RegistrationService>());
+        _ = services.AddScoped<CollectionSessions>();
         _ = services.AddScoped<IdentifierService>();
         _ = services.AddScoped<IIdentifiers>(provider =>
             provider.GetRequiredService<IdentifierService>());
