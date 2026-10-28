@@ -281,6 +281,44 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Writes an active person record of the case's organization, with its data key.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The subject the record was issued.</returns>
+    public async Task<SubjectId> PersonRecordAsync(CancellationToken cancellationToken)
+    {
+        SubjectId subject;
+
+        using (var randomness = RandomNumberGenerator.Create())
+        {
+            subject = SubjectId.New(randomness);
+        }
+
+        // REC-REC-001 (D-221): the record's key row is its parent, as an account's is.
+        await using (AsyncServiceScope scope = fixture.Services.CreateAsyncScope())
+        {
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            await work.BeginAsync(cancellationToken);
+            await scope.ServiceProvider.GetRequiredService<ISubjectKeyStore>().CreateAsync(subject, cancellationToken);
+            await work.CommitAsync(cancellationToken);
+        }
+
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO identity.person_records
+                (subject, organization, origin, state, created_at, language, restriction_held)
+            VALUES (@subject, @organization, 'collection', 'active', @at, 'en', false);
+            """,
+            new { subject = subject.Value, organization = Organization.Value, at = Noon },
+            cancellationToken: cancellationToken));
+
+        return subject;
+    }
+
+    /// <summary>
     /// Makes an account a member of an organization.
     /// </summary>
     /// <param name="subject">The account.</param>

@@ -893,7 +893,7 @@ POST /admin/grants
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.grant.self authz.restricted authz.role.notassignable
   409 authz.grant.duplicate authz.grant.expired
-  422 authz.grant.reasonrequired authz.grant.unresolved
+  422 api.request.invalid authz.grant.reasonrequired authz.grant.unresolved
 DELETE /admin/grants/{id}
   request application/json
     reason: string

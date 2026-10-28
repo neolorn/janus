@@ -809,6 +809,11 @@ internal sealed class Deployment : IAsyncDisposable
     private Janus.Authorization.Tests.Grants.EmergencyAccountInMemory GrantEmergency { get; } = new();
 
     /// <summary>
+    /// Which subjects an account bears, as the authorization area reads it.
+    /// </summary>
+    public Janus.Authorization.Tests.Grants.AccountSubjectsInMemory AccountSubjects { get; } = new();
+
+    /// <summary>
     /// Names the account the break-glass session belongs to, as bootstrap does.
     /// </summary>
     /// <param name="account">The reserved emergency account.</param>
@@ -1236,6 +1241,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();
         _ = services.AddSingleton<Janus.Authorization.Gate.IAdministrativeOrganization>(GateAdministrative);
         _ = services.AddSingleton<Janus.Authorization.Grants.IEmergencyAccount>(GrantEmergency);
+        _ = services.AddSingleton<Janus.Authorization.Grants.IAccountSubjects>(AccountSubjects);
         _ = services.AddSingleton<Janus.Authorization.Grants.IGrantStore>(AccessGrants);
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleReferences>(
             new Janus.Hosting.Tests.Authorization.RoleReferencesInMemory(AccessGrants, Invitations, Roles));

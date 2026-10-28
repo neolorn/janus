@@ -20,6 +20,7 @@ namespace Janus.Authorization.Groups;
 /// <param name="scope">Whether the caller holds system administration.</param>
 /// <param name="stepUp">What a change of members asks of the caller's session.</param>
 /// <param name="groups">Where groups and their members are read and written.</param>
+/// <param name="accounts">Whether an account bears the subject a member names.</param>
 /// <param name="grants">What a group holds, and whether any grant was given to it.</param>
 /// <param name="roles">Where the roles a group holds are read.</param>
 /// <param name="emergency">Which account joins no group.</param>
@@ -41,6 +42,7 @@ internal sealed class GroupService(
     AdministrativeScope scope,
     IStepUpGate stepUp,
     IGroupStore groups,
+    IAccountSubjects accounts,
     IGrantStore grants,
     IRoleStore roles,
     IEmergencyAccount emergency,
@@ -516,14 +518,16 @@ internal sealed class GroupService(
             .Match<Error?>(() => null, error => error);
 
     // A group belongs to one organization, and only a group of the same one joins it,
-    // as only such a group is given a grant there.
+    // as only such a group is given a grant there. IDN-ACCT-007, REC-REC-001 (D-166,
+    // D-221): a subject no account bears, a person record's among them, joins none.
     private async ValueTask<bool> JoinableAsync(
         GrantSubject member,
         OrganizationId organization,
         CancellationToken cancellationToken) =>
-        member.Type != SubjectType.Group
-            || (await groups.FindAsync(new GroupId(member.Value), cancellationToken).ConfigureAwait(false))
-                ?.Organization == organization;
+        member.Type == SubjectType.Group
+            ? (await groups.FindAsync(new GroupId(member.Value), cancellationToken).ConfigureAwait(false))
+                ?.Organization == organization
+            : await accounts.BearsAsync(new SubjectId(member.Value), cancellationToken).ConfigureAwait(false);
 
     // AUTHZ-GROUP-001: a group that already reaches this one, or this one itself,
     // would come to hold itself.

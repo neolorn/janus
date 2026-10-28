@@ -59,6 +59,29 @@ public sealed class PersonRecordStoreTests(DatabaseFixture database) : IClassFix
     }
 
     /// <summary>
+    /// REC-REC-001 AC3: a record holds no membership; a membership naming its subject is
+    /// refused as one naming a subject no account bears.
+    /// </summary>
+    [Fact]
+    public async Task REC_REC_001_AC3_NoMembershipNamesARecordAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId record = await RecordAsync(organization, _ => { });
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO identity.memberships (id, subject, organization, created_at)
+                VALUES (@id, @subject, @organization, @at);
+                """,
+                new { id = Guid.NewGuid(), subject = record.Value, organization = organization.Value, at = Noon }));
+
+        Assert.Equal("fk_memberships_subject", refused.ConstraintName);
+    }
+
+    /// <summary>
     /// REC-REC-001: a record reads back as it was written: its organization, origin,
     /// language, name, age answer with the date retained, and its attachment.
     /// </summary>

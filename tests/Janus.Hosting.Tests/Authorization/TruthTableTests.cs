@@ -987,6 +987,66 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     }
 
     /// <summary>
+    /// REC-REC-001 AC3, IDN-ACCT-007 (D-166, D-221): a person record holds no grant and no
+    /// group membership. A grant to its subject and a member naming it are each refused
+    /// 422 <c>api.request.invalid</c> naming <c>subjectId</c>, as one naming a subject no
+    /// account bears, to a caller the gate admits; nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_REC_001_AC3_AGrantAndAGroupMemberNamingAPersonRecordAreRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        RoleName managing = await deployment.RoleAsync([Permissions.GrantManage, Permissions.GroupManage], cancellationToken);
+        SubjectId caller = await deployment.AccountAsync(cancellationToken);
+        SubjectId record = await deployment.PersonRecordAsync(cancellationToken);
+        GroupId group = await deployment.GroupAsync(cancellationToken);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), managing, null, false, null, deployment.Organization, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        SessionId session = await SteppedUpAsync(scope.ServiceProvider, caller);
+        int held = await GrantsInAsync(deployment.Organization);
+
+        Result<GrantId> granted = await scope.ServiceProvider.GetRequiredService<IGrants>().GrantAsync(
+            AccessContext.Of(caller),
+            session,
+            OrganizationWideGrant(record, role, deployment.Organization),
+            cancellationToken);
+        Result joined = await scope.ServiceProvider.GetRequiredService<IGroups>().AddMemberAsync(
+            AccessContext.Of(caller),
+            session,
+            group,
+            GrantSubject.Of(record),
+            "Joins the team.",
+            cancellationToken);
+
+        Error grantRefusal = granted.Match(_ => throw new InvalidOperationException("The grant was written."), error => error);
+        Error memberRefusal = joined.Match(() => throw new InvalidOperationException("The member was added."), error => error);
+
+        Assert.All(
+            new[] { grantRefusal, memberRefusal },
+            refusal =>
+            {
+                Assert.Equal(ErrorCodes.RequestInvalid, refusal.Code);
+                Assert.Equal("subjectId", refusal.Details["member"].GetString());
+            });
+        Assert.Equal(held, await GrantsInAsync(deployment.Organization));
+        Assert.Equal(0, await GrantRefusalsAsync(AccessContext.Of(caller), deployment.Organization));
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.group_members WHERE member_id = @record;",
+            new { record = record.Value },
+            cancellationToken: cancellationToken)));
+    }
+
+    /// <summary>
     /// AUTHZ-SCOPE-001 AC4, AUTHZ-CONCEAL-004 (D-209): a grant on the whole of an
     /// organization the deployment does not hold, through the library's grant operation,
     /// is refused 403 <c>authz.denied</c> with one refusal recorded, naming

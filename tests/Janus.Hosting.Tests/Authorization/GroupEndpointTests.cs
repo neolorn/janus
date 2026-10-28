@@ -705,6 +705,32 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// REC-REC-001 AC3, IDN-ACCT-007 (D-166, D-221): a member naming a subject no account
+    /// bears, a person record's among them, is refused naming <c>subjectId</c>, and
+    /// nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_REC_001_AC3_AMemberNoAccountBearsIsRefusedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
+        var record = new SubjectId(Guid.NewGuid());
+
+        _deployment.AccountSubjects.Unborne(record);
+
+        Answer refused = await AddedAsync(administrator, tellers, GrantSubject.Of(record));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), refused.Text("code"));
+        Assert.Equal("subjectId", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
+        Assert.DoesNotContain(
+            _deployment.GroupChanges.Changes,
+            change => change.Action == AuditActions.GroupMemberAdded);
+    }
+
+    /// <summary>
     /// CONV-CODE-006 AC2: a body missing a member creating or removing a group, or
     /// changing its members, requires is refused naming the member before the service
     /// is reached, so a caller the service would refuse for want of the permission is

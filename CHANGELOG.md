@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A grant, or a group member, naming a subject no account bears, a person record's
+  among them, is refused 422 `api.request.invalid` naming `subjectId`; a grant to such a
+  subject failed as a fault before, and such a member was added.
 - The library keeps person records in four tables of its own schema (`person_records`,
   `person_record_contacts`, `person_record_references`, `person_record_documents`): a
   record's name, date of birth and contacts under its own data key, its contacts and
