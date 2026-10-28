@@ -54,17 +54,29 @@ public sealed class IdentityEndpointsTests
         "POST /register/terms",
 
         // The browser's own sessions of a person record, whose person holds no access
-        // context: the collection session, the record access session and their steps
-        // (chapter 07, D-221).
+        // context: the collection session, the record access session, their steps and the
+        // rights on each record the session reaches (chapter 07, D-221).
+        "DELETE /records/access/{subject}/objections/{purpose}",
         "GET /records/access/",
+        "GET /records/access/{subject}/",
+        "GET /records/access/{subject}/consents",
+        "GET /records/access/{subject}/export",
+        "GET /records/access/{subject}/objections",
         "GET /records/collection/",
         "POST /records/access/",
         "POST /records/access/end",
         "POST /records/access/reference",
         "POST /records/access/verify",
+        "POST /records/access/{subject}/consents/{purpose}/grant",
+        "POST /records/access/{subject}/consents/{purpose}/withdraw",
+        "POST /records/access/{subject}/delete",
+        "POST /records/access/{subject}/delete/cancel",
+        "POST /records/access/{subject}/objections/{purpose}",
+        "POST /records/access/{subject}/requests",
         "POST /records/collection/",
         "POST /records/collection/abandon",
         "POST /records/collection/verify",
+        "PUT /records/access/{subject}/",
         "PUT /records/collection/age",
         "PUT /records/collection/email",
         "PUT /records/collection/phone",

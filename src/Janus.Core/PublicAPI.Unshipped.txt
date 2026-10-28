@@ -2032,6 +2032,7 @@ Janus.Core.MessageKind.PrivacyRequestLapsed = 16 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.PrivacyRequestReceived = 15 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.RecordAccessCode = 26 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.RecordAccessNone = 27 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.RecordDeletionNotice = 28 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.RecoveryCodesReminder = 20 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.RecoveryLink = 14 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecondStepCode = 2 -> Janus.Core.MessageKind
@@ -2642,6 +2643,18 @@ Janus.Core.RecordCollection.Reference.get -> string?
 Janus.Core.RecordCollection.Reference.init -> void
 Janus.Core.RecordCollection.TermsVersion.get -> string?
 Janus.Core.RecordCollection.TermsVersion.init -> void
+Janus.Core.RecordDeletionCancelled
+Janus.Core.RecordDeletionCancelled.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
+Janus.Core.RecordDeletionCancelled.Equals(Janus.Core.RecordDeletionCancelled? other) -> bool
+Janus.Core.RecordDeletionCancelled.RecordDeletionCancelled(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
+Janus.Core.RecordDeletionRequested
+Janus.Core.RecordDeletionRequested.By.get -> Janus.Core.DeletionOrigin
+Janus.Core.RecordDeletionRequested.By.init -> void
+Janus.Core.RecordDeletionRequested.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.DeletionOrigin By, out System.DateTimeOffset ErasesAt) -> void
+Janus.Core.RecordDeletionRequested.Equals(Janus.Core.RecordDeletionRequested? other) -> bool
+Janus.Core.RecordDeletionRequested.ErasesAt.get -> System.DateTimeOffset
+Janus.Core.RecordDeletionRequested.ErasesAt.init -> void
+Janus.Core.RecordDeletionRequested.RecordDeletionRequested(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.DeletionOrigin By, System.DateTimeOffset ErasesAt) -> void
 Janus.Core.RecoveryCodeStatus
 Janus.Core.RecoveryCodeStatus.<Clone>$() -> Janus.Core.RecoveryCodeStatus!
 Janus.Core.RecoveryCodeStatus.Deconstruct(out int Remaining, out System.DateTimeOffset GeneratedAt, out System.DateTimeOffset? ViewedAt, out System.DateTimeOffset? ExportedAt, out System.DateTimeOffset? RemindedAt) -> void
@@ -3923,6 +3936,14 @@ override Janus.Core.RecipientRecord.ToString() -> string!
 override Janus.Core.RecordCollection.Equals(object? obj) -> bool
 override Janus.Core.RecordCollection.GetHashCode() -> int
 override Janus.Core.RecordCollection.ToString() -> string!
+override Janus.Core.RecordDeletionCancelled.<Clone>$() -> Janus.Core.RecordDeletionCancelled!
+override Janus.Core.RecordDeletionCancelled.Equals(object? obj) -> bool
+override Janus.Core.RecordDeletionCancelled.GetHashCode() -> int
+override Janus.Core.RecordDeletionCancelled.ToString() -> string!
+override Janus.Core.RecordDeletionRequested.<Clone>$() -> Janus.Core.RecordDeletionRequested!
+override Janus.Core.RecordDeletionRequested.Equals(object? obj) -> bool
+override Janus.Core.RecordDeletionRequested.GetHashCode() -> int
+override Janus.Core.RecordDeletionRequested.ToString() -> string!
 override Janus.Core.RecoveryCodeStatus.Equals(object? obj) -> bool
 override Janus.Core.RecoveryCodeStatus.GetHashCode() -> int
 override Janus.Core.RecoveryCodeStatus.ToString() -> string!
@@ -4115,6 +4136,8 @@ override sealed Janus.Core.OrganizationCreated.Equals(Janus.Core.DomainEvent? ot
 override sealed Janus.Core.OrganizationDeletionCancelled.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.OrganizationDeletionRequested.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.OrganizationErased.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.RecordDeletionCancelled.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.RecordDeletionRequested.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.RestrictionChanged.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.RoleChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.SendingRestrictionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -4234,6 +4257,7 @@ static Janus.Core.AuditActions.ProfileChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ProviderEventRejected.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ProviderEventTaken.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecordAccessed.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RecordChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecordCollected.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecordEntered.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecoveryApproved.get -> Janus.Core.AuditAction
@@ -4293,6 +4317,7 @@ static Janus.Core.CollectedRecord.operator !=(Janus.Core.CollectedRecord? left, 
 static Janus.Core.CollectedRecord.operator ==(Janus.Core.CollectedRecord? left, Janus.Core.CollectedRecord? right) -> bool
 static Janus.Core.ComplianceRecord.operator !=(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
 static Janus.Core.ComplianceRecord.operator ==(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
+static Janus.Core.Configuration.Settings.RecordDeletionGrace.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordsAccessLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordsCollectionLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordsProofAge.get -> Janus.Core.Configuration.DurationSetting!
@@ -4658,6 +4683,7 @@ static Janus.Core.ErrorCodes.PurposeNotObjectable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ReactivationTokenInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecordNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecordSignedIn.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RecordStateConflict.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryChannelNotOnAccount.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoverySelfApproval.get -> Janus.Core.ErrorCode
@@ -4969,6 +4995,10 @@ static Janus.Core.RecipientRecord.operator !=(Janus.Core.RecipientRecord? left, 
 static Janus.Core.RecipientRecord.operator ==(Janus.Core.RecipientRecord? left, Janus.Core.RecipientRecord? right) -> bool
 static Janus.Core.RecordCollection.operator !=(Janus.Core.RecordCollection? left, Janus.Core.RecordCollection? right) -> bool
 static Janus.Core.RecordCollection.operator ==(Janus.Core.RecordCollection? left, Janus.Core.RecordCollection? right) -> bool
+static Janus.Core.RecordDeletionCancelled.operator !=(Janus.Core.RecordDeletionCancelled? left, Janus.Core.RecordDeletionCancelled? right) -> bool
+static Janus.Core.RecordDeletionCancelled.operator ==(Janus.Core.RecordDeletionCancelled? left, Janus.Core.RecordDeletionCancelled? right) -> bool
+static Janus.Core.RecordDeletionRequested.operator !=(Janus.Core.RecordDeletionRequested? left, Janus.Core.RecordDeletionRequested? right) -> bool
+static Janus.Core.RecordDeletionRequested.operator ==(Janus.Core.RecordDeletionRequested? left, Janus.Core.RecordDeletionRequested? right) -> bool
 static Janus.Core.RecoveryCodeStatus.operator !=(Janus.Core.RecoveryCodeStatus? left, Janus.Core.RecoveryCodeStatus? right) -> bool
 static Janus.Core.RecoveryCodeStatus.operator ==(Janus.Core.RecoveryCodeStatus? left, Janus.Core.RecoveryCodeStatus? right) -> bool
 static Janus.Core.RegisterFlag.operator !=(Janus.Core.RegisterFlag? left, Janus.Core.RegisterFlag? right) -> bool

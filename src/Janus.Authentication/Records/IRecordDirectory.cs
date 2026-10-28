@@ -126,4 +126,71 @@ internal interface IRecordDirectory
         IdentifierKind kind,
         IReadOnlyList<byte[]> fingerprints,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads one person record as the person reads it (REC-ACC-002).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The record, or nothing where no record bears the subject.</returns>
+    ValueTask<ReadRecord?> ReadAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes one person record's row for a change, to the end of the transaction, and
+    /// reads where it stands under that lock (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Where it stands, or nothing where no record bears the subject.</returns>
+    ValueTask<RecordStanding?> HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Changes the name and the language of an active record held for the change
+    /// (REC-ACC-002).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="name">The name it takes, or nothing to leave it as it is.</param>
+    /// <param name="language">The language it takes, or nothing to leave it as it is.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of carrying the change.</returns>
+    ValueTask RectifyAsync(
+        SubjectId subject,
+        DisplayName? name,
+        string? language,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Starts the deletion grace window of a record held for the change, active or
+    /// restricted, a restriction in force held through it (REC-REC-002).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="by">The person's own request, or one that arrived out of band.</param>
+    /// <param name="at">When the window began.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of carrying the change.</returns>
+    ValueTask BeginDeletionAsync(
+        SubjectId subject,
+        DeletionOrigin by,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Cancels the deletion window of a record held for the change, which returns active,
+    /// or restricted where a restriction is held (REC-REC-002).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of carrying the change.</returns>
+    ValueTask CancelDeletionAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Where a message to one person record goes (REC-ACC-002).
+    /// </summary>
+    /// <param name="subject">The subject a message names.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The record's notice contacts and language, or nothing where no record bears the
+    /// subject.
+    /// </returns>
+    ValueTask<RecordNoticeContacts?> NoticeContactsAsync(SubjectId subject, CancellationToken cancellationToken);
 }

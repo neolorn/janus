@@ -1170,6 +1170,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<RegistrationService>());
         _ = services.AddScoped<CollectionSessions>();
         _ = services.AddScoped<RecordAccessSessions>();
+        _ = services.AddScoped<RecordRights>();
         _ = services.AddScoped<RecordCollectionService>();
         _ = services.AddScoped<IPersonRecords, PersonRecordService>();
         _ = services.AddScoped<IdentifierService>();
@@ -1240,7 +1241,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IExportContributor>(ExportContributor);
         _ = services.AddSingleton<IExportNameRule, ExportNames>();
         _ = services.AddSingleton<IFaultEntry, FaultEntry>();
-        _ = services.AddScoped<IExports, ExportService>();
+        _ = services.AddScoped<ExportService>();
+        _ = services.AddScoped<IExports>(provider => provider.GetRequiredService<ExportService>());
         _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
         _ = services.AddSingleton<IErasureLedger>(Ledger);

@@ -312,6 +312,16 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "لا شيء يمكن عرضه لهذا العنوان",
                 "طلب أحدهم رمزا للاطلاع على البيانات المحفوظة بهذا العنوان، ولا يوجد ما يمكن عرضه له برمز. إن كنت أنت وقدمت بياناتك بطريقة أخرى فاطلبها من الجهة التي تحفظها.",
                 null)),
+        (
+            MessageKind.RecordDeletionNotice,
+            new Words(
+                "Your details are set to be deleted",
+                "You asked for the details kept about you to be deleted. They will be deleted when the grace window ends. To keep them, ask for a new code and cancel the deletion before then.",
+                "You asked for your details to be deleted. To keep them, ask for a new code and cancel before the window ends."),
+            new Words(
+                "بياناتك في طريقها للحذف",
+                "طلبت حذف البيانات المحفوظة عنك. ستُحذف بانتهاء مهلة السماح. للإبقاء عليها اطلب رمزا جديدا وألغ الحذف قبل ذلك.",
+                "طلبت حذف بياناتك. لإلغاء الحذف اطلب رمزا جديدا قبل انتهاء المهلة.")),
     ];
 
     private static readonly FrozenDictionary<Held, MessageTemplate> Texts = Written();

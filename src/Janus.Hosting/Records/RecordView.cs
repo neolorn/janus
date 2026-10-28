@@ -1,0 +1,65 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Janus.Authentication.Records;
+using Janus.Core;
+
+namespace Janus.Hosting.Records;
+
+/// <summary>
+/// A person record as <c>GET /records/access/{subject}</c> answers it.
+/// </summary>
+/// <param name="Subject">The record's subject.</param>
+/// <param name="Organization">The organization the host keeps it in.</param>
+/// <param name="OrganizationName">The organization's name.</param>
+/// <param name="Origin">How the record came to be.</param>
+/// <param name="State">The state it is in.</param>
+/// <param name="CreatedAt">When it was created.</param>
+/// <param name="Name">Its name, or nothing where none was given.</param>
+/// <param name="Language">Its language.</param>
+/// <param name="Contacts">Its contacts.</param>
+/// <param name="Age">Its age answer, or nothing where none was given.</param>
+/// <param name="Notices">The notice versions its collections presented.</param>
+/// <param name="Terms">The terms versions its collections recorded.</param>
+/// <remarks>Implements REC-ACC-002, chapter 09 section 7a.</remarks>
+internal sealed record RecordView(
+    Guid Subject,
+    Guid Organization,
+    string OrganizationName,
+    PersonRecordOrigin Origin,
+    PersonRecordState State,
+    DateTimeOffset CreatedAt,
+    string? Name,
+    string Language,
+    IReadOnlyList<RecordContactView> Contacts,
+    RecordAgeView? Age,
+    IReadOnlyList<RecordNoticeView> Notices,
+    IReadOnlyList<RecordTermsView> Terms)
+{
+    /// <summary>
+    /// Shows a record's read.
+    /// </summary>
+    /// <param name="reading">The read.</param>
+    /// <returns>Its view.</returns>
+    /// <exception cref="ArgumentNullException">The read is absent.</exception>
+    public static RecordView Of(RecordReading reading)
+    {
+        ArgumentNullException.ThrowIfNull(reading);
+
+        ReadRecord record = reading.Record;
+
+        return new RecordView(
+            record.Subject.Value,
+            record.Organization.Value,
+            reading.OrganizationName,
+            record.Origin,
+            record.State,
+            record.CreatedAt,
+            record.Name,
+            record.Language,
+            [.. record.Contacts.Select(RecordContactView.Of)],
+            record.Age is RecordAge age ? RecordAgeView.Of(age) : null,
+            [.. record.Notices.Select(notice => new RecordNoticeView(notice.Version, notice.At))],
+            [.. record.Terms.Select(terms => new RecordTermsView(terms.Version, terms.At))]);
+    }
+}

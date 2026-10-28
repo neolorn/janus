@@ -350,6 +350,7 @@ public sealed class VocabularyContractTests
                 "privacy-request-received",
                 "record-access-code",
                 "record-access-none",
+                "record-deletion-notice",
                 "recovery-codes-reminder",
                 "recovery-link",
                 "secondstep-code",

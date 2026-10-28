@@ -31,6 +31,16 @@ internal sealed record HeldRecord(SubjectId Subject, OrganizationId Organization
     public DeletionOrigin? DeletingBy { get; set; }
 
     /// <summary>
+    /// When its deletion window began, where one runs.
+    /// </summary>
+    public DateTimeOffset? DeletingSince { get; set; }
+
+    /// <summary>
+    /// Whether a restriction is held through its deletion window.
+    /// </summary>
+    public bool RestrictionHeld { get; set; }
+
+    /// <summary>
     /// The account it is attached to, where it is.
     /// </summary>
     public SubjectId? AttachedTo { get; set; }

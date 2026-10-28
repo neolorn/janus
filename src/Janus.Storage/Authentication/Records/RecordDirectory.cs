@@ -20,7 +20,8 @@ namespace Janus.Storage.Authentication.Records;
 /// <param name="identifiers">The identifiers, whose value locks a collection takes too.</param>
 /// <param name="subjectKeys">Where a new record's data key is created.</param>
 /// <remarks>
-/// Implements REC-COL-002, REC-COL-003, REC-REC-001, REC-ACC-001 and CONV-DESIGN-003.
+/// Implements REC-COL-002, REC-COL-003, REC-REC-001, REC-REC-002, REC-ACC-001, REC-ACC-002
+/// and CONV-DESIGN-003.
 /// </remarks>
 internal sealed class RecordDirectory(
     StoreContext context,
@@ -189,6 +190,129 @@ internal sealed class RecordDirectory(
             .ConfigureAwait(false);
 
         return [.. subjects.SelectMany(subject => reaching.Where(record => record.Subject == subject))];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<ReadRecord?> ReadAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        if (await records.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not PersonRecord record)
+        {
+            return null;
+        }
+
+        IReadOnlyList<RecordContact> contacts = await records
+            .ContactsAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<RecordDocuments> documents = await records
+            .DocumentsAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Chapter 09 section 7a: the read carries the age answer and never the date of
+        // birth it was computed from.
+        return new ReadRecord(
+            record.Subject,
+            record.Organization,
+            record.Origin,
+            record.State,
+            record.CreatedAt,
+            record.Name?.Value,
+            record.Language,
+            [.. contacts.Select(contact => new CollectedContact(contact.Kind, contact.Value, contact.VerifiedAt))],
+            record.Age is RecordAgeAnswer age ? new RecordAge(age.AdultAffirmed, age.Group, age.AnsweredAt) : null,
+            [.. documents.Select(held => new RecordDocument(held.NoticeVersion, held.RecordedAt))],
+            [
+                .. documents
+                    .Where(held => held.TermsVersion is not null)
+                    .Select(held => new RecordDocument(held.TermsVersion!, held.RecordedAt)),
+            ]);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<RecordStanding?> HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false) is PersonRecord record
+            ? new RecordStanding(
+                record.Organization,
+                record.State,
+                record.DeletingBy,
+                record.DeletingSince,
+                record.AttachedTo is not null)
+            : null;
+
+    /// <inheritdoc/>
+    public ValueTask RectifyAsync(
+        SubjectId subject,
+        DisplayName? name,
+        string? language,
+        CancellationToken cancellationToken) =>
+        ChangedAsync(
+            subject,
+            record =>
+            {
+                if (name is DisplayName given)
+                {
+                    record.Rename(given);
+                }
+
+                if (language is not null)
+                {
+                    record.ChangeLanguage(language);
+                }
+            },
+            cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask BeginDeletionAsync(
+        SubjectId subject,
+        DeletionOrigin by,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        ChangedAsync(subject, record => record.RequestDeletion(by, at), cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask CancelDeletionAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        ChangedAsync(subject, record => record.CancelDeletion(), cancellationToken);
+
+    /// <inheritdoc/>
+    public async ValueTask<RecordNoticeContacts?> NoticeContactsAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (await records.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not PersonRecord record)
+        {
+            return null;
+        }
+
+        IReadOnlyList<RecordContact> contacts = await records
+            .ContactsAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        // REC-ACC-002: the contacts verified at a collection, or, where none was, every
+        // contact the record holds.
+        IEnumerable<RecordContact> notified = contacts.Any(contact => contact.VerifiedAt is not null)
+            ? contacts.Where(contact => contact.VerifiedAt is not null)
+            : contacts;
+
+        return new RecordNoticeContacts(
+            record.Language,
+            [.. notified.Select(contact => new CollectedContact(contact.Kind, contact.Value, contact.VerifiedAt))]);
+    }
+
+    // A transition of the record the caller holds: the row is read under the lock the
+    // caller took, changed by the aggregate, and carried back.
+    private async ValueTask ChangedAsync(
+        SubjectId subject,
+        Action<PersonRecord> change,
+        CancellationToken cancellationToken)
+    {
+        PersonRecord record = await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("A record is changed only where a row bears it.");
+
+        change(record);
+
+        await records.RecordAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
     // REC-ACC-001: a code reaches a record collected from the person, attached to no

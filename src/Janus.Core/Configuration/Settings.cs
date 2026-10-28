@@ -617,6 +617,13 @@ public static class Settings
     public static DurationSetting AccountDeletionGrace { get; } =
         new("account.deletion.grace", SettingScope.Runtime, "P30D", floor: "P7D");
 
+    /// <summary>
+    /// How long a person record's own deletion, or one a request out of band began, stays
+    /// cancellable.
+    /// </summary>
+    public static DurationSetting RecordDeletionGrace { get; } =
+        new("record.deletion.grace", SettingScope.Runtime, "P30D", floor: "P7D");
+
     /// <summary>How long a collection session lives before it is swept, leaving nothing.</summary>
     public static DurationSetting RecordsCollectionLifetime { get; } =
         new("records.collection.lifetime", SettingScope.Runtime, "PT1H", ceiling: "PT24H");
@@ -1099,6 +1106,7 @@ public static class Settings
         OrganizationDeletionGrace,
         TakedownGrace,
         AccountDeletionGrace,
+        RecordDeletionGrace,
         RecordsCollectionLifetime,
         RecordsAccessLifetime,
         RecordsProofAge,

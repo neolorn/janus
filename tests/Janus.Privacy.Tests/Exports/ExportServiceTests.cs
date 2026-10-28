@@ -589,6 +589,48 @@ public sealed class ExportServiceTests : IAsyncDisposable
             export => export,
             error => throw new InvalidOperationException(error.Code.ToString()));
 
+    /// <summary>
+    /// REC-ACC-002: a person record's export is PRIV-RIGHT-003's routine for the record,
+    /// its own sections then each contributor's, counted for the record and asking no
+    /// step-up, since the code that reached it is fresh.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ACC_002_ARecordsExportAsksNoStepUpAndIsCountedForTheRecordAsync()
+    {
+        _source.Holds(Ahmed, new ExportSection("record", []));
+        _contributors.Add(Contributor("orders", "orders"));
+
+        SubjectExport export = Assembled(await Exports.AssembleRecordAsync(Ahmed, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ["record", "consents", "objections", "orders"],
+            export.Sections.Select(section => section.Name));
+        Assert.Empty(_stepUp.Asked);
+        Assert.Equal((Ahmed, Noon), Assert.Single(_ledger.Taken));
+    }
+
+    /// <summary>
+    /// REC-ACC-002 (chapter 10 section 5.46, D-221): a contributor's section for a person
+    /// record under a name of an account's export, or under <c>record</c> or
+    /// <c>records</c>, fails the record's export uncounted.
+    /// </summary>
+    /// <param name="taken">The name the contributor answers a section under.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("record")]
+    [InlineData("records")]
+    [InlineData("credentials")]
+    public async Task REC_ACC_002_ARecordsExportRefusesAContributorTakingALibraryNameAsync(string taken)
+    {
+        _source.Holds(Ahmed, new ExportSection("record", []));
+        _contributors.Add(Contributor("tickets", taken));
+
+        AssertFaulted(
+            Refused(await Exports.AssembleRecordAsync(Ahmed, TestContext.Current.CancellationToken)),
+            "tickets");
+    }
+
     private static ExportContributorInMemory Contributor(string name, params string[] sections) =>
         new(name)
         {

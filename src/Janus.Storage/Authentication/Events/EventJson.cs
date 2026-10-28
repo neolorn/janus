@@ -35,6 +35,8 @@ namespace Janus.Storage.Authentication.Events;
 [JsonSerializable(typeof(OrganizationDeletionCancelled))]
 [JsonSerializable(typeof(OrganizationDeletionRequested))]
 [JsonSerializable(typeof(OrganizationErased))]
+[JsonSerializable(typeof(RecordDeletionCancelled))]
+[JsonSerializable(typeof(RecordDeletionRequested))]
 [JsonSerializable(typeof(RestrictionChanged))]
 [JsonSerializable(typeof(RoleChanged))]
 [JsonSerializable(typeof(SendingRestrictionChanged))]

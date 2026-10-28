@@ -55,6 +55,7 @@ internal static class MessageChannels
         MessageKind.CredentialUnbound,
         MessageKind.RecordAccessCode,
         MessageKind.RecordAccessNone,
+        MessageKind.RecordDeletionNotice,
     ];
 
     /// <summary>

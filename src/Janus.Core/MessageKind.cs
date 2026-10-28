@@ -200,4 +200,12 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("record-access-none")]
     RecordAccessNone = 27,
+
+    /// <summary>
+    /// A person record's own deletion began its grace window, sent to the record's
+    /// notice contacts and carrying no link: the cancellation is reached by a new code
+    /// (REC-ACC-002).
+    /// </summary>
+    [JsonStringEnumMemberName("record-deletion-notice")]
+    RecordDeletionNotice = 28,
 }

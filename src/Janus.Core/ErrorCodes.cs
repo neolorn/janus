@@ -557,6 +557,13 @@ public static class ErrorCodes
     public static ErrorCode RecordNotFound { get; } = ErrorCode.Parse("identity.record.notfound");
 
     /// <summary>
+    /// The operation does not apply to the state the person record is in; the details
+    /// name the state.
+    /// </summary>
+    /// <remarks>Implements REC-REC-002, REC-ACC-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RecordStateConflict { get; } = ErrorCode.Parse("identity.record.stateconflict");
+
+    /// <summary>
     /// The date of birth is under eighteen where the deployment takes an adult
     /// affirmation. The registration session has ended; nothing further is accepted in
     /// it.

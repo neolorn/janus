@@ -1819,6 +1819,151 @@ POST /records/access/verify
   409 identity.record.signedin
   422 auth.code.expired auth.code.invalid
   429 auth.throttled
+GET /records/access/{subject}
+  200
+    application/json
+      subject: Guid
+      organization: Guid
+      organizationName: string
+      origin: PersonRecordOrigin
+      state: PersonRecordState
+      createdAt: DateTimeOffset
+      name: string
+      language: string
+      contacts[].kind: IdentifierKind
+      contacts[].value: string
+      contacts[].verifiedAt: DateTimeOffset?
+      age.answeredAt: DateTimeOffset
+      age.affirmed: boolean?
+      age.ageGroup: AgeGroup?
+      notices[].version: string
+      notices[].presentedAt: DateTimeOffset
+      terms[].version: string
+      terms[].acceptedAt: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin
+PUT /records/access/{subject}
+  request application/json
+    name: string
+    language: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict
+  422 api.request.invalid identity.profile.invalid
+GET /records/access/{subject}/consents
+  200
+    application/json
+      [].purpose: string
+      [].document: string
+      [].noticeVersion: string
+      [].mechanism: ConsentMechanism
+      [].grantedAt: DateTimeOffset
+      [].withdrawnAt: DateTimeOffset?
+      [].supersededAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict
+POST /records/access/{subject}/consents/{purpose}/grant
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict privacy.notice.unpublished
+  422 privacy.purpose.noconsent
+POST /records/access/{subject}/consents/{purpose}/withdraw
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict
+  422 privacy.purpose.noconsent
+POST /records/access/{subject}/delete
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict identity.takedown.active
+POST /records/access/{subject}/delete/cancel
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict identity.takedown.active
+  422 identity.deletion.windowelapsed
+GET /records/access/{subject}/export
+  200
+    application/json
+      subject: string
+      assembledAt: DateTimeOffset
+      sections[].name: string
+      sections[].records[]{}: string
+    application/json
+      subject: string
+      assembledAt: DateTimeOffset
+      values{}: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict
+  429 auth.throttled
+  500 system.fault
+GET /records/access/{subject}/objections
+  200
+    application/json
+      [].purpose: string
+      [].document: string
+      [].noticeVersion: string
+      [].mechanism: ConsentMechanism
+      [].recordedAt: DateTimeOffset
+      [].withdrawnAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict
+DELETE /records/access/{subject}/objections/{purpose}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict
+  422 privacy.purpose.notobjectable
+POST /records/access/{subject}/objections/{purpose}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict privacy.notice.unpublished
+  422 privacy.purpose.notobjectable
+POST /records/access/{subject}/requests
+  request application/json
+    type: string
+    detail: string
+  202
+    application/json
+      requestId: Guid
+      receiptSentAt: DateTimeOffset?
+      decisionDue: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.signedin identity.record.stateconflict
 GET /records/collection
   200
     application/json

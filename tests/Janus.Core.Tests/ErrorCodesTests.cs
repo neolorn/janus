@@ -140,6 +140,7 @@ public sealed class ErrorCodesTests
         "identity.reactivation.tokeninvalid",
         "identity.record.notfound",
         "identity.record.signedin",
+        "identity.record.stateconflict",
         "identity.registration.incomplete",
         "identity.registration.signedin",
         "identity.takedown.active",

@@ -188,6 +188,106 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
         ]);
     }
 
+    /// <inheritdoc/>
+    public ValueTask<ReadRecord?> ReadAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_records.TryGetValue(subject, out HeldRecord? record)
+            ? new ReadRecord(
+                record.Subject,
+                record.Organization,
+                record.Origin,
+                record.State,
+                record.CreatedAt,
+                record.Name?.Value,
+                record.Language,
+                [.. record.Contacts.Values.OrderBy(contact => contact.Kind)],
+                record.Age is CollectedAge age ? new RecordAge(age.AdultAffirmed, age.Group, age.AnsweredAt) : null,
+                [.. record.Documents.Select(held => new RecordDocument(held.NoticeVersion, held.At))],
+                [
+                    .. record.Documents
+                        .Where(held => held.TermsVersion is not null)
+                        .Select(held => new RecordDocument(held.TermsVersion!, held.At)),
+                ])
+            : null);
+
+    /// <inheritdoc/>
+    public ValueTask<RecordStanding?> HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_records.TryGetValue(subject, out HeldRecord? record)
+            ? new RecordStanding(
+                record.Organization,
+                record.State,
+                record.DeletingBy,
+                record.DeletingSince,
+                record.AttachedTo is not null)
+            : null);
+
+    /// <inheritdoc/>
+    public ValueTask RectifyAsync(
+        SubjectId subject,
+        DisplayName? name,
+        string? language,
+        CancellationToken cancellationToken)
+    {
+        Enlist();
+
+        HeldRecord record = _records[subject];
+
+        record.Name = name ?? record.Name;
+        record.Language = language ?? record.Language;
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask BeginDeletionAsync(
+        SubjectId subject,
+        DeletionOrigin by,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Enlist();
+
+        HeldRecord record = _records[subject];
+
+        record.RestrictionHeld = record.State is PersonRecordState.Restricted;
+        record.State = PersonRecordState.Deleting;
+        record.DeletingBy = by;
+        record.DeletingSince = at;
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask CancelDeletionAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        Enlist();
+
+        HeldRecord record = _records[subject];
+
+        record.State = record.RestrictionHeld ? PersonRecordState.Restricted : PersonRecordState.Active;
+        record.DeletingBy = null;
+        record.DeletingSince = null;
+        record.RestrictionHeld = false;
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<RecordNoticeContacts?> NoticeContactsAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (!_records.TryGetValue(subject, out HeldRecord? record))
+        {
+            return ValueTask.FromResult<RecordNoticeContacts?>(null);
+        }
+
+        CollectedContact[] held = [.. record.Contacts.Values.OrderBy(contact => contact.Kind)];
+        CollectedContact[] verified = [.. held.Where(contact => contact.IsVerified)];
+
+        return ValueTask.FromResult<RecordNoticeContacts?>(
+            new RecordNoticeContacts(record.Language, verified.Length > 0 ? verified : held));
+    }
+
     private static ReachedRecord Reached(HeldRecord record) =>
         new(record.Subject, record.Organization, record.CreatedAt, record.State);
 

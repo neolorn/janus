@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A person a record access session reaches exercises their rights on each record under
+  `/records/access/{subject}`: its read, its export in both formats, its consents and
+  objections, a restriction or rectification request, a change of its name and
+  language, and its own deletion inside `record.deletion.grace` (30 days), raising
+  `RecordDeletionRequested` and `RecordDeletionCancelled` and sending
+  `record-deletion-notice`. Every message the privacy area sends a record goes to its
+  notice contacts, in its language.
 - A person reaches the person records held under their email or phone without an
   account, through `/records/access`: a code is asked for in a browser
   (`record-access-code`, or `record-access-none` by email where nothing is held, the

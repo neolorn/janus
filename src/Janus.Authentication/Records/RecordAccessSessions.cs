@@ -227,6 +227,44 @@ internal sealed class RecordAccessSessions(
     }
 
     /// <summary>
+    /// Whether an open session reaches one record, which is what every right exercised
+    /// on the record from the session asks first (REC-ACC-002).
+    /// </summary>
+    /// <param name="carried">The record access session the browser carries, or nothing.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The record as the session reaches it, or <c>auth.session.expired</c> where no
+    /// session is open, <c>identity.record.notfound</c> where the session does not reach
+    /// it, or reaches it no longer.
+    /// </returns>
+    public async ValueTask<Result<ReachedRecord>> ReachesAsync(
+        RecordAccessSessionId? carried,
+        SubjectId record,
+        CancellationToken cancellationToken)
+    {
+        if (carried is not RecordAccessSessionId named
+            || await sessions.FindAsync(named, cancellationToken).ConfigureAwait(false) is not RecordAccessSession found
+            || !Open(found))
+        {
+            return Result.Failure<ReachedRecord>(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        // Chapter 09 section 7a: a record the session never reached and one it reaches no
+        // longer are answered alike, so the answer says nothing of what else is held.
+        if (!found.Reached.Contains(record))
+        {
+            return Result.Failure<ReachedRecord>(Error.From(ErrorCodes.RecordNotFound));
+        }
+
+        return (await records
+                .InReachAsync([record], found.Kind, found.Fingerprints, cancellationToken)
+                .ConfigureAwait(false)) is [ReachedRecord reached]
+            ? Result.Success(reached)
+            : Result.Failure<ReachedRecord>(Error.From(ErrorCodes.RecordNotFound));
+    }
+
+    /// <summary>
     /// Adds every reachable record holding the session's value and a reference, whatever
     /// the age of the value's verification.
     /// </summary>

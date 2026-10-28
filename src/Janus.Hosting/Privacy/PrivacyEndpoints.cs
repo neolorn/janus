@@ -286,7 +286,7 @@ internal static class PrivacyEndpoints
             arrangement);
     }
 
-    private static Func<SubjectExport, IResult>? Arranged(string? format) => format switch
+    internal static Func<SubjectExport, IResult>? Arranged(string? format) => format switch
     {
         "human" => Readable,
         "machine" => Portable,
@@ -544,7 +544,7 @@ internal static class PrivacyEndpoints
 
     // 10 section 5.12c gives the three spellings, and a body carrying anything else
     // is malformed rather than a request for something the library does not do.
-    private static PrivacyRequestType? Asked(string? type) => type switch
+    internal static PrivacyRequestType? Asked(string? type) => type switch
     {
         "restriction" => PrivacyRequestType.Restriction,
         "rectification" => PrivacyRequestType.Rectification,
@@ -552,7 +552,7 @@ internal static class PrivacyEndpoints
         _ => null,
     };
 
-    private static IResult Receipted(PrivacyRequestReceipt receipt) =>
+    internal static IResult Receipted(PrivacyRequestReceipt receipt) =>
         TypedResults.Json(
             new PrivacyReceiptView(
                 receipt.RequestId.Value,
@@ -632,14 +632,14 @@ internal static class PrivacyEndpoints
             contentType: null,
             StatusCodes.Status200OK);
 
-    private static IResult Held(IReadOnlyList<ConsentRecord> records) =>
+    internal static IResult Held(IReadOnlyList<ConsentRecord> records) =>
         TypedResults.Json(
             (IReadOnlyList<ConsentView>)[.. records.Select(ConsentView.Of)],
             PrivacyJson.Default.IReadOnlyListConsentView,
             contentType: null,
             StatusCodes.Status200OK);
 
-    private static IResult Standing(IReadOnlyList<ObjectionRecord> records) =>
+    internal static IResult Standing(IReadOnlyList<ObjectionRecord> records) =>
         TypedResults.Json(
             (IReadOnlyList<ObjectionView>)[.. records.Select(ObjectionView.Of)],
             PrivacyJson.Default.IReadOnlyListObjectionView,

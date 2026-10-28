@@ -17,8 +17,8 @@ using Xunit;
 namespace Janus.Storage.Tests.Authentication;
 
 /// <summary>
-/// The person records a collection reads and writes and staff enter, as the database
-/// keeps them (REC-COL-002, REC-COL-003).
+/// The person records a collection reads and writes, staff enter and a person changes,
+/// as the database keeps them (REC-COL-002, REC-COL-003, REC-ACC-002).
 /// </summary>
 /// <remarks>The port implementations are tested against the real database (D-156).</remarks>
 [Trait("kind", "integration")]
@@ -312,6 +312,121 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
+    /// <summary>
+    /// REC-ACC-002: a record is read as the person reads it, its contacts with when each
+    /// was verified, its age answer without the date of birth, and the notice and terms
+    /// versions its collection recorded.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ACC_002_ARecordIsReadAsThePersonReadsItAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId subject = Subjects.New();
+
+        await WrittenAsync(Person(subject, organization, created: true) with
+        {
+            Age = new CollectedAge(AdultAffirmed: true, Group: null, new DateOnly(1990, 4, 1), Noon),
+            TermsVersion = "7",
+        });
+
+        await using StoreContext reading = database.Context();
+
+        ReadRecord read = Assert.IsType<ReadRecord>(
+            await Directory(reading).ReadAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (organization, PersonRecordOrigin.Collection, PersonRecordState.Active, "en"),
+            (read.Organization, read.Origin, read.State, read.Language));
+        Assert.Equal(new CollectedContact(IdentifierKind.Phone, Number, Noon), Assert.Single(read.Contacts));
+        Assert.Equal(new RecordAge(AdultAffirmed: true, Group: null, Noon), read.Age);
+        Assert.Equal(new RecordDocument("1", Noon), Assert.Single(read.Notices));
+        Assert.Equal(new RecordDocument("7", Noon), Assert.Single(read.Terms));
+    }
+
+    /// <summary>
+    /// REC-ACC-002, REC-REC-002: a record held for a change takes a new name and language,
+    /// begins its own deletion holding the restriction it is under, and returns
+    /// restricted when the deletion is cancelled.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ACC_002_ARecordHeldForAChangeIsRectifiedAndItsDeletionCancelledAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId subject = Subjects.New();
+
+        await WrittenAsync(Person(subject, organization, created: true));
+
+        Assert.True(DisplayName.TryParse("Mona Saleh", out DisplayName name));
+
+        RecordStanding? active = await HeldAsync(
+            subject,
+            directory => directory.RectifyAsync(subject, name, "ar", TestContext.Current.CancellationToken));
+
+        await ChangedAsync(subject, record => record.Restrict());
+
+        RecordStanding? restricted = await HeldAsync(
+            subject,
+            directory => directory.BeginDeletionAsync(subject, DeletionOrigin.Self, Noon, TestContext.Current.CancellationToken));
+        RecordStanding? deleting = await HeldAsync(
+            subject,
+            directory => directory.CancelDeletionAsync(subject, TestContext.Current.CancellationToken));
+        RecordStanding? returned = await HeldAsync(subject, _ => ValueTask.CompletedTask);
+
+        await using StoreContext reading = database.Context();
+
+        ReadRecord read = Assert.IsType<ReadRecord>(
+            await Directory(reading).ReadAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal(("Mona Saleh", "ar"), (read.Name, read.Language));
+        Assert.Equal(
+            [PersonRecordState.Active, PersonRecordState.Restricted, PersonRecordState.Deleting, PersonRecordState.Restricted],
+            new[] { active, restricted, deleting, returned }.Select(standing => standing!.State));
+        Assert.Equal((DeletionOrigin.Self, Noon), (deleting!.DeletingBy, deleting.DeletingSince));
+    }
+
+    /// <summary>
+    /// REC-ACC-002: a record's notice contacts are those verified at a collection, or,
+    /// where none was, every contact it holds, with the record's language.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ACC_002_TheNoticeContactsAreTheVerifiedOnesOrEveryOneAsync()
+    {
+        const string address = "guest@example.test";
+
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId verified = Subjects.New();
+        SubjectId unverified = Subjects.New();
+
+        await WrittenAsync(Person(verified, organization, created: true) with
+        {
+            Contacts =
+            [
+                new CollectedContact(IdentifierKind.Phone, Number, Noon),
+                new CollectedContact(IdentifierKind.Email, address, VerifiedAt: null),
+            ],
+        });
+        await WrittenAsync(Person(unverified, organization, created: true) with
+        {
+            Language = "ar",
+            Contacts = [new CollectedContact(IdentifierKind.Email, address, VerifiedAt: null)],
+        });
+
+        await using StoreContext reading = database.Context();
+        RecordDirectory directory = Directory(reading);
+
+        RecordNoticeContacts first = Assert.IsType<RecordNoticeContacts>(
+            await directory.NoticeContactsAsync(verified, TestContext.Current.CancellationToken));
+        RecordNoticeContacts second = Assert.IsType<RecordNoticeContacts>(
+            await directory.NoticeContactsAsync(unverified, TestContext.Current.CancellationToken));
+
+        Assert.Equal(("en", Number), (first.Language, Assert.Single(first.Contacts).Value));
+        Assert.Equal(("ar", address), (second.Language, Assert.Single(second.Contacts).Value));
+        Assert.Null(await directory.NoticeContactsAsync(Subjects.New(), TestContext.Current.CancellationToken));
+    }
+
     private static CollectedPerson Person(
         SubjectId subject,
         OrganizationId organization,
@@ -360,6 +475,24 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
 
         await records.RecordAsync(record, TestContext.Current.CancellationToken);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    // A change as the rights make it: the record held under its lock, where it stands
+    // read there, and the change written in the same transaction.
+    private async Task<RecordStanding?> HeldAsync(SubjectId subject, Func<RecordDirectory, ValueTask> change)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        RecordDirectory directory = Directory(context);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        RecordStanding? standing = await directory.HoldAsync(subject, TestContext.Current.CancellationToken);
+
+        await change(directory);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return standing;
     }
 
     // The collection's decision as the service makes it: the value locked, the records

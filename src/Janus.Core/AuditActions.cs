@@ -436,6 +436,13 @@ public static class AuditActions
     public static AuditAction RecordAccessed { get; } = AuditAction.Parse("identity.record.accessed");
 
     /// <summary>
+    /// A person record's name, language or contacts were changed, recorded by field and
+    /// never by value, the record its subject.
+    /// </summary>
+    /// <remarks>Implements REC-ACC-002, REC-ADM-002, chapter 10 section 5.</remarks>
+    public static AuditAction RecordChanged { get; } = AuditAction.Parse("identity.record.changed");
+
+    /// <summary>
     /// A social provider's security event naming a linked credential was refused: it
     /// was not signed by the provider's published keys, or it had been carried before.
     /// </summary>

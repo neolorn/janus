@@ -44,4 +44,10 @@ internal sealed class ExportSourceInMemory : IExportSource
         return ValueTask.FromResult<IReadOnlyList<ExportSection>>(
             _sections.TryGetValue(subject, out List<ExportSection>? held) ? held : []);
     }
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<ExportSection>> RecordSectionsAsync(
+        SubjectId record,
+        CancellationToken cancellationToken) =>
+        SectionsAsync(record, cancellationToken);
 }

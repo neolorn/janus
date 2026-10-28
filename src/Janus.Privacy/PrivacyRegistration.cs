@@ -71,7 +71,8 @@ internal static class PrivacyRegistration
 
         services.AddScoped<DeletionSweep>();
         services.AddScoped<OrganizationErasureSweep>();
-        services.AddScoped<IExports, ExportService>();
+        services.AddScoped<ExportService>();
+        services.AddScoped<IExports>(provider => provider.GetRequiredService<ExportService>());
         services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         services.AddScoped<LawfulBasisSeed>();
         services.AddScoped<IAuditTrail, AuditTrailService>();
