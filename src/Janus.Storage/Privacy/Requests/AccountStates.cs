@@ -17,14 +17,14 @@ namespace Janus.Storage.Privacy.Requests;
 /// the identity area.
 /// </summary>
 /// <param name="accounts">Where accounts are read and their transitions carried.</param>
-/// <param name="records">Where a person record a request names is restricted.</param>
+/// <param name="records">Where a person record a request names is restricted, and its deletion read.</param>
 /// <param name="sessions">What a restriction or a takedown ends in the transaction that makes it.</param>
 /// <param name="events">Where each session a restriction or a takedown ends is announced.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-004, IDN-LIFE-003, AUTH-SESS-010, REC-ACC-002 and
-/// CONV-DESIGN-003. The
-/// transitions are the account aggregate's, so a state this adapter cannot reach from
-/// is refused there and answered here as no change.
+/// Implements PRIV-RIGHT-004, IDN-LIFE-003, AUTH-SESS-010, REC-ACC-002, REC-REC-003
+/// and CONV-DESIGN-003. The transitions are the account aggregate's and the person
+/// record's, so a state this adapter cannot reach from is refused there and answered
+/// here as no change.
 /// </remarks>
 internal sealed class AccountStates(
     IAccountStore accounts,
@@ -129,6 +129,11 @@ internal sealed class AccountStates(
             .DeletingSinceAsync(before, cancellationToken)
             .ConfigureAwait(false);
 
+        // REC-REC-003: a person record's window closes into the same erasure.
+        IReadOnlyList<PersonRecord> erasing = await records
+            .DeletingSinceAsync(before, cancellationToken)
+            .ConfigureAwait(false);
+
         return
         [
             .. deleting
@@ -138,6 +143,16 @@ internal sealed class AccountStates(
                     account.DeletingBy!.Value,
                     account.DeletingSince!.Value,
                     account.DeletionHeldSince)),
+            .. erasing
+                .Where(record => record.DeletingBy is not null && record.DeletingSince is not null)
+                .Select(record => new PendingDeletion(
+                    record.Subject,
+                    record.DeletingBy!.Value,
+                    record.DeletingSince!.Value,
+                    record.DeletionHeldSince)
+                {
+                    IsPersonRecord = true,
+                }),
         ];
     }
 

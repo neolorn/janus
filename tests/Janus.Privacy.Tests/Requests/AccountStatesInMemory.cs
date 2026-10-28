@@ -143,10 +143,11 @@ internal sealed class AccountStatesInMemory : IAccountStates
     /// <param name="subject">Whose.</param>
     /// <param name="origin">What began it.</param>
     /// <param name="since">When the window began.</param>
-    public void Deletes(SubjectId subject, DeletionOrigin origin, DateTimeOffset since)
+    /// <param name="personRecord">Whether the subject is a person record's.</param>
+    public void Deletes(SubjectId subject, DeletionOrigin origin, DateTimeOffset since, bool personRecord = false)
     {
         _states[subject] = AccountState.Deleting;
-        _deletions[subject] = new PendingDeletion(subject, origin, since, HeldSince: null);
+        _deletions[subject] = new PendingDeletion(subject, origin, since, HeldSince: null) { IsPersonRecord = personRecord };
     }
 
     /// <summary>

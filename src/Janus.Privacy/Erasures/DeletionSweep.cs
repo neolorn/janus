@@ -22,9 +22,9 @@ namespace Janus.Privacy.Erasures;
 /// <param name="work">The one transaction each account is carried in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-LIFE-014, IDN-LIFE-003, IDN-ACCT-007, PRIV-RIGHT-005 and INF-BG-002.
-/// Nothing here waits on a human: the window is the whole of the decision, and an
-/// account that reaches its end without a cancellation or a reversal is erased. One
+/// Implements IDN-LIFE-014, IDN-LIFE-003, IDN-ACCT-007, PRIV-RIGHT-005, INF-BG-002 and
+/// REC-REC-003. Nothing here waits on a human: the window is the whole of the decision,
+/// and an account that reaches its end without a cancellation or a reversal is erased. One
 /// account per transaction, so a deployment that falls over mid-pass has erased whole
 /// accounts and begun none.
 /// </remarks>
@@ -65,8 +65,10 @@ internal sealed class DeletionSweep(
         foreach (PendingDeletion deletion in elapsed)
         {
             // IDN-LIFE-003: a takedown borrows the deletion timer and not its length,
-            // so each window is measured by its own key.
-            if (windows.ErasureDue(deletion.By, deletion.Since, deletion.HeldSince) > now)
+            // so each window is measured by its own key; a person record's own by
+            // record.deletion.grace (REC-REC-002).
+            if ((deletion.IsPersonRecord ? windows.ForRecords : windows)
+                    .ErasureDue(deletion.By, deletion.Since, deletion.HeldSince) > now)
             {
                 continue;
             }

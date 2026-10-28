@@ -13,6 +13,7 @@ using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
@@ -131,6 +132,7 @@ public sealed class UsernameHoldTests(DatabaseFixture database) : IClassFixture<
             new ConfigurationStore(erasing, new DataConnections(erasing)),
             new DataConnections(erasing),
             Identifiers(erasing),
+            new PersonRecordStore(erasing, _deployment.Ring, _deployment.Randomness),
             new EventOutbox(new PendingEvents(erasing), work));
 
         await work.BeginAsync(TestContext.Current.CancellationToken);

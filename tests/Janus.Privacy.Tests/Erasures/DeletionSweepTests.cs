@@ -67,6 +67,32 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-REC-002, REC-REC-003: a person record's own deletion is erased when
+    /// <c>record.deletion.grace</c> elapses, and not when an account's window would, its
+    /// erasure announced naming the record's subject.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_REC_003_ARecordsDeletionIsErasedWhenItsOwnWindowElapsesAsync()
+    {
+        _configuration.Set(Settings.RecordDeletionGrace, TimeSpan.FromDays(10));
+        _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon, personRecord: true);
+        _accounts.Deletes(Noura, DeletionOrigin.Self, Noon);
+
+        _clock.Advance(TimeSpan.FromDays(10) - TimeSpan.FromMinutes(1));
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+        Assert.Equal((Ahmed, ErasureReason.ErasureRequest), (Assert.Single(_eraser.Erased).Subject, _eraser.Erased[0].Reason));
+        Assert.Equal(
+            (Ahmed, SubjectEventKind.ErasureRequested),
+            (Assert.Single(_outbox.Deliveries).Subject, _outbox.Deliveries[0].Kind));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC7: a background pass returns no result, so a transaction that
     /// does not open, or does not commit, is thrown as a fault naming the failure's code.
     /// </summary>

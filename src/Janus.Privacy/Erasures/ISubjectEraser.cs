@@ -11,16 +11,18 @@ namespace Janus.Privacy.Erasures;
 /// </summary>
 /// <remarks>
 /// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, IDN-LIFE-003b,
-/// IDN-LIFE-014, IDN-ACCT-002 and CONV-DESIGN-003. It is one port rather than a call
-/// per table because IDN-LIFE-003b AC4 admits exactly two outcomes: no row at all, or
-/// a row whose key destruction and fingerprint neutralisation committed with it.
+/// IDN-LIFE-014, IDN-ACCT-002, REC-REC-003 and CONV-DESIGN-003. It is one port rather
+/// than a call per table because IDN-LIFE-003b AC4 admits exactly two outcomes: no row
+/// at all, or a row whose key destruction and fingerprint neutralisation committed with
+/// it.
 /// </remarks>
 internal interface ISubjectEraser
 {
     /// <summary>
-    /// Erases a subject: the account reaches <c>deleted</c>, its wrapped key is
-    /// overwritten with an irreversible value, its fingerprints are neutralised, its
-    /// photo is removed, and the erasure is recorded.
+    /// Erases a subject: the account or the person record reaches <c>deleted</c>, its
+    /// wrapped key is overwritten with an irreversible value, its fingerprints are
+    /// neutralised, an account's photo is removed, and the erasure is recorded
+    /// (REC-REC-003).
     /// </summary>
     /// <param name="subject">Whose fields to erase.</param>
     /// <param name="reason">Why the erasure is happening.</param>
@@ -28,7 +30,8 @@ internal interface ISubjectEraser
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The erasure, with the host-side work outstanding.</returns>
     /// <exception cref="InvalidOperationException">
-    /// The subject has no account, has no key, or has already been erased.
+    /// The subject has neither an account nor a person record, has no key, or has already
+    /// been erased.
     /// </exception>
     ValueTask<Erasure> EraseAsync(
         SubjectId subject,
@@ -39,7 +42,7 @@ internal interface ISubjectEraser
     /// <summary>
     /// Erases a subject again after a restore to a point before its erasure: the same
     /// writes as <see cref="EraseAsync"/>, from whatever state the restore left the
-    /// account in (DR-016).
+    /// account or the record in (DR-016).
     /// </summary>
     /// <param name="subject">Whose fields to erase.</param>
     /// <param name="reason">Why the erasure happened, as the ledger records it.</param>
@@ -48,7 +51,8 @@ internal interface ISubjectEraser
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The erasure, with the host-side work outstanding.</returns>
     /// <exception cref="InvalidOperationException">
-    /// The subject has no account, has no key, or has already been erased.
+    /// The subject has neither an account nor a person record, has no key, or has already
+    /// been erased.
     /// </exception>
     ValueTask<Erasure> ReapplyAsync(
         SubjectId subject,

@@ -40,7 +40,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     : IClassFixture<DatabaseFixture>, IDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 23, 12, 0, 0, TimeSpan.Zero);
-    private static readonly DeletionWindows Windows = new(TimeSpan.FromDays(30), TimeSpan.FromDays(30));
+    private static readonly DeletionWindows Windows = new(TimeSpan.FromDays(30), TimeSpan.FromDays(30), TimeSpan.FromDays(30));
     private static readonly DateTimeOffset Due = Noon + TimeSpan.FromDays(30);
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
@@ -677,6 +677,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             new ConfigurationStore(context, new DataConnections(context)),
             new DataConnections(context),
             new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+            new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
             new EventOutbox(new PendingEvents(context), work));
 
     // The second transaction is waiting on the account row the first holds, as the

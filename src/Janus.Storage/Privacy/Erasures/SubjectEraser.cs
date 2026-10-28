@@ -9,6 +9,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Identity.Accounts;
 using Janus.Identity.Identifiers;
+using Janus.Identity.Records;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Factors;
@@ -17,6 +18,7 @@ using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,10 +32,11 @@ namespace Janus.Storage.Privacy.Erasures;
 /// <param name="configuration">Where the username hold's length is read.</param>
 /// <param name="connections">Where the grant counter statement takes its connection from.</param>
 /// <param name="identifiers">Where the subject's username is read and its lock is taken.</param>
+/// <param name="records">Where a person record the erasure names is held and carried.</param>
 /// <param name="events">Where each session the erasure ends, and each grant it revokes, is announced.</param>
 /// <remarks>
 /// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, REG-IDENT-009,
-/// IDN-LIFE-003b, IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003 and DR-016. Every write here is made on one
+/// IDN-LIFE-003b, IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003, REC-REC-003 and DR-016. Every write here is made on one
 /// context and committed by the caller's unit of work, so the three writes and the
 /// erasures row reach the database together or not at all. No row is removed: the
 /// photo's bytes are held under the same key as every other personal field, so
@@ -47,6 +50,7 @@ internal sealed class SubjectEraser(
     IConfigurationStore configuration,
     DataConnections connections,
     IIdentifierStore identifiers,
+    IPersonRecordStore records,
     IEvents events) : ISubjectEraser
 {
     // IDN-LIFE-014: no person revokes an erased account's grants, so the nil subject
@@ -61,7 +65,13 @@ internal sealed class SubjectEraser(
         ErasureReason reason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        ErasedAsync(subject, reason, at, account => account.MarkErased(), cancellationToken);
+        ErasedAsync(
+            subject,
+            reason,
+            at,
+            account => account.MarkErased(),
+            record => record.MarkErased(),
+            cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Erasure> ReapplyAsync(
@@ -70,13 +80,20 @@ internal sealed class SubjectEraser(
         DeletionOrigin by,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        ErasedAsync(subject, reason, at, account => account.ReapplyErasure(by, at), cancellationToken);
+        ErasedAsync(
+            subject,
+            reason,
+            at,
+            account => account.ReapplyErasure(by, at),
+            record => record.ReapplyErasure(),
+            cancellationToken);
 
     private async ValueTask<Erasure> ErasedAsync(
         SubjectId subject,
         ErasureReason reason,
         DateTimeOffset at,
         Action<Account> erased,
+        Action<PersonRecord> recordErased,
         CancellationToken cancellationToken)
     {
         if (await context.Erasures.FindAsync([subject], cancellationToken).ConfigureAwait(false)
@@ -85,13 +102,28 @@ internal sealed class SubjectEraser(
             throw new InvalidOperationException("The subject has already been erased.");
         }
 
-        await EndSessionsAsync(subject, at, cancellationToken).ConfigureAwait(false);
-        await MarkErasedAsync(subject, erased, cancellationToken).ConfigureAwait(false);
-        await RevokeGrantsAsync(subject, at, cancellationToken).ConfigureAwait(false);
-        await HoldUsernameAsync(subject, at, cancellationToken).ConfigureAwait(false);
-        await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
-        await EraseOutstandingMessagesAsync(subject, cancellationToken).ConfigureAwait(false);
-        await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
+        // REC-REC-003: a person record's erasure is an account's over the record's own
+        // rows. It holds no session, grant or username, and its row is held first, as an
+        // account's is, so a cancellation at the window's end is decided before it.
+        if (await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false) is PersonRecord record)
+        {
+            recordErased(record);
+
+            await records.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+            await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
+            await EraseOutstandingMessagesAsync(subject, cancellationToken).ConfigureAwait(false);
+            await NeutraliseRecordFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await EndSessionsAsync(subject, at, cancellationToken).ConfigureAwait(false);
+            await MarkErasedAsync(subject, erased, cancellationToken).ConfigureAwait(false);
+            await RevokeGrantsAsync(subject, at, cancellationToken).ConfigureAwait(false);
+            await HoldUsernameAsync(subject, at, cancellationToken).ConfigureAwait(false);
+            await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
+            await EraseOutstandingMessagesAsync(subject, cancellationToken).ConfigureAwait(false);
+            await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
+        }
 
         var erasure = Erasure.Begun(subject, at, reason);
 
@@ -357,6 +389,32 @@ internal sealed class SubjectEraser(
             // The erased value of a wrapped key held with no marker: 32 zero bytes alone.
             invitation.WrappedKey = new byte[PersonalDataFormat.DataKeyLength];
             invitation.EncryptedIdentifiers = null;
+        }
+    }
+    // PRIV-RIGHT-005c, REC-REC-003: a record's contacts and references are found by
+    // their fingerprints alone, so neutralising them leaves nothing that matches.
+    private async ValueTask NeutraliseRecordFingerprintsAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        List<RecordContactRow> contacts = await context.PersonRecordContacts
+            .Where(contact => contact.Subject == subject)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (RecordContactRow contact in contacts)
+        {
+            contact.Fingerprint = Fingerprint.Neutralised();
+        }
+
+        List<RecordReferenceRow> references = await context.PersonRecordReferences
+            .Where(reference => reference.Subject == subject)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (RecordReferenceRow reference in references)
+        {
+            reference.Fingerprint = Fingerprint.Neutralised();
         }
     }
 }
