@@ -686,13 +686,15 @@ Janus.Core.ConsentRecord.WithdrawnAt.get -> System.DateTimeOffset?
 Janus.Core.ConsentRecord.WithdrawnAt.init -> void
 Janus.Core.ContactDetail
 Janus.Core.ContactDetail.<Clone>$() -> Janus.Core.ContactDetail!
-Janus.Core.ContactDetail.ContactDetail(string? DisplayName, string? Email, string? Phone, string? Language, string? TimeZone, Janus.Core.AccountState State) -> void
-Janus.Core.ContactDetail.Deconstruct(out string? DisplayName, out string? Email, out string? Phone, out string? Language, out string? TimeZone, out Janus.Core.AccountState State) -> void
+Janus.Core.ContactDetail.ContactDetail(Janus.Core.SubjectKind Kind, string? DisplayName, string? Email, string? Phone, string? Language, string? TimeZone, Janus.Core.AccountState State) -> void
+Janus.Core.ContactDetail.Deconstruct(out Janus.Core.SubjectKind Kind, out string? DisplayName, out string? Email, out string? Phone, out string? Language, out string? TimeZone, out Janus.Core.AccountState State) -> void
 Janus.Core.ContactDetail.DisplayName.get -> string?
 Janus.Core.ContactDetail.DisplayName.init -> void
 Janus.Core.ContactDetail.Email.get -> string?
 Janus.Core.ContactDetail.Email.init -> void
 Janus.Core.ContactDetail.Equals(Janus.Core.ContactDetail? other) -> bool
+Janus.Core.ContactDetail.Kind.get -> Janus.Core.SubjectKind
+Janus.Core.ContactDetail.Kind.init -> void
 Janus.Core.ContactDetail.Language.get -> string?
 Janus.Core.ContactDetail.Language.init -> void
 Janus.Core.ContactDetail.Phone.get -> string?
@@ -3282,17 +3284,22 @@ Janus.Core.SubjectId.Equals(Janus.Core.SubjectId other) -> bool
 Janus.Core.SubjectId.SubjectId() -> void
 Janus.Core.SubjectId.SubjectId(System.Guid value) -> void
 Janus.Core.SubjectId.Value.get -> System.Guid
+Janus.Core.SubjectKind
+Janus.Core.SubjectKind.Account = 0 -> Janus.Core.SubjectKind
+Janus.Core.SubjectKind.Record = 1 -> Janus.Core.SubjectKind
 Janus.Core.SubjectStanding
 Janus.Core.SubjectStanding.<Clone>$() -> Janus.Core.SubjectStanding!
 Janus.Core.SubjectStanding.Consents.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ConsentRecord!>!
 Janus.Core.SubjectStanding.Consents.init -> void
-Janus.Core.SubjectStanding.Deconstruct(out Janus.Core.AccountState State, out System.Collections.Generic.IReadOnlyList<Janus.Core.ConsentRecord!>! Consents, out System.Collections.Generic.IReadOnlyList<Janus.Core.ObjectionRecord!>! Objections) -> void
+Janus.Core.SubjectStanding.Deconstruct(out Janus.Core.SubjectKind Kind, out Janus.Core.AccountState State, out System.Collections.Generic.IReadOnlyList<Janus.Core.ConsentRecord!>! Consents, out System.Collections.Generic.IReadOnlyList<Janus.Core.ObjectionRecord!>! Objections) -> void
 Janus.Core.SubjectStanding.Equals(Janus.Core.SubjectStanding? other) -> bool
+Janus.Core.SubjectStanding.Kind.get -> Janus.Core.SubjectKind
+Janus.Core.SubjectStanding.Kind.init -> void
 Janus.Core.SubjectStanding.Objections.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ObjectionRecord!>!
 Janus.Core.SubjectStanding.Objections.init -> void
 Janus.Core.SubjectStanding.State.get -> Janus.Core.AccountState
 Janus.Core.SubjectStanding.State.init -> void
-Janus.Core.SubjectStanding.SubjectStanding(Janus.Core.AccountState State, System.Collections.Generic.IReadOnlyList<Janus.Core.ConsentRecord!>! Consents, System.Collections.Generic.IReadOnlyList<Janus.Core.ObjectionRecord!>! Objections) -> void
+Janus.Core.SubjectStanding.SubjectStanding(Janus.Core.SubjectKind Kind, Janus.Core.AccountState State, System.Collections.Generic.IReadOnlyList<Janus.Core.ConsentRecord!>! Consents, System.Collections.Generic.IReadOnlyList<Janus.Core.ObjectionRecord!>! Objections) -> void
 Janus.Core.SubjectType
 Janus.Core.SubjectType.Group = 1 -> Janus.Core.SubjectType
 Janus.Core.SubjectType.User = 0 -> Janus.Core.SubjectType

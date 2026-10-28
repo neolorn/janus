@@ -520,6 +520,7 @@ GET /admin/accounts/{subject}
 GET /admin/accounts/{subject}/contact
   200
     application/json
+      kind: SubjectKind
       displayName: string
       email: string
       phone: string
@@ -596,6 +597,7 @@ POST /admin/accounts/{subject}/sessions/revoke
 GET /admin/accounts/{subject}/standing
   200
     application/json
+      kind: SubjectKind
       state: AccountState
       consents[].purpose: string
       consents[].document: string

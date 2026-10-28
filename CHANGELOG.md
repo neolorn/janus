@@ -10,6 +10,7 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+The contact and standing reads, `IAccounts.ContactAsync` and `IConsents.StandingAsync`, answer a person record's subject as they answer an account's, each answer naming its `kind` (`account` or `record`); a record's contact read carries its name, its contacts as held, verified or not, its language, its state and no time zone. An organization's reach takes in the person records it holds.
 Staff holding `record:read` in an organization find the person records it holds by an email or a phone, read in its canonical form, or by a reference, at `POST /admin/records/find` and `IPersonRecords.FindAsync`.
 A person record's deletion window, `record.deletion.grace`, closing erases the record as an account's erasure does: its key destroyed, its contact and reference fingerprints neutralised, its row kept `deleted` beside an erasures row, and `ErasureRequested` naming its subject.
 - A person a record access session reaches exercises their rights on each record under

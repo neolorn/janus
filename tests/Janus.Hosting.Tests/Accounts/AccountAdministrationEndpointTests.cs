@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Records;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -315,6 +318,44 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-ADM-001 AC3 and chapter 09 section 8a (D-221): the contact read of a person
+    /// record's subject answers <c>kind</c> <c>record</c>, its name, its contacts as held,
+    /// its language, its state and a null time zone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_001_AC3_TheContactReadOfARecordNamesItsKindAsync()
+    {
+        var shop = OrganizationId.New(_deployment.Clock);
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId clerk = _deployment.Directory.Created[^1].Subject;
+        var subject = new SubjectId(Guid.CreateVersion7(_deployment.Clock.GetUtcNow()));
+
+        _deployment.Organizations.Seed(shop);
+        _deployment.Records.Hold(new HeldRecord(subject, shop, _deployment.Clock.GetUtcNow())
+        {
+            Language = "ar",
+            Contacts =
+            {
+                [IdentifierKind.Phone] = new CollectedContact(IdentifierKind.Phone, "+441632960021", VerifiedAt: null),
+            },
+        });
+        _deployment.Ties.Tie(subject, shop);
+        _deployment.Gate.Grant(clerk, shop, Permissions.ContactRead);
+
+        Answer contact = await browser.SendAsync("GET", PathOf(subject, "contact?organization=" + shop.Value));
+
+        Assert.Equal(StatusCodes.Status200OK, contact.Status);
+        Assert.Equal(
+            ("record", "+441632960021", "ar", "active"),
+            (contact.Text("kind"), contact.Text("phone"), contact.Text("language"), contact.Text("state")));
+        Assert.Equal(
+            JsonValueKind.Null,
+            contact.Json().GetProperty("timeZone").ValueKind);
+        Assert.Equal(JsonValueKind.Null, contact.Json().GetProperty("email").ValueKind);
+    }
+
+    /// <summary>
     /// IDN-READ-003 and chapter 09 section 8a (D-218): a holder of the reads in an
     /// organization reads the account of a person tied to it in the shape the row gives,
     /// finds it by its email address carried in the body, and reads its contact details.
@@ -352,7 +393,7 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.Equal(member.Subject.Value, found.Json().GetProperty("subject").GetGuid());
         Assert.Equal(StatusCodes.Status200OK, contact.Status);
         Assert.Equal("ann@example.test", contact.Text("email"));
-        Assert.Equal("active", contact.Text("state"));
+        Assert.Equal(("account", "active"), (contact.Text("kind"), contact.Text("state")));
     }
 
     /// <summary>
@@ -420,7 +461,7 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
             "GET", PathOf(SubjectId.New(_randomness), "standing?organization=" + shop.Value));
 
         Assert.Equal(StatusCodes.Status200OK, standing.Status);
-        Assert.Equal("restricted", standing.Text("state"));
+        Assert.Equal(("account", "restricted"), (standing.Text("kind"), standing.Text("state")));
         Assert.Equal(
             "recommendations",
             standing.Json().GetProperty("consents")[0].GetProperty("purpose").GetString());

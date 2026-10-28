@@ -243,6 +243,56 @@ public sealed class AccountReadTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// REC-ADM-001 AC1 and AC3 (D-221): a holder of <c>contact:read</c> and
+    /// <c>consent:read</c> in an organization reads the contact details and the standing
+    /// of a person record it holds, each naming its kind <c>record</c>, and is answered
+    /// <c>identity.account.notfound</c> for a record another organization holds alone,
+    /// exactly as for a subject nothing bears.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ADM_001_AC3_TheReadsOfARecordNameItsKindWithinTheReachAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+        var elsewhere = new Deployment(host);
+
+        RoleName reading = await deployment.BeginAsync([Permissions.ContactRead, Permissions.ConsentRead], cancellationToken);
+        _ = await elsewhere.BeginAsync([], cancellationToken);
+
+        SubjectId clerk = await deployment.AccountAsync(cancellationToken);
+        SubjectId record = await deployment.PersonRecordAsync(cancellationToken);
+        SubjectId stranger = await elsewhere.PersonRecordAsync(cancellationToken);
+        _ = await deployment.GrantAsync(
+            GrantSubject.Of(clerk), reading, null, false, null, null, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IAccounts accounts = scope.ServiceProvider.GetRequiredService<IAccounts>();
+        IConsents consents = scope.ServiceProvider.GetRequiredService<IConsents>();
+        var asking = AccessContext.Of(clerk);
+
+        ContactDetail contact = Read(await accounts.ContactAsync(asking, record, deployment.Organization, cancellationToken));
+        SubjectStanding standing = Read(await consents.StandingAsync(asking, record, deployment.Organization, cancellationToken));
+
+        Assert.Equal(
+            new ContactDetail(SubjectKind.Record, null, null, null, "en", null, AccountState.Active),
+            contact);
+        Assert.Equal((SubjectKind.Record, AccountState.Active), (standing.Kind, standing.State));
+
+        Error nobody = Refusal(await accounts.ContactAsync(
+            asking, new SubjectId(Guid.NewGuid()), deployment.Organization, cancellationToken));
+
+        foreach (Error beyond in new[]
+        {
+            Refusal(await accounts.ContactAsync(asking, stranger, deployment.Organization, cancellationToken)),
+            Refusal(await consents.StandingAsync(asking, stranger, deployment.Organization, cancellationToken)),
+        })
+        {
+            Assert.Equal((nobody.Code, nobody.Details), (beyond.Code, beyond.Details));
+        }
+    }
+
+    /// <summary>
     /// IDN-READ-003 AC5 (D-218): an administrator's setting of another person's
     /// preferences is written to the trail as <c>identity.preferences.changed</c>, the
     /// administrator acting, the person the subject and the reason in

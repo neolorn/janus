@@ -188,6 +188,9 @@ internal sealed class AccountStates(
                 record.DeletingSince,
                 record.DeletionHeldSince,
                 Emergency: false)
+            {
+                IsPersonRecord = true,
+            }
             : null;
     }
 

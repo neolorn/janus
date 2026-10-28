@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -32,6 +34,7 @@ namespace Janus.Authentication.Accounts;
 /// <param name="photos">Where the photo an account shows is read.</param>
 /// <param name="reach">Where a read is asked, and which accounts it reaches.</param>
 /// <param name="identifiers">Where an account's identifiers are read and found.</param>
+/// <param name="records">Where a person record's contact is read.</param>
 /// <param name="memberships">Which organizations an account is a current member of.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
 /// <param name="volume">Where the accounts a person reads are counted.</param>
@@ -39,7 +42,7 @@ namespace Janus.Authentication.Accounts;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements IDN-LIFE-013, AUTH-SESS-010, PRIV-RIGHT-004, IDN-AUD-001, IDN-READ-003,
-/// IDN-READ-004, REG-PREF-001 and chapter 09 section 8a. The grants of a suspended
+/// IDN-READ-004, REG-PREF-001, REC-ADM-001 and chapter 09 section 8a. The grants of a suspended
 /// account are left in place, which is what lets reactivation restore them exactly; the
 /// gate confers nothing on an account that is not active.
 /// </remarks>
@@ -56,6 +59,7 @@ internal sealed class AccountAdministration(
     ProfilePhotos photos,
     AccountReach reach,
     IIdentifierDirectory identifiers,
+    IRecordDirectory records,
     IMembershipLookup memberships,
     PreferenceDeclarations declarations,
     IReadVolume volume,
@@ -607,6 +611,14 @@ internal sealed class AccountAdministration(
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // REC-ADM-001: a person record's subject is answered as an account's is, the
+        // answer naming its kind.
+        if (await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false) is RecordStanding standing)
+        {
+            return await RecordContactAsync(context, subject, standing, organization, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         Result<AccountState> reached = await ReachedAsync(context, Permissions.ContactRead, subject, organization, cancellationToken)
             .ConfigureAwait(false);
 
@@ -623,6 +635,7 @@ internal sealed class AccountAdministration(
             .ConfigureAwait(false);
 
         var contact = new ContactDetail(
+            SubjectKind.Account,
             profile.DisplayName?.Value,
             Reachable(held, IdentifierKind.Email),
             Reachable(held, IdentifierKind.Phone),
@@ -864,6 +877,53 @@ internal sealed class AccountAdministration(
                 read => WithinAsync(read, subject, cancellationToken),
                 error => ValueTask.FromResult(Result.Failure<AccountState>(error)))
             .ConfigureAwait(false);
+
+    // REC-ADM-001: a record's name, its contacts as held, verified or not, its language
+    // and its state, with no time zone; a deleted record, and one beyond the reach, are
+    // answered as an account no person bears, in the same bytes.
+    private async ValueTask<Result<ContactDetail>> RecordContactAsync(
+        AccessContext context,
+        SubjectId subject,
+        RecordStanding standing,
+        OrganizationId? organization,
+        CancellationToken cancellationToken)
+    {
+        Result<AdmittedRead> asked = await reach
+            .AskedAsync(context, Permissions.ContactRead, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (asked.Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return Result.Failure<ContactDetail>(refused);
+        }
+
+        if (standing.State is PersonRecordState.Deleted
+            || !await asked
+                .Match(
+                    read => reach.ReachesAsync(read, subject, cancellationToken),
+                    _ => ValueTask.FromResult(false))
+                .ConfigureAwait(false)
+            || await records.ReadAsync(subject, cancellationToken).ConfigureAwait(false) is not ReadRecord record)
+        {
+            return Result.Failure<ContactDetail>(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        var contact = new ContactDetail(
+            SubjectKind.Record,
+            record.Name,
+            record.Contacts.FirstOrDefault(held => held.Kind is IdentifierKind.Email)?.Value,
+            record.Contacts.FirstOrDefault(held => held.Kind is IdentifierKind.Phone)?.Value,
+            record.Language,
+            TimeZone: null,
+            record.State switch
+            {
+                PersonRecordState.Restricted => AccountState.Restricted,
+                PersonRecordState.Deleting => AccountState.Deleting,
+                _ => AccountState.Active,
+            });
+
+        return await CountedAsync(context, contact, cancellationToken).ConfigureAwait(false);
+    }
 
     // IDN-READ-003, IDN-READ-004: a deleted account, and one beyond the reach, are
     // answered as an account no person bears, in the same bytes.

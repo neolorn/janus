@@ -361,6 +361,7 @@ internal sealed class ConsentService(
         }
 
         var read = new SubjectStanding(
+            standing.IsPersonRecord ? SubjectKind.Record : SubjectKind.Account,
             standing.State,
             await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false),
             await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false));

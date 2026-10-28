@@ -20,6 +20,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
     private readonly Dictionary<SubjectId, DateTimeOffset> _sessionsEnded = [];
     private readonly HashSet<SubjectId> _held = [];
     private readonly HashSet<SubjectId> _reserved = [];
+    private readonly HashSet<SubjectId> _personRecords = [];
 
     /// <summary>
     /// Puts an account in a state, as a deployment has one.
@@ -27,6 +28,17 @@ internal sealed class AccountStatesInMemory : IAccountStates
     /// <param name="subject">Whose.</param>
     /// <param name="state">Which state.</param>
     public void Hold(SubjectId subject, AccountState state) => _states[subject] = state;
+
+    /// <summary>
+    /// Holds a person record in a state, its states spelled as an account's.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="state">The state.</param>
+    public void HoldRecord(SubjectId subject, AccountState state)
+    {
+        _states[subject] = state;
+        _ = _personRecords.Add(subject);
+    }
 
     /// <summary>
     /// Marks an account as the reserved emergency account.
@@ -195,7 +207,10 @@ internal sealed class AccountStatesInMemory : IAccountStates
                 deletion?.By,
                 deletion?.Since,
                 deletion?.HeldSince,
-                _reserved.Contains(subject)));
+                _reserved.Contains(subject))
+            {
+                IsPersonRecord = _personRecords.Contains(subject),
+            });
     }
 
     /// <inheritdoc/>
