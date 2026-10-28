@@ -66,16 +66,18 @@ internal sealed class AuthorizationModel
         "replay-erasures", "role-declaration", "migrate",
     ];
 
-    // IDN-READ-004 (D-218): the library's reads a job may declare beside its host
-    // permissions, since a host's processing outside a request reads the organization,
-    // its members and the people it writes to; every other library-owned permission
-    // stays a person's.
-    private static readonly Permission[] JobReads =
+    // IDN-READ-004 (D-218, D-221): the library-owned permissions a job may declare beside
+    // its host permissions, since a host's processing outside a request reads the
+    // organization, its members and the people it writes to, and reads and erases the
+    // person records it keeps; every other library-owned permission stays a person's.
+    private static readonly Permission[] JobDeclarable =
     [
         Core.Permissions.OrganizationRead,
         Core.Permissions.MembershipRead,
         Core.Permissions.ContactRead,
         Core.Permissions.ConsentRead,
+        Core.Permissions.RecordRead,
+        Core.Permissions.RecordErase,
     ];
 
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
@@ -1043,7 +1045,7 @@ internal sealed class AuthorizationModel
     // are.
     private static void CheckJobs(AuthorizationDeclaration declaration)
     {
-        var exercisable = new HashSet<Permission>(declaration.Permissions.Concat(JobReads));
+        var exercisable = new HashSet<Permission>(declaration.Permissions.Concat(JobDeclarable));
         var names = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (JobDeclaration job in declaration.Jobs)

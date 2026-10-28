@@ -345,8 +345,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // refusals are those of its records; a consent-based purpose, which no data subject's
     // consent can admit there, is refused as it is for a person. A read of the library
     // IDN-READ-004 lets a job declare reaches its organization as a host permission does,
-    // and a read it does not declare is refused (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001
-    // AC6, IDN-READ-004 AC3, AUTHZ-GATE-005, D-207, D-208, D-218).
+    // and so does a permission over person records a job may declare; one it does not
+    // declare is refused (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, IDN-READ-004 AC3,
+    // AUTHZ-GATE-005, D-207, D-208, D-218, D-221).
     private static readonly (string Scenario, Decided Decided)[] JobOrganizations =
     [
         ("a declared job asking a permission its declaration names, of its organization", Decided.Allowed),
@@ -361,6 +362,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         (
             "a declared job asking a library read its declaration names, of its organization while a request is served",
             Decided.Denied),
+        ("a declared job asking a record permission its declaration names, of its organization", Decided.Allowed),
+        ("a declared job asking a record permission its declaration does not name, of its organization", Decided.Denied),
     ];
 
     // A grant written in an organization, which names no record of a list and so runs
@@ -2209,17 +2212,19 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             await ConsentedAsync(account);
         }
 
-        Permission asked = scenario.Contains("a library read its declaration does not name", StringComparison.Ordinal)
-            ? Permissions.MembershipRead
-            : scenario.Contains("a library read", StringComparison.Ordinal)
-                ? Permissions.ContactRead
-                : scenario.Contains("does not name", StringComparison.Ordinal)
-                    ? HostPermissions.Retain
-                    : scenario.Contains("consent-bound", StringComparison.Ordinal)
-                        ? HostPermissions.Recommend
-                        : scenario.Contains("modifying", StringComparison.Ordinal)
-                            ? HostPermissions.Edit
-                            : HostPermissions.Read;
+        Permission asked = scenario switch
+        {
+            _ when scenario.Contains("a record permission its declaration does not name", StringComparison.Ordinal) =>
+                Permissions.RecordRead,
+            _ when scenario.Contains("a record permission", StringComparison.Ordinal) => Permissions.RecordErase,
+            _ when scenario.Contains("a library read its declaration does not name", StringComparison.Ordinal) =>
+                Permissions.MembershipRead,
+            _ when scenario.Contains("a library read", StringComparison.Ordinal) => Permissions.ContactRead,
+            _ when scenario.Contains("does not name", StringComparison.Ordinal) => HostPermissions.Retain,
+            _ when scenario.Contains("consent-bound", StringComparison.Ordinal) => HostPermissions.Recommend,
+            _ when scenario.Contains("modifying", StringComparison.Ordinal) => HostPermissions.Edit,
+            _ => HostPermissions.Read,
+        };
 
         return new Case(host, deployment, account, record, sibling, outer, outer, asked);
     }

@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library ships `record:create`, `record:read`, `record:manage` and `record:erase`,
+  the permissions over person records, which the seeded `system-administrator` role
+  holds, a deployment already bootstrapped gaining them at migration. A host's job may
+  declare `record:read` and `record:erase` beside its own permissions.
 - A host writes a person record from its own screen with `IRecordCollection.CollectAsync`
   (`RecordCollection`, `CollectedRecord`), inside its own unit of work and while the
   request of a browser holding a collection session is served. It reuses the

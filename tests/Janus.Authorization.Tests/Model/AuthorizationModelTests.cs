@@ -458,11 +458,12 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
-    /// IDN-PRIN-001 AC7, IDN-READ-004 AC3, OPS-ALERT-006 (D-202, D-218): a job declared
-    /// with a permission the model does not declare, a library-owned one other than the
-    /// four reads of IDN-READ-004, one bound to a step-up gate or one whose action is
-    /// <c>export</c> stops the deployment with <c>model.startup.declarationinvalid</c>,
-    /// naming <c>job.&lt;name&gt;</c> and <c>permissions</c>.
+    /// IDN-PRIN-001 AC7, IDN-READ-004 AC3, OPS-ALERT-006 (D-202, D-218, D-221): a job
+    /// declared with a permission the model does not declare, a library-owned one other
+    /// than the four reads of IDN-READ-004, <c>record:read</c> and <c>record:erase</c>, one
+    /// bound to a step-up gate or one whose action is <c>export</c> stops the deployment
+    /// with <c>model.startup.declarationinvalid</c>, naming <c>job.&lt;name&gt;</c> and
+    /// <c>permissions</c>.
     /// </summary>
     /// <param name="permission">The permission the job is declared with.</param>
     [Theory]
@@ -471,6 +472,8 @@ public sealed class AuthorizationModelTests
     [InlineData("account:read")]
     [InlineData("account:manage")]
     [InlineData("system:administer")]
+    [InlineData("record:create")]
+    [InlineData("record:manage")]
     [InlineData("article:publish")]
     [InlineData("article:export")]
     public void IDN_PRIN_001_AC7_AJobDeclaredWithAPermissionItMayNotExerciseFailsStartup(string permission)
@@ -571,16 +574,19 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
-    /// IDN-READ-004 AC3 (D-218): a job declares the four reads of the library beside its
-    /// host permissions, and the model then has it exercise each.
+    /// IDN-READ-004 AC3 (D-218, D-221): a job declares the four reads of the library,
+    /// <c>record:read</c> and <c>record:erase</c> beside its host permissions, and the
+    /// model then has it exercise each.
     /// </summary>
-    /// <param name="permission">The library's read the job declares.</param>
+    /// <param name="permission">The library-owned permission the job declares.</param>
     [Theory]
     [InlineData("organization:read")]
     [InlineData("membership:read")]
     [InlineData("contact:read")]
     [InlineData("consent:read")]
-    public void IDN_READ_004_AC3_AJobDeclaresTheLibrarysFourReads(string permission)
+    [InlineData("record:read")]
+    [InlineData("record:erase")]
+    public void IDN_READ_004_AC3_AJobDeclaresTheLibraryOwnedPermissionsAJobMayExercise(string permission)
     {
         var model = AuthorizationModel.Of(Jobbed()
             .Job("customer-letters", "article:read", permission)

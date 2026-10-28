@@ -4868,6 +4868,10 @@ static Janus.Core.Permissions.NoticePublish.get -> Janus.Core.Permission
 static Janus.Core.Permissions.OrganizationManage.get -> Janus.Core.Permission
 static Janus.Core.Permissions.OrganizationRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.PrivacyRequestManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RecordCreate.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RecordErase.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RecordManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RecordRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.RecordsOfProcessingRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.RecoveryApprove.get -> Janus.Core.Permission
 static Janus.Core.Permissions.RestrictionEdit.get -> Janus.Core.Permission
