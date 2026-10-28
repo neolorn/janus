@@ -15,8 +15,8 @@ namespace Janus.Storage.Authentication.Records;
 /// <param name="records">The audit log.</param>
 /// <param name="time">The clock each record's identifier is drawn from.</param>
 /// <remarks>
-/// Implements REC-COL-002, REC-COL-003, REC-ACC-001, REC-ACC-002 and chapter 10
-/// section 5.
+/// Implements REC-COL-002, REC-COL-003, REC-ACC-001, REC-ACC-002, REC-ATT-001 and
+/// chapter 10 section 5.
 /// </remarks>
 internal sealed class RecordAudit(IAuditStore records, TimeProvider time) : IRecordAudit
 {
@@ -98,8 +98,36 @@ internal sealed class RecordAudit(IAuditStore records, TimeProvider time) : IRec
                     }),
                 cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask AttachedAsync(
+        SubjectId account,
+        string? breakGlassReason,
+        SubjectId record,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    AuditActions.RecordAttached,
+                    at,
+                    account,
+                    record,
+                    breakGlassReason,
+                    organization,
+                    new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
+                    {
+                        ["account"] = JsonSerializer.SerializeToElement(account.ToString()),
+                    }),
+                cancellationToken)
+            .ConfigureAwait(false);
+
     /// <inheritdoc/>
     public async ValueTask ChangedAsync(
+
         SubjectId acting,
         string? breakGlassReason,
         SubjectId record,

@@ -314,17 +314,51 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
             new RecordNoticeContacts(record.Language, verified.Length > 0 ? verified : held));
     }
 
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Attachment>> AttachedToAsync(SubjectId account, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Attachment>>(
+        [
+            .. _records.Values
+                .Where(record => record.AttachedTo == account && record.State is not PersonRecordState.Deleted)
+                .OrderBy(record => record.AttachedAt)
+                .ThenBy(record => record.Subject.Value)
+                .Select(record => new Attachment(record.Subject, record.Organization, record.CreatedAt, record.AttachedAt!.Value)),
+        ]);
+
+    /// <inheritdoc/>
+    public ValueTask<OrganizationId?> AttachAsync(
+        SubjectId subject,
+        SubjectId account,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (!_records.TryGetValue(subject, out HeldRecord? record)
+            || record is not { State: PersonRecordState.Active, AttachedTo: null })
+        {
+            return ValueTask.FromResult<OrganizationId?>(null);
+        }
+
+        Enlist();
+
+        HeldRecord held = _records[subject];
+
+        held.AttachedTo = account;
+        held.AttachedAt = at;
+
+        return ValueTask.FromResult<OrganizationId?>(held.Organization);
+    }
+
     private static ReachedRecord Reached(HeldRecord record) =>
         new(record.Subject, record.Organization, record.CreatedAt, record.State);
 
-    // REC-ACC-001: collected, attached to no account, active, restricted or deleting by
-    // its own request, holding the value as a contact verified at a collection.
     // A deleted record's fingerprints are neutralised, so nothing finds it.
     private IEnumerable<HeldRecord> HeldBy(OrganizationId organization) =>
         _records.Values
             .Where(record => record.Organization == organization && record.State is not PersonRecordState.Deleted)
             .OrderBy(record => record.Subject.Value);
 
+    // REC-ACC-001: collected, attached to no account, active, restricted or deleting by
+    // its own request, holding the value as a contact verified at a collection.
     private IEnumerable<HeldRecord> Reaching(
         IdentifierKind kind,
         IReadOnlyList<byte[]> fingerprints,

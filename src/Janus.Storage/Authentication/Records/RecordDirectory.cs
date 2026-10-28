@@ -8,6 +8,7 @@ using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Identity.Records;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Identity.Records;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Records;
@@ -22,7 +23,7 @@ namespace Janus.Storage.Authentication.Records;
 /// <param name="subjectKeys">Where a new record's data key is created.</param>
 /// <remarks>
 /// Implements REC-COL-002, REC-COL-003, REC-REC-001, REC-REC-002, REC-ACC-001, REC-ACC-002,
-/// REC-ADM-001 and CONV-DESIGN-003.
+/// REC-ATT-001, REC-ADM-001 and CONV-DESIGN-003.
 /// </remarks>
 internal sealed class RecordDirectory(
     StoreContext context,
@@ -324,6 +325,51 @@ internal sealed class RecordDirectory(
             [.. notified.Select(contact => new CollectedContact(contact.Kind, contact.Value, contact.VerifiedAt))]);
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Attachment>> AttachedToAsync(
+        SubjectId account,
+        CancellationToken cancellationToken)
+    {
+        List<PersonRecordRow> attached = await context.PersonRecords
+            .Where(record => record.AttachedTo == account && record.State != PersonRecordState.Deleted)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. attached
+                .OrderBy(record => record.AttachedAt)
+                .ThenBy(record => record.Subject.Value)
+                .Select(record => new Attachment(
+                    record.Subject,
+                    record.Organization,
+                    record.CreatedAt,
+                    record.AttachedAt!.Value)),
+        ];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<OrganizationId?> AttachAsync(
+        SubjectId subject,
+        SubjectId account,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        // REC-ATT-001: judged again under the record's lock, so of two attachments at
+        // once only one finds the record unattached.
+        if (await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not { State: PersonRecordState.Active, AttachedTo: null } record)
+        {
+            return null;
+        }
+
+        record.Attach(account, at);
+
+        await records.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+
+        return record.Organization;
+    }
+
     // A transition of the record the caller holds: the row is read under the lock the
     // caller took, changed by the aggregate, and carried back.
     private async ValueTask ChangedAsync(
@@ -339,10 +385,6 @@ internal sealed class RecordDirectory(
         await records.RecordAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
-    // REC-ACC-001: a code reaches a record collected from the person, attached to no
-    // account, active, restricted or deleting by its own request, whose contact of the
-    // kind is the value and was verified at a collection; where an instant is named, at
-    // or after it. A record staff entered is never reached.
     // Those of some records the organization holds, in the order of their subjects.
     private async ValueTask<IReadOnlyList<SubjectId>> HeldByAsync(
         OrganizationId organization,
@@ -363,6 +405,10 @@ internal sealed class RecordDirectory(
         return [.. held.OrderBy(subject => subject.Value)];
     }
 
+    // REC-ACC-001: a code reaches a record collected from the person, attached to no
+    // account, active, restricted or deleting by its own request, whose contact of the
+    // kind is the value and was verified at a collection; where an instant is named, at
+    // or after it. A record staff entered is never reached.
     private async ValueTask<IReadOnlyList<ReachedRecord>> ReachingAsync(
         IdentifierKind kind,
         IReadOnlyList<byte[]> fingerprints,

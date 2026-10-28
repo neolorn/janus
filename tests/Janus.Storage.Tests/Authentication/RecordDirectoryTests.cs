@@ -484,6 +484,46 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
             TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// REC-ATT-001: an active record attached to no account is attached under its lock,
+    /// once, and the account lists it with the instant; a second attachment finds it
+    /// attached and attaches nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ATT_001_AnActiveUnattachedRecordIsAttachedOnceAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        SubjectId elsewhere = await _deployment.AccountAsync(Noon);
+        SubjectId subject = Subjects.New();
+        OrganizationId? attached = null;
+        OrganizationId? again = null;
+
+        await WrittenAsync(Person(subject, organization, created: true));
+
+        _ = await HeldAsync(subject, async directory => attached = await directory.AttachAsync(
+            subject,
+            account,
+            Noon.AddDays(1),
+            TestContext.Current.CancellationToken));
+        _ = await HeldAsync(subject, async directory => again = await directory.AttachAsync(
+            subject,
+            elsewhere,
+            Noon.AddDays(2),
+            TestContext.Current.CancellationToken));
+
+        await using StoreContext reading = database.Context();
+        RecordDirectory directory = Directory(reading);
+
+        Assert.Equal(organization, attached);
+        Assert.Null(again);
+        Assert.Equal(
+            [new Attachment(subject, organization, Noon, Noon.AddDays(1))],
+            await directory.AttachedToAsync(account, TestContext.Current.CancellationToken));
+        Assert.Empty(await directory.AttachedToAsync(elsewhere, TestContext.Current.CancellationToken));
+    }
+
     private static CollectedPerson Person(
         SubjectId subject,
         OrganizationId organization,

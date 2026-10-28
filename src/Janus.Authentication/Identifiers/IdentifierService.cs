@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -37,8 +38,9 @@ namespace Janus.Authentication.Identifiers;
 /// <param name="events">Where what happened is published.</param>
 /// <param name="time">The clock every instant is taken from.</param>
 /// <param name="randomness">The randomness the codes and the tokens are drawn from.</param>
+/// <param name="offering">What makes the offer to attach a value verified now brings.</param>
 /// <remarks>
-/// Implements LIB-API-005, REG-IDENT-002 and REG-IDENT-004 to REG-IDENT-007. The
+/// Implements LIB-API-005, REG-IDENT-002, REG-IDENT-004 to REG-IDENT-007 and REC-ATT-001. The
 /// verification is the registration's, unchanged: the same code, the same link and
 /// the same rule that only a press from the browser that staged the change proves
 /// anything. What differs is that an account already exists, so what is added is
@@ -63,7 +65,8 @@ internal sealed class IdentifierService(
     IUnitOfWork work,
     IEvents events,
     TimeProvider time,
-    RandomNumberGenerator randomness) : IIdentifiers
+    RandomNumberGenerator randomness,
+    RecordOffers offering) : IIdentifiers
 {
     private static readonly IReadOnlyDictionary<string, string> Nothing =
         new Dictionary<string, string>(capacity: 0, StringComparer.Ordinal);
@@ -2454,6 +2457,15 @@ internal sealed class IdentifierService(
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
             return Result.Failure<IReadOnlyList<LossReport>>(unpublished);
+        }
+
+        // REG-IDENT-004, REG-IDENT-007, REC-ATT-001 (D-221): a value verified now under
+        // the account's session offers it the records holding the value.
+        if (completing is SessionId session
+            && await offering.ProvedAsync(session, [(staged.Kind, staged.Canonical)], cancellationToken).ConfigureAwait(false)
+                is Error unoffered)
+        {
+            return Result.Failure<IReadOnlyList<LossReport>>(unoffered);
         }
 
         return Result.Success(suspended);

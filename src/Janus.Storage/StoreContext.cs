@@ -402,6 +402,13 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         Set<RecordAccessSessionRecord>();
 
     /// <summary>
+    /// The offers to attach person records, one held on an account session after a proof
+    /// (REC-ATT-001).
+    /// </summary>
+    public DbSet<RecordOfferRecord> RecordOffers =>
+        Set<RecordOfferRecord>();
+
+    /// <summary>
     /// The verification links a registration in progress has outstanding.
     /// </summary>
     public DbSet<RegistrationLinkRecord> RegistrationLinks =>
@@ -626,6 +633,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
         modelBuilder.ApplyConfiguration(new CollectionSessionConfiguration());
         modelBuilder.ApplyConfiguration(new RecordAccessSessionConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordOfferConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());

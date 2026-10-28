@@ -129,6 +129,7 @@ internal static class ApiStatus
         [ErrorCodes.CollectionIncomplete] = StatusCodes.Status409Conflict,
         [ErrorCodes.CollectionExpired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RecordFollowsAccount] = StatusCodes.Status409Conflict,
+        [ErrorCodes.RecordNoOffer] = StatusCodes.Status409Conflict,
         [ErrorCodes.RecordNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.RecordSignedIn] = StatusCodes.Status409Conflict,
         [ErrorCodes.RecordStateConflict] = StatusCodes.Status409Conflict,

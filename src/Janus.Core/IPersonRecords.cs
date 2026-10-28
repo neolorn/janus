@@ -7,7 +7,7 @@ namespace Janus.Core;
 
 /// <summary>
 /// The operations over person records: what staff do to a record of someone who holds
-/// no account.
+/// no account, and what an account does to attach the records a proof offers it.
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005 and chapter 21. Each is asked of the access gate, and a
@@ -78,5 +78,124 @@ public interface IPersonRecords
         AccessContext context,
         OrganizationId organization,
         string reference,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The person records attached to the asking account.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The records, in the order they were attached, or <c>authz.denied</c> where the
+    /// context is no person's.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<IReadOnlyList<AttachedRecord>>> ListAttachedAsync(
+        AccessContext context,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// What the latest proof of an email or phone on the session offers the account to
+    /// attach: a count and its expiry, nothing of the records.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The offer, <see cref="RecordOffer.None"/> where none stands, or
+    /// <c>authz.denied</c> where the context is no person's.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<RecordOffer>> ReadOfferAsync(
+        AccessContext context,
+        SessionId session,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends a code to one of the account's verified emails or phones, whose presentation
+    /// proves it now and makes the offer. A code to a phone goes only where the phone
+    /// signal does not answer risk, and the answer is the same either way; the signal is
+    /// asked before any unit of work is open, so a code to a phone is not asked inside
+    /// the host's.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="identifier">The identifier the code goes to.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.identifier.invalid</c> where the account
+    /// holds no verified email or phone under the identifier; <c>auth.throttled</c>, or
+    /// the governed send's refusal.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the source is absent.</exception>
+    ValueTask<Result> SendFindCodeAsync(
+        AccessContext context,
+        SessionId session,
+        IdentifierId identifier,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Proves by its code the identifier the last code on the session went to, and makes
+    /// the offer it brings.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="code">The code entered.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The offer, or the refusal: <c>auth.code.invalid</c>, then <c>auth.code.expired</c>
+    /// for a code past its life or its attempts and where no code is outstanding;
+    /// <c>auth.throttled</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    ValueTask<Result<RecordOffer>> VerifyFindCodeAsync(
+        AccessContext context,
+        SessionId session,
+        [NeverLogged] string code,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Attaches to the account each record the offer counted, each judged again under its
+    /// lock, and ends the offer.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// How many were attached, none where no offer stands, or the refusal:
+    /// <c>authz.restricted</c> while the account is restricted.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<int>> AttachAsync(
+        AccessContext context,
+        SessionId session,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Attaches to the account, inside the offer's life, each active record attached to
+    /// no account that holds a value the offer proved and a reference, whatever the age
+    /// of its verification. One that matches none is counted against the source and the
+    /// account as a wrong code is.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="reference">The reference, trimmed and 1 to 64 characters long.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// How many were attached, none where none matched, or the refusal:
+    /// <c>authz.restricted</c>; <c>identity.record.nooffer</c> where no offer stands;
+    /// <c>auth.throttled</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    ValueTask<Result<int>> AttachByReferenceAsync(
+        AccessContext context,
+        SessionId session,
+        string reference,
+        string source,
         CancellationToken cancellationToken);
 }

@@ -46,6 +46,11 @@ internal sealed record HeldRecord(SubjectId Subject, OrganizationId Organization
     public SubjectId? AttachedTo { get; set; }
 
     /// <summary>
+    /// When it was attached, where it is.
+    /// </summary>
+    public DateTimeOffset? AttachedAt { get; set; }
+
+    /// <summary>
     /// The language messages to it are sent in.
     /// </summary>
     public string Language { get; set; } = string.Empty;

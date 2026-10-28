@@ -557,6 +557,13 @@ public static class ErrorCodes
     public static ErrorCode RecordFollowsAccount { get; } = ErrorCode.Parse("identity.record.followsaccount");
 
     /// <summary>
+    /// An attachment by a reference was asked where no offer to attach stands on the
+    /// account's session.
+    /// </summary>
+    /// <remarks>Implements REC-ATT-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RecordNoOffer { get; } = ErrorCode.Parse("identity.record.nooffer");
+
+    /// <summary>
     /// A path names a subject no person record bears, or one outside the caller's reach:
     /// a record the record access session does not reach, or one not attached to the
     /// account, alike.

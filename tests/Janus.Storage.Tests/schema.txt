@@ -1047,6 +1047,14 @@ table record_access_sessions
   column reached uuid[] not null
   constraint pk_record_access_sessions PRIMARY KEY (id)
   index ix_record_access_sessions_expires_at using btree (expires_at)
+table record_offers
+  column session_id uuid not null
+  column proven jsonb not null
+  column offered uuid[] not null
+  column expires_at timestamp with time zone not null
+  constraint fk_record_offers_session_id FOREIGN KEY (session_id) REFERENCES identity.sessions(id) ON DELETE CASCADE
+  constraint pk_record_offers PRIMARY KEY (session_id)
+  index ix_record_offers_expires_at using btree (expires_at)
 table recovery_approvals
   column subject uuid not null
   column approver uuid not null

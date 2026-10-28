@@ -1724,6 +1724,35 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("record_access_sessions", "identity");
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Records.RecordOfferRecord", b =>
+            {
+                b.Property<Guid>("SessionId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("session_id");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.PrimitiveCollection<Guid[]>("Offered")
+                    .IsRequired()
+                    .HasColumnType("uuid[]")
+                    .HasColumnName("offered");
+
+                b.Property<string>("Proven")
+                    .IsRequired()
+                    .HasColumnType("jsonb")
+                    .HasColumnName("proven");
+
+                b.HasKey("SessionId")
+                    .HasName("pk_record_offers");
+
+                b.HasIndex("ExpiresAt")
+                    .HasDatabaseName("ix_record_offers_expires_at");
+
+                b.ToTable("record_offers", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Recovery.LossReportRecord", b =>
             {
                 b.Property<Guid>("Credential")
@@ -4827,6 +4856,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasForeignKey("Organization")
                     .OnDelete(DeleteBehavior.Restrict)
                     .HasConstraintName("fk_policy_raises_organization");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Records.RecordOfferRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authentication.Sessions.SessionRecord", null)
+                    .WithOne()
+                    .HasForeignKey("Janus.Storage.Authentication.Records.RecordOfferRecord", "SessionId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_record_offers_session_id");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Recovery.LossReportRecord", b =>

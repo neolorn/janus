@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Janus.Hosting.Records;
@@ -7,7 +8,7 @@ namespace Janus.Hosting.Records;
 /// write.
 /// </summary>
 /// <remarks>
-/// Implements CONV-DESIGN-006, REC-COL-001, REC-COL-003, REC-ACC-001, REC-ACC-002 and REC-ADM-001.
+/// Implements CONV-DESIGN-006, REC-COL-001, REC-COL-003, REC-ACC-001, REC-ACC-002, REC-ATT-001 and REC-ADM-001.
 /// Generated at build time, so the shapes are fixed by something a reader can see.
 /// </remarks>
 [JsonSourceGenerationOptions(
@@ -26,6 +27,12 @@ namespace Janus.Hosting.Records;
 [JsonSerializable(typeof(RecordAccessVerifyRequest))]
 [JsonSerializable(typeof(RecordAccessReferenceRequest))]
 [JsonSerializable(typeof(RecordAccessStateView))]
+[JsonSerializable(typeof(IReadOnlyList<AttachedRecordView>))]
+[JsonSerializable(typeof(RecordOfferView))]
+[JsonSerializable(typeof(RecordFindCodeRequest))]
+[JsonSerializable(typeof(RecordFindVerifyRequest))]
+[JsonSerializable(typeof(RecordAttachReferenceRequest))]
+[JsonSerializable(typeof(RecordsAttachedView))]
 [JsonSerializable(typeof(RecordRectificationRequest))]
 [JsonSerializable(typeof(RecordView))]
 internal sealed partial class RecordsJson : JsonSerializerContext;

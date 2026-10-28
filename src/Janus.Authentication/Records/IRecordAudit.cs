@@ -69,6 +69,26 @@ internal interface IRecordAudit
         bool byReference,
         DateTimeOffset at,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records a person record attached to an account, the account acting and the record
+    /// its subject, filed under the record's organization (REC-ATT-001).
+    /// </summary>
+    /// <param name="account">The account it was attached to.</param>
+    /// <param name="breakGlassReason">The break-glass reason the acting session carries, or nothing.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="organization">The record's organization.</param>
+    /// <param name="at">The instant of the attachment.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask AttachedAsync(
+        SubjectId account,
+        string? breakGlassReason,
+        SubjectId record,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
     /// <summary>
     /// Records one field of a person record changed, by the field and never by its value
     /// (REC-ACC-002, IDN-AUD-001).

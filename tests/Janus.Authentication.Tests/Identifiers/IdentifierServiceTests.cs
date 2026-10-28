@@ -10,6 +10,7 @@ using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -19,6 +20,7 @@ using Janus.Authentication.Tests.Credentials;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Records;
 using Janus.Authentication.Tests.Recovery;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
@@ -128,7 +130,8 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             _work,
             _events,
             _clock,
-            _randomness);
+            _randomness,
+            new RecordOffers(new RecordOfferStoreInMemory(), new RecordDirectoryInMemory(), _configuration, _clock));
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()

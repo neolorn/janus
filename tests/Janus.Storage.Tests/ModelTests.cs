@@ -816,6 +816,13 @@ public sealed class ModelTests
             "record_access_sessions.reached",
             "record_access_sessions.throttled",
 
+            // Not an account field: the offer to attach of REC-ATT-001, held on an
+            // account session, which holds the values proved only as keyed
+            // fingerprints and names the records it counted by their subjects.
+            "record_offers.expires_at",
+            "record_offers.offered",
+            "record_offers.proven",
+            "record_offers.session_id",
 
             // Not an account field: one approver standing behind one re-enrolment, on
             // the channel they confirmed the person on, which is held under the

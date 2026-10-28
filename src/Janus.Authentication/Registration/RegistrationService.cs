@@ -11,6 +11,7 @@ using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Core;
@@ -52,8 +53,9 @@ namespace Janus.Authentication.Registration;
 /// <param name="events">Where the emitted events go.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where the codes and the tokens are drawn from.</param>
+/// <param name="offering">What makes the offer to attach the identifiers verified bring.</param>
 /// <remarks>
-/// Implements REG-SESS-001 to REG-SESS-008, REG-PROF-002, REG-IDENT-010, REG-INV-001,
+/// Implements REG-SESS-001 to REG-SESS-008, REC-ATT-001, REG-PROF-002, REG-IDENT-010, REG-INV-001,
 /// REG-INV-002, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a, API-REDIR-002, AUTH-FACT-004,
 /// AUTH-ABUSE-001, AUTH-ABUSE-003 and AUTH-ABUSE-008. Every answer is the same whether or not the identifier presented
 /// belongs to an account already: the lookup decides only whether a code goes out and
@@ -89,7 +91,8 @@ internal sealed class RegistrationService(
     IUnitOfWork work,
     IEvents events,
     TimeProvider time,
-    RandomNumberGenerator randomness) : IRegistration
+    RandomNumberGenerator randomness,
+    RecordOffers offering) : IRegistration
 {
     private const int Majority = 18;
 
@@ -1168,6 +1171,20 @@ internal sealed class RegistrationService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<RegistrationOutcome>(failure);
+        }
+
+        // REG-SESS-007, REC-ATT-001 (D-221): the identifiers the registration verified
+        // offer the records holding them, on the session the step establishes.
+        if (await offering
+                .ProvedAsync(
+                    issued.Id,
+                    [.. live.Identifiers.Where(staged => staged.IsVerified).Select(staged => (staged.Kind, staged.Canonical))],
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unoffered)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<RegistrationOutcome>(unoffered);
         }
 
         // The browser that completed the step is remembered, so the account's next

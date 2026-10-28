@@ -436,6 +436,13 @@ public static class AuditActions
     public static AuditAction RecordAccessed { get; } = AuditAction.Parse("identity.record.accessed");
 
     /// <summary>
+    /// A person record was attached to an account, the account acting and the record
+    /// its subject, filed under the record's organization.
+    /// </summary>
+    /// <remarks>Implements REC-ATT-001, chapter 10 section 5.</remarks>
+    public static AuditAction RecordAttached { get; } = AuditAction.Parse("identity.record.attached");
+
+    /// <summary>
     /// A person record's name, language or contacts were changed, recorded by field and
     /// never by value, the record its subject.
     /// </summary>

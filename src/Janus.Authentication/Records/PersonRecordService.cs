@@ -14,7 +14,8 @@ namespace Janus.Authentication.Records;
 
 /// <summary>
 /// What staff do to a person record: enter one for someone who gave their details
-/// otherwise than on a host's screen, and find the records an organization holds.
+/// otherwise than on a host's screen, and find the records an organization holds; and
+/// what an account does to attach the records a proof offers it.
 /// </summary>
 /// <param name="gate">Where each operation's permission is asked.</param>
 /// <param name="records">The person records staff enter.</param>
@@ -25,9 +26,10 @@ namespace Janus.Authentication.Records;
 /// <param name="work">The unit of work an operation runs in, the host's where it calls inside its own.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a new record's subject identifier is drawn from.</param>
+/// <param name="attachments">What an account does to attach the records a proof offers it.</param>
 /// <remarks>
-/// Implements REC-COL-003, REC-AGE-001, REC-ADM-001, PRIV-CONS-001 and chapter 09 section
-/// 8a.
+/// Implements REC-COL-003, REC-AGE-001, REC-ADM-001, REC-ATT-001, PRIV-CONS-001 and
+/// chapter 09 sections 7a and 8a.
 /// Everything is judged before the unit of work is joined save the consents, whose
 /// refusal rolls the whole back, so a refusal writes nothing and keeps nothing.
 /// </remarks>
@@ -40,7 +42,8 @@ internal sealed class PersonRecordService(
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time,
-    RandomNumberGenerator randomness) : IPersonRecords
+    RandomNumberGenerator randomness,
+    RecordAttachments attachments) : IPersonRecords
 {
     private const int ReferenceMaximum = 64;
 
@@ -204,6 +207,53 @@ internal sealed class PersonRecordService(
             .ReferencingAsync(organization, CanonicalForm.Of(trimmed), cancellationToken)
             .ConfigureAwait(false));
     }
+
+    /// <inheritdoc/>
+    public ValueTask<Result<IReadOnlyList<AttachedRecord>>> ListAttachedAsync(
+        AccessContext context,
+        CancellationToken cancellationToken) =>
+        attachments.ListAttachedAsync(context, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<RecordOffer>> ReadOfferAsync(
+        AccessContext context,
+        SessionId session,
+        CancellationToken cancellationToken) =>
+        attachments.ReadOfferAsync(context, session, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> SendFindCodeAsync(
+        AccessContext context,
+        SessionId session,
+        IdentifierId identifier,
+        string source,
+        CancellationToken cancellationToken) =>
+        attachments.SendFindCodeAsync(context, session, identifier, source, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<RecordOffer>> VerifyFindCodeAsync(
+        AccessContext context,
+        SessionId session,
+        [NeverLogged] string code,
+        string source,
+        CancellationToken cancellationToken) =>
+        attachments.VerifyFindCodeAsync(context, session, code, source, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<int>> AttachAsync(
+        AccessContext context,
+        SessionId session,
+        CancellationToken cancellationToken) =>
+        attachments.AttachAsync(context, session, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<int>> AttachByReferenceAsync(
+        AccessContext context,
+        SessionId session,
+        string reference,
+        string source,
+        CancellationToken cancellationToken) =>
+        attachments.AttachByReferenceAsync(context, session, reference, source, cancellationToken);
 
     // What the person gave, judged before anything is written: the language, the name,
     // each contact and the reference.

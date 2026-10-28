@@ -53,6 +53,7 @@ internal sealed class PendingEvents(StoreContext context) : IPendingEvents
         EventJson.Default.OrganizationDeletionCancelled,
         EventJson.Default.OrganizationDeletionRequested,
         EventJson.Default.OrganizationErased,
+        EventJson.Default.RecordAttached,
         EventJson.Default.RecordDeletionCancelled,
         EventJson.Default.RecordDeletionRequested,
         EventJson.Default.RestrictionChanged,

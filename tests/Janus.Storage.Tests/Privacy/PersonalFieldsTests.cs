@@ -4,7 +4,11 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Janus.Authentication.Records;
 using Janus.Core;
+using Janus.Storage.Authentication.Records;
+using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -55,6 +59,46 @@ public sealed class PersonalFieldsTests(DatabaseFixture database) : IClassFixtur
         Assert.Equal(signature, readSignature.ToArray());
         Assert.Equal(-1, name.Span.IndexOf("Named Recipient"u8));
         Assert.Equal(0x01, name.Span[0]);
+    }
+
+    /// <summary>
+    /// REC-ATT-001 AC4: a field written under a person record's subject still decrypts
+    /// under that subject once the record is attached to an account, since attaching
+    /// moves and re-encrypts nothing.
+    /// </summary>
+    [Fact]
+    public async Task REC_ATT_001_AC4_AFieldOfARecordStillDecryptsOnceItIsAttachedAsync()
+    {
+        SubjectId record = await RecordAsync();
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        (ReadOnlyMemory<byte> name, _) = await WrittenAsync(
+            record,
+            fields => (Value(fields.Encrypt(ParcelType, "RecipientName", "Named Recipient")), default));
+
+        await using (StoreContext attaching = database.Context())
+        {
+            await using var work = new UnitOfWork(attaching);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            Assert.NotNull(await Directory(attaching).AttachAsync(
+                record,
+                account,
+                Noon.AddDays(1),
+                TestContext.Current.CancellationToken));
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            [record],
+            (await Directory(reading).AttachedToAsync(account, TestContext.Current.CancellationToken))
+                .Select(attached => attached.Record));
+        Assert.Equal("Named Recipient", Value(await Fields(reading).WithSubjectAsync(
+            record,
+            fields => fields.Decrypt(ParcelType, "RecipientName", name),
+            TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -356,6 +400,43 @@ public sealed class PersonalFieldsTests(DatabaseFixture database) : IClassFixtur
                 .Encrypted(row => row.RecipientPhone, row => row.Recipient, "contact")
                 .Encrypted(row => row.Signature, row => row.Recipient, "contact"))
             .Build();
+
+    private RecordDirectory Directory(StoreContext context) =>
+        new(
+            context,
+            new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
+            new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+            new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness));
+
+    // A person record a collection wrote, of a contact verified then, under a key of its
+    // own subject.
+    private async Task<SubjectId> RecordAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId subject = Subjects.New();
+
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await Directory(writing).WriteAsync(
+            new CollectedPerson(
+                subject,
+                organization,
+                Created: true,
+                "en",
+                Name: null,
+                Age: null,
+                [new CollectedContact(IdentifierKind.Phone, "+441632960047", Noon)],
+                Reference: null,
+                "1",
+                TermsVersion: null,
+                Noon),
+            TestContext.Current.CancellationToken);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return subject;
+    }
 
     private PersonalFields Fields(StoreContext context) => Fields(context, Declared());
 

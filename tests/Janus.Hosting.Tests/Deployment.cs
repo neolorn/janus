@@ -387,6 +387,11 @@ internal sealed class Deployment : IAsyncDisposable
     public RecordAccessSessionStoreInMemory RecordAccess { get; } = new();
 
     /// <summary>
+    /// The offers to attach person records each account session holds.
+    /// </summary>
+    public RecordOfferStoreInMemory RecordOffers { get; } = new();
+
+    /// <summary>
     /// The person records a collection reads and writes.
     /// </summary>
     public RecordDirectoryInMemory Records { get; } = new();
@@ -991,6 +996,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IRegistrationSessionStore>(Registrations);
         _ = services.AddSingleton<ICollectionSessionStore>(Collections);
         _ = services.AddSingleton<IRecordAccessSessionStore>(RecordAccess);
+        _ = services.AddSingleton<IRecordOfferStore>(RecordOffers);
         _ = services.AddSingleton<IRecordDirectory>(Records);
         _ = services.AddSingleton<IRecordAudit>(RecordAudit);
         _ = services.AddSingleton<IRegistrationSignals>(Signals);
@@ -1172,6 +1178,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RecordAccessSessions>();
         _ = services.AddScoped<RecordRights>();
         _ = services.AddScoped<RecordCollectionService>();
+        _ = services.AddScoped<RecordOffers>();
+        _ = services.AddScoped<RecordAttachments>();
         _ = services.AddScoped<IPersonRecords, PersonRecordService>();
         _ = services.AddScoped<IdentifierService>();
         _ = services.AddScoped<IIdentifiers>(provider =>

@@ -59,6 +59,7 @@ internal sealed class EventConsumers(IServiceProvider services)
         OrganizationDeletionCancelled each => Registered(each),
         OrganizationDeletionRequested each => Registered(each),
         OrganizationErased each => Registered(each),
+        RecordAttached each => Registered(each),
         RecordDeletionCancelled each => Registered(each),
         RecordDeletionRequested each => Registered(each),
         RestrictionChanged each => Registered(each),

@@ -221,4 +221,30 @@ internal interface IRecordDirectory
     /// subject.
     /// </returns>
     ValueTask<RecordNoticeContacts?> NoticeContactsAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The records attached to an account, in the order they were attached, a deleted one
+    /// left out (REC-ATT-001).
+    /// </summary>
+    /// <param name="account">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The records.</returns>
+    ValueTask<IReadOnlyList<Attachment>> AttachedToAsync(SubjectId account, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Attaches a record to an account, judged under the record's lock: only an active
+    /// record attached to no account is attached (REC-ATT-001).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="account">The account it is attached to.</param>
+    /// <param name="at">The instant of the attachment.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The organization holding the record, or nothing where it was not attached.
+    /// </returns>
+    ValueTask<OrganizationId?> AttachAsync(
+        SubjectId subject,
+        SubjectId account,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
 }

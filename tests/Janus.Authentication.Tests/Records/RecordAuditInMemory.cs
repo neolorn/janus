@@ -16,6 +16,7 @@ internal sealed class RecordAuditInMemory : IRecordAudit
     private readonly List<(SubjectId Acting, SubjectId Record, OrganizationId Organization, bool AgeAnswered, DateTimeOffset At)> _entered = [];
     private readonly List<(SubjectId Record, OrganizationId Organization, RecordAccessSessionId Session, bool ByReference, DateTimeOffset At)> _accessed = [];
     private readonly List<(SubjectId Acting, SubjectId Record, string Field, string? Reason, DateTimeOffset At)> _changed = [];
+    private readonly List<(SubjectId Account, SubjectId Record, OrganizationId Organization, DateTimeOffset At)> _attached = [];
 
     /// <summary>
     /// Every collection recorded, in order.
@@ -34,6 +35,12 @@ internal sealed class RecordAuditInMemory : IRecordAudit
     /// </summary>
     public IReadOnlyList<(SubjectId Record, OrganizationId Organization, RecordAccessSessionId Session, bool ByReference, DateTimeOffset At)> Accessed =>
         _accessed;
+
+    /// <summary>
+    /// Every record attached to an account, in order.
+    /// </summary>
+    public IReadOnlyList<(SubjectId Account, SubjectId Record, OrganizationId Organization, DateTimeOffset At)> Attached =>
+        _attached;
 
     /// <summary>
     /// Each field of a record changed, as recorded.
@@ -82,6 +89,21 @@ internal sealed class RecordAuditInMemory : IRecordAudit
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public ValueTask AttachedAsync(
+        SubjectId account,
+        string? breakGlassReason,
+        SubjectId record,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _attached.Add((account, record, organization, at));
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <inheritdoc/>
     public ValueTask ChangedAsync(
         SubjectId acting,

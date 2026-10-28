@@ -416,6 +416,61 @@ POST /account/reactivate
   403 auth.session.csrfinvalid
   409 identity.account.adminsuspended
   422 identity.reactivation.tokeninvalid
+GET /account/records
+  200
+    application/json
+      [].subject: Guid
+      [].organization: Guid
+      [].organizationName: string
+      [].createdAt: DateTimeOffset
+      [].attachedAt: DateTimeOffset
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+POST /account/records/attach
+  200
+    application/json
+      attached: number
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+POST /account/records/attach/reference
+  request application/json
+    reference: string
+  200
+    application/json
+      attached: number
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  409 identity.record.nooffer
+  429 auth.throttled
+POST /account/records/find
+  request application/json
+    identifier: Guid?
+  202
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  422 identity.identifier.invalid
+  429 auth.restriction.exceeded auth.throttled
+POST /account/records/find/verify
+  request application/json
+    code: string
+  200
+    application/json
+      count: number
+      expiresAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  422 auth.code.expired auth.code.invalid
+  429 auth.throttled
+GET /account/records/offer
+  200
+    application/json
+      count: number
+      expiresAt: DateTimeOffset?
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
 POST /account/recoverycodes
   200
     application/json
