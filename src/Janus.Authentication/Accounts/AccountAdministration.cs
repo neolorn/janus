@@ -447,7 +447,7 @@ internal sealed class AccountAdministration(
             ? await directory.ErasureRequestAsync(subject, deleting.Since, cancellationToken).ConfigureAwait(false)
             : null;
 
-        await directory.CancelDeletionAsync(subject, cancellationToken).ConfigureAwait(false);
+        await directory.CancelDeletionAsync(subject, now, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(subject, cancellationToken).ConfigureAwait(false);
 
         Result published = await events

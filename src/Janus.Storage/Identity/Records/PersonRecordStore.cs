@@ -131,6 +131,7 @@ internal sealed class PersonRecordStore(
         List<PersonRecordRow> rows = await context.PersonRecords
             .Where(row =>
                 row.State == PersonRecordState.Deleting
+                && row.AttachedTo == null
                 && (row.DeletingSince <= before || row.DeletionHeldSince <= before))
             .OrderBy(row => row.DeletingSince)
             .ToListAsync(cancellationToken)
@@ -145,6 +146,17 @@ internal sealed class PersonRecordStore(
 
         return records;
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<SubjectId>> AttachedToAsync(
+        SubjectId account,
+        CancellationToken cancellationToken) =>
+        await context.PersonRecords
+            .Where(row => row.AttachedTo == account && row.State != PersonRecordState.Deleted)
+            .OrderBy(row => row.Subject)
+            .Select(row => row.Subject)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<RecordContact>> ContactsAsync(

@@ -22,8 +22,8 @@ namespace Janus.Privacy.Erasures;
 /// <param name="work">The one transaction each account is carried in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-LIFE-014, IDN-LIFE-003, IDN-ACCT-007, PRIV-RIGHT-005, INF-BG-002 and
-/// REC-REC-003. Nothing here waits on a human: the window is the whole of the decision,
+/// Implements IDN-LIFE-014, IDN-LIFE-003, IDN-ACCT-007, PRIV-RIGHT-005, INF-BG-002,
+/// REC-REC-003 and REC-ATT-002. Nothing here waits on a human: the window is the whole of the decision,
 /// and an account that reaches its end without a cancellation or a reversal is erased. One
 /// account per transaction, so a deployment that falls over mid-pass has erased whole
 /// accounts and begun none.
@@ -109,14 +109,38 @@ internal sealed class DeletionSweep(
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        _ = await eraser.EraseAsync(deletion.Subject, reason, now, cancellationToken)
+        await SubjectErasedAsync(principal, deletion, deletion.Subject, reason, now, cancellationToken).ConfigureAwait(false);
+
+        // REC-ATT-002 AC2: an account's erasure erases each record attached to it in the
+        // same transaction, each as for the record alone.
+        if (!deletion.IsPersonRecord)
+        {
+            foreach (SubjectId record in await accounts.AttachedAsync(deletion.Subject, cancellationToken).ConfigureAwait(false))
+            {
+                await SubjectErasedAsync(principal, deletion, record, reason, now, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    private async ValueTask SubjectErasedAsync(
+        SystemPrincipal principal,
+        PendingDeletion deletion,
+        SubjectId subject,
+        ErasureReason reason,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        _ = await eraser.EraseAsync(subject, reason, now, cancellationToken)
             .ConfigureAwait(false);
 
         // PRIV-RIGHT-005b: the fact goes on the outbox in the transaction that made
         // it true, so an erased account and the word to the host commit together.
         await outbox
             .AddAsync(
-                Delivery.Of(deletion.Subject, SubjectEventKind.ErasureRequested, now, reason: reason),
+                Delivery.Of(subject, SubjectEventKind.ErasureRequested, now, reason: reason),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -124,14 +148,12 @@ internal sealed class DeletionSweep(
             .RecordedAsync(
                 Erased,
                 principal,
-                deletion.Subject,
+                subject,
                 organization: null,
                 now,
                 Named(deletion, reason),
                 cancellationToken)
             .ConfigureAwait(false);
-        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     private static Dictionary<string, JsonElement> Named(

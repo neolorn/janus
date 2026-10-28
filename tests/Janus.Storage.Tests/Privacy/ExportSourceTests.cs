@@ -694,7 +694,8 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 new SubjectKeyStore(reading, _deployment.Ring, _deployment.Randomness),
                 Preferences(reading),
                 Declared,
-                new OutboxStore(reading, new FixedTime(Noon))),
+                new OutboxStore(reading, new FixedTime(Noon)),
+                _deployment.Attached(reading, new EventsInMemory(), new FixedTime(Noon))),
             new IdentifierDirectory(
                 Identifiers(reading),
                 Preferences(reading),

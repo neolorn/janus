@@ -171,6 +171,7 @@ internal static class StorageRegistration
         services.AddScoped<ISubjectEraser, SubjectEraser>();
         services.AddScoped<Janus.Privacy.Outbox.IOutboxStore, OutboxStore>();
         services.AddScoped<IPrivacyRequestStore, PrivacyRequestStore>();
+        services.AddScoped<AttachedRecords>();
         services.AddScoped<IAccountStates, AccountStates>();
         services.AddScoped<IExportSource, ExportSource>();
         services.AddScoped<IExportLedger, ExportLedger>();

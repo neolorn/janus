@@ -93,6 +93,34 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-ATT-002 AC2: an account's erasure erases each record attached to it in the
+    /// same transaction, each with its own erasure, its <c>ErasureRequested</c> and its
+    /// audit record, carrying the account's reason; one already erased is left as it is.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ATT_002_AC2_AnAccountsErasureErasesEachRecordAttachedToItAsync()
+    {
+        var erased = new SubjectId(Guid.Parse("33333333-3333-4333-8333-333333333333"));
+
+        _accounts.Deletes(Ahmed, DeletionOrigin.Takedown, Noon);
+        _accounts.HoldRecord(Noura, AccountState.Deleting, attachedTo: Ahmed);
+        _accounts.HoldRecord(erased, AccountState.Deleted, attachedTo: Ahmed);
+
+        _clock.Advance(Settings.AccountDeletionGrace.Default);
+
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            [(Ahmed, ErasureReason.MinorTakedown), (Noura, ErasureReason.MinorTakedown)],
+            _eraser.Erased.Select(erasure => (erasure.Subject, erasure.Reason)));
+        Assert.Equal(
+            [(Ahmed, SubjectEventKind.ErasureRequested), (Noura, SubjectEventKind.ErasureRequested)],
+            _outbox.Deliveries.Select(delivery => (delivery.Subject, delivery.Kind)));
+        Assert.Equal([Ahmed, Noura], _audit.Entries.Select(entry => entry.Subject));
+        Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC7: a background pass returns no result, so a transaction that
     /// does not open, or does not commit, is thrown as a fault naming the failure's code.
     /// </summary>

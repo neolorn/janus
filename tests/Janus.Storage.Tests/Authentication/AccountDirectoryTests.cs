@@ -312,5 +312,6 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
         new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
         new PreferenceStore(context, _deployment.Ring, _deployment.Randomness),
         PreferenceDeclarations.None,
-        new OutboxStore(context, new FixedTime(Noon)));
+        new OutboxStore(context, new FixedTime(Noon)),
+        _deployment.Attached(context, new EventsInMemory(), new FixedTime(Noon)));
 }

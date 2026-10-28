@@ -59,13 +59,23 @@ internal interface IPersonRecordStore
 
     /// <summary>
     /// Reads the records standing in a deletion grace window that began on or before an
-    /// instant.
+    /// instant, save those attached to an account, which are erased with it.
     /// </summary>
     /// <param name="before">The instant the window must have begun by.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Them, oldest window first.</returns>
     ValueTask<IReadOnlyList<PersonRecord>> DeletingSinceAsync(
         DateTimeOffset before,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the subjects of the records attached to an account and not erased.
+    /// </summary>
+    /// <param name="account">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Them, in the order their rows are locked in.</returns>
+    ValueTask<IReadOnlyList<SubjectId>> AttachedToAsync(
+        SubjectId account,
         CancellationToken cancellationToken);
 
     /// <summary>

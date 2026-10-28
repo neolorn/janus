@@ -726,7 +726,8 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             new AccountStore(context),
             new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
             Sessions(context),
-            new EventOutbox(new PendingEvents(context), work));
+            new EventOutbox(new PendingEvents(context), work),
+            _deployment.Attached(context, new EventOutbox(new PendingEvents(context), work), new FixedTime(Noon)));
 
     private SubjectEraser Eraser(StoreContext context, UnitOfWork work) =>
         new(

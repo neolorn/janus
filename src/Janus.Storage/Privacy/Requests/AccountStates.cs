@@ -9,6 +9,7 @@ using Janus.Identity.Accounts;
 using Janus.Identity.Records;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Requests;
+using Janus.Storage.Identity.Records;
 
 namespace Janus.Storage.Privacy.Requests;
 
@@ -20,17 +21,19 @@ namespace Janus.Storage.Privacy.Requests;
 /// <param name="records">Where a person record a request names is restricted, and its deletion read.</param>
 /// <param name="sessions">What a restriction or a takedown ends in the transaction that makes it.</param>
 /// <param name="events">Where each session a restriction or a takedown ends is announced.</param>
+/// <param name="attached">Where each transition is carried to the records attached to the account.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-004, IDN-LIFE-003, AUTH-SESS-010, REC-ACC-002, REC-REC-003
-/// and CONV-DESIGN-003. The transitions are the account aggregate's and the person
-/// record's, so a state this adapter cannot reach from is refused there and answered
-/// here as no change.
+/// Implements PRIV-RIGHT-004, IDN-LIFE-003, AUTH-SESS-010, REC-ACC-002, REC-REC-003,
+/// REC-ATT-002 and CONV-DESIGN-003. The transitions are the account aggregate's and the
+/// person record's, so a state this adapter cannot reach from is refused there and
+/// answered here as no change.
 /// </remarks>
 internal sealed class AccountStates(
     IAccountStore accounts,
     IPersonRecordStore records,
     ISessionStore sessions,
-    IEvents events)
+    IEvents events,
+    AttachedRecords attached)
     : IAccountStates
 {
     /// <inheritdoc/>
@@ -71,12 +74,22 @@ internal sealed class AccountStates(
                     throw new InvalidOperationException(unannounced.Code.ToString());
                 }
 
+                // REC-ATT-002 AC1: each record attached to it is restricted with it.
+                await attached.RestrictAsync(subject, at, cancellationToken).ConfigureAwait(false);
+
                 break;
 
             // PRIV-RIGHT-004: an account away from active holds the restriction, so it
-            // comes back restricted and nothing acts on it meanwhile.
+            // comes back restricted and nothing acts on it meanwhile. Its records in the
+            // window with it hold it as well; a suspension changes no attached record
+            // (REC-ATT-002).
             case { State: AccountState.Suspended or AccountState.Deleting, RestrictionHeld: false }:
                 account.HoldRestriction();
+
+                if (account.State is AccountState.Deleting)
+                {
+                    await attached.RestrictAsync(subject, at, cancellationToken).ConfigureAwait(false);
+                }
 
                 break;
 
@@ -122,6 +135,7 @@ internal sealed class AccountStates(
         account.RequestDeletion(origin, at);
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+        await attached.BeginDeletionAsync(subject, origin, at, cancellationToken).ConfigureAwait(false);
 
         return true;
     }
@@ -161,6 +175,12 @@ internal sealed class AccountStates(
                 }),
         ];
     }
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<SubjectId>> AttachedAsync(
+        SubjectId account,
+        CancellationToken cancellationToken) =>
+        records.AttachedToAsync(account, cancellationToken);
 
     /// <inheritdoc/>
     public async ValueTask<AccountStanding?> StandingAsync(
@@ -221,6 +241,9 @@ internal sealed class AccountStates(
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
 
+        // REC-ATT-002 AC4: each record attached to it is taken down with it.
+        await attached.TakeDownAsync(subject, at, cancellationToken).ConfigureAwait(false);
+
         // Chapter 10 section 5b (D-218): no person takes an account down here, so no actor
         // is named; an event not taken fails the takedown, as its unit of work failing does.
         if (await SessionEnds
@@ -265,6 +288,7 @@ internal sealed class AccountStates(
         account.ReverseTakedown();
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+        await attached.ReverseTakedownAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
         return true;
     }

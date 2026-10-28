@@ -128,9 +128,10 @@ internal interface IAccountDirectory
     /// stood.
     /// </summary>
     /// <param name="subject">Whose account.</param>
+    /// <param name="at">When the window ends.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of restoring it.</returns>
-    ValueTask CancelDeletionAsync(SubjectId subject, CancellationToken cancellationToken);
+    ValueTask CancelDeletionAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken);
 
     /// <summary>
     /// When an account came into being, which decides whether a raised requirement

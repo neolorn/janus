@@ -478,7 +478,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Empty(_directory.Lifted);
         Assert.Empty(_audit.Administered);
 
-        await _directory.CancelDeletionAsync(_member, TestContext.Current.CancellationToken);
+        await _directory.CancelDeletionAsync(_member, Noon, TestContext.Current.CancellationToken);
 
         Assert.Equal(AccountState.Restricted, await StateAsync(_member));
     }

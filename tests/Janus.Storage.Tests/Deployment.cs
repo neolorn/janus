@@ -8,7 +8,10 @@ using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Organizations;
+using Janus.Storage.Identity.Records;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.SubjectKeys;
+using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -148,6 +151,21 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     /// <returns>The key.</returns>
     public DeploymentDataKeyStore DataKey(StoreContext context) =>
         new(new DataConnections(context), Ring, _randomness);
+
+    /// <summary>
+    /// What carries an account's transitions to the person records attached to it, over
+    /// the context's tracked writes.
+    /// </summary>
+    /// <param name="context">The context the operation runs in.</param>
+    /// <param name="events">Where each record's events go.</param>
+    /// <param name="time">The clock each outbox record is written on.</param>
+    /// <returns>It.</returns>
+    public AttachedRecords Attached(StoreContext context, IEvents events, TimeProvider time) =>
+        new(
+            new PersonRecordStore(context, Ring, _randomness),
+            new OutboxStore(context, time),
+            events,
+            new ConfigurationStore(context, new DataConnections(context)));
 
     /// <summary>
     /// Destroys a subject's data key, as the erasure transaction does.

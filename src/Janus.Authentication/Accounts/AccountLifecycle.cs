@@ -459,7 +459,7 @@ internal sealed class AccountLifecycle(
             return Result.Failure(moved);
         }
 
-        await directory.CancelDeletionAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+        await directory.CancelDeletionAsync(link.Subject, now, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(link.Subject, cancellationToken).ConfigureAwait(false);
 
         Result published = await events

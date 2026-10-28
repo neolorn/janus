@@ -155,6 +155,18 @@ internal sealed class AccountStatesInMemory : IAccountStates
                 .OrderBy(deletion => deletion.Since),
         ]);
 
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<SubjectId>> AttachedAsync(
+        SubjectId account,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<SubjectId>>(
+        [
+            .. _attached
+                .Where(attached => attached.Value == account && Of(attached.Key) is not AccountState.Deleted)
+                .Select(attached => attached.Key)
+                .OrderBy(record => record.Value),
+        ]);
+
     /// <summary>
     /// Puts an account in a grace window somebody else began, as a takedown or the
     /// privacy queue does.

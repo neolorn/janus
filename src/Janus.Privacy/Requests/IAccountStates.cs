@@ -62,6 +62,15 @@ internal interface IAccountStates
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The person records attached to an account and not erased, which its erasure
+    /// erases with it (REC-ATT-002).
+    /// </summary>
+    /// <param name="account">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Their subjects.</returns>
+    ValueTask<IReadOnlyList<SubjectId>> AttachedAsync(SubjectId account, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes the account's row for a change, to the end of the transaction, where the
     /// operation that goes on to change it must hold it before any other lock
     /// (AUTHZ-GATE-006, CONV-DESIGN-003).
