@@ -102,6 +102,45 @@ public sealed class PersonalFieldsTests(DatabaseFixture database) : IClassFixtur
     }
 
     /// <summary>
+    /// REC-REC-001 AC2: a host's field encrypted under a person record's subject decrypts
+    /// under it and under no account's, and answers <c>privacy.subject.erased</c> once the
+    /// record is erased.
+    /// </summary>
+    [Fact]
+    public async Task REC_REC_001_AC2_AFieldUnderARecordsSubjectDecryptsUnderItAloneAsync()
+    {
+        SubjectId record = await RecordAsync();
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        (ReadOnlyMemory<byte> name, _) = await WrittenAsync(
+            record,
+            fields => (Value(fields.Encrypt(ParcelType, "RecipientName", "Named Recipient")), default));
+
+        await using (StoreContext reading = database.Context())
+        {
+            Assert.Equal("Named Recipient", Value(await Fields(reading).WithSubjectAsync(
+                record,
+                fields => fields.Decrypt(ParcelType, "RecipientName", name),
+                TestContext.Current.CancellationToken)));
+
+            await Assert.ThrowsAnyAsync<CryptographicException>(async () =>
+                await Fields(reading).WithSubjectAsync(
+                    account,
+                    fields => fields.Decrypt(ParcelType, "RecipientName", name),
+                    TestContext.Current.CancellationToken));
+        }
+
+        await _deployment.EraseAsync(record);
+
+        await using StoreContext erased = database.Context();
+
+        Assert.Equal(ErrorCodes.SubjectErased, Code(Value(await Fields(erased).WithSubjectAsync(
+            record,
+            fields => Result.Success(fields.Decrypt(ParcelType, "RecipientName", name)),
+            TestContext.Current.CancellationToken))));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC20: a field's declared name is its member's, or the one the
     /// declaration gives it, so a member the host renamed and gave its old name reads
     /// what was written under that name.

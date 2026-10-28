@@ -143,6 +143,41 @@ public sealed class RecordAccessTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-ATT-002 AC3: a code for the contact an attached record holds opens a session
+    /// that does not reach it, in the state or by its own path; a contact only an attached
+    /// record holds is sent <c>record-access-none</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ATT_002_AC3_ACodeForAnAttachedRecordsContactDoesNotReachItAsync()
+    {
+        const string alone = "attached.only@example.test";
+
+        SubjectId reachable = Held(IdentifierKind.Email, Address, verifiedAgo: TimeSpan.FromDays(1));
+        SubjectId attached = Held(IdentifierKind.Email, Address, verifiedAgo: TimeSpan.FromDays(1));
+        SubjectId only = Held(IdentifierKind.Email, alone, verifiedAgo: TimeSpan.FromDays(1));
+
+        _deployment.Records.Of(attached).AttachedTo = SubjectId.New(Randomness);
+        _deployment.Records.Of(only).AttachedTo = SubjectId.New(Randomness);
+
+        Browser browser = await OpenedAsync("email", Address);
+
+        Answer state = await browser.SendAsync("GET", "/records/access");
+        Answer read = await browser.SendAsync("GET", "/records/access/" + attached);
+
+        Assert.Equal([reachable], Reached(state));
+        Assert.Equal(
+            (StatusCodes.Status404NotFound, ErrorCodes.RecordNotFound.ToString()),
+            (read.Status, read.Text("code")));
+
+        Assert.Equal(StatusCodes.Status202Accepted, (await AskedAsync(new Browser(_deployment), "email", alone)).Status);
+
+        _ = await _deployment.CarrySendsAsync();
+
+        Assert.Equal(NoneSent, Assert.Single(_deployment.Mail.Taken, sent => sent.Destination.Value == alone).Body);
+    }
+
+    /// <summary>
     /// REC-ACC-001: a record restricted, and one deleting by its own request, are still
     /// reached.
     /// </summary>
