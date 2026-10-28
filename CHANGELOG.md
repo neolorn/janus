@@ -10,6 +10,7 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+Staff holding `record:read` in an organization find the person records it holds by an email or a phone, read in its canonical form, or by a reference, at `POST /admin/records/find` and `IPersonRecords.FindAsync`.
 A person record's deletion window, `record.deletion.grace`, closing erases the record as an account's erasure does: its key destroyed, its contact and reference fingerprints neutralised, its row kept `deleted` beside an erasures row, and `ErasureRequested` naming its subject.
 - A person a record access session reaches exercises their rights on each record under
   `/records/access/{subject}`: its read, its export in both formats, its consents and

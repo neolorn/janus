@@ -189,6 +189,32 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
     }
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<SubjectId>> HoldingAsync(
+        OrganizationId organization,
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<SubjectId>>(
+        [
+            .. HeldBy(organization)
+                .Where(record => record.Contacts.TryGetValue(kind, out CollectedContact? held)
+                    && fingerprints.Any(fingerprint => fingerprint.AsSpan().SequenceEqual(Encoding.UTF8.GetBytes(held.Value))))
+                .Select(record => record.Subject),
+        ]);
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<SubjectId>> ReferencingAsync(
+        OrganizationId organization,
+        string reference,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<SubjectId>>(
+        [
+            .. HeldBy(organization)
+                .Where(record => record.References.Contains(reference, StringComparer.Ordinal))
+                .Select(record => record.Subject),
+        ]);
+
+    /// <inheritdoc/>
     public ValueTask<ReadRecord?> ReadAsync(SubjectId subject, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_records.TryGetValue(subject, out HeldRecord? record)
             ? new ReadRecord(
@@ -293,6 +319,12 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
 
     // REC-ACC-001: collected, attached to no account, active, restricted or deleting by
     // its own request, holding the value as a contact verified at a collection.
+    // A deleted record's fingerprints are neutralised, so nothing finds it.
+    private IEnumerable<HeldRecord> HeldBy(OrganizationId organization) =>
+        _records.Values
+            .Where(record => record.Organization == organization && record.State is not PersonRecordState.Deleted)
+            .OrderBy(record => record.Subject.Value);
+
     private IEnumerable<HeldRecord> Reaching(
         IdentifierKind kind,
         IReadOnlyList<byte[]> fingerprints,

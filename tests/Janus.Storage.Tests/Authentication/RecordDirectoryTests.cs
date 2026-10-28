@@ -427,6 +427,63 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
         Assert.Null(await directory.NoticeContactsAsync(Subjects.New(), TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// REC-ADM-001 AC2: a finding answers the records the organization holds that hold
+    /// the contact, verified or not, or the reference, in the order of their subjects,
+    /// and none another organization holds.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ADM_001_AC2_AFindingAnswersTheRecordsOfTheOrganizationHoldingTheValueAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        OrganizationId elsewhere = await _deployment.OrganizationAsync(Noon);
+        SubjectId collected = Subjects.New();
+        SubjectId entered = Subjects.New();
+        string reference = "order-" + collected.Value.ToString("N")[..12];
+
+        await WrittenAsync(Person(collected, organization, created: true) with { Reference = reference });
+        await WrittenAsync(Person(Subjects.New(), elsewhere, created: true) with { Reference = reference });
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var work = new UnitOfWork(writing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await Directory(writing).EnterAsync(
+                new EnteredPerson(
+                    entered,
+                    organization,
+                    "en",
+                    Name: null,
+                    Age: null,
+                    [new CollectedContact(IdentifierKind.Phone, Number, VerifiedAt: null)],
+                    Reference: null,
+                    Noon),
+                TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        RecordDirectory directory = Directory(reading);
+
+        Assert.Equal(
+            [.. new[] { collected, entered }.OrderBy(subject => subject.Value)],
+            await directory.HoldingAsync(
+                organization,
+                IdentifierKind.Phone,
+                directory.FingerprintsOf(Number),
+                TestContext.Current.CancellationToken));
+        Assert.Equal(
+            [collected],
+            await directory.ReferencingAsync(organization, reference, TestContext.Current.CancellationToken));
+        Assert.Empty(await directory.HoldingAsync(
+            organization,
+            IdentifierKind.Email,
+            directory.FingerprintsOf(Number),
+            TestContext.Current.CancellationToken));
+    }
+
     private static CollectedPerson Person(
         SubjectId subject,
         OrganizationId organization,

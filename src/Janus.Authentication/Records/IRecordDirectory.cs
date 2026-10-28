@@ -12,7 +12,7 @@ namespace Janus.Authentication.Records;
 /// through this port.
 /// </summary>
 /// <remarks>
-/// Implements REC-COL-002, REC-COL-003, REC-ACC-001 and CONV-DESIGN-003.
+/// Implements REC-COL-002, REC-COL-003, REC-ACC-001, REC-ADM-001 and CONV-DESIGN-003.
 /// </remarks>
 internal interface IRecordDirectory
 {
@@ -125,6 +125,34 @@ internal interface IRecordDirectory
         IReadOnlyList<SubjectId> subjects,
         IdentifierKind kind,
         IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The records an organization holds that hold a value as a contact, verified or
+    /// not, in the order of their subjects (REC-ADM-001).
+    /// </summary>
+    /// <param name="organization">The organization.</param>
+    /// <param name="kind">The contact's kind.</param>
+    /// <param name="fingerprints">The value's keyed fingerprints.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Their subjects.</returns>
+    ValueTask<IReadOnlyList<SubjectId>> HoldingAsync(
+        OrganizationId organization,
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The records an organization holds that hold a reference, in the order of their
+    /// subjects (REC-ADM-001).
+    /// </summary>
+    /// <param name="organization">The organization.</param>
+    /// <param name="reference">The reference, in its <c>NFKC_Casefold</c> form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Their subjects.</returns>
+    ValueTask<IReadOnlyList<SubjectId>> ReferencingAsync(
+        OrganizationId organization,
+        string reference,
         CancellationToken cancellationToken);
 
     /// <summary>

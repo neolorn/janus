@@ -1276,6 +1276,18 @@ POST /admin/records
   403 auth.session.csrfinvalid authz.denied authz.restricted
   409 privacy.notice.unpublished
   422 api.request.invalid identity.identifier.invalid identity.profile.invalid privacy.purpose.noconsent
+POST /admin/records/find
+  request application/json
+    organization: Guid?
+    kind: IdentifierKind?
+    value: string
+    reference: string
+  200
+    application/json
+      subjects[]: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
 POST /admin/recovery/approve
   request application/json
     subject: string

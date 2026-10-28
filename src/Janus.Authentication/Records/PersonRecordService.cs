@@ -14,7 +14,7 @@ namespace Janus.Authentication.Records;
 
 /// <summary>
 /// What staff do to a person record: enter one for someone who gave their details
-/// otherwise than on a host's screen.
+/// otherwise than on a host's screen, and find the records an organization holds.
 /// </summary>
 /// <param name="gate">Where each operation's permission is asked.</param>
 /// <param name="records">The person records staff enter.</param>
@@ -26,7 +26,8 @@ namespace Janus.Authentication.Records;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a new record's subject identifier is drawn from.</param>
 /// <remarks>
-/// Implements REC-COL-003, REC-AGE-001, PRIV-CONS-001 and chapter 09 section 8a.
+/// Implements REC-COL-003, REC-AGE-001, REC-ADM-001, PRIV-CONS-001 and chapter 09 section
+/// 8a.
 /// Everything is judged before the unit of work is joined save the consents, whose
 /// refusal rolls the whole back, so a refusal writes nothing and keeps nothing.
 /// </remarks>
@@ -149,6 +150,61 @@ internal sealed class PersonRecordService(
             .Match(() => Result.Success(person.Subject), Result.Failure<SubjectId>);
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<SubjectId>>> FindAsync(
+        AccessContext context,
+        OrganizationId organization,
+        IdentifierKind kind,
+        string value,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (await DeniedAsync(context, organization, cancellationToken).ConfigureAwait(false) is Error denied)
+        {
+            return Result.Failure<IReadOnlyList<SubjectId>>(denied);
+        }
+
+        // IDN-ACCT-004: read in the canonical form a contact is held in, so another case,
+        // another Unicode form or other digits find the same record; a value that is not
+        // well formed is one no record holds.
+        if (Canonical(kind, value.Trim()) is not string canonical)
+        {
+            return Result.Success<IReadOnlyList<SubjectId>>([]);
+        }
+
+        return Result.Success(await records
+            .HoldingAsync(organization, kind, records.FingerprintsOf(canonical), cancellationToken)
+            .ConfigureAwait(false));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<SubjectId>>> FindAsync(
+        AccessContext context,
+        OrganizationId organization,
+        string reference,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(reference);
+
+        if (await DeniedAsync(context, organization, cancellationToken).ConfigureAwait(false) is Error denied)
+        {
+            return Result.Failure<IReadOnlyList<SubjectId>>(denied);
+        }
+
+        // PRIV-RIGHT-005c: a reference is held only in its folded form.
+        if (reference.Trim() is not { Length: > 0 } trimmed)
+        {
+            return Result.Success<IReadOnlyList<SubjectId>>([]);
+        }
+
+        return Result.Success(await records
+            .ReferencingAsync(organization, CanonicalForm.Of(trimmed), cancellationToken)
+            .ConfigureAwait(false));
+    }
+
     // What the person gave, judged before anything is written: the language, the name,
     // each contact and the reference.
     private static Error? Taken(
@@ -252,6 +308,24 @@ internal sealed class PersonRecordService(
 
         return null;
     }
+
+    // REC-ADM-001: a finding is asked in the organization named, under record:read.
+    private async ValueTask<Error?> DeniedAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        (await gate
+            .RequireAsync(context, Permissions.RecordRead, organization, cancellationToken)
+            .ConfigureAwait(false))
+        .Match<Error?>(() => null, error => error);
+
+    private static string? Canonical(IdentifierKind kind, string entered) =>
+        kind switch
+        {
+            IdentifierKind.Email when EmailAddress.TryParse(entered, out EmailAddress address) => address.Value,
+            IdentifierKind.Phone when PhoneNumber.TryParse(entered, out PhoneNumber number) => number.Value,
+            _ => null,
+        };
 
     private async ValueTask<OrganizationId?> ScopeOfAsync(
         OrganizationId organization,

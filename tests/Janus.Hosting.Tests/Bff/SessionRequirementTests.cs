@@ -123,6 +123,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /admin/privacy/requests/{request}/fulfil",
         "POST /admin/privacy/requests/{request}/refuse",
         "POST /admin/records",
+        "POST /admin/records/find",
         "POST /admin/recovery/approve",
         "POST /admin/restrictions/{name}/grant",
         "POST /admin/roles",

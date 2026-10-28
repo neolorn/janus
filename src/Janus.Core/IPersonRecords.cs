@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -37,5 +38,45 @@ public interface IPersonRecords
     ValueTask<Result<SubjectId>> EnterAsync(
         AccessContext context,
         PersonRecordEntry entry,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The person records an organization holds that hold an email or a phone, read in
+    /// its canonical form, under <c>record:read</c> in that organization.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">The organization the finding is asked in.</param>
+    /// <param name="kind">Whether the value is an email or a phone.</param>
+    /// <param name="value">The value, as entered.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The records' subjects, none where no record holds the value, or the refusal:
+    /// <c>authz.denied</c> where the caller does not hold the permission there.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the value is absent.</exception>
+    ValueTask<Result<IReadOnlyList<SubjectId>>> FindAsync(
+        AccessContext context,
+        OrganizationId organization,
+        IdentifierKind kind,
+        string value,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The person records an organization holds that hold a reference, under
+    /// <c>record:read</c> in that organization.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">The organization the finding is asked in.</param>
+    /// <param name="reference">The reference, as entered.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The records' subjects, none where no record holds the reference, or the refusal
+    /// as the finding by a contact answers it.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the reference is absent.</exception>
+    ValueTask<Result<IReadOnlyList<SubjectId>>> FindAsync(
+        AccessContext context,
+        OrganizationId organization,
+        string reference,
         CancellationToken cancellationToken);
 }

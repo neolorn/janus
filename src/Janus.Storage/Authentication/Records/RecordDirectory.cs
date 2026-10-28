@@ -8,6 +8,7 @@ using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Identity.Records;
 using Janus.Privacy.SubjectKeys;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Records;
 
@@ -20,8 +21,8 @@ namespace Janus.Storage.Authentication.Records;
 /// <param name="identifiers">The identifiers, whose value locks a collection takes too.</param>
 /// <param name="subjectKeys">Where a new record's data key is created.</param>
 /// <remarks>
-/// Implements REC-COL-002, REC-COL-003, REC-REC-001, REC-REC-002, REC-ACC-001, REC-ACC-002
-/// and CONV-DESIGN-003.
+/// Implements REC-COL-002, REC-COL-003, REC-REC-001, REC-REC-002, REC-ACC-001, REC-ACC-002,
+/// REC-ADM-001 and CONV-DESIGN-003.
 /// </remarks>
 internal sealed class RecordDirectory(
     StoreContext context,
@@ -193,6 +194,29 @@ internal sealed class RecordDirectory(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<SubjectId>> HoldingAsync(
+        OrganizationId organization,
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken) =>
+        await HeldByAsync(
+                organization,
+                await records.HoldingContactAsync(kind, fingerprints, cancellationToken).ConfigureAwait(false),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<SubjectId>> ReferencingAsync(
+        OrganizationId organization,
+        string reference,
+        CancellationToken cancellationToken) =>
+        await HeldByAsync(
+                organization,
+                await records.HoldingReferenceAsync(reference, cancellationToken).ConfigureAwait(false),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask<ReadRecord?> ReadAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         if (await records.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
@@ -319,6 +343,26 @@ internal sealed class RecordDirectory(
     // account, active, restricted or deleting by its own request, whose contact of the
     // kind is the value and was verified at a collection; where an instant is named, at
     // or after it. A record staff entered is never reached.
+    // Those of some records the organization holds, in the order of their subjects.
+    private async ValueTask<IReadOnlyList<SubjectId>> HeldByAsync(
+        OrganizationId organization,
+        IReadOnlyList<SubjectId> subjects,
+        CancellationToken cancellationToken)
+    {
+        if (subjects.Count == 0)
+        {
+            return [];
+        }
+
+        List<SubjectId> held = await context.PersonRecords
+            .Where(record => record.Organization == organization && subjects.Contains(record.Subject))
+            .Select(record => record.Subject)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. held.OrderBy(subject => subject.Value)];
+    }
+
     private async ValueTask<IReadOnlyList<ReachedRecord>> ReachingAsync(
         IdentifierKind kind,
         IReadOnlyList<byte[]> fingerprints,
