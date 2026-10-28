@@ -353,6 +353,36 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
     }
 
     /// <summary>
+    /// REC-AGE-001 AC3, REC-COL-003 (D-221): a record staff entered without a date of
+    /// birth holds no answer, and no sensitive record registers under it; one entered
+    /// with the person's own answer does.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_AGE_001_AC3_ASensitiveRecordRegistersUnderAnEntryOnlyWithThePersonsAnswerAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case written = await BeginAsync();
+        ResourceReference workspace = Reference(Workspace);
+        RoleName entering = await written.Deployment.RoleAsync([Permissions.RecordCreate], cancellationToken);
+
+        _ = await written.Deployment.GrantAsync(
+            GrantSubject.Of(written.Account), entering, null, false, null, written.Organization, cancellationToken);
+
+        Ok(await RegisteredAsync(new ResourceRegistration(workspace, written.Organization, null, null)));
+
+        SubjectId unanswered = await EnteredAsync(written, dateOfBirth: null);
+        SubjectId answered = await EnteredAsync(written, new DateOnly(1990, 1, 1));
+
+        Assert.Equal(
+            "subject",
+            Invalid(Refused(await RegisteredAsync(
+                new ResourceRegistration(Reference(Document), written.Organization, workspace, unanswered)))));
+        Ok(await RegisteredAsync(
+            new ResourceRegistration(Reference(Document), written.Organization, workspace, answered)));
+    }
+
+    /// <summary>
     /// AUTHZ-INHERIT-002 AC5, AUTHZ-GRANT-003 AC6 (D-203, D-206): a record that holds a
     /// registered record is refused with <c>authz.resource.inuse</c>, and one not
     /// registered with <c>api.request.invalid</c> naming <c>resource</c>, each changing
@@ -443,6 +473,26 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         SubjectId account = await deployment.AccountAsync(TestContext.Current.CancellationToken);
 
         return new Case(deployment, deployment.Organization, account, role);
+    }
+
+    // A record staff entered in the case's organization by the case's account.
+    private async Task<SubjectId> EnteredAsync(Case written, DateOnly? dateOfBirth)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IPersonRecords>().EnterAsync(
+                AccessContext.Of(written.Account),
+                new PersonRecordEntry(
+                    written.Organization,
+                    "en",
+                    Name: null,
+                    Email: null,
+                    "+441632960031",
+                    Consents: [],
+                    dateOfBirth,
+                    Reference: null),
+                TestContext.Current.CancellationToken))
+            .Match(subject => subject, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     private async Task<Result> RegisteredAsync(ResourceRegistration registration)

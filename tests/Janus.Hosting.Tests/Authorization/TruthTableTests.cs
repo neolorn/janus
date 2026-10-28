@@ -990,6 +990,81 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     }
 
     /// <summary>
+    /// REC-AGE-001 AC1, AUTHZ-INHERIT-002, IDN-LIFE-002a (D-221): a record of a sensitive
+    /// type naming a person record as its data subject is registered on the record's age
+    /// answer. One naming a record that holds no affirmation, or one that holds it and is
+    /// being deleted, is refused 422 <c>api.request.invalid</c> naming <c>subject</c>; one
+    /// naming a record collected with the age answered, or attached to an account that
+    /// stands, is admitted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_AGE_001_AC1_ASensitiveRecordUnderAPersonRecordIsRegisteredOnItsAgeAnswerAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+        _ = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        SubjectId unanswered = await deployment.PersonRecordAsync(cancellationToken);
+        SubjectId answered = await deployment.PersonRecordAsync(cancellationToken);
+        SubjectId leaving = await deployment.PersonRecordAsync(cancellationToken);
+        SubjectId attached = await deployment.PersonRecordAsync(cancellationToken);
+        ResourceReference workspace = Reference(Workspace);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+
+        await using (NpgsqlConnection connection = await host.OpenAsync())
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE identity.person_records SET adult_affirmed = true, answered_age_at = @at
+                WHERE subject = ANY(@affirmed);
+                UPDATE identity.person_records
+                SET state = 'deleting', deleting_by = 'self', deleting_since = @at
+                WHERE subject = @leaving;
+                UPDATE identity.person_records SET attached_to = @account, attached_at = @at
+                WHERE subject = @attached;
+                """,
+                new
+                {
+                    affirmed = new[] { answered.Value, leaving.Value },
+                    leaving = leaving.Value,
+                    account = account.Value,
+                    attached = attached.Value,
+                    at = DateTimeOffset.UtcNow,
+                },
+                cancellationToken: cancellationToken));
+        }
+
+        async Task<Decided> RegisteredAsync(SubjectId subject)
+        {
+            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+            return (await scope.ServiceProvider.GetRequiredService<IResources>().RegisterAsync(
+                    new ResourceRegistration(Reference(Document), deployment.Organization, workspace, subject),
+                    cancellationToken))
+                .Match(
+                    () => Decided.Allowed,
+                    error =>
+                    {
+                        Assert.Equal(ErrorCodes.RequestInvalid, error.Code);
+                        Assert.Equal("subject", error.Details["member"].GetString());
+
+                        return Decided.Denied;
+                    });
+        }
+
+        Assert.Equal(
+            [Decided.Denied, Decided.Allowed, Decided.Denied, Decided.Allowed],
+            [
+                await RegisteredAsync(unanswered),
+                await RegisteredAsync(answered),
+                await RegisteredAsync(leaving),
+                await RegisteredAsync(attached),
+            ]);
+    }
+
+    /// <summary>
     /// REC-REC-001 AC3, IDN-ACCT-007 (D-166, D-221): a person record holds no grant and no
     /// group membership. A grant to its subject and a member naming it are each refused
     /// 422 <c>api.request.invalid</c> naming <c>subjectId</c>, as one naming a subject no

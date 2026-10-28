@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A record of a sensitive type may name a person record as its data subject where the
+  person record holds the age answer (the adult affirmation, or the age group where
+  `registration.adultaffirmation` is `off`) or is attached to an account that stands;
+  one naming a person record without the answer, or one being deleted or deleted, is
+  refused 422 `api.request.invalid` naming `subject`.
 - Staff enter a person record for someone who gave their details by telephone, in
   person or on paper with `IPersonRecords.EnterAsync` (`PersonRecordEntry`) or
   `POST /admin/records`, under `record:create` in the organization named. The record is
