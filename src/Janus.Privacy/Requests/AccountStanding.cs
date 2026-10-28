@@ -26,4 +26,10 @@ internal sealed record AccountStanding(
     /// Whether the subject is a person record's rather than an account's (REC-ADM-001).
     /// </summary>
     public bool IsPersonRecord { get; init; }
+
+    /// <summary>
+    /// The account a person record is attached to and follows, where it is attached
+    /// (REC-ATT-002).
+    /// </summary>
+    public SubjectId? AttachedTo { get; init; }
 }

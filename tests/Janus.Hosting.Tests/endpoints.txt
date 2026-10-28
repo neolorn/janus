@@ -1243,6 +1243,7 @@ POST /admin/privacy/requests
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied authz.restricted
+  409 identity.record.followsaccount
   422 api.request.invalid privacy.request.receivedfuture
 POST /admin/privacy/requests/{request}/fulfil
   204

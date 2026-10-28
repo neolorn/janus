@@ -108,7 +108,7 @@ internal static class PrivacyEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.RequestReceivedFuture, ErrorCodes.RequestInvalid))
+                    ErrorCodes.RequestReceivedFuture, ErrorCodes.RequestInvalid, ErrorCodes.RecordFollowsAccount))
             .Accepts<PrivacyEntryBody>(MediaTypeNames.Application.Json)
             .Produces<PrivacyReceiptView>(StatusCodes.Status202Accepted);
         _ = SessionRequired.On(queue.MapPost("/{request}/fulfil", FulfilAsync))

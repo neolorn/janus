@@ -199,6 +199,64 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// REC-ADM-002: an out-of-band erasure begins an active or restricted person record's
+    /// window by <c>oob-request</c>, holding a restriction in force, and begins none for a
+    /// record already in its window; an attached record's standing names its account.
+    /// </summary>
+    [Fact]
+    public async Task REC_ADM_002_AnOutOfBandErasureBeginsARecordsWindowAsync()
+    {
+        SubjectId active = await RecordAsync();
+        SubjectId restricted = await RecordAsync();
+        SubjectId attached = await RecordAsync();
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext changing = database.Context())
+        {
+            var records = new PersonRecordStore(changing, _deployment.Ring, _deployment.Randomness);
+            PersonRecord held = (await records.FindBySubjectAsync(restricted, TestContext.Current.CancellationToken))!;
+            PersonRecord following = (await records.FindBySubjectAsync(attached, TestContext.Current.CancellationToken))!;
+
+            held.Restrict();
+            following.Attach(account, Noon);
+
+            await records.RecordAsync(held, TestContext.Current.CancellationToken);
+            await records.RecordAsync(following, TestContext.Current.CancellationToken);
+            await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        foreach ((SubjectId subject, bool begun) in new[] { (active, true), (restricted, true), (active, false) })
+        {
+            await using StoreContext deleting = database.Context();
+            await using var work = new UnitOfWork(deleting);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(
+                begun,
+                await States(deleting, work).BeginDeletionAsync(
+                    subject,
+                    DeletionOrigin.OutOfBandRequest,
+                    Noon,
+                    TestContext.Current.CancellationToken));
+
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        var read = new PersonRecordStore(reading, _deployment.Ring, _deployment.Randomness);
+        PersonRecord withRestriction = (await read.FindBySubjectAsync(restricted, TestContext.Current.CancellationToken))!;
+
+        Assert.Equal(
+            (AccountState.Deleting, DeletionOrigin.OutOfBandRequest, Noon),
+            ((await StandingAsync(active)).State, (await StandingAsync(active)).DeletingBy, (await StandingAsync(active)).DeletingSince));
+        Assert.Equal((PersonRecordState.Deleting, true), (withRestriction.State, withRestriction.RestrictionHeld));
+        Assert.Equal(
+            (true, account),
+            ((await StandingAsync(attached)).IsPersonRecord, (await StandingAsync(attached)).AttachedTo));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003 AC4: at the trigger no personal field is destroyed and no erasures
     /// row is written, so the subject's key is as it was.
     /// </summary>

@@ -4690,6 +4690,7 @@ static Janus.Core.ErrorCodes.ProviderNonconformant.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PurposeNoConsent.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PurposeNotObjectable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ReactivationTokenInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RecordFollowsAccount.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecordNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecordSignedIn.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecordStateConflict.get -> Janus.Core.ErrorCode

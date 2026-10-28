@@ -106,8 +106,14 @@ internal sealed class AccountStates(
         Account? account = await accounts.HoldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (account is null
-            || !(account.State is AccountState.Active or AccountState.Restricted
+        // REC-ADM-002: a person record's out-of-band erasure begins its window as an
+        // active or restricted account's does, holding a restriction in force.
+        if (account is null)
+        {
+            return await RecordDeletionBegunAsync(subject, origin, at, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!(account.State is AccountState.Active or AccountState.Restricted
                 || (account.State is AccountState.Suspended && origin is DeletionOrigin.OutOfBandRequest)))
         {
             return false;
@@ -190,6 +196,7 @@ internal sealed class AccountStates(
                 Emergency: false)
             {
                 IsPersonRecord = true,
+                AttachedTo = record.AttachedTo,
             }
             : null;
     }
@@ -261,6 +268,7 @@ internal sealed class AccountStates(
 
         return true;
     }
+
     private async ValueTask<bool> RecordRestrictedAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         PersonRecord? record = await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -280,6 +288,25 @@ internal sealed class AccountStates(
             default:
                 return false;
         }
+
+        await records.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    private async ValueTask<bool> RecordDeletionBegunAsync(
+        SubjectId subject,
+        DeletionOrigin origin,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not { State: PersonRecordState.Active or PersonRecordState.Restricted } record)
+        {
+            return false;
+        }
+
+        record.RequestDeletion(origin, at);
 
         await records.RecordAsync(record, cancellationToken).ConfigureAwait(false);
 

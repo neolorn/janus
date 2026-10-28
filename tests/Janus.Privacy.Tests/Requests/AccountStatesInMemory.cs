@@ -21,6 +21,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
     private readonly HashSet<SubjectId> _held = [];
     private readonly HashSet<SubjectId> _reserved = [];
     private readonly HashSet<SubjectId> _personRecords = [];
+    private readonly Dictionary<SubjectId, SubjectId> _attached = [];
 
     /// <summary>
     /// Puts an account in a state, as a deployment has one.
@@ -34,10 +35,16 @@ internal sealed class AccountStatesInMemory : IAccountStates
     /// </summary>
     /// <param name="subject">Whose.</param>
     /// <param name="state">The state.</param>
-    public void HoldRecord(SubjectId subject, AccountState state)
+    /// <param name="attachedTo">The account it is attached to, where it is.</param>
+    public void HoldRecord(SubjectId subject, AccountState state, SubjectId? attachedTo = null)
     {
         _states[subject] = state;
         _ = _personRecords.Add(subject);
+
+        if (attachedTo is SubjectId account)
+        {
+            _attached[subject] = account;
+        }
     }
 
     /// <summary>
@@ -210,6 +217,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
                 _reserved.Contains(subject))
             {
                 IsPersonRecord = _personRecords.Contains(subject),
+                AttachedTo = _attached.TryGetValue(subject, out SubjectId account) ? account : null,
             });
     }
 

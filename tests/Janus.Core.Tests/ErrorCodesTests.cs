@@ -138,6 +138,7 @@ public sealed class ErrorCodesTests
         "identity.profile.notaccepted",
         "identity.profile.underage",
         "identity.reactivation.tokeninvalid",
+        "identity.record.followsaccount",
         "identity.record.notfound",
         "identity.record.signedin",
         "identity.record.stateconflict",

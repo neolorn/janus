@@ -21,13 +21,14 @@ namespace Janus.Privacy.Requests;
 /// <param name="accounts">Where an account enters the restricted or deleting state.</param>
 /// <param name="restrictions">Where an account is restricted and the subscribers told.</param>
 /// <param name="notices">Where the automatic receipt and the out-of-band deletion notice go.</param>
+/// <param name="events">Where a person record's window an out-of-band request began is announced.</param>
 /// <param name="audit">Where each exercise is written down.</param>
 /// <param name="configuration">Where the decision period and the warning lead are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, PRIV-RIGHT-001, PRIV-RIGHT-002 and chapter 09 sections 7
-/// and 8a. The receipt is undertaken inside the transaction that puts the request on
+/// Implements LIB-API-005, PRIV-RIGHT-001, PRIV-RIGHT-002, REC-ADM-002 and chapter 09
+/// sections 7 and 8a. The receipt is undertaken inside the transaction that puts the request on
 /// the queue, so no receipt goes out for a request that was not queued, and a receipt a
 /// sending restriction refuses leaves the request standing with no receipt.
 /// </remarks>
@@ -39,6 +40,7 @@ internal sealed class PrivacyRequestService(
     IAccountStates accounts,
     RestrictionGrant restrictions,
     ISubjectNotices notices,
+    IEvents events,
     IPrivacyAudit audit,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -146,12 +148,24 @@ internal sealed class PrivacyRequestService(
             return Result.Failure<PrivacyRequestReceipt>(Malformed("identityConfirmation"));
         }
 
-        // 09 section 8a (D-183): a request is entered for a subject an account bears, so
-        // that the fulfilment has no existence left to refuse on.
-        if (await accounts.StandingAsync(entry.Subject, cancellationToken).ConfigureAwait(false) is null)
+        // 09 section 8a (D-183, D-221): a request is entered for a subject an account or a
+        // person record bears, so that the fulfilment has no existence left to refuse on.
+        AccountStanding? borne = await accounts.StandingAsync(entry.Subject, cancellationToken).ConfigureAwait(false);
+
+        if (borne is null)
         {
             return Result.Failure<PrivacyRequestReceipt>(
                 Error.From(ErrorCodes.RequestInvalid, "member", JsonSerializer.SerializeToElement("subject")));
+        }
+
+        // REC-ATT-002: a record attached to an account follows it, so the request is the
+        // account's.
+        if (borne.AttachedTo is SubjectId account)
+        {
+            return Result.Failure<PrivacyRequestReceipt>(Error.From(
+                ErrorCodes.RecordFollowsAccount,
+                "account",
+                JsonSerializer.SerializeToElement(account.Value)));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -303,7 +317,7 @@ internal sealed class PrivacyRequestService(
         }
 
         // IDN-LIFE-003: what the fulfilment could not do leaves the request open.
-        bool windowStarted = (await DoneAsync(held, now, cancellationToken).ConfigureAwait(false))
+        bool windowStarted = (await DoneAsync(context, held, now, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<bool>(error, ref failure));
 
         if (failure is not null)
@@ -500,6 +514,7 @@ internal sealed class PrivacyRequestService(
     // What the fulfilment does to the account, answering whether it started a deletion
     // grace window.
     private async ValueTask<Result<bool>> DoneAsync(
+        AccessContext context,
         QueuedRequest request,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -533,7 +548,7 @@ internal sealed class PrivacyRequestService(
                             cancellationToken)
                         .ConfigureAwait(false))
                 {
-                    return Result.Success(true);
+                    return await BegunAsync(context, request.Subject, now, cancellationToken).ConfigureAwait(false);
                 }
 
                 // D-166 X3: the window is begun under the account's lock, which this
@@ -553,6 +568,40 @@ internal sealed class PrivacyRequestService(
             default:
                 return Result.Success(false);
         }
+    }
+
+    // REC-ADM-002: a person record's window an out-of-band request began is announced
+    // in the transaction that begins it, with the instant it closes.
+    private async ValueTask<Result<bool>> BegunAsync(
+        AccessContext context,
+        SubjectId subject,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false) is not { IsPersonRecord: true })
+        {
+            return Result.Success(true);
+        }
+
+        TimeSpan grace = (await configuration
+                .ReadAsync(Settings.RecordDeletionGrace, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        return (await events
+                .PublishAsync(
+                    new RecordDeletionRequested(
+                        now,
+                        string.Create(CultureInfo.InvariantCulture, $"{subject.Value}@{now.UtcTicks}"),
+                        DeletionOrigin.OutOfBandRequest,
+                        now + grace)
+                    {
+                        Subject = subject,
+                        Actor = context.Acting,
+                        Effective = context.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => Result.Success(true), Result.Failure<bool>);
     }
 
     private static bool Away(AccountStanding standing) =>
