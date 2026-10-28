@@ -29,6 +29,10 @@ internal static class RecordAccessEndpoints
 
     private static readonly IResult Accepted = TypedResults.StatusCode(StatusCodes.Status202Accepted);
 
+    // Chapter 09 section 7a: every step refuses a browser holding a live sign-in session,
+    // as the ask does; the end alone answers 204 always.
+    private static IResult SignedIn => Answers.Refused(ErrorCodes.RecordSignedIn);
+
     // Chapter 09 section 7a: a reference is 1 to 64 characters after trimming.
     private const int ReferenceLength = 64;
 
@@ -53,14 +57,16 @@ internal static class RecordAccessEndpoints
             .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/verify", VerifyAsync)
             .Declares(EndpointDeclaration
-                .Answering(ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.Throttled))
+                .Answering(
+                    ErrorCodes.RecordSignedIn, ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.Throttled))
             .Accepts<RecordAccessVerifyRequest>(MediaTypeNames.Application.Json)
             .Produces<RecordAccessStateView>();
         _ = group.MapGet("/", StateAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.RecordSignedIn, ErrorCodes.SessionExpired))
             .Produces<RecordAccessStateView>();
         _ = group.MapPost("/reference", ReferenceAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.Throttled))
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.RecordSignedIn, ErrorCodes.SessionExpired, ErrorCodes.Throttled))
             .Accepts<RecordAccessReferenceRequest>(MediaTypeNames.Application.Json)
             .Produces<RecordAccessStateView>();
         _ = group.MapPost("/end", EndAsync)
@@ -145,6 +151,11 @@ internal static class RecordAccessEndpoints
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
 
+        if (browser.Context is not null)
+        {
+            return SignedIn;
+        }
+
         RecordAccessVerifyRequest request = await JsonBody
             .ReadAsync<RecordAccessVerifyRequest>(context.Request, cancellationToken)
             .ConfigureAwait(false);
@@ -172,6 +183,11 @@ internal static class RecordAccessEndpoints
         ArgumentNullException.ThrowIfNull(access);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (browser.Context is not null)
+        {
+            return SignedIn;
+        }
+
         return await ShownAsync(access, browser, cancellationToken).ConfigureAwait(false);
     }
 
@@ -184,6 +200,11 @@ internal static class RecordAccessEndpoints
         ArgumentNullException.ThrowIfNull(access);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
+
+        if (browser.Context is not null)
+        {
+            return SignedIn;
+        }
 
         RecordAccessReferenceRequest request = await JsonBody
             .ReadAsync<RecordAccessReferenceRequest>(context.Request, cancellationToken)

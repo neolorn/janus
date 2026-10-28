@@ -1772,6 +1772,7 @@ GET /records/access
       records[].state: PersonRecordState
   401 auth.session.expired
   403 auth.session.csrfinvalid
+  409 identity.record.signedin
 POST /records/access
   request application/json
     kind: IdentifierKind?
@@ -1800,6 +1801,7 @@ POST /records/access/reference
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid
+  409 identity.record.signedin
   429 auth.throttled
 POST /records/access/verify
   request application/json
@@ -1814,6 +1816,7 @@ POST /records/access/verify
       records[].state: PersonRecordState
   400 api.request.malformed
   403 auth.session.csrfinvalid
+  409 identity.record.signedin
   422 auth.code.expired auth.code.invalid
   429 auth.throttled
 GET /records/collection

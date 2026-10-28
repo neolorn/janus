@@ -277,6 +277,37 @@ public sealed class RecordAccessTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-ACC-001, chapter 09 section 7a: every step of a record access session refuses
+    /// a browser holding a live sign-in session with <c>identity.record.signedin</c>, as
+    /// the ask does.
+    /// </summary>
+    /// <param name="method">The step's method.</param>
+    /// <param name="path">The step's path.</param>
+    /// <param name="member">The member its body names, where it takes one.</param>
+    /// <param name="value">The value of that member.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("POST", "/records/access/verify", "code", "123456")]
+    [InlineData("GET", "/records/access", null, null)]
+    [InlineData("POST", "/records/access/reference", "reference", "booking-1")]
+    public async Task REC_ACC_001_EveryStepRefusesABrowserSignedInAsync(
+        string method,
+        string path,
+        string? member,
+        string? value)
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer refused = member is null
+            ? await browser.SendAsync(method, path)
+            : await browser.SendAsync(method, path, (member, value!));
+
+        Assert.Equal(
+            (StatusCodes.Status409Conflict, ErrorCodes.RecordSignedIn.ToString()),
+            (refused.Status, refused.Text("code")));
+    }
+
+    /// <summary>
     /// REC-ACC-001, chapter 09 section 7a: a wrong code is refused as invalid whether or
     /// not a record holds the address asked, so the code tells nothing the ask did not;
     /// a browser that asked for no code is answered as for a lapsed one.

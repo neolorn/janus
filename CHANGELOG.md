@@ -17,7 +17,9 @@ against the public contract of LIB-API-001.
   `records.access.lifetime` (default 15 minutes, never extended). The session reaches
   the collected records whose contact was verified within `records.proof.age`, and an older
   one by the reference it holds; never a record staff entered, one attached to an
-  account or one deleted. Each record reached is audited `identity.record.accessed`.
+  account or one deleted. Each record reached is audited `identity.record.accessed`. A
+  browser holding a sign-in session is refused at every step but the end, with
+  `identity.record.signedin`.
 - A record of a sensitive type may name a person record as its data subject where the
   person record holds the age answer (the adult affirmation, or the age group where
   `registration.adultaffirmation` is `off`) or is attached to an account that stands;
