@@ -50,7 +50,7 @@ internal sealed class RecordDirectory(
 
         // Rows are held in one order, so two collections holding the same records never
         // wait on each other's.
-        foreach (SubjectId subject in holding.Order())
+        foreach (SubjectId subject in holding.OrderBy(id => id.Value))
         {
             if (await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
                 is not { State: PersonRecordState.Active, AttachedTo: null } held
