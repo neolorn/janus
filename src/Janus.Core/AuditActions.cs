@@ -417,6 +417,12 @@ public static class AuditActions
     public static AuditAction ProfileChanged { get; } = AuditAction.Parse("identity.profile.changed");
 
     /// <summary>
+    /// A collection wrote or reused a person record, the record acting and its subject.
+    /// </summary>
+    /// <remarks>Implements REC-COL-002, chapter 10 section 5.</remarks>
+    public static AuditAction RecordCollected { get; } = AuditAction.Parse("identity.record.collected");
+
+    /// <summary>
     /// A social provider's security event naming a linked credential was refused: it
     /// was not signed by the provider's published keys, or it had been carried before.
     /// </summary>

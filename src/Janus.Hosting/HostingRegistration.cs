@@ -33,6 +33,7 @@ using Janus.Hosting.Oidc;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Passwords;
 using Janus.Hosting.Privacy;
+using Janus.Hosting.Records;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
@@ -139,6 +140,10 @@ public static class HostingRegistration
         // BFF-HOST-001: a host's own endpoint reads what stage 5 established for the
         // request, the one record the library's own endpoints read.
         services.AddScoped<IRequestAccess>(provider => provider.GetRequiredService<RequestSession>());
+
+        // REC-COL-002: a host's own screen collects a person record through the session the
+        // request's browser holds.
+        services.AddScoped<IRecordCollection, RequestRecordCollection>();
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();

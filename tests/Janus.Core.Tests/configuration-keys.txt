@@ -113,6 +113,7 @@ privacy.workingdays multiple-choice R allowed=friday,monday,saturday,sunday,thur
 profile.dateofbirth choice R allowed=off,optional,required
 profile.legalname choice R allowed=off,optional,required
 records.collection.lifetime duration R ceiling=P1D
+records.proof.age duration R floor=P7D ceiling=P365D
 recovery.approvers.required integer R
 recovery.codes.reminder duration R
 recovery.invalidation.noticeinterval duration R

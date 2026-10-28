@@ -101,6 +101,7 @@ public sealed class ErrorCodesTests
         "identity.affirmation.required",
         "identity.change.pending",
         "identity.change.windowelapsed",
+        "identity.collection.expired",
         "identity.collection.incomplete",
         "identity.deletion.windowelapsed",
         "identity.domain.notfound",

@@ -149,7 +149,7 @@ public sealed class VocabularyContractTests
             ["accountstate", "consent", "reauthenticate", "restricted", "stepup"],
             WireNames<CapabilityResidual>());
         Assert.Equal(
-            ["administrator", "dashboard", "reconsent", "registration"],
+            ["administrator", "collection", "dashboard", "reconsent", "registration"],
             WireNames<ConsentMechanism>());
         Assert.Equal(["adult", "minor"], WireNames<AgeGroup>());
     }

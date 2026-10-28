@@ -621,6 +621,20 @@ public static class Settings
     public static DurationSetting RecordsCollectionLifetime { get; } =
         new("records.collection.lifetime", SettingScope.Runtime, "PT1H", ceiling: "PT24H");
 
+    /// <summary>
+    /// How long a contact verified at a collection proves the person: a record whose
+    /// contact was last verified longer ago is not reused by a collection, and is reached
+    /// by a code or offered to an account only with a reference it holds.
+    /// </summary>
+    public static DurationSetting RecordsProofAge { get; } =
+        new(
+            "records.proof.age",
+            SettingScope.Runtime,
+            "P90D",
+            floor: "P7D",
+            ceiling: "P365D",
+            loosening: SettingDirection.Increase);
+
     /// <summary>Whether one account may hold memberships in several organizations.</summary>
     public static FlagSetting OrganizationMultipleMemberships { get; } =
         new("organization.multiplememberships", SettingScope.Runtime, false);
@@ -1079,6 +1093,7 @@ public static class Settings
         TakedownGrace,
         AccountDeletionGrace,
         RecordsCollectionLifetime,
+        RecordsProofAge,
         OrganizationMultipleMemberships,
         IdentifierChangeCoolingOff,
         RegistrationPhone,

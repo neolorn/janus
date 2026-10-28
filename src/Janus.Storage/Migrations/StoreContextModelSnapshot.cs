@@ -3991,7 +3991,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_consents_kind", "kind IN ('ordinary', 'written')");
 
-                        t.HasCheckConstraint("ck_consents_mechanism", "mechanism IN ('administrator', 'dashboard', 'reconsent', 'registration')");
+                        t.HasCheckConstraint("ck_consents_mechanism", "mechanism IN ('administrator', 'collection', 'dashboard', 'reconsent', 'registration')");
 
                         t.HasCheckConstraint("ck_consents_purpose", "length(trim(purpose)) > 0");
 
@@ -4050,7 +4050,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("objections", "identity", t =>
                     {
-                        t.HasCheckConstraint("ck_objections_mechanism", "mechanism IN ('administrator', 'dashboard', 'reconsent', 'registration')");
+                        t.HasCheckConstraint("ck_objections_mechanism", "mechanism IN ('administrator', 'collection', 'dashboard', 'reconsent', 'registration')");
 
                         t.HasCheckConstraint("ck_objections_purpose", "length(trim(purpose)) > 0");
 

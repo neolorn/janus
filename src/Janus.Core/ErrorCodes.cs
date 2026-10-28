@@ -534,6 +534,14 @@ public static class ErrorCodes
     public static ErrorCode CollectionIncomplete { get; } = ErrorCode.Parse("identity.collection.incomplete");
 
     /// <summary>
+    /// A person record was asked to be collected where the browser of the request being
+    /// served holds no collection session: none begun, or one expired, ended or spent.
+    /// Nothing was written; begin a collection again.
+    /// </summary>
+    /// <remarks>Implements REC-COL-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode CollectionExpired { get; } = ErrorCode.Parse("identity.collection.expired");
+
+    /// <summary>
     /// The browser asking to give its details already holds a session. Nothing is
     /// staged or sent for it; the person gives their data under their account.
     /// </summary>

@@ -193,6 +193,7 @@ internal sealed class Deployment : IAsyncDisposable
         Action<IServiceCollection>? services = null)
     {
         Events = new EventsInMemory { Work = Work };
+        Records.Work = Work;
 
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -379,6 +380,16 @@ internal sealed class Deployment : IAsyncDisposable
     /// The collection sessions as they stand (REC-COL-001).
     /// </summary>
     public CollectionSessionStoreInMemory Collections { get; } = new();
+
+    /// <summary>
+    /// The person records a collection reads and writes.
+    /// </summary>
+    public RecordDirectoryInMemory Records { get; } = new();
+
+    /// <summary>
+    /// What was recorded of what happened to person records.
+    /// </summary>
+    public RecordAuditInMemory RecordAudit { get; } = new();
 
     /// <summary>
     /// The datacenter ranges the bot defence reads (AUTH-ABUSE-008).
@@ -904,7 +915,18 @@ internal sealed class Deployment : IAsyncDisposable
 
         context.RequestServices = scope.ServiceProvider;
 
-        await _pipeline(context);
+        // The web server's context factory sets the request on the flow that serves it.
+        IHttpContextAccessor requests = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+        requests.HttpContext = context;
+
+        try
+        {
+            await _pipeline(context);
+        }
+        finally
+        {
+            requests.HttpContext = null;
+        }
 
         // CONV-DESIGN-006: no endpoint answers a code it does not declare, which every
         // request a test sends is held to.
@@ -963,6 +985,8 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddSingleton<IRegistrationSessionStore>(Registrations);
         _ = services.AddSingleton<ICollectionSessionStore>(Collections);
+        _ = services.AddSingleton<IRecordDirectory>(Records);
+        _ = services.AddSingleton<IRecordAudit>(RecordAudit);
         _ = services.AddSingleton<IRegistrationSignals>(Signals);
         _ = services.AddSingleton<IRegistrationDirectory>(Directory);
         _ = services.AddSingleton<IPreAuthenticationStore>(Contacts);
@@ -1139,6 +1163,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IRegistration>(provider =>
             provider.GetRequiredService<RegistrationService>());
         _ = services.AddScoped<CollectionSessions>();
+        _ = services.AddScoped<RecordCollectionService>();
         _ = services.AddScoped<IdentifierService>();
         _ = services.AddScoped<IIdentifiers>(provider =>
             provider.GetRequiredService<IdentifierService>());
@@ -1365,6 +1390,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SourceRateLimiting>();
         _ = services.AddScoped<RequestSession>();
         _ = services.AddScoped<IRequestAccess>(provider => provider.GetRequiredService<RequestSession>());
+        _ = services.AddHttpContextAccessor();
+        _ = services.AddScoped<IRecordCollection, Janus.Hosting.Records.RequestRecordCollection>();
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();

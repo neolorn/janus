@@ -224,6 +224,8 @@ internal static class StorageRegistration
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DeploymentDataKeyStore>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IRecordDirectory, RecordDirectory>();
+        services.AddScoped<IRecordAudit, RecordAudit>();
         services.AddScoped<IRegistrationDirectory>(provider => new RegistrationDirectory(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IAccountStore>(),

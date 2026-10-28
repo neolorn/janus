@@ -268,7 +268,7 @@ internal static class CollectionEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return browser.Context is null ? browser.FirstContact?.Collection : null;
+        return browser.Collection;
     }
 
     // `09` section 7a: a step taken from a browser signed in is refused as the beginning

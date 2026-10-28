@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host writes a person record from its own screen with `IRecordCollection.CollectAsync`
+  (`RecordCollection`, `CollectedRecord`), inside its own unit of work and while the
+  request of a browser holding a collection session is served. It reuses the
+  organization's active, unattached record that holds a contact the session verified,
+  last verified within `records.proof.age` (default 90 days), or creates one of origin
+  `collection`; it records the notice and terms versions, the age answer, one consent
+  per purpose ticked with the new mechanism `collection`, and the reference only as a
+  keyed fingerprint, spends the session and audits `identity.record.collected`. A
+  browser holding no collection session is refused 422 `identity.collection.expired`.
 - A browser with no session collects a guest's details under `/records/collection`: it
   begins a collection session (asking the age or not), answers the age where asked, and
   stages and verifies at most one email and one phone with a code. An under-age date

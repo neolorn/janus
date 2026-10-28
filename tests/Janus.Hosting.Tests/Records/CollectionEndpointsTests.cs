@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Janus.Authentication.Records;
+using Janus.Authentication.Tests.Records;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
 using Xunit;
@@ -165,25 +167,35 @@ public sealed class CollectionEndpointsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REC-COL-001 AC3: staging a value an account holds and a value no one holds are
-    /// answered in identical bytes; the session asks no one who holds a value.
+    /// REC-COL-001 AC3: staging a value an account holds, a value a record holds and a
+    /// value no one holds are answered in identical bytes; the session asks no one who
+    /// holds a value.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task REC_COL_001_AC3_StagingAHeldValueAnswersAsAFreshOneAsync()
     {
         const string heldNumber = "+441632960022";
+        const string recordedNumber = "+441632960033";
 
         _ = _deployment.Identifiers.Verified(SubjectId.New(Randomness), IdentifierKind.Phone, heldNumber);
+        _deployment.Records.Hold(
+            new HeldRecord(SubjectId.New(Randomness), OrganizationId.New(_deployment.Clock), _deployment.Clock.GetUtcNow())
+            {
+                Contacts = { [IdentifierKind.Phone] = new CollectedContact(IdentifierKind.Phone, recordedNumber, _deployment.Clock.GetUtcNow()) },
+            });
 
         Answer unheld = await (await BegunAsync(age: false))
             .SendAsync("PUT", "/records/collection/phone", ("value", Number));
         Answer held = await (await BegunAsync(age: false))
             .SendAsync("PUT", "/records/collection/phone", ("value", heldNumber));
+        Answer recorded = await (await BegunAsync(age: false))
+            .SendAsync("PUT", "/records/collection/phone", ("value", recordedNumber));
 
         Assert.Equal(StatusCodes.Status202Accepted, unheld.Status);
         Assert.Equal((unheld.Status, unheld.Body), (held.Status, held.Body));
-        Assert.Equal(2, _deployment.Sms.Taken.Count);
+        Assert.Equal((unheld.Status, unheld.Body), (recorded.Status, recorded.Body));
+        Assert.Equal(3, _deployment.Sms.Taken.Count);
     }
 
     /// <summary>
