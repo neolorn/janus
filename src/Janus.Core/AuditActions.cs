@@ -423,6 +423,12 @@ public static class AuditActions
     public static AuditAction RecordCollected { get; } = AuditAction.Parse("identity.record.collected");
 
     /// <summary>
+    /// Staff entered a person record, the staff member acting and the record its subject.
+    /// </summary>
+    /// <remarks>Implements REC-COL-003, chapter 10 section 5.</remarks>
+    public static AuditAction RecordEntered { get; } = AuditAction.Parse("identity.record.entered");
+
+    /// <summary>
     /// A social provider's security event naming a linked credential was refused: it
     /// was not signed by the provider's published keys, or it had been carried before.
     /// </summary>

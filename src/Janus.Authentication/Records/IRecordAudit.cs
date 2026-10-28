@@ -9,7 +9,7 @@ namespace Janus.Authentication.Records;
 /// Where what happened to a person record is recorded.
 /// </summary>
 /// <remarks>
-/// Implements REC-COL-002 and chapter 10 section 5.
+/// Implements REC-COL-002, REC-COL-003 and chapter 10 section 5.
 /// </remarks>
 internal interface IRecordAudit
 {
@@ -27,6 +27,27 @@ internal interface IRecordAudit
         SubjectId record,
         OrganizationId organization,
         bool created,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records that staff entered a record, the staff member acting and the record its
+    /// subject, filed under its organization.
+    /// </summary>
+    /// <param name="acting">The staff member.</param>
+    /// <param name="breakGlassReason">The reason of the break-glass session the entry was made in, or nothing.</param>
+    /// <param name="record">The record.</param>
+    /// <param name="organization">The record's organization.</param>
+    /// <param name="ageAnswered">Whether the record holds the person's answer to the age question.</param>
+    /// <param name="at">The instant of the entry.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask EnteredAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        OrganizationId organization,
+        bool ageAnswered,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 }

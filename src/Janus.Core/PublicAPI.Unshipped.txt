@@ -1525,6 +1525,8 @@ Janus.Core.IExportContributor
 Janus.Core.IExportContributor.Covers.get -> System.Collections.Generic.IReadOnlyCollection<Janus.Core.ResourceType>!
 Janus.Core.IExportContributor.Name.get -> string!
 Janus.Core.IExportContributor.SectionsAsync(Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>!>>
+Janus.Core.IPersonRecords
+Janus.Core.IPersonRecords.EnterAsync(Janus.Core.AccessContext! context, Janus.Core.PersonRecordEntry! entry, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectId>>
 Janus.Core.IPersonalFields
 Janus.Core.IPersonalFields.WithSubjectAsync<TValue>(Janus.Core.SubjectId subject, System.Func<Janus.Core.SubjectFields!, Janus.Core.Result<TValue>>! use, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.IPersonalFields.WithSubjectsAsync<TValue>(System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>! subjects, System.Func<System.Collections.Generic.IReadOnlyDictionary<Janus.Core.SubjectId, Janus.Core.SubjectFields!>!, Janus.Core.Result<TValue>>! use, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
@@ -2243,6 +2245,27 @@ Janus.Core.Permission.Equals(Janus.Core.Permission other) -> bool
 Janus.Core.Permission.Permission() -> void
 Janus.Core.Permission.Resource.get -> string!
 Janus.Core.Permissions
+Janus.Core.PersonRecordEntry
+Janus.Core.PersonRecordEntry.<Clone>$() -> Janus.Core.PersonRecordEntry!
+Janus.Core.PersonRecordEntry.Consents.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.PersonRecordEntry.Consents.init -> void
+Janus.Core.PersonRecordEntry.DateOfBirth.get -> System.DateOnly?
+Janus.Core.PersonRecordEntry.DateOfBirth.init -> void
+Janus.Core.PersonRecordEntry.Deconstruct(out Janus.Core.OrganizationId Organization, out string! Language, out string? Name, out string? Email, out string? Phone, out System.Collections.Generic.IReadOnlyList<string!>! Consents, out System.DateOnly? DateOfBirth, out string? Reference) -> void
+Janus.Core.PersonRecordEntry.Email.get -> string?
+Janus.Core.PersonRecordEntry.Email.init -> void
+Janus.Core.PersonRecordEntry.Equals(Janus.Core.PersonRecordEntry? other) -> bool
+Janus.Core.PersonRecordEntry.Language.get -> string!
+Janus.Core.PersonRecordEntry.Language.init -> void
+Janus.Core.PersonRecordEntry.Name.get -> string?
+Janus.Core.PersonRecordEntry.Name.init -> void
+Janus.Core.PersonRecordEntry.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.PersonRecordEntry.Organization.init -> void
+Janus.Core.PersonRecordEntry.PersonRecordEntry(Janus.Core.OrganizationId Organization, string! Language, string? Name, string? Email, string? Phone, System.Collections.Generic.IReadOnlyList<string!>! Consents, System.DateOnly? DateOfBirth, string? Reference) -> void
+Janus.Core.PersonRecordEntry.Phone.get -> string?
+Janus.Core.PersonRecordEntry.Phone.init -> void
+Janus.Core.PersonRecordEntry.Reference.get -> string?
+Janus.Core.PersonRecordEntry.Reference.init -> void
 Janus.Core.PersonRecordOrigin
 Janus.Core.PersonRecordOrigin.Collection = 0 -> Janus.Core.PersonRecordOrigin
 Janus.Core.PersonRecordOrigin.Staff = 1 -> Janus.Core.PersonRecordOrigin
@@ -3837,6 +3860,9 @@ override Janus.Core.PasskeyAddresses.GetHashCode() -> int
 override Janus.Core.PasskeyAddresses.ToString() -> string!
 override Janus.Core.Permission.GetHashCode() -> int
 override Janus.Core.Permission.ToString() -> string!
+override Janus.Core.PersonRecordEntry.Equals(object? obj) -> bool
+override Janus.Core.PersonRecordEntry.GetHashCode() -> int
+override Janus.Core.PersonRecordEntry.ToString() -> string!
 override Janus.Core.PhoneNumber.GetHashCode() -> int
 override Janus.Core.PhoneNumber.ToString() -> string!
 override Janus.Core.PhoneSignalProvider.Equals(object? obj) -> bool
@@ -4206,6 +4232,7 @@ static Janus.Core.AuditActions.ProfileChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ProviderEventRejected.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ProviderEventTaken.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecordCollected.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RecordEntered.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecoveryApproved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RefreshTokenReused.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RequestEntered.get -> Janus.Core.AuditAction
@@ -4881,6 +4908,8 @@ static Janus.Core.Permissions.SessionRevoke.get -> Janus.Core.Permission
 static Janus.Core.Permissions.SessionRevokeAccount.get -> Janus.Core.Permission
 static Janus.Core.Permissions.SystemAdminister.get -> Janus.Core.Permission
 static Janus.Core.Permissions.TakedownExecute.get -> Janus.Core.Permission
+static Janus.Core.PersonRecordEntry.operator !=(Janus.Core.PersonRecordEntry? left, Janus.Core.PersonRecordEntry? right) -> bool
+static Janus.Core.PersonRecordEntry.operator ==(Janus.Core.PersonRecordEntry? left, Janus.Core.PersonRecordEntry? right) -> bool
 static Janus.Core.PhoneNumber.TryParse(string! entered, out Janus.Core.PhoneNumber number) -> bool
 static Janus.Core.PhoneNumber.operator !=(Janus.Core.PhoneNumber left, Janus.Core.PhoneNumber right) -> bool
 static Janus.Core.PhoneNumber.operator ==(Janus.Core.PhoneNumber left, Janus.Core.PhoneNumber right) -> bool

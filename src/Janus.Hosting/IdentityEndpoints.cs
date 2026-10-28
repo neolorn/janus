@@ -78,6 +78,7 @@ public static class IdentityEndpoints
         _ = library.MapGrants();
         _ = library.MapRoles();
         _ = library.MapGroups();
+        _ = library.MapRecords();
         _ = library.MapOrganizations();
 
         return endpoints;

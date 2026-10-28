@@ -6,11 +6,11 @@ using Janus.Core;
 namespace Janus.Authentication.Records;
 
 /// <summary>
-/// The person records a collection reads and writes. The records themselves belong to
-/// the identity area; a collection reaches them only through this port.
+/// The person records a collection reads and writes, and staff enter. The records
+/// themselves belong to the identity area; this area reaches them only through this port.
 /// </summary>
 /// <remarks>
-/// Implements REC-COL-002 and CONV-DESIGN-003.
+/// Implements REC-COL-002, REC-COL-003 and CONV-DESIGN-003.
 /// </remarks>
 internal interface IRecordDirectory
 {
@@ -49,4 +49,12 @@ internal interface IRecordDirectory
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of writing it.</returns>
     ValueTask WriteAsync(CollectedPerson person, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Writes the record staff entered, of origin <c>staff</c> with its own data key.
+    /// </summary>
+    /// <param name="person">What the entry writes.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    ValueTask EnterAsync(EnteredPerson person, CancellationToken cancellationToken);
 }

@@ -17,8 +17,8 @@ using Xunit;
 namespace Janus.Storage.Tests.Authentication;
 
 /// <summary>
-/// The person records a collection reads and writes, as the database keeps them
-/// (REC-COL-002).
+/// The person records a collection reads and writes and staff enter, as the database
+/// keeps them (REC-COL-002, REC-COL-003).
 /// </summary>
 /// <remarks>The port implementations are tested against the real database (D-156).</remarks>
 [Trait("kind", "integration")]
@@ -195,6 +195,49 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
 
         Assert.Equal(1, held);
         Assert.Equal([false, true], [.. created.Order()]);
+    }
+
+    /// <summary>
+    /// REC-COL-003 AC1: a record staff entered is of origin staff, holds its contacts
+    /// unverified and the age answer the person gave, and records no documents.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_COL_003_AC1_AnEnteredRecordHoldsItsContactsUnverifiedAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId subject = Subjects.New();
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var work = new UnitOfWork(writing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await Directory(writing).EnterAsync(
+                new EnteredPerson(
+                    subject,
+                    organization,
+                    "en",
+                    Name: null,
+                    new CollectedAge(AdultAffirmed: true, Group: null, DateOfBirth: null, Noon),
+                    [new CollectedContact(IdentifierKind.Phone, Number, VerifiedAt: null)],
+                    Reference: null,
+                    Noon),
+                TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        var records = new PersonRecordStore(reading, _deployment.Ring, _deployment.Randomness);
+
+        PersonRecord read = Assert.IsType<PersonRecord>(
+            await records.FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal((PersonRecordOrigin.Staff, true), (read.Origin, read.Age?.AdultAffirmed));
+        Assert.Equal(
+            new RecordContact(IdentifierKind.Phone, Number, VerifiedAt: null),
+            Assert.Single(await records.ContactsAsync(subject, TestContext.Current.CancellationToken)));
+        Assert.Empty(await records.DocumentsAsync(subject, TestContext.Current.CancellationToken));
     }
 
     /// <inheritdoc/>

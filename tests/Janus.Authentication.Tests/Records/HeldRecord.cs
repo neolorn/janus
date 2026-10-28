@@ -6,15 +6,20 @@ using Janus.Core;
 namespace Janus.Authentication.Tests.Records;
 
 /// <summary>
-/// A person record as the in-memory directory holds it: what a collection wrote of it,
-/// and the state and attachment a test sets.
+/// A person record as the in-memory directory holds it: what a collection wrote or staff
+/// entered of it, and the state and attachment a test sets.
 /// </summary>
 /// <param name="Subject">The record's subject.</param>
 /// <param name="Organization">The organization it belongs to.</param>
 /// <param name="CreatedAt">When it was created.</param>
-/// <remarks>Implements REC-COL-002 for the tests.</remarks>
+/// <remarks>Implements REC-COL-002 and REC-COL-003 for the tests.</remarks>
 internal sealed record HeldRecord(SubjectId Subject, OrganizationId Organization, DateTimeOffset CreatedAt)
 {
+    /// <summary>
+    /// Whether a collection wrote it or staff entered it.
+    /// </summary>
+    public PersonRecordOrigin Origin { get; init; } = PersonRecordOrigin.Collection;
+
     /// <summary>
     /// The state it is in.
     /// </summary>

@@ -1258,6 +1258,24 @@ POST /admin/privacy/requests/{request}/refuse
   403 auth.session.csrfinvalid authz.denied authz.restricted
   404 privacy.request.notfound
   409 privacy.request.decided
+POST /admin/records
+  request application/json
+    organization: Guid?
+    language: string
+    name: string
+    email: string
+    phone: string
+    consents[]: string
+    dateOfBirth: DateOnly?
+    reference: string
+  201
+    application/json
+      subject: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  409 privacy.notice.unpublished
+  422 api.request.invalid identity.identifier.invalid identity.profile.invalid privacy.purpose.noconsent
 POST /admin/recovery/approve
   request application/json
     subject: string

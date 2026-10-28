@@ -1164,6 +1164,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<RegistrationService>());
         _ = services.AddScoped<CollectionSessions>();
         _ = services.AddScoped<RecordCollectionService>();
+        _ = services.AddScoped<IPersonRecords, PersonRecordService>();
         _ = services.AddScoped<IdentifierService>();
         _ = services.AddScoped<IIdentifiers>(provider =>
             provider.GetRequiredService<IdentifierService>());

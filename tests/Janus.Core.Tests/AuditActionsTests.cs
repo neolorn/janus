@@ -75,6 +75,7 @@ public sealed class AuditActionsTests
         "identity.preferences.changed",
         "identity.profile.changed",
         "identity.record.collected",
+        "identity.record.entered",
         "identity.secondstep.preferred",
         "identity.takedown.executed",
         "identity.takedown.reversed",

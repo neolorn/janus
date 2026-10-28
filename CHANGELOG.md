@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Staff enter a person record for someone who gave their details by telephone, in
+  person or on paper with `IPersonRecords.EnterAsync` (`PersonRecordEntry`) or
+  `POST /admin/records`, under `record:create` in the organization named. The record is
+  of origin `staff`, its email and phone unverified; each consent is recorded with the
+  mechanism `administrator`, a date of birth the person gave is recorded as their
+  answer to the age question, and a reference only as a keyed fingerprint. The entry is
+  audited `identity.record.entered` with the staff member acting, and answers 201 with
+  the record's `subject`.
 - The library ships `record:create`, `record:read`, `record:manage` and `record:erase`,
   the permissions over person records, which the seeded `system-administrator` role
   holds, a deployment already bootstrapped gaining them at migration. A host's job may

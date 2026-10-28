@@ -109,7 +109,38 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc/>
+    public ValueTask EnterAsync(EnteredPerson person, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(person);
+
+        Enlist();
+
+        var record = new HeldRecord(person.Subject, person.Organization, person.At)
+        {
+            Origin = PersonRecordOrigin.Staff,
+            Language = person.Language,
+            Name = person.Name,
+            Age = person.Age,
+        };
+
+        foreach (CollectedContact contact in person.Contacts)
+        {
+            record.Contacts[contact.Kind] = contact;
+        }
+
+        if (person.Reference is string reference)
+        {
+            record.References.Add(reference);
+        }
+
+        _records[record.Subject] = record;
+
+        return ValueTask.CompletedTask;
+    }
+
     private void Enlist()
+
     {
         if (Work is null)
         {
