@@ -127,7 +127,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
         Assert.Equal(Ahmed, export.Subject);
         Assert.Equal(Noon, export.AssembledAt);
         Assert.Equal(
-            ["identifiers", "consents", "objections"],
+            ["identifiers", "consents", "objections", "records"],
             export.Sections.Select(section => section.Name));
 
         Assert.Equal(
@@ -295,7 +295,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
         Assert.Equal("privacy.export.assembled", entry.Action.ToString());
         Assert.Equal(Ahmed, entry.Subject);
         Assert.Equal(
-            ["profile", "consents", "objections"],
+            ["profile", "consents", "objections", "records"],
             entry.Details["sections"].Deserialize<string[]>() ?? []);
         Assert.DoesNotContain("Ahmed Mostafa", JsonSerializer.Serialize(entry.Details), StringComparison.Ordinal);
     }
@@ -341,9 +341,9 @@ public sealed class ExportServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            ["consents", "objections", "orders", "support-tickets", "ticket-notes"],
+            ["consents", "objections", "records", "orders", "support-tickets", "ticket-notes"],
             export.Sections.Select(section => section.Name));
-        Assert.Equal("orders", Assert.Single(export.Sections[2].Records).Values["held-in"]);
+        Assert.Equal("orders", Assert.Single(export.Sections[3].Records).Values["held-in"]);
         Assert.Equal([Ahmed], orders.Asked);
         Assert.Equal([Ahmed], tickets.Asked);
         Assert.Equal([false, false], open);
@@ -518,7 +518,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
             ["orders", "held-in", "support-tickets", "held-in", "ticket-notes", "held-in"],
             _names.Asked);
         Assert.Equal([false, false, false, false, false, false], open);
-        Assert.Equal(6, export.Sections.Count);
+        Assert.Equal(7, export.Sections.Count);
     }
 
     /// <summary>
@@ -629,6 +629,71 @@ public sealed class ExportServiceTests : IAsyncDisposable
         AssertFaulted(
             Refused(await Exports.AssembleRecordAsync(Ahmed, TestContext.Current.CancellationToken)),
             "tickets");
+    }
+
+    /// <summary>
+    /// REC-ATT-002 (chapter 10 section 5.46): an account's export names each record
+    /// attached to it in the section <c>records</c>, after its objections, and a
+    /// contributor's section under that name fails the export.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ATT_002_AnAccountsExportNamesItsRecordsAfterItsObjectionsAsync()
+    {
+        _source.Attaches(
+            Ahmed,
+            new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal) { ["subject"] = "a-record" }));
+        _contributors.Add(Contributor("tickets", "records"));
+
+        AssertFaulted(
+            Refused(await Exports.AssembleAsync(AccessContext.Of(Ahmed), Browser, TestContext.Current.CancellationToken)),
+            "tickets");
+
+        _contributors.Clear();
+
+        SubjectExport export = Assembled(await Exports.AssembleAsync(
+            AccessContext.Of(Ahmed),
+            Browser,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(["consents", "objections", "records"], export.Sections.Select(section => section.Name));
+        Assert.Equal("a-record", Assert.Single(export.Sections[2].Records).Values["subject"]);
+    }
+
+    /// <summary>
+    /// REC-ATT-002: a record attached to the account is exported behind the step-up the
+    /// account's own export asks, of the account and its session, and counted for the
+    /// record.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ATT_002_AnAttachedRecordsExportAsksTheAccountsStepUpAsync()
+    {
+        var record = new SubjectId(Guid.Parse("22222222-2222-4222-8222-222222222222"));
+
+        _source.Holds(record, new ExportSection("record", []));
+        _stepUp.Closed = Error.From(ErrorCodes.StepUpRequired);
+
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refused(await Exports.AssembleAttachedAsync(
+                AccessContext.Of(Ahmed),
+                Browser,
+                record,
+                TestContext.Current.CancellationToken)).Code);
+        Assert.Equal((Ahmed, Browser, StepUpAction.PrivacyExport), Assert.Single(_stepUp.Asked));
+        Assert.Equal(0, _source.Reads);
+
+        _stepUp.Closed = null;
+
+        SubjectExport export = Assembled(await Exports.AssembleAttachedAsync(
+            AccessContext.Of(Ahmed),
+            Browser,
+            record,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(["record", "consents", "objections"], export.Sections.Select(section => section.Name));
+        Assert.Equal((record, Noon), Assert.Single(_ledger.Taken));
     }
 
     private static ExportContributorInMemory Contributor(string name, params string[] sections) =>

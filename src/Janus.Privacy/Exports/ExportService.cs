@@ -93,6 +93,7 @@ internal sealed class ExportService(
                 subject,
                 context.BreakGlassReason,
                 source.SectionsAsync,
+                source.RecordsAsync,
                 FrozenSet<string>.Empty,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -114,9 +115,57 @@ internal sealed class ExportService(
                 record,
                 breakGlassReason: null,
                 source.RecordSectionsAsync,
+                attached: null,
                 RecordNames,
                 cancellationToken)
             .ConfigureAwait(false);
+
+    /// <summary>
+    /// The export of a person record attached to the account asking: the record's own
+    /// sections, then each contributor's for its subject, counted against the limit for
+    /// the record, behind the step-up the account's own export asks (REC-ATT-002).
+    /// </summary>
+    /// <param name="context">The account asking, which the caller found the record attached to.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The export, or <c>auth.stepup.required</c>, <c>auth.throttled</c>,
+    /// <c>system.fault</c>, <c>authz.denied</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    internal async ValueTask<Result<SubjectExport>> AssembleAttachedAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId record,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Effective is not SubjectId account)
+        {
+            return Result.Failure<SubjectExport>(Error.From(ErrorCodes.Denied));
+        }
+
+        // Chapter 09 section 7a: under the account's session the record's export is a
+        // step-up action, as the account's own is (AUTH-STEP-002a).
+        if ((await stepUp
+                .RequireAsync(account, session, StepUpAction.PrivacyExport, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error) is Error closed)
+        {
+            return Result.Failure<SubjectExport>(closed);
+        }
+
+        return await CountedAsync(
+                record,
+                context.BreakGlassReason,
+                source.RecordSectionsAsync,
+                attached: null,
+                RecordNames,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     // D-086, D-203: the export counted against the subject's limit, its contributors
     // answered before it is, and recorded in the transaction that counts it.
@@ -124,6 +173,7 @@ internal sealed class ExportService(
         SubjectId subject,
         string? breakGlassReason,
         Func<SubjectId, CancellationToken, ValueTask<IReadOnlyList<ExportSection>>> own,
+        Func<SubjectId, CancellationToken, ValueTask<ExportSection>>? attached,
         IReadOnlySet<string> reserved,
         CancellationToken cancellationToken)
     {
@@ -138,7 +188,7 @@ internal sealed class ExportService(
         // PRIV-RIGHT-003 (D-203): every contributor has answered before the export is
         // counted, so one that failed leaves the person's limit as it was.
         Result<IReadOnlyList<ExportSection>> assembled =
-            await SectionsAsync(subject, own, reserved, cancellationToken).ConfigureAwait(false);
+            await SectionsAsync(subject, own, attached, reserved, cancellationToken).ConfigureAwait(false);
 
         if (assembled.Match(_ => (Error?)null, error => error) is Error notAssembled)
         {
@@ -304,6 +354,7 @@ internal sealed class ExportService(
     private async ValueTask<Result<IReadOnlyList<ExportSection>>> SectionsAsync(
         SubjectId subject,
         Func<SubjectId, CancellationToken, ValueTask<IReadOnlyList<ExportSection>>> own,
+        Func<SubjectId, CancellationToken, ValueTask<ExportSection>>? attached,
         IReadOnlySet<string> reserved,
         CancellationToken cancellationToken)
     {
@@ -318,6 +369,13 @@ internal sealed class ExportService(
             "objections",
             (await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false))
                 .Select(Standing)));
+
+        // Chapter 10 section 5.46 (D-221): an account's export names each record attached
+        // to it after its own objections.
+        if (attached is not null)
+        {
+            sections.Add(await attached(subject, cancellationToken).ConfigureAwait(false));
+        }
 
         var taken = new HashSet<string>(sections.Select(section => section.Name).Concat(reserved), StringComparer.Ordinal);
 

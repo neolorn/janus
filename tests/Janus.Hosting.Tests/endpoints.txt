@@ -471,6 +471,135 @@ GET /account/records/offer
       expiresAt: DateTimeOffset?
   401 auth.session.expired
   403 auth.session.csrfinvalid
+GET /account/records/{subject}
+  200
+    application/json
+      subject: Guid
+      organization: Guid
+      organizationName: string
+      origin: PersonRecordOrigin
+      state: PersonRecordState
+      createdAt: DateTimeOffset
+      name: string
+      language: string
+      contacts[].kind: IdentifierKind
+      contacts[].value: string
+      contacts[].verifiedAt: DateTimeOffset?
+      age.answeredAt: DateTimeOffset
+      age.affirmed: boolean?
+      age.ageGroup: AgeGroup?
+      notices[].version: string
+      notices[].presentedAt: DateTimeOffset
+      terms[].version: string
+      terms[].acceptedAt: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+PUT /account/records/{subject}
+  request application/json
+    name: string
+    language: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  404 identity.record.notfound
+  409 identity.record.stateconflict
+  422 api.request.invalid identity.profile.invalid
+GET /account/records/{subject}/consents
+  200
+    application/json
+      [].purpose: string
+      [].document: string
+      [].noticeVersion: string
+      [].mechanism: ConsentMechanism
+      [].grantedAt: DateTimeOffset
+      [].withdrawnAt: DateTimeOffset?
+      [].supersededAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.stateconflict
+POST /account/records/{subject}/consents/{purpose}/grant
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.stateconflict privacy.notice.unpublished
+  422 privacy.purpose.noconsent
+POST /account/records/{subject}/consents/{purpose}/withdraw
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.stateconflict
+  422 privacy.purpose.noconsent
+GET /account/records/{subject}/export
+  200
+    application/json
+      subject: string
+      assembledAt: DateTimeOffset
+      sections[].name: string
+      sections[].records[]{}: string
+    application/json
+      subject: string
+      assembledAt: DateTimeOffset
+      values{}: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required
+  404 identity.record.notfound
+  409 identity.record.stateconflict
+  429 auth.throttled
+  500 system.fault
+GET /account/records/{subject}/objections
+  200
+    application/json
+      [].purpose: string
+      [].document: string
+      [].noticeVersion: string
+      [].mechanism: ConsentMechanism
+      [].recordedAt: DateTimeOffset
+      [].withdrawnAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.stateconflict
+DELETE /account/records/{subject}/objections/{purpose}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.stateconflict
+  422 privacy.purpose.notobjectable
+POST /account/records/{subject}/objections/{purpose}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.stateconflict privacy.notice.unpublished
+  422 privacy.purpose.notobjectable
+POST /account/records/{subject}/requests
+  request application/json
+    type: string
+    detail: string
+  202
+    application/json
+      requestId: Guid
+      receiptSentAt: DateTimeOffset?
+      decisionDue: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+  409 identity.record.stateconflict
 POST /account/recoverycodes
   200
     application/json

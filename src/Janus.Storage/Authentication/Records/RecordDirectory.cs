@@ -344,7 +344,8 @@ internal sealed class RecordDirectory(
                     record.Subject,
                     record.Organization,
                     record.CreatedAt,
-                    record.AttachedAt!.Value)),
+                    record.AttachedAt!.Value,
+                    record.State)),
         ];
     }
 

@@ -60,6 +60,7 @@ public static class IdentityEndpoints
         _ = library.MapSignOn();
         _ = library.MapAccount();
         _ = library.MapAccountRecords();
+        _ = library.MapAttachedRecordRights();
         _ = library.MapAccountAdministration();
         _ = library.MapAppPasswords();
         _ = library.MapCredentials();

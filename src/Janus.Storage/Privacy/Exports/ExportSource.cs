@@ -8,6 +8,7 @@ using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
@@ -36,10 +37,11 @@ namespace Janus.Storage.Privacy.Exports;
 /// <param name="sessions">Where the live sessions and their location records are.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
 /// <param name="records">Where a person record and what it holds are.</param>
+/// <param name="attachments">Where the records attached to an account are.</param>
 /// <param name="time">The clock a session's expiry is judged against.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-003, REC-ACC-002, REG-ACCT-001, REG-PREF-001, REG-IDENT-002, AUTH-SESS-013
-/// and CONV-DESIGN-003. The groups of REG-ACCT-001 are carried whole, so the export and
+/// Implements PRIV-RIGHT-003, REC-ACC-002, REC-ATT-002, REG-ACCT-001, REG-PREF-001, REG-IDENT-002,
+/// AUTH-SESS-013 and CONV-DESIGN-003. The groups of REG-ACCT-001 are carried whole, so the export and
 /// the account page answer the same question with the same facts. Every value crosses as
 /// text: an export is read, not computed with, and one representation is one thing that
 /// can disagree with the account page. No secret material crosses: a credential is
@@ -59,6 +61,7 @@ internal sealed class ExportSource(
     ISessionStore sessions,
     PreferenceDeclarations declarations,
     IPersonRecordStore records,
+    IRecordDirectory attachments,
     TimeProvider time) : IExportSource
 {
     /// <inheritdoc/>
@@ -128,6 +131,14 @@ internal sealed class ExportSource(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<ExportSection> RecordsAsync(
+        SubjectId account,
+        CancellationToken cancellationToken) =>
+        Listed(
+            "records",
+            (await attachments.AttachedToAsync(account, cancellationToken).ConfigureAwait(false)).Select(Attached));
+
+    /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">No person record bears the subject.</exception>
     public async ValueTask<IReadOnlyList<ExportSection>> RecordSectionsAsync(
         SubjectId record,
@@ -178,6 +189,20 @@ internal sealed class ExportSource(
         at.ToString("O", CultureInfo.InvariantCulture);
 
     private static string Told(bool answer) => answer ? "true" : "false";
+
+    // REC-ATT-002: a record attached to the account is named, and what it holds is its
+    // own export's.
+    private static Dictionary<string, string> Attached(Attachment attached)
+    {
+        Dictionary<string, string> values = Values(capacity: 4);
+
+        values["subject"] = attached.Record.ToString();
+        values["organization"] = attached.Organization.ToString();
+        values["createdAt"] = Moment(attached.CreatedAt);
+        values["attachedAt"] = Moment(attached.AttachedAt);
+
+        return values;
+    }
 
     private static Dictionary<string, string> Filled(HeldProfile profile)
     {

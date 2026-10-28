@@ -103,6 +103,37 @@ internal sealed class RecordAttachments(
     }
 
     /// <summary>
+    /// The record attached to the account asking, as its rights reach it.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The record, or <c>identity.record.notfound</c> for one not attached to the account,
+    /// <c>authz.denied</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    public async ValueTask<Result<ReachedRecord>> ReachesAsync(
+        AccessContext context,
+        SubjectId record,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Effective is not SubjectId account)
+        {
+            return Result.Failure<ReachedRecord>(Error.From(ErrorCodes.Denied));
+        }
+
+        // REC-ATT-002, chapter 09 section 7a: a record attached to another account and one
+        // no record bears are answered alike.
+        return (await records.AttachedToAsync(account, cancellationToken).ConfigureAwait(false))
+            .SingleOrDefault(attached => attached.Record == record) is Attachment found
+            ? Result.Success(new ReachedRecord(found.Record, found.Organization, found.CreatedAt, found.State))
+            : Result.Failure<ReachedRecord>(Error.From(ErrorCodes.RecordNotFound));
+    }
+
+    /// <summary>
     /// The offer the session holds, as a count and its expiry.
     /// </summary>
     /// <param name="context">The account asking.</param>

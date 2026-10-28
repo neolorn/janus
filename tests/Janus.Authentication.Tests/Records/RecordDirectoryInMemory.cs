@@ -322,7 +322,12 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
                 .Where(record => record.AttachedTo == account && record.State is not PersonRecordState.Deleted)
                 .OrderBy(record => record.AttachedAt)
                 .ThenBy(record => record.Subject.Value)
-                .Select(record => new Attachment(record.Subject, record.Organization, record.CreatedAt, record.AttachedAt!.Value)),
+                .Select(record => new Attachment(
+                    record.Subject,
+                    record.Organization,
+                    record.CreatedAt,
+                    record.AttachedAt!.Value,
+                    record.State)),
         ]);
 
     /// <inheritdoc/>

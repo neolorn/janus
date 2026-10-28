@@ -94,6 +94,10 @@ internal sealed class RecordRights(
     /// <param name="record">The record's subject.</param>
     /// <param name="name">The name given, or nothing to leave it.</param>
     /// <param name="language">The language given, or nothing to leave it.</param>
+    /// <param name="attached">
+    /// Whether it is asked through the account the record is attached to, rather than by a
+    /// code that reached it.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or <c>identity.profile.invalid</c>, <c>api.request.invalid</c> naming
@@ -104,6 +108,7 @@ internal sealed class RecordRights(
         SubjectId record,
         string? name,
         string? language,
+        bool attached,
         CancellationToken cancellationToken)
     {
         DisplayName? named = null;
@@ -133,6 +138,7 @@ internal sealed class RecordRights(
 
         return await ChangedAsync(
                 record,
+                attached,
                 async standing =>
                 {
                     // REC-REC-002: a restricted record admits its rights and no change of
@@ -187,6 +193,7 @@ internal sealed class RecordRights(
 
         return await ChangedAsync(
                 record,
+                attached: false,
                 async standing =>
                 {
                     if (standing is { State: PersonRecordState.Deleting, DeletingBy: DeletionOrigin.Takedown })
@@ -248,6 +255,7 @@ internal sealed class RecordRights(
 
         return await ChangedAsync(
                 record,
+                attached: false,
                 async standing =>
                 {
                     if (standing is { State: PersonRecordState.Deleting, DeletingBy: DeletionOrigin.Takedown })
@@ -344,9 +352,11 @@ internal sealed class RecordRights(
         .Match(() => (Error?)null, error => error);
 
     // The change decided on the record's row under its lock, in one unit of work: a record
-    // no row bears, or one attached to an account meanwhile, is not the code's to change.
+    // no row bears is no one's to change; one attached to an account meanwhile is not the
+    // code's, and one not attached to it is not the account's (REC-ATT-002).
     private async ValueTask<Result> ChangedAsync(
         SubjectId record,
+        bool attached,
         Func<RecordStanding, ValueTask<Error?>> change,
         CancellationToken cancellationToken)
     {
@@ -357,7 +367,7 @@ internal sealed class RecordRights(
         }
 
         Error? refused = await records.HoldAsync(record, cancellationToken).ConfigureAwait(false)
-            is RecordStanding { Attached: false } standing
+            is RecordStanding standing && standing.Attached == attached
             ? await change(standing).ConfigureAwait(false)
             : Error.From(ErrorCodes.RecordNotFound);
 

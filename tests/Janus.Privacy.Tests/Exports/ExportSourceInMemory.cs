@@ -13,6 +13,8 @@ internal sealed class ExportSourceInMemory : IExportSource
 {
     private readonly Dictionary<SubjectId, List<ExportSection>> _sections = [];
 
+    private readonly Dictionary<SubjectId, List<ExportRecord>> _attached = [];
+
     /// <summary>
     /// How many times the sections were read.
     /// </summary>
@@ -44,6 +46,30 @@ internal sealed class ExportSourceInMemory : IExportSource
         return ValueTask.FromResult<IReadOnlyList<ExportSection>>(
             _sections.TryGetValue(subject, out List<ExportSection>? held) ? held : []);
     }
+
+    /// <summary>
+    /// Attaches a person record to an account, as its export names it.
+    /// </summary>
+    /// <param name="account">The account.</param>
+    /// <param name="record">How the record is named.</param>
+    public void Attaches(SubjectId account, ExportRecord record)
+    {
+        if (!_attached.TryGetValue(account, out List<ExportRecord>? held))
+        {
+            held = [];
+            _attached[account] = held;
+        }
+
+        held.Add(record);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<ExportSection> RecordsAsync(
+        SubjectId account,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(new ExportSection(
+            "records",
+            _attached.TryGetValue(account, out List<ExportRecord>? held) ? held : []));
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<ExportSection>> RecordSectionsAsync(

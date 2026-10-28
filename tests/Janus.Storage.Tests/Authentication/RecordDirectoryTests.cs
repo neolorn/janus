@@ -519,7 +519,7 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
         Assert.Equal(organization, attached);
         Assert.Null(again);
         Assert.Equal(
-            [new Attachment(subject, organization, Noon, Noon.AddDays(1))],
+            [new Attachment(subject, organization, Noon, Noon.AddDays(1), PersonRecordState.Active)],
             await directory.AttachedToAsync(account, TestContext.Current.CancellationToken));
         Assert.Empty(await directory.AttachedToAsync(elsewhere, TestContext.Current.CancellationToken));
     }

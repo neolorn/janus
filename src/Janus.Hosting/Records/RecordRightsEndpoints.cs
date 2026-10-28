@@ -143,7 +143,7 @@ internal static class RecordRightsEndpoints
 
         return Answers.Of(
             await rights
-                .RectifyAsync(subject, request.Name, request.Language, cancellationToken)
+                .RectifyAsync(subject, request.Name, request.Language, attached: false, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
