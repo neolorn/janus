@@ -659,6 +659,48 @@ public sealed class ModelTests
             "pending_enrolments.subject",
             "pending_enrolments.wrong_attempts",
 
+            // Not an account field: a person record, a data subject of its own who holds
+            // no account (`21` REC-REC-001): its contacts, under its key with a
+            // fingerprint beside each; its references, as fingerprints alone; what its
+            // collections presented and the person accepted; and the record itself, with
+            // its state, the held state an account's has save the suspension, its name
+            // and age answer under its key, and the account it is attached to.
+            "person_record_contacts.canonicalisation_version",
+            "person_record_contacts.enc_value",
+            "person_record_contacts.fingerprint",
+            "person_record_contacts.fingerprint_version",
+            "person_record_contacts.kind",
+            "person_record_contacts.subject",
+            "person_record_contacts.verified_at",
+            "person_record_documents.documents_id",
+            "person_record_documents.notice_version",
+            "person_record_documents.recorded_at",
+            "person_record_documents.subject",
+            "person_record_documents.terms_version",
+            "person_record_references.added_at",
+            "person_record_references.fingerprint",
+            "person_record_references.fingerprint_version",
+            "person_record_references.reference_id",
+            "person_record_references.subject",
+            "person_records.adult_affirmed",
+            "person_records.age_group",
+            "person_records.answered_age_at",
+            "person_records.attached_at",
+            "person_records.attached_to",
+            "person_records.created_at",
+            "person_records.deleting_by",
+            "person_records.deleting_since",
+            "person_records.deletion_held",
+            "person_records.deletion_held_since",
+            "person_records.enc_date_of_birth",
+            "person_records.enc_name",
+            "person_records.language",
+            "person_records.organization",
+            "person_records.origin",
+            "person_records.restriction_held",
+            "person_records.state",
+            "person_records.subject",
+
             // Not an account field: a requirement a scope's policy raised and when the
             // run-up to it began, one row per scope per field, which a sign-in that does
             // not yet meet it is told of (AUTH-FACT-017).

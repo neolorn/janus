@@ -102,6 +102,16 @@ internal sealed class PersonRecord
     public DateTimeOffset? AttachedAt { get; private set; }
 
     /// <summary>
+    /// The name the record holds, where it holds one: a personal field under its key.
+    /// </summary>
+    public DisplayName? Name { get; private set; }
+
+    /// <summary>
+    /// The answer to the age question, where one was given (REC-AGE-001).
+    /// </summary>
+    public RecordAgeAnswer? Age { get; private set; }
+
+    /// <summary>
     /// Whether a code may reach the record: attached to no account, and active,
     /// restricted, or in a deletion window its own deletion began (REC-ACC-001).
     /// </summary>
@@ -149,6 +159,8 @@ internal sealed class PersonRecord
     /// <param name="deletionHeldSince">When that held deletion began.</param>
     /// <param name="attachedTo">The account it is attached to, where it is.</param>
     /// <param name="attachedAt">When it was attached.</param>
+    /// <param name="name">The name it holds, where it holds one.</param>
+    /// <param name="age">The answer to the age question, where one was given.</param>
     /// <returns>The record.</returns>
     public static PersonRecord Existing(
         SubjectId subject,
@@ -163,7 +175,9 @@ internal sealed class PersonRecord
         DeletionOrigin? deletionHeld,
         DateTimeOffset? deletionHeldSince,
         SubjectId? attachedTo,
-        DateTimeOffset? attachedAt) =>
+        DateTimeOffset? attachedAt,
+        DisplayName? name,
+        RecordAgeAnswer? age) =>
         new(subject, organization, origin, createdAt, language)
         {
             State = state,
@@ -174,6 +188,8 @@ internal sealed class PersonRecord
             DeletionHeldSince = deletionHeldSince,
             AttachedTo = attachedTo,
             AttachedAt = attachedAt,
+            Name = name,
+            Age = age,
         };
 
     /// <summary>
@@ -188,6 +204,46 @@ internal sealed class PersonRecord
         Require(PersonRecordState.Active);
 
         Language = language;
+    }
+
+    /// <summary>
+    /// Sets or clears the name the record holds.
+    /// </summary>
+    /// <param name="name">The name, or nothing to clear it.</param>
+    /// <exception cref="InvalidOperationException">The record is not active.</exception>
+    public void Rename(DisplayName? name)
+    {
+        Require(PersonRecordState.Active);
+
+        Name = name;
+    }
+
+    /// <summary>
+    /// Records the person's answer to the age question. A record keeps the first answer
+    /// it was given; a later collection does not replace it (REC-COL-002).
+    /// </summary>
+    /// <param name="answer">The answer.</param>
+    /// <exception cref="ArgumentException">The answer holds both forms, or neither.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The record is not active, or already holds an answer.
+    /// </exception>
+    public void AnswerAge(RecordAgeAnswer answer)
+    {
+        ArgumentNullException.ThrowIfNull(answer);
+
+        if (!answer.IsWellFormed)
+        {
+            throw new ArgumentException("An age answer holds the affirmation or the age group.", nameof(answer));
+        }
+
+        Require(PersonRecordState.Active);
+
+        if (Age is not null)
+        {
+            throw new InvalidOperationException("A record keeps the age answer it was first given.");
+        }
+
+        Age = answer;
     }
 
     /// <summary>

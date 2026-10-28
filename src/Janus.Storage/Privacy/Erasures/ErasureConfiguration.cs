@@ -1,6 +1,5 @@
 using System;
 using Janus.Core;
-using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -54,11 +53,9 @@ internal sealed class ErasureConfiguration : IEntityTypeConfiguration<ErasureRec
 
         builder.Property(erasure => erasure.Attempts).HasColumnName("attempts");
 
-        builder.HasOne<AccountRecord>()
-            .WithOne()
-            .HasForeignKey<ErasureRecord>(erasure => erasure.Subject)
-            .HasConstraintName("fk_erasures_subject")
-            .OnDelete(DeleteBehavior.Restrict);
+        // REC-REC-001 (D-221): the subject is an account's or a person record's, so its
+        // parent is the subject key row both hold, the key's identifier being a type of
+        // its own; the migration writes the constraint, fk_erasures_subject.
 
         // IDN-LIFE-003b AC2: every outstanding erasure in one query.
         builder.HasIndex(erasure => erasure.RequestedAt)

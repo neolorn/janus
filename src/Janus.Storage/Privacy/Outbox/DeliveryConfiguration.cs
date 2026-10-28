@@ -1,7 +1,6 @@
 using System;
 using Janus.Core;
 using Janus.Privacy.Outbox;
-using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -91,11 +90,9 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<DeliveryR
 
         builder.Property(delivery => delivery.ClaimedUntil).HasColumnName("claimed_until");
 
-        builder.HasOne<AccountRecord>()
-            .WithMany()
-            .HasForeignKey(delivery => delivery.Subject)
-            .HasConstraintName("fk_outbox_subject")
-            .OnDelete(DeleteBehavior.Restrict);
+        // REC-REC-001 (D-221): the subject is an account's or a person record's, so its
+        // parent is the subject key row both hold, the key's identifier being a type of
+        // its own; the migration writes the constraint, fk_outbox_subject.
 
         builder.HasIndex(delivery => delivery.Subject).HasDatabaseName("ix_outbox_subject");
 

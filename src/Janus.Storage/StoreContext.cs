@@ -31,6 +31,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.Bases;
 using Janus.Storage.Privacy.Consents;
 using Janus.Storage.Privacy.Documents;
@@ -117,6 +118,26 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// The images the accounts show for themselves.
     /// </summary>
     public DbSet<ProfilePhotoRecord> ProfilePhotos => Set<ProfilePhotoRecord>();
+
+    /// <summary>
+    /// The people a host keeps data about who hold no account.
+    /// </summary>
+    public DbSet<PersonRecordRow> PersonRecords => Set<PersonRecordRow>();
+
+    /// <summary>
+    /// The emails and phones the person records hold.
+    /// </summary>
+    public DbSet<RecordContactRow> PersonRecordContacts => Set<RecordContactRow>();
+
+    /// <summary>
+    /// The references collections gave the person records, as fingerprints.
+    /// </summary>
+    public DbSet<RecordReferenceRow> PersonRecordReferences => Set<RecordReferenceRow>();
+
+    /// <summary>
+    /// What each collection presented to the person and what they accepted.
+    /// </summary>
+    public DbSet<RecordDocumentsRow> PersonRecordDocuments => Set<RecordDocumentsRow>();
 
     /// <summary>
     /// What each account has settled about language, time zone and the keys the host
@@ -547,6 +568,10 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new ProfileConfiguration());
         modelBuilder.ApplyConfiguration(new ProfilePhotoConfiguration());
         modelBuilder.ApplyConfiguration(new PreferenceConfiguration());
+        modelBuilder.ApplyConfiguration(new PersonRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordContactConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordReferenceConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordDocumentsConfiguration());
         modelBuilder.ApplyConfiguration(new ErasureConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
         modelBuilder.ApplyConfiguration(new AuditConfiguration());

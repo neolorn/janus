@@ -188,6 +188,42 @@ public sealed class PersonRecordTests
         Assert.Throws<InvalidOperationException>(() => restricted.Attach(Account, Noon));
     }
 
+    /// <summary>
+    /// REC-REC-002: a restricted record is read and its rights exercised, and its own
+    /// fields are not changed.
+    /// </summary>
+    [Fact]
+    public void REC_REC_002_ARestrictedRecordsOwnFieldsAreNotChanged()
+    {
+        PersonRecord record = Collected();
+        record.Restrict();
+
+        Assert.True(DisplayName.TryParse("Layla", out DisplayName name));
+        Assert.Throws<InvalidOperationException>(() => record.Rename(name));
+        Assert.Throws<InvalidOperationException>(() => record.ChangeLanguage("en"));
+        Assert.Null(record.Name);
+        Assert.Equal("ar", record.Language);
+    }
+
+    /// <summary>
+    /// REC-AGE-001, REC-COL-002: a record holds one form of the age answer, and keeps the
+    /// first it was given.
+    /// </summary>
+    [Fact]
+    public void REC_AGE_001_ARecordKeepsTheFirstAgeAnswerItWasGiven()
+    {
+        PersonRecord record = Collected();
+        var affirmed = new RecordAgeAnswer(true, null, Noon, null);
+
+        record.AnswerAge(affirmed);
+
+        Assert.Equal(affirmed, record.Age);
+        Assert.Throws<InvalidOperationException>(() => record.AnswerAge(new RecordAgeAnswer(null, AgeGroup.Adult, Noon, null)));
+        Assert.Throws<ArgumentException>(() => Collected().AnswerAge(new RecordAgeAnswer(true, AgeGroup.Adult, Noon, null)));
+        Assert.Throws<ArgumentException>(() => Collected().AnswerAge(new RecordAgeAnswer(null, null, Noon, null)));
+        Assert.Equal(affirmed, record.Age);
+    }
+
     private static PersonRecord Collected() =>
         PersonRecord.Create(Guest, Shop, PersonRecordOrigin.Collection, Noon, "ar");
 }

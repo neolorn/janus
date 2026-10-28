@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library keeps person records in four tables of its own schema (`person_records`,
+  `person_record_contacts`, `person_record_references`, `person_record_documents`): a
+  record's name, date of birth and contacts under its own data key, its contacts and
+  references found by keyed fingerprint, a reference held in no other form. A
+  subject's consents, objections, exports, privacy requests, erasure and outbox rows now
+  name the subject-key table, which accounts and person records share, rather than the
+  accounts table.
 - A person record is a data subject a host keeps data about in their own right who
   holds no account: one of four states (`PersonRecordState`: `active`, `restricted`,
   `deleting`, `deleted`, and no `suspended`, since a record signs nothing in) and how it

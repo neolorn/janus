@@ -37,6 +37,7 @@ using Janus.Identity.Identifiers;
 using Janus.Identity.Organizations;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
+using Janus.Identity.Records;
 using Janus.Privacy.Bases;
 using Janus.Privacy.Breaches;
 using Janus.Privacy.Consents;
@@ -81,6 +82,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy;
 using Janus.Storage.Privacy.Bases;
 using Janus.Storage.Privacy.Breaches;
@@ -185,6 +187,10 @@ internal static class StorageRegistration
             provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IProfilePhotoStore>(provider => new ProfilePhotoStore(
+            provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<IKeyRing>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IPersonRecordStore>(provider => new PersonRecordStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<RandomNumberGenerator>()));

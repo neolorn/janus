@@ -1,6 +1,5 @@
 using System;
 using Janus.Core;
-using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -51,11 +50,9 @@ internal sealed class ObjectionConfiguration : IEntityTypeConfiguration<Objectio
         builder.Property(objection => objection.RecordedAt).HasColumnName("recorded_at");
         builder.Property(objection => objection.WithdrawnAt).HasColumnName("withdrawn_at");
 
-        builder.HasOne<AccountRecord>()
-            .WithMany()
-            .HasForeignKey(objection => objection.Subject)
-            .HasConstraintName("fk_objections_subject")
-            .OnDelete(DeleteBehavior.Restrict);
+        // REC-REC-001 (D-221): the subject is an account's or a person record's, so its
+        // parent is the subject key row both hold, the key's identifier being a type of
+        // its own; the migration writes the constraint, fk_objections_subject.
 
         // PRIV-RIGHT-001a AC6: at most one standing objection a subject and purpose.
         builder.HasIndex(objection => new { objection.Subject, objection.Purpose })
