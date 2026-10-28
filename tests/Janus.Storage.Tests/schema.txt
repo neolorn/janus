@@ -934,15 +934,18 @@ table preauthentication_sessions
   column signon_state bytea
   column signon_verifier bytea
   column collection uuid
+  column record_access uuid
   constraint ck_preauthentication_sessions_expires_at CHECK ((expires_at > created_at))
   constraint ck_preauthentication_sessions_fingerprint CHECK (((octet_length(fingerprint) = 32) AND (octet_length(csrf_fingerprint) = 32)))
   constraint ck_preauthentication_sessions_signon CHECK ((num_nulls(signon_state, signon_verifier, signon_return) = ANY (ARRAY[0, 3])))
   constraint fk_preauthentication_sessions_collection FOREIGN KEY (collection) REFERENCES identity.collection_sessions(id) ON DELETE SET NULL
+  constraint fk_preauthentication_sessions_record_access FOREIGN KEY (record_access) REFERENCES identity.record_access_sessions(id) ON DELETE SET NULL
   constraint fk_preauthentication_sessions_registration FOREIGN KEY (registration) REFERENCES identity.registration_sessions(id) ON DELETE SET NULL
   constraint pk_preauthentication_sessions PRIMARY KEY (fingerprint)
   index ix_preauthentication_sessions_expires_at using btree (expires_at)
   index ux_preauthentication_sessions_collection unique using btree (collection) WHERE (collection IS NOT NULL)
   index ux_preauthentication_sessions_enrolment unique using btree (enrolment) WHERE (enrolment IS NOT NULL)
+  index ux_preauthentication_sessions_record_access unique using btree (record_access) WHERE (record_access IS NOT NULL)
   index ux_preauthentication_sessions_registration unique using btree (registration) WHERE (registration IS NOT NULL)
 table privacy_exports
   column id uuid not null
@@ -1033,6 +1036,17 @@ table read_volume
   constraint ck_read_volume_actor_not_max_uuid CHECK ((actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint pk_read_volume PRIMARY KEY (actor, day)
   index ix_read_volume_day using btree (day)
+table record_access_sessions
+  column id uuid not null
+  column kind text not null
+  column fingerprints bytea not null
+  column throttled bytea not null
+  column created_at timestamp with time zone not null
+  column opened_at timestamp with time zone
+  column expires_at timestamp with time zone not null
+  column reached uuid[] not null
+  constraint pk_record_access_sessions PRIMARY KEY (id)
+  index ix_record_access_sessions_expires_at using btree (expires_at)
 table recovery_approvals
   column subject uuid not null
   column approver uuid not null
