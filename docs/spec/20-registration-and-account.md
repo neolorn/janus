@@ -90,7 +90,8 @@ channel.
 1. No path exists by which a **human** account is created or left with zero verified
    emails and no provider credential supplying one; `emergency` and the non-human
    principals are not human accounts and are not counted by this criterion.
-2. With `registration.phone` = `required`, no account reaches `active` without a verified
+2. With `registration.phone` = `required`, no account reaches `active` without a
+   verified
    phone; a number verified on one account cannot verify on another.
 3. While `identifiers.username.enabled` is off, no request accepts a username and no
    response carries the field.
@@ -230,7 +231,8 @@ Only identifiers the person has already verified are involved; nothing new enter
 account and nothing leaves it.
 
 **Acceptance criteria**
-1. `POST /account/identifiers/{id}/primary` and `PUT /account/identifiers/backup` succeed
+1. `POST /account/identifiers/{id}/primary` and `PUT /account/identifiers/backup`
+   succeed
    in an ordinary session at the account's assurance level.
 2. Setting an unverified identifier primary, or naming one as the backup, is refused
    with `identity.identifier.unverified` and changes nothing.
@@ -534,7 +536,8 @@ declared purpose. Date of birth is off because the answer is kept, not the date:
 key off the age step records only the derived outcome.
 
 **Acceptance criteria**
-1. A display name of 65 bytes is refused with `identity.profile.invalid`; one of 64 bytes
+1. A display name of 65 bytes is refused with `identity.profile.invalid`; one of 64
+   bytes
    in any script is accepted.
 2. While `profile.legalname` and `profile.dateofbirth` are off, no request accepts the
    field (`identity.profile.notaccepted`) and no response carries it.
@@ -562,7 +565,8 @@ defined outcome (`14-takedown-procedure`).
 
 **Acceptance criteria**
 1. No identifier field is shown or accepted before the age screen is answered.
-2. On an adults-only host, an under-age date ends the session (`identity.profile.underage`),
+2. On an adults-only host, an under-age date ends the session
+   (`identity.profile.underage`),
    and the same session accepts no further date.
 3. The account record carries the affirmation with its timestamp; the date is present
    only where `profile.dateofbirth` is on.
@@ -650,7 +654,8 @@ AUTH-ABUSE-001 counts a source by.
    `linkToken`.
 3. The session store contains no registration session older than
    `registration.session.lifetime`.
-4. Exactly one `AccountRegistered` event fires per created account, and no account exists
+4. Exactly one `AccountRegistered` event fires per created account, and no account
+   exists
    in a state that is not `active` immediately after creation, save where an invitation's
    policy holds it at enrolment (AUTH-RECOV-001 enforced).
 5. Beginning a passkey ceremony or a TOTP generator at the security step writes no row
@@ -697,7 +702,8 @@ where `registration.phone` is `optional` and no invitation bound a phone (REG-MA
 a skip otherwise is refused with `identity.registration.incomplete`.
 
 **Acceptance criteria**
-1. No step can be reached before the one preceding it is complete, and no control returns
+1. No step can be reached before the one preceding it is complete, and no control
+   returns
    to a completed step; a request for such a step is refused with
    `identity.registration.incomplete`.
 2. Before step 6 completes, no account, identifier, credential or consent exists outside
@@ -910,19 +916,23 @@ account has no password and no recovery codes.
 ### 4.6 The terms step
 
 **REG-SESS-007** — The terms step SHALL record, each with its document and version,
-timestamp and action: terms of service **accepted** (required); the privacy notice **presented**
-(PRIV-CONS-008a); the affirmation derived at step 1; one unticked control per
-consent-based purpose the host declares (PRIV-CONS-002 to 004), none of which blocks
+timestamp and action: terms of service **accepted** (required); the privacy notice
+**presented** (PRIV-CONS-008a); the affirmation derived at step 1; one unticked control
+per consent-based purpose the host declares (PRIV-CONS-002 to 004), none of which blocks
 registration. Every document SHALL be readable in its governing language and any
-available translation without changing the interface language (PRIV-CONS-005). On
-submit the one transaction of REG-SESS-001 SHALL run and the person SHALL be signed in
-at the assurance the security step proved (AUTH-SESS-005a), in a session that records
-the whole address of the request completing the step (AUTH-SESS-013). Completing the
-step SHALL remember the registering browser as seen for `device.verification.lifetime`,
-so that the new-device check (AUTH-FACT-016) does not hold the account's next sign-in
-from it. The account SHALL NOT be created without the terms version accepted and the
-notice version presented; a session that reaches the transaction without either is
-refused with `identity.registration.incomplete`.
+available translation without changing the interface language (PRIV-CONS-005). On submit
+the one transaction of REG-SESS-001 SHALL run and the person SHALL be signed in at the
+assurance the security step proved (AUTH-SESS-005a), in a session that records the whole
+address of the request completing the step (AUTH-SESS-013). Completing the step SHALL
+remember the registering browser as seen for `device.verification.lifetime`, so that the
+new-device check (AUTH-FACT-016) does not hold the account's next sign-in from it. The
+account SHALL NOT be created without the terms version accepted and the notice version
+presented; a session that reaches the transaction without either is refused with
+`identity.registration.incomplete`. Each SHALL be the current version of its document
+(`terms` and `privacy-notice`, `10` section 5.52): one that is not is refused with
+`privacy.consent.superseded` naming it, and a document with no version published with
+`privacy.notice.unpublished`, so no one is recorded as accepting a text that was never
+published (D-222).
 
 **The offer to attach (D-221).** Where an identifier the session verified is held by a
 person record as a contact verified at a collection, the session the step establishes
@@ -944,6 +954,9 @@ done step (`18` FE-REC-003).
    creates no account and is refused with `identity.registration.incomplete`.
 6. A registration completed from an IPv6 address opens a session that records the whole
    address, not its /64.
+7. A terms step naming a terms or notice version that is not its document's current
+   version is refused with `privacy.consent.superseded` naming it, and creates no
+   account (D-222).
 
 ---
 
@@ -1045,12 +1058,14 @@ with 403 `authz.grant.self`, nothing attached (`03` AUTHZ-GRANT-005, D-212).
 *Source: D-146, D-166, D-212; IDN-ACCT-003*
 
 **Acceptance criteria**
-1. Opening an invitation while signed in, or signing in from the invitation landing page,
+1. Opening an invitation while signed in, or signing in from the invitation landing
+   page,
    reaches the membership step without a registration session.
 2. An existing account below the organization's required assurance is held at enrolment
    until it satisfies it; the membership attaches afterwards.
 3. The account count is unchanged by the acceptance.
-4. An account the membership limit refuses is answered `identity.membership.limitreached`
+4. An account the membership limit refuses is answered
+   `identity.membership.limitreached`
    and is not sent to enrol, whatever its credentials.
 
 ---
@@ -1208,7 +1223,8 @@ proves nothing. The personal email is what the account keeps when the membership
 security notices reach the personal address as well.
 
 **Acceptance criteria**
-1. Sending a staff invitation creates a disabled mail account; acknowledgement enables it;
+1. Sending a staff invitation creates a disabled mail account; acknowledgement enables
+   it;
    expiry leaves it disabled and reserved.
 2. The corporate address is never sent a verification code.
 3. A bound phone is verified before the membership step can be reached.

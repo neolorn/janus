@@ -1208,7 +1208,9 @@ both: an approved recovery's link is undertaken in the approval's unit of work
 
 **Acceptance criteria**
 1. A restricted account's records are readable by that account and not modifiable.
-2. Restriction is enforced through the gate, not by scattered checks.
+2. Restriction is enforced in one place for each kind of acting subject, never by
+   scattered checks: an account's by the gate, a person record's by the record's rights
+   (`21` REC-ACC-002), which every change a person asks of their record passes (D-222).
 3. A restriction committed after a modifying action of the account passed the gate step
    and before its first write refuses the action with `authz.restricted`, and the action
    leaves nothing of its own in the library's database, save a kept write committed

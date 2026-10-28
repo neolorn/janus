@@ -219,8 +219,8 @@ read it; called outside a browser request it is a fault of the calling code. It 
 - `name`: optional, under REC-REC-001's rule;
 - `noticeVersion`: required, the version of the privacy notice the screen presented
   (PRIV-CONS-008a);
-- `termsVersion`: optional, the version of the terms the screen asked the person to
-  accept, where the host has terms;
+- `termsVersion`: optional, the version of the terms (the document `terms`, `10` section
+  5.52) the screen asked the person to accept, where the host has terms;
 - `consents`: the consent-based purposes the person ticked, one control each
   (PRIV-CONS-002, PRIV-CONS-003);
 - `contacts`: optional, at most one email and one phone the screen took and did not
@@ -254,9 +254,10 @@ host's unit of work:
   `identity.collection.expired` (422);
 - a staged contact unverified, an age the session asked unanswered, or no contact at
   all: `identity.collection.incomplete` (409);
-- `noticeVersion` or `termsVersion` that is not the current version of its document:
-  `privacy.consent.superseded` (422), `details.member` naming it; no version of the
-  privacy notice published: `privacy.notice.unpublished` (409);
+- `noticeVersion` or `termsVersion` that is not the current version of its document
+  (`privacy-notice`, `terms`): `privacy.consent.superseded` (422), `details.member`
+  naming it; no version of a document it names published: `privacy.notice.unpublished`
+  (409), `details.document` naming it (D-222);
 - a purpose that does not rest on consent: `privacy.purpose.noconsent` (422);
 - an organization the deployment does not hold, or whose deletion is requested, a
   language outside `notification.languages`, a contact in `contacts` of a kind the
@@ -288,14 +289,14 @@ their details otherwise (by telephone, in person, on paper), under `record:creat
 
 **Values (D-221).** `IPersonRecords.EnterAsync` (`POST /admin/records`), an operation
 under `record:create` in the organization it names, takes `organization`, `language`,
-and `name`, `email` and `phone`, at least one of the three; `consents`, the purposes the
-person gave consent for to the staff member, each recorded with the mechanism
-`administrator`; `dateOfBirth`, the person's own answer where the staff member asked
-them the age question (REC-AGE-001); and `reference`. It writes a record of origin
-`staff` whose contacts are unverified and answers its `subject`. Its refusals keep
-nothing, so it may be called inside the host's unit of work. The staff member is the
-acting identity of `identity.record.entered`, the record its `subject`, filed under the
-organization.
+and `name`, `email` and `phone`, at least one of the three (none given is refused with
+`api.request.invalid` naming `name`, D-222); `consents`, the purposes the person gave
+consent for to the staff member, each recorded with the mechanism `administrator`;
+`dateOfBirth`, the person's own answer where the staff member asked them the age
+question (REC-AGE-001); and `reference`. It writes a record of origin `staff` whose
+contacts are unverified and answers its `subject`. Its refusals keep nothing, so it may
+be called inside the host's unit of work. The staff member is the acting identity of
+`identity.record.entered`, the record its `subject`, filed under the organization.
 
 A record staff entered is reached by no code (REC-ACC-001) and offered to no account
 (REC-ATT-001), since no contact of it was proven by the person: its rights are exercised
@@ -333,7 +334,10 @@ key only where `profile.dateofbirth` is on.
 - **Staff never answer for someone.** A record staff enter holds no age answer, save the
   answer the person gave when the staff member asked them during the conversation (an
   order with sensitive data taken by telephone), passed as `dateOfBirth` (REC-COL-003)
-  and recorded as the person's answer with the staff member acting.
+  and recorded as the person's answer with the staff member acting. Where
+  `registration.adultaffirmation` is `required`, an answer under eighteen refuses the
+  entry with `identity.profile.underage` and writes nothing, the service being for
+  adults only (PRIV-MINOR-001, D-222).
 
 A host that serves minors records the age group, and a minor's sensitive data rests on
 the written-consent basis PRIV-MINOR-001 requires.
@@ -446,8 +450,19 @@ on each record it reaches, with no human approval save where PRIV-RIGHT-001 puts
 A record's **notice contacts** are its contacts verified at a collection, or, where none
 was, every contact it holds; every message PRIV-RIGHT-002 and this chapter send a record
 (a receipt, a lapse, a deletion notice, `oob-deletion-notice`) goes to them, in the
-record's language. Every action is recorded as the account's same action is, the record
-acting and its `subject`.
+record's language. They are the record's existing holder: `record-deletion-notice` and
+`oob-deletion-notice` are security notices, governed only by restrictions of the
+`notification` purpose (AUTH-ABUSE-004, D-222).
+
+**Where a record's restriction is enforced (D-222).** The gate judges an account's
+restriction, and a record access session acts for no account (AUTHZ-GATE-006). A person
+record's restriction is enforced in one place of its own, the record's rights, which
+every change a person asks of their record passes, by a code or through the account it
+is attached to, and which refuses the change of a `restricted` record with
+`authz.restricted`; no other place refuses it. Staff's corrections (REC-ADM-002) are not
+the person's change and are admitted, being how a rectification request is fulfilled.
+Every action is recorded as the account's same action is, the record acting and its
+`subject`.
 
 *Source: D-221*
 
@@ -460,6 +475,9 @@ acting and its `subject`.
    returns it as it was; once the window closes it is erased (REC-REC-003).
 3. A `restricted` record's name change is refused with `authz.restricted`, and its
    export is served.
+4. A record's deletion asked within a minute of its access code still sends
+   `record-deletion-notice`, which answers only to restrictions of the `notification`
+   purpose (D-222).
 
 ---
 
@@ -496,8 +514,11 @@ offer to attach those records, and SHALL attach them only when the person confir
   naming the record as `subject` and the account; `identity.record.attached` records it,
   the account acting, the record its `subject`, filed under the record's organization.
   An attachment is never undone.
-- A `restricted` account's attachment is refused with `authz.restricted`
-  (AUTHZ-GATE-006).
+- An attachment is admitted only while the account is `active`, read under its lock in
+  the attachment's transaction: a `restricted` account's is refused with
+  `authz.restricted` (AUTHZ-GATE-006), and an account in any other state with
+  `identity.account.stateconflict`, so an attached record never enters a state its
+  account has already left (D-222).
 
 *Source: D-221*
 
@@ -511,6 +532,8 @@ offer to attach those records, and SHALL attach them only when the person confir
    reference alone, and a wrong reference attaches nothing and is counted.
 4. An attached record keeps its subject, and a host field encrypted under it before the
    attachment still decrypts after it.
+5. An attachment asked of an account that is no longer `active` when it is read under
+   its lock is refused, and attaches nothing (D-222).
 
 ---
 
@@ -530,7 +553,12 @@ exercised through the account.
   the same transaction to each record attached to it, with the account's origin and
   window, each record holding what it held and with its own events, outbox records and
   erasures row, as for the record alone: restricting the account restricts each, and
-  `RestrictionChanged` names each; the account's erasure erases each (REC-REC-003). An
+  `RestrictionChanged` names each; the account's erasure erases each (REC-REC-003). A
+  restriction follows its **decision**, not the account's state: a restriction decided
+  while the account is `suspended` or `deleting`, which the account holds
+  (PRIV-RIGHT-004), restricts each attached record at once (holding it where the record
+  is `deleting`), with `RestrictionChanged` for each; the account's later return to
+  `restricted` changes no record; the restriction's lift lifts each (D-222). An
   account's suspension changes no attached record. An operation that acts on an attached
   record's lifecycle by its own path (a lift, a cancellation, a takedown, an erasure) is
   refused with `identity.record.followsaccount` (409), `details.account` naming the
@@ -538,8 +566,10 @@ exercised through the account.
 - **What a host reads.** `IPersonRecords.AttachedAsync`
   (`GET /admin/accounts/{subject}/records`) answers the subjects of the records attached
   to an account, so a host reads "this person's records" as the account's subject and
-  these: a person's own context reads its own; another's is read under `record:read`
-  with the reach of REC-ADM-001.
+  these: a person's own context reads its own; another's is read under `record:read`,
+  asked in the organization named (the administrative organization where none is) with
+  IDN-READ-004's reach of the account, and answers the attached records that
+  organization holds, every one in the administrative organization (D-222).
 
 *Source: D-221*
 
@@ -551,6 +581,9 @@ exercised through the account.
 3. A code for an attached record's contact opens a session that does not reach it.
 4. A takedown of an account takes each attached record into `deleting` by `takedown`,
    and its reversal returns each to what it held.
+5. A restriction decided while the account is `suspended` restricts each attached record
+   at once, with `RestrictionChanged` for each; the account's reactivation into
+   `restricted` changes no record (D-222).
 
 ---
 
@@ -563,24 +596,29 @@ read reaching only the records its organization holds or is tied to.
 the record as REC-ACC-002's read does, with its origin and the account it is attached
 to; `IPersonRecords.FindAsync` (`POST /admin/records/find`) answers the subjects of the
 records of an organization holding an email, a phone (read in its canonical form,
-IDN-ACCT-004) or a reference. Each is asked in the organization named under
-`record:read`, with IDN-READ-004's reach: a holder in the administrative organization
-reaches every record; a holder elsewhere the records its organization holds and the data
-subjects of records registered in it. A record outside the reach answers
-`identity.record.notfound` as one never held does. `IAccounts.ContactAsync` and
-`IConsents.StandingAsync` (IDN-READ-003) answer a person record's subject as they answer
-an account's, each answer naming its `kind` (`account` · `record`), so a host holding a
-subject reads either in one call: a record's contact read carries its name, its contacts
-(its email and its phone as held, verified or not), its language, no time zone, and its
-state. A host's declared job may declare `record:read` (IDN-READ-004). A person's read
-of a record counts toward their read volume (OPS-ALERT-005).
+IDN-ACCT-004) or a reference. A read or an action whose path names a record is asked in
+the organization that holds the record, and admitted where its permission is held there
+or in the administrative organization, judged as one admission, as D-219 admits an
+organization's reads; a caller admitted in neither, and a subject no record bears, are
+answered `identity.record.notfound` alike, the first refusal recorded against the
+record's organization as IDN-READ-004 records an account read's (D-222). The find is
+asked in the organization its body names and answers the records that organization
+holds, and, asked in the administrative organization, those every organization holds; an
+organization the deployment does not hold answers `identity.organization.notfound`
+(D-222). `IAccounts.ContactAsync` and `IConsents.StandingAsync` (IDN-READ-003) answer a
+person record's subject as they answer an account's, each answer naming its `kind`
+(`account` · `record`), so a host holding a subject reads either in one call: a record's
+contact read carries its name, its contacts (its email and its phone as held, verified
+or not), its language, no time zone, and its state. A host's declared job may declare
+`record:read` (IDN-READ-004). A person's read of a record counts toward their read
+volume (OPS-ALERT-005).
 
 *Source: D-221*
 
 **Acceptance criteria**
 1. A holder of `record:read` in an organization reads a record it holds, and is answered
-   `identity.record.notfound` for one another organization holds alone, in bytes
-   identical to a subject no record bears.
+   `identity.record.notfound` for one another organization holds, in bytes identical to
+   a subject no record bears; a holder in the administrative organization reads both.
 2. Finding by a phone written with Arabic-Indic digits answers the record holding its
    E.164 form; finding by a reference answers the records holding it.
 3. The contact read of a record's subject answers its name, contacts, language and state

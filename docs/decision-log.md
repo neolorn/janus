@@ -18554,6 +18554,90 @@ REG-IDENT-004, REG-IDENT-007, REG-SESS-007; the working guide (the chapters' ran
 
 ---
 
+## D-222 — Round P questions 1 to 11: the terms document, staff rows, notices, an attached record's restriction, a guest's browser
+
+**Date:** 2026-10-29 · **Status:** accepted · **Amends:** D-221
+
+Round P's report asked eleven questions.
+
+- **Q1, the terms document: reading A.** The library names two legal documents,
+  `privacy-notice` and `terms` (`10` section 5.52), every other being the host's. A
+  collection's `termsVersion` is checked against `terms`, and a registration's terms
+  step now checks its `termsVersion` and `noticeVersion` the same way (REG-SESS-007): a
+  version that is not its document's current one is refused with
+  `privacy.consent.superseded` naming it, and a document with no version published with
+  `privacy.notice.unpublished`. A host building on the library found that the terms step
+  recorded any version given, so a person could be recorded as accepting a text never
+  published; this closes it.
+- **Q2, the rows naming a record.** A row whose path names a person record is asked in
+  the organization that holds the record and admitted where its permission is held there
+  or in the administrative organization, one admission, as D-219 admits an
+  organization's reads. A caller admitted in neither, and a subject no record bears, are
+  answered `identity.record.notfound` alike, in identical bytes, the first refusal
+  recorded against the record's organization as an account read outside its reach is
+  recorded (IDN-READ-004). The reach through records registered in an organization
+  serves the contact and standing reads, not these rows. Section 8's opening, which
+  answers an identifier naming no row as a missing permission, does not govern them.
+  `GET /admin/accounts/{subject}/records` is asked in the organization its query names,
+  the administrative one where none is, with the account's reach, and answers the
+  attached records that organization holds.
+- **Q3: reading A.** An entry naming none of name, email and phone is refused with
+  `api.request.invalid` naming `name`.
+- **Q4: reading B.** On an adults-only host, an entry's date of birth under eighteen is
+  refused with `identity.profile.underage` and nothing is written, as a collection ends:
+  the service is for adults only (PRIV-MINOR-001).
+- **Q5.** A person record's notice contacts are its existing holder, so
+  `record-deletion-notice` and `oob-deletion-notice` to them are security notices,
+  governed only by restrictions of the `notification` purpose (AUTH-ABUSE-004): a notice
+  the person must see is never silenced by a code sent a moment before.
+- **Q6: (1) reading A, (2) reading A.** The find answers the records the organization
+  named holds, and in the administrative organization those every organization holds; an
+  organization the deployment does not hold answers `identity.organization.notfound`, as
+  every read naming one does.
+- **Q7: reading A.** `AccountDeletionRequested` and `AccountDeletionCancelled` fire
+  whether the owner or a fulfilled out-of-band request began the window; only a takedown
+  raises neither.
+- **Q8: reading A.** The replace answers 422 `identity.identifier.invalid` for an
+  identifier the account does not hold or a replace outside single-address mode, as `10`
+  already reads, and 409 `identity.identifier.locked` for a locked identifier; `09` and
+  the declaration name both.
+- **Q9.** (1) An attached record's restriction follows the restriction's decision, not
+  the account's state: decided while the account is `suspended` or `deleting`, it
+  restricts each attached record at once, with `RestrictionChanged` for each; the
+  account's later return to `restricted` changes no record; the lift lifts each. (2) An
+  attachment is admitted only while the account is `active`, read under its lock; any
+  other state is refused (`authz.restricted` for a restricted account,
+  `identity.account.stateconflict` otherwise), so a record never enters a state its
+  account has left.
+- **Q10: reading A.** `Janus.Testing` gains a visitor, `TestPeople.Visitor()`, a
+  `TestVisitor` carrying what a `TestSession` carries save a sign-in session, since
+  every host that tests a guest's flows needs one (LIB-TEST-003).
+- **Q11.** AUTHZ-GATE-006 AC2 is amended: a restriction is enforced in one place for
+  each kind of acting subject, an account's by the gate, a person record's by the
+  record's rights, which every change a person asks of their record passes; staff's
+  corrections are admitted, being how a rectification is fulfilled. The gate judges the
+  acting account (D-207), and a record access session acts for none, so the record's own
+  place is the one place for it.
+
+*Rejected:* a terms document the host names at startup (Q1: one more declaration for a
+name every deployment shares); answering a missing permission on a record row with 403
+(Q2: it would tell a caller outside the reach that the record exists); recording no
+answer for an under-age entry (Q4: the record would exist for a person the service does
+not serve); letting the gate judge a person record (Q11: the gate admits by grants, and
+a record holds none).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `21` REC-COL-002, REC-COL-003, REC-AGE-001, REC-ACC-002, REC-ATT-001,
+REC-ATT-002, REC-ADM-001; `02` AUTH-ABUSE-004; `03` AUTHZ-GATE-006; `07` LIB-TEST-003;
+`09` `POST /register/terms`, `PUT /account/identifiers/{id}/replace`,
+`POST /account/records/attach` and `/attach/reference`, section 8a's person records (the
+heading, `POST /admin/records`, the find, `GET /admin/accounts/{subject}/records`); `10`
+sections 1.4, 5.25, 5.52 and 5b; `20` REG-SESS-007; `implementation-plan.md` (section
+3a: round P's row, and round H3 before round S).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18785,6 +18869,7 @@ REG-IDENT-004, REG-IDENT-007, REG-SESS-007; the working guide (the chapters' ran
 | Round H2 questions 1 to 5: where an organization's reads are asked, and what events and refusals say | D-219 |
 | A standalone library: Milestone 2 is the release, and the deployment is a host's | D-220 |
 | Round P: people without an account | D-221 |
+| Round P questions 1 to 11: the terms document, staff rows, notices, an attached record's restriction, a guest's browser | D-222 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

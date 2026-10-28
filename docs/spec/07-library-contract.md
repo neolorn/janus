@@ -693,7 +693,12 @@ carries:
   `Software passkey`; and for each a `TestSession`, an `HttpClient` that carries the
   session cookie, the synchronizer token and `X-Identity-Request` (BFF-CSRF-001,
   BFF-CSRF-003) on every request, with the person's subject, and a step-up with the
-  person's passkey or password.
+  person's passkey or password; and a visitor (`TestPeople.Visitor()`, a `TestVisitor`),
+  an `HttpClient` that carries what a `TestSession` carries save a sign-in session (the
+  pre-authentication cookie, the synchronizer token, `X-Identity-Request`, the origin
+  and the fetch metadata), for what a guest does with no account: a collection (`21`
+  REC-COL-001) and the record access (REC-ACC-001), the codes read from the in-memory
+  transports (D-222).
 
 A host's project that references the library's packages, a test project using
 `Janus.Testing` among them, carries the framework reference to `Microsoft.AspNetCore.App`
@@ -701,7 +706,7 @@ itself: the reference a package carries prunes nothing in the project that takes
 without its own the project resolves as packages what the shared framework serves (`08`
 CONV-LAYOUT-001, D-205).
 
-*Source: D-204, D-205, D-206, D-207, D-208, D-210*
+*Source: D-204, D-205, D-206, D-207, D-208, D-210, D-222*
 
 **Acceptance criteria**
 1. A test using only `Janus.Testing` and a host built on the public surface stands a
@@ -714,8 +719,9 @@ CONV-LAYOUT-001, D-205).
 4. A development deployment composed with the stand-ins raises no `degradation` for the
    seams they stand in for, and its balance job records the SMS transport's balance and
    raises no `background-job-failed` (D-208).
-5. A state-changing request made through a `TestSession` passes the browser profile's
-   CSRF stages.
+5. A state-changing request made through a `TestSession`, or through a `TestVisitor`,
+   passes the browser profile's CSRF stages; a `TestVisitor` carries no sign-in session
+   (D-222).
 
 ---
 

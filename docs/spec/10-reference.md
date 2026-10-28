@@ -164,10 +164,10 @@ message — rewording the human-facing text is free, changing the code is breaki
 | Code | Meaning | Source |
 |---|---|---|
 | `privacy.consent.required` **(new)** | Processing attempted without recorded consent; 403 | PRIV-SENS-002, D-166 |
-| `privacy.consent.superseded` **(new)** | Notice version no longer current; re-consent needed; also a collection naming a `noticeVersion` or `termsVersion` that is not its document's current version, `details.member` naming it (`21` REC-COL-002); 422 | PRIV-CONS-007, REC-COL-002, D-166, D-221 |
+| `privacy.consent.superseded` **(new)** | Notice version no longer current; re-consent needed; also a registration's terms step or a collection naming a `noticeVersion` or `termsVersion` that is not the current version of its document (section 5.52), `details.member` naming it (REG-SESS-007, `21` REC-COL-002); 422 | PRIV-CONS-007, REG-SESS-007, REC-COL-002, D-166, D-221, D-222 |
 | `privacy.consent.writtenrequired` **(new)** | Sensitive data requires written consent; 422 | PRIV-BASIS-003, D-166 |
 | `privacy.purpose.noconsent` | A consent is granted or withdrawn, at the dashboard, at the terms step, at a collection or a staff entry of a person record (`21` REC-COL-002, REC-COL-003), on a purpose the deployment did not declare or whose basis does not carry `IsConsent`; 422 | PRIV-BASIS-001, PRIV-CONS-011, REG-SESS-007, D-162, D-166 |
-| `privacy.notice.unpublished` | A consent is granted, or an objection recorded, before any version of the document that governs its purpose is published (the privacy notice where the purpose names none); 409 | PRIV-CONS-001, PRIV-CONS-005, PRIV-CONS-007, PRIV-RIGHT-001a, D-162, D-166 |
+| `privacy.notice.unpublished` | A consent is granted, or an objection recorded, before any version of the document that governs its purpose is published (the privacy notice where the purpose names none); also a terms step or a collection naming a version of `terms` or of `privacy-notice` where none is published (section 5.52), `details.document` naming it (D-222); 409 | PRIV-CONS-001, PRIV-CONS-005, PRIV-CONS-007, PRIV-RIGHT-001a, D-162, D-166 |
 | `privacy.document.notfound` | A legal document, or a named version of one, that does not exist or was never published is read, or has a translation filed against it, by a path naming it; a document an invitation's `documents` names that is not published is `api.request.invalid` (422); 404 | PRIV-CONS-005, PRIV-CONS-006, D-162, D-166 |
 | `privacy.request.duplicate` **(new)** | An identical request is already open; 409 | PRIV-RIGHT-001, D-166 |
 | `privacy.request.notfound` | A decision names no privacy request, told only to a caller holding `privacyrequest:manage`; 404 | PRIV-RIGHT-001, D-162, D-166 |
@@ -1154,7 +1154,7 @@ kind lands under.
 | `no-account` | The answer to a request made for an address no account holds | none | AUTH-ABUSE-003 |
 | `record-access-code` | The code that opens a record access session, an authentication code held to `code.signin.lifetime` and `code.signin.attempts`, under the `signin` purpose | `code` | REC-ACC-001, D-221 |
 | `record-access-none` | The answer to an ask of a code for an address no reachable person record holds as a contact verified at a collection, once per `abuse.nonexistent.window`, judged under the purpose of the code asked for | none | REC-ACC-001, D-221 |
-| `record-deletion-notice` | A person record's own deletion began its window; sent to its notice contacts, carrying no link, the cancellation being reached by a new code | none | REC-ACC-002, D-221 |
+| `record-deletion-notice` | A person record's own deletion began its window; sent to its notice contacts, carrying no link, the cancellation being reached by a new code; a security notice to an existing holder (AUTH-ABUSE-004, D-222) | none | REC-ACC-002, D-221, D-222 |
 | `account-exists` | The answer to a registration or a change made with an address an account holds, sent to the holder and never to the person who tried | none | REG-SESS-005, REG-IDENT-008 |
 | `identifier-added` | An identifier was added to the account, a corporate address taken on at an invitation's acknowledgement included; sent to the security-notice set as it stood before | none | REG-IDENT-004, REG-MAIL-001 |
 | `identifier-removed` | An identifier was removed; sent to the remaining security-notice set with the undo link | `link` | REG-IDENT-006, REG-IDENT-007 |
@@ -1566,6 +1566,16 @@ screen, REC-COL-002) · `staff` (a member of staff entered it for them, REC-COL-
 
 *Source: REC-REC-001, REC-REC-002, D-221*
 
+### 5.52 Legal document names
+
+`privacy-notice` (the privacy notice, PRIV-CONS-008a; `GET /privacy/notice`) · `terms`
+(the terms of service: a registration's terms step and a person record's collection
+check `termsVersion` against its current version, REG-SESS-007, `21` REC-COL-002). Every
+other legal document is named by the host under INT-SMS-003's rule. The current version
+of a document is the highest published (PRIV-CONS-005).
+
+*Source: REG-SESS-007, REC-COL-002, D-222*
+
 ---
 
 ## 5a. Step-up actions — library-owned
@@ -1669,7 +1679,7 @@ REC-ATT-002, D-221).
 | `IdentifierRemoved` | An identifier was removed (REG-IDENT-006), or a corporate address was retired when a membership ended (REG-MAIL-003); a later undo fires `IdentifierAdded` | Host |
 | `IdentifierPrimaryChanged` | The primary of a kind changed (REG-IDENT-005), including on invitation acknowledgement when the corporate address becomes primary (REG-INV-001) and when a membership ends (REG-MAIL-003) | Host |
 | `AccountSuspended` · `AccountReactivated` | State enters or leaves `suspended`, by the subject or an administrator. `AccountSuspended` is also written at every takedown trigger, whatever state the account held, announcing that access stopped (IDN-LIFE-003) | Host |
-| `AccountDeletionRequested` · `AccountDeletionCancelled` | The grace window starts or is cancelled | Host (pause its own processing for the subject) |
+| `AccountDeletionRequested` · `AccountDeletionCancelled` | The grace window starts or is cancelled, whether the owner or a fulfilled out-of-band erasure request began it; not raised for a takedown (D-222) | Host (pause its own processing for the subject) |
 | `RecordDeletionRequested` · `RecordDeletionCancelled` | A person record's grace window, begun by the person or by an out-of-band request, starts or is cancelled; not raised for a takedown (`21` REC-ACC-002, REC-ADM-002, D-221) | Host (pause its own processing for the subject) |
 | `RecordAttached` | A person record was attached to an account (`21` REC-ATT-001); names the record as `subject` and carries `account`; the record keeps its subject, so nothing the host holds under it moves (D-221) | Host |
 | `ErasureRequested` | The erasure transaction has committed; the host clears the copies the destroyed key does not reach (PRIV-RIGHT-005b) | Every registered subject-event handler — **required** |
