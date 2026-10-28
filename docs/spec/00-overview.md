@@ -41,6 +41,7 @@ anyone who wants it.
 | **18-frontend-integration** | Angular wiring and constraints — not UI |
 | **19-infrastructure** | Requirements the environment must satisfy — not how |
 | **20-registration-and-account** | What an account holds, the registration session and steps, identifier management, invitations, domain lock, corporate mailbox |
+| **21-people-without-an-account** | The person record: collection in a host's own screens, the person's access by a code, attaching to an account, the age question and the takedown for records, what staff do with them |
 | `decision-log.md` | Rationale — why each decision was made, what was rejected. **Supplementary; not required to build** |
 
 ### 1.2 Requirement format
@@ -347,6 +348,7 @@ triggers" table (D-147); a deferral recorded in the log and absent here is a def
 | **Grant** | One row expressing "[somebody] has [a role] on [something]" |
 | **Model builder** | Fluent startup declaration where the host describes its resource types, containment, concealment, sensitivity and processing purposes |
 | **Organization** | A domain entity, not a tenancy boundary |
+| **Person record** | A data subject a host keeps data about in their own right who holds no account: its own subject identifier, key and consents, no sign-in; reached by the person by a code, or through an account once attached (`21-people-without-an-account` REC-REC-001, D-221) |
 | **Registration session** | Opaque server-side record bound to the requesting browser that stages everything registration collects and reserves nothing; the account is created in one transaction at the terms step or not at all (`20-registration-and-account` REG-SESS-001) |
 | **Restriction** | A named sending limit: a key (destination, account, source, global or host-supplied), an optional purpose, an optional channel (`sms`, `email` or `any`), one or more (max, interval) buckets, sliding or fixed, and an optional `resend` mark, under which a send is judged and counted once whatever its languages (AUTH-ABUSE-004, D-197). Every send of every kind except an alert is checked against every restriction that applies to it; a security notice to an existing holder answers only to restrictions whose purpose is `notification`, and an alert only to its deduplication (`02-authentication` AUTH-ABUSE-004, D-166) |
 | **RoPA** | Record of Processing Activities. Generated, not maintained by hand |

@@ -18449,6 +18449,111 @@ governs).
 
 ---
 
+## D-221 — Round P: people without an account
+
+**Date:** 2026-10-28 · **Status:** accepted · **Amends:** D-073, D-039
+
+A host keeps personal data about people who hold no account: a guest who buys without
+registering, an applicant, the sender of a form, a contact staff enter for someone who
+called. D-073 required every subject of sensitive data to hold an account, on the
+premise that the account cost one screen; registration is now six required screens
+(REG-SESS-002), and a mandatory account fits a shop's guest poorly (the EDPB's
+Recommendations 2/2025 on requiring user accounts in e-commerce, consultation version of
+3 December 2025, name the guest mode the most privacy-protective option). The owner
+decided eight points in a question and answer of 2026-10-18 and 19, which this decision
+records with the design that follows from them, in a chapter of its own,
+`21-people-without-an-account`.
+
+1. **The library protects people without an account**, with the protection and the
+   rights an account has.
+2. **As a separate person record**, a data subject with its own subject identifier, key,
+   consents and rights and no sign-in, never an account with its parts missing, so no
+   account is weakened for it and none is ever merged (REC-REC-001, IDN-ACCT-003).
+3. **Who counts:** anyone whose personal data a host keeps in their own right and who
+   holds no account, sensitive or not, whether they gave it themselves or staff recorded
+   it. A third party named inside someone else's record stays under that person's key
+   (D-131).
+4. **How the person proves who they are:** a code to the email or phone the record was
+   collected under, opening a short session scoped to those records' data (see, export,
+   correct, withdraw consent, object, delete), answered alike whether or not anything is
+   held (AUTH-ABUSE-003); self-service only where the contact was verified at the
+   collection, the out-of-band path otherwise (PRIV-RIGHT-001). A code proves who holds
+   a number now, so a record verified longer ago than `records.proof.age` asks for a
+   reference only its collector holds (REC-ACC-001, R-A22).
+5. **Consent at collection** is given in the host's own screens and recorded against the
+   record (mechanism `collection`), with the notice presented and the terms accepted,
+   and withdrawn on "Your data"; staff record a consent only where the person gave it to
+   them (`administrator`) (REC-COL-002, REC-COL-003).
+6. **Linking, not moving:** an account that proves now, by a verification that completes
+   now, a contact a record holds as verified at a collection is offered a count of those
+   records, nothing else, and attaches them only when the person confirms; a record
+   keeps its identifier, key and consents; an older one is attached by its reference; a
+   record staff entered is the staff path's; once attached, a record answers to the
+   account's sign-in alone, and a host reads a person's records as the account and its
+   attached records (REC-ATT-001, REC-ATT-002).
+7. **Minors:** the age question is asked first on the host's collection screen, before
+   any contact, where the record will hold sensitive data, and enforced when a sensitive
+   record is registered under it; on other screens the host chooses, and by default does
+   not ask; staff are never asked to answer for someone, save the answer the person
+   gives a staff member who asks them during a telephone order of sensitive data. A
+   record is taken down as an account is (REC-AGE-001, REC-TKD-001).
+8. **When:** in host rounds after the host's way in, before the release: this round for
+   the records, then the staff search, then reports and import.
+
+**What follows (the design).**
+- **A collection session and a seam.** A host collects in its own screens through a
+  collection session bound to the browser, as a registration session is: the age first
+  where it asks it, then each contact verified by a code typed in place (REC-COL-001).
+  The record is written by `IRecordCollection.CollectAsync`, a seam in the host's own
+  unit of work, so the host's order and the record commit together; it takes no access
+  context, since the person holds none, and is admitted by the collection session the
+  browser of the request holds (REC-COL-002).
+- **One record per person and organization, in practice.** A collection reuses the
+  organization's record that holds a contact the session verified, verified at a
+  collection within `records.proof.age`; a number used again after that writes a new
+  record, so a former holder's record never gains a new holder's data.
+- **What staff do.** Staff enter records for people who called (`record:create`), read
+  and find them (`record:read`, with the reach of IDN-READ-004), and act for the person
+  a code does not reach (`record:manage`): correct, record a consent the person gave,
+  export for them, lift a restriction, cancel a deletion. The contact and standing reads
+  of round H2 answer a record's subject too, so a host holding a subject reads either in
+  one call.
+- **The host's retention.** The library cannot see a host's tables (LIB-HOST-002) and so
+  cannot know when a host keeps nothing more under a record's key; a host erases a
+  record it is done with (`record:erase`), which its declared job may call. Nothing
+  erases a record on its own.
+- **No `suspended` state.** A record signs nothing in; a takedown takes it straight into
+  `deleting`, ending the sessions a code opened.
+- **An attached record follows its account** in restriction, deletion, erasure and
+  takedown, each record with its own events and erasures row, so a host's subscriber
+  acts on every subject the change reaches.
+- **The staff search becomes round S.** The plan had it in round P; its decision is its
+  own, and the records are a round's worth alone.
+
+*Rejected:* an account with no sign-in method (point 2: it would need merging later);
+moving a record's data under the account's key (every host rewrites rows, and a move
+half done strands data); attaching automatically (a reissued number would bring another
+person's records); the order reference and phone as the only proof (rejected by D-073 as
+weak); the out-of-band path alone (fails PRIV-RIGHT-001 AC1); consent only at
+registration (a guest's sensitive order would be impossible); one tick for every purpose
+(PRIV-CONS-002); asking the age at every collection (more data for nothing); erasing a
+record when no registered record names it (the library would destroy host data it cannot
+see).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `21` (new); `00` (the chapter table, the glossary); `01`
+IDN-ACCT-002, IDN-LIFE-002a, IDN-LIFE-003, IDN-READ-003, IDN-READ-004; `03`
+AUTHZ-INHERIT-002; `04` PRIV-CONS-001, PRIV-CONS-011, PRIV-RIGHT-001, PRIV-RIGHT-003,
+PRIV-RIGHT-005c, PRIV-MINOR-001; `07` LIB-API-001, LIB-API-005, LIB-HOST-001 (jobs);
+`08` CONV-LAYOUT-001 (the areas); `09` sections 7a and 8a; `10` sections 1.1, 1.4, 2.1,
+4.6, 5.12a, 5.12b, 5.21, 5.24, 5.25, 5.46, 5.51, 5a and 5b; `13` R-A22 and its trigger;
+`14` sections 1 and 3; `15` section 3.2; `18` FE-REC-001 to FE-REC-003; `20`
+REG-IDENT-004, REG-IDENT-007, REG-SESS-007; the working guide (the chapters' range);
+`implementation-plan.md` (section 3a, rounds P and S).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18679,6 +18784,7 @@ governs).
 | Round H2: what a host reads and is told | D-218 |
 | Round H2 questions 1 to 5: where an organization's reads are asked, and what events and refusals say | D-219 |
 | A standalone library: Milestone 2 is the release, and the deployment is a host's | D-220 |
+| Round P: people without an account | D-221 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

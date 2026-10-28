@@ -28,8 +28,8 @@ area**, published as one package, beside the further packages LIB-PKG-001 lists.
 | Project | Contains | Depends on |
 |---|---|---|
 | `Janus.Core` | Contracts, abstractions, the public surface; internally, the key ring's implementation (CONV-CODE-007) and the implementation of the contract of the mail server in use (CONV-DESIGN-007) | nothing |
-| `Janus.Identity` | The account, identifier, organization and membership aggregates, their rules and their persistence ports | Core |
-| `Janus.Authentication` | Factors, sessions, flows; the services of the account, identifier, registration, organization and invitation operations, which gate through this area's step-up guard; the sending restrictions and the governed send path (evaluation, outbox row, counting), whose contract `Janus.Core` declares so that every area sends through it | Core |
+| `Janus.Identity` | The account, identifier, organization and membership aggregates, the person record (`21`, D-221), their rules and their persistence ports | Core |
+| `Janus.Authentication` | Factors, sessions, flows; the services of the account, identifier, registration, organization and invitation operations, and of the person record operations with their collection and record access sessions (D-221), which gate through this area's step-up guard; the sending restrictions and the governed send path (evaluation, outbox row, counting), whose contract `Janus.Core` declares so that every area sends through it | Core |
 | `Janus.Authorization` | Grants, model builder, gate | Core |
 | `Janus.Privacy` | Purposes and bases, consent and objection, legal documents, rights queue, erasure and export (chapter `04`) | Core |
 | `Janus.Storage` | EF Core, Dapper, migrations; implements the persistence ports the areas declare; the OIDC provider's stores | Core, Identity, Authentication, Authorization, Privacy (D-149) |

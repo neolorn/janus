@@ -37,8 +37,10 @@ reused** after deletion.
 
 *Source: D-005*
 
-This identifier is what audit records, grants, and any future OIDC tokens reference.
-It is the reason erasure can anonymise rather than destroy the record (`04-privacy`).
+This identifier is what audit records, grants, and any future OIDC tokens reference. It
+is the reason erasure can anonymise rather than destroy the record (`04-privacy`). A
+person record's subject identifier is issued the same way, from the same space, so none
+is ever an account's (`21` REC-REC-001, D-221).
 
 **Acceptance criteria**
 1. The identifier contains no substring derived from email, phone, or name.
@@ -534,14 +536,16 @@ notified without a code).*
 
 ---
 
-**IDN-LIFE-002a** — Where a host processes **sensitive personal data** about a
-subject, that subject SHALL hold an account.
+**IDN-LIFE-002a** — Where a host processes **sensitive personal data** about a subject,
+that subject SHALL hold an account, or be a person record that carries the age answer
+(`21` REC-AGE-001).
 
-*Source: D-073, D-091, D-166*
+*Source: D-073, D-091, D-166, D-221*
 
-Every rights mechanism hangs off an account — consent records, the dashboard, erasure,
-restriction, takedown. Sensitive data about an identifiable person, attached to no
-account, has no route by which any right can be exercised or honoured.
+Every rights mechanism hangs off a data subject the library holds, an account or a
+person record (`21`, D-221): consent records, the dashboard or the person's access by a
+code, erasure, restriction, takedown. Sensitive data about an identifiable person
+attached to neither has no route by which any right can be exercised or honoured.
 
 **This is a library rule about sensitive data**, not a rule about any particular host's
 product. A host processing no sensitive data is unaffected.
@@ -558,22 +562,25 @@ right (keys, consent and rights for people who never touched the system) is reje
 
 **Acceptance criteria**
 1. No path exists by which a sensitive resource type is created without a subject
-   holding an account: the registration of a record of a sensitive type
-   (AUTHZ-INHERIT-002) that names no subject is refused with `api.request.malformed`
-   naming `subject`, and one naming a subject that holds no account, or whose account
-   is `deleting` or `deleted`, with `api.request.invalid` naming `subject`.
+   holding an account or a person record carrying the age answer: the registration of a
+   record of a sensitive type (AUTHZ-INHERIT-002) that names no subject is refused with
+   `api.request.malformed` naming `subject`, and one naming a subject that is neither,
+   whose account or person record is `deleting` or `deleted`, or whose person record
+   holds no age answer and is attached to no account, with `api.request.invalid` naming
+   `subject`.
 2. A third party's fields on a host record are encrypted under the key of the subject
    who entered them and become unrecoverable when that subject is erased.
-3. A subject with sensitive data held about them has an account, a history and a
-   privacy dashboard.
-4. The takedown procedure always has an account to act on.
+3. A subject with sensitive data held about them has an account or a person record, a
+   history, and a way to their rights: the privacy dashboard, a code (`21` REC-ACC-001),
+   or out of band.
+4. The takedown procedure always has an account or a person record to act on.
 
 **Consequence for a host.** A host whose records about a subject are sensitive
-(PRIV-SENS-001) gives every such subject an account, so there is **no anonymous path**
-into those records. The cost is one screen: phone verification is required by default
-(REG-IDENT-001, `registration.phone`), which is the entire friction an anonymous path
-would have avoided. Registration, which opens with the age screen (REG-PROF-002), is
-the single point at which the adult affirmation is collected.
+(PRIV-SENS-001) keeps them under an account, or under a person record that answered the
+age question, so there is **no anonymous path** into those records. A guest answers the
+question on the host's own collection screen before any contact is taken (`21`
+REC-AGE-001), and registration, which opens with the age screen (REG-PROF-002), is the
+other place the adult affirmation is collected (D-221).
 
 ---
 
@@ -669,6 +676,11 @@ own processing for the subject.
 The affirmation verifies nothing. What makes self-declaration proportionate for
 sensitive data is that the situation has a defined outcome rather than being decided
 on the spot.
+
+**A person record (D-221).** The takedown applies to a person record as `21` REC-TKD-001
+states: with no suspension, since a record signs nothing in, the record goes straight
+into `deleting` by `takedown`, every session that reaches it by a code ends, and the
+window, the erasure and the reversal are an account's.
 
 **Acceptance criteria**
 1. The procedure exists as `14-takedown-procedure.md`.
@@ -1637,7 +1649,12 @@ endpoints are `GET /admin/accounts/{subject}`, `POST /admin/accounts/find`,
 (`09` section 8a); the finding is a `POST` so no identifier rides in an address a proxy
 logs.
 
-*Source: D-218*
+**Values (D-221).** The contact and standing reads answer a person record's subject as
+they answer an account's, each answer naming its `kind` (`account` · `record`): a
+record's contact read carries its name, its contacts as held, verified or not, its
+language, no time zone and its state (`21` REC-ADM-001).
+
+*Source: D-218, D-221*
 
 **Acceptance criteria**
 1. An account read answers no credential, date of birth or photo, and the legal name
@@ -1668,22 +1685,25 @@ held in that organization or in the administrative organization, judged as one
 admission: one refusal, naming the organization the path names, is recorded where
 neither admits (AUTHZ-SCOPE-001, D-219). A holder elsewhere reaches its own
 organization, and a person only where the account is tied to it: a current member of it,
-or the data subject of a record registered in it (`03` AUTHZ-INHERIT-002, `IResources`).
-An account outside that reach answers `identity.account.notfound` (404) as an account no
-person bears does, so the read discloses nothing of whether it exists. Each person
-record a person reads (an account, a contact, a standing, a member) counts toward their
+or the data subject of a record registered in it (`03` AUTHZ-INHERIT-002, `IResources`);
+and a person record only where the organization holds it, or the record is the data
+subject of a record registered in it (`21` REC-ADM-001, D-221). An account outside that
+reach answers `identity.account.notfound` (404) as an account no person bears does, so
+the read discloses nothing of whether it exists. Each record of a person that a person
+reads (an account, a contact, a standing, a member, a person record) counts toward their
 read volume (OPS-ALERT-005); a job's reads are not counted, as no system principal's
 are. A read is not audited; a refusal is recorded as every refusal is
 (AUTHZ-CONCEAL-004).
 
 A host's declared job (IDN-PRIN-001) MAY declare `organization:read`, `membership:read`,
-`contact:read` and `consent:read` beside its host permissions, the only library-owned
+`contact:read` and `consent:read` beside its host permissions, and `record:read` and
+`record:erase` (`21` REC-ADM-001, REC-ADM-003, D-221), the only library-owned
 permissions a job declares; it is then admitted for the reads they govern in its own
 organization, with the reach above, and refused them while a request is served and in an
 organization whose deletion is requested, as for any permission. `account:read`, the
 account finding, the sessions read and the preference setting stay a person's.
 
-*Source: D-218, D-219*
+*Source: D-218, D-219, D-221*
 
 The reach is the owner's choice of 2026-10-27: a host reads the people it deals with,
 and another organization's customers are not among them.

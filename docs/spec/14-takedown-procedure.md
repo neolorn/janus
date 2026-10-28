@@ -10,10 +10,15 @@ What happens when a customer turns out to be under 18.
 
 ## 1. Why this exists
 
-The service is 18+ only. Age is **self-declared** on a neutral age screen at registration
-(REG-PROF-002); the affirmation is derived from the answer. Every act of processing the
-host performs belongs to an account (D-073), so this procedure always has an account to
-act on. The date itself is retained only where `profile.dateofbirth` is on.
+The service is 18+ only. Age is **self-declared** on a neutral age screen at
+registration (REG-PROF-002); the affirmation is derived from the answer. Every act of
+processing of sensitive data the host performs belongs to an account, or to a person
+record that answered the age question (IDN-LIFE-002a, D-221), so this procedure always
+has one of them to act on. A person record, a customer the host keeps data about who
+holds no account (a guest buyer, say), is taken down as an account is, with no
+suspension since it signs nothing in (`21` REC-TKD-001); a record attached to an account
+is taken down with the account. The date itself is retained only where
+`profile.dateofbirth` is on.
 
 A self-declared date verifies nothing. Someone under 18 can enter one.
 
@@ -51,7 +56,9 @@ Four steps, in **two phases**. The system provides one operation — the takedow
 The takedown applies to an account that is active, restricted or suspended, and to one
 already in a deletion window of its own (one the person asked for, or one an out-of-band
 erasure request began). From the trigger the person can no longer cancel that deletion
-from their inbox (IDN-LIFE-003, D-166).
+from their inbox (IDN-LIFE-003, D-166). For a person record, step 1 ends every session
+that reaches it by a code and takes the record straight into its window; there is no
+sign-in to refuse (`21` REC-TKD-001, D-221).
 
 **Phase one — the moment you trigger it.** In one transaction the identity system:
 

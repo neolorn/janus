@@ -522,6 +522,32 @@ security necessity, and confirming that reading with counsel is item 7 under R-O
 
 ---
 
+### R-A22 · A number issued again within `records.proof.age` reaches its former holder's person records
+
+| | |
+|---|---|
+| **Likelihood** | Low (a number given up, issued to another person inside the window, whose new holder asks that host for a code) |
+| **Impact** | High for that person (what a host keeps about a guest, sensitive data included) |
+| **Decision** | Accepted; bounded by `records.proof.age` |
+| **Source** | D-221, REC-ACC-001, REC-ATT-001 |
+
+A code proves who holds an email or a phone now, not who held it when a person record
+was collected. A record whose contact was verified at a collection within
+`records.proof.age` (90 days by default) is reached by the code alone; an older one asks
+for a reference only its collector holds, an order number say, and the offer to attach a
+record to an account follows the same rule (`21` REC-ACC-001, REC-ATT-001). A number
+given up and issued to someone else inside the window therefore opens its former
+holder's recent records to the new holder.
+
+**Why accepted.** Self-service rights without an account need a proof a guest holds, and
+a code to the contact they gave is the one they always hold; asking a reference for
+every record would turn every access into a support case for the person who kept no
+order number. The window keeps the exposure to records collected recently; an operator
+whose customers' numbers change hands faster, or who keeps highly sensitive data under
+person records, shortens it.
+
+---
+
 ## 2. Mitigated
 
 Risks addressed by design rather than accepted.
@@ -682,6 +708,7 @@ on a calendar rather than waited for (D-147).
 | R-A13 | The VPS tier upgrade, at which the erasure ledger is registered on the new storage (DR-016, D-166) |
 | R-A17 | A host or regulator requires the NIST blocklist sources as written |
 | R-A20 | A second market whose law names another governing language is served |
+| R-A22 | A person reports that a record reached by a code was another person's, or a host keeps under person records data whose exposure to a number's next holder it judges too grave for the window |
 
 ---
 

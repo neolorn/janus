@@ -189,6 +189,10 @@ for the asking session, the records staged before it answering nothing from then
 each new one a send the restrictions count, as a replace does (REG-IDENT-007, D-190,
 D-197).
 
+**The offer to attach (D-221).** Where the identifier verified here is held by a person
+record as a contact verified at a collection, the account's session carries the offer of
+`21` REC-ATT-001, read at `GET /account/records/offer`.
+
 *Source: D-146, D-166, D-187, D-188, D-189, D-197; amends D-035*
 
 **Acceptance criteria**
@@ -354,6 +358,10 @@ the source (AUTH-ABUSE-001, D-191); a replace naming another value is refused
 replace that session staged lands on the authentication application, where that session
 is held, and a press of it there verifies, as a press in the browser that staged any
 replace does (REG-SESS-003, D-190).
+
+**The offer to attach (D-221).** Where the value a replace verified is held by a person
+record as a contact verified at a collection, the account's session carries the offer of
+`21` REC-ATT-001.
 
 *Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, D-190, D-191, D-197, amends
 D-035 and restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
@@ -915,6 +923,11 @@ so that the new-device check (AUTH-FACT-016) does not hold the account's next si
 from it. The account SHALL NOT be created without the terms version accepted and the
 notice version presented; a session that reaches the transaction without either is
 refused with `identity.registration.incomplete`.
+
+**The offer to attach (D-221).** Where an identifier the session verified is held by a
+person record as a contact verified at a collection, the session the step establishes
+carries the offer of `21` REC-ATT-001, which the account application shows after the
+done step (`18` FE-REC-003).
 
 *Source: D-148; D-146, D-166, D-183, PRIV-CONS-005, PRIV-CONS-008a*
 

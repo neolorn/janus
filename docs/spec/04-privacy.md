@@ -307,8 +307,9 @@ carry: the specific purpose, the **document and version displayed** (the documen
 purpose's declaration names, the privacy notice where it names none), timestamp,
 mechanism, and withdrawal timestamp where applicable.
 
-**Values (D-153).** `mechanism` is one of `10` section 5.21: `registration` · `dashboard`
-· `reconsent` · `administrator`.
+**Values (D-153).** `mechanism` is one of `10` section 5.21: `registration` ·
+`collection` · `dashboard` · `reconsent` · `administrator`; `collection` is a person
+record's collection in a host's own screen (`21` REC-COL-002, D-221).
 
 **Values (D-166).** A grant named `dashboard` over a superseded, unwithdrawn consent for
 the purpose, or over a live one the purpose no longer admits, is recorded `reconsent`,
@@ -642,8 +643,10 @@ management of, and updating of consent settings at any time.
 
 *Source: D-030*
 
-Required by the guideline for sensitive-data processing, and the natural home for
-the self-service rights in section 5.
+Required by the guideline for sensitive-data processing, and the natural home for the
+self-service rights in section 5. A person without an account reaches the same access
+and controls for their person record by a code ("Your data", `21` REC-ACC-002), and
+through their account once the record is attached (REC-ATT-002) (D-221).
 
 **Acceptance criteria**
 1. Every consent record held is visible to its subject.
@@ -693,6 +696,13 @@ Where the account is already `deleting`, whatever its origin, the request is rec
 `fulfilled` against the running window and nothing restarts; where it is `deleted`, the
 request is recorded `fulfilled` and nothing further happens. Fulfilling a request of any
 type is a step-up action (`privacyrequest:fulfil`, `10` section 5a); refusing one is not.
+
+**A person without an account (D-221).** Each right of a person record is exercised in
+the record access session a code opens (`21` REC-ACC-002), through the account the
+record is attached to (REC-ATT-002), or out of band through staff for a record no code
+reaches (REC-ADM-002); the person's own erasure begins the record's window
+(`record.deletion.grace`), and an out-of-band request names the record's subject as it
+names an account's.
 
 **Objection is self-service and immediate** (PRIV-RIGHT-001a): the twin of consent
 withdrawal for purposes the person was never asked about.
@@ -882,6 +892,12 @@ type that declares an encrypted field or a sensitive category is covered by at l
 contributor; startup fails otherwise with `model.startup.declarationmissing`,
 `details.handler` naming the type. Both formats carry a host section as the library's
 (`09` `GET /privacy/export`).
+
+**A person record (D-221).** A person record's export is the same routine over the
+record's own sections (`10` section 5.46, `21` REC-ACC-002), followed by each
+contributor's sections for the record's subject; an account's export carries a section
+`records` naming each record attached to it, whose own export the account asks for at
+`/account/records/{subject}/export` (REC-ATT-002).
 
 *Source: D-148; D-037, D-146, D-162, D-166, D-203, D-206*
 
@@ -1296,7 +1312,8 @@ transaction, and a row whose key is erased SHALL be removed without being carrie
 outside the database** — alongside their encrypted form. Erasure SHALL **neutralise**
 the fingerprint, overwriting it with an irreversible value, never removing the row
 (IDN-PRIN-003). The fingerprints erasure neutralises include the provider subject of
-every linked identity (IDN-LIFE-012).
+every linked identity (IDN-LIFE-012), and a person record's contacts and references
+(`21` REC-REC-003, D-221).
 
 **Keyed is not optional, and that one word carries the whole control.** An unkeyed hash
 satisfies "one-way" and is reversible in practice: national mobile numbers occupy a few
@@ -1748,19 +1765,22 @@ disappears on its own once the interval has passed since its newest send.
 ## 9. Minors
 
 **PRIV-MINOR-001** — Where `registration.adultaffirmation` is `required` (the default)
-the service SHALL be 18+ only and the affirmation SHALL be derived at **registration**. The
-affirmation SHALL be derived from the age screen (REG-PROF-002); the date of birth
-itself SHALL be retained only where `profile.dateofbirth` is on. A host that serves
-minors (`registration.adultaffirmation` = `off`) SHALL declare a written-consent basis
-for minors' data (PRIV-BASIS-003; children's data is a sensitive category,
-PRIV-SENS-001).
+the service SHALL be 18+ only and the affirmation SHALL be derived at **registration**,
+and at the **collection** of a person record that will hold sensitive data (`21`
+REC-AGE-001). The affirmation SHALL be derived from the age screen (REG-PROF-002); the
+date of birth itself SHALL be retained only where `profile.dateofbirth` is on. A host
+that serves minors (`registration.adultaffirmation` = `off`) SHALL declare a
+written-consent basis for minors' data (PRIV-BASIS-003; children's data is a sensitive
+category, PRIV-SENS-001).
 
-*Source: D-148; D-027, D-073, D-146, D-166; supersedes IDN-LIFE-002 and the earlier "date
-of birth SHALL NOT be collected"*
+*Source: D-148; D-027, D-073, D-146, D-166, D-221; supersedes IDN-LIFE-002 and the
+earlier "date of birth SHALL NOT be collected"*
 
-Every subject holds an account (IDN-LIFE-002a): there is no anonymous path into the
-host's records, so registration is the only collection path and the only place the
-affirmation is needed.
+Every subject sensitive data is held about holds an account, or is a person record that
+answered the age question (IDN-LIFE-002a): there is no anonymous path into the host's
+sensitive records, so registration and a collection that asks the question are the two
+places the affirmation is collected, and staff never answer it for someone (`21`
+REC-AGE-001, D-221).
 
 **Acceptance criteria**
 1. With `registration.adultaffirmation` = `required`, registration requires the derived
@@ -1773,6 +1793,9 @@ affirmation is needed.
    the restore-test canary (DR-007), which no person answers for, carry no answer.
 4. A deployment with `registration.adultaffirmation` = `off` and no written-consent
    basis declared for minors' data fails startup validation.
+5. With `registration.adultaffirmation` = `required`, no record of a sensitive type is
+   registered under a person record that holds no affirmation and is attached to no
+   account (`21` REC-AGE-001, D-221).
 
 ---
 

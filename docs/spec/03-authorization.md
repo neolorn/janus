@@ -362,16 +362,17 @@ Recursive resolution at request time SHALL NOT be used.
 unit of work. A registration names the record, its organization, its container and,
 where its type declares a subject column for its encrypted fields, its data subject read
 from that column (AUTHZ-MODEL-003). A registration or move with a member absent or
-unreadable, a type the model does not declare and a record of a sensitive type naming
-no subject (IDN-LIFE-002a) included, is refused with 400 `api.request.malformed` naming
-the member. One well formed and refused on its meaning is refused with 422
-`api.request.invalid` naming the member: the record is already registered; its
-container is not of the declared type, is unregistered, belongs to another
-organization or is absent where the type requires one; or, for a sensitive type, the
-subject it names holds no account, or one `deleting` or `deleted` (IDN-LIFE-002a). A
-batch is judged whole before anything is written. `IResources` is a seam, not an
-operation: it joins the unit of work, which the host's context joins, has no endpoint and
-takes no access context (LIB-API-005).
+unreadable, a type the model does not declare and a record of a sensitive type naming no
+subject (IDN-LIFE-002a) included, is refused with 400 `api.request.malformed` naming the
+member. One well formed and refused on its meaning is refused with 422
+`api.request.invalid` naming the member: the record is already registered; its container
+is not of the declared type, is unregistered, belongs to another organization or is
+absent where the type requires one; or, for a sensitive type, the subject it names is
+neither an account nor a person record, its account or person record is `deleting` or
+`deleted`, or its person record holds no age answer and is attached to no account
+(IDN-LIFE-002a, `21` REC-AGE-001, D-221). A batch is judged whole before anything is
+written. `IResources` is a seam, not an operation: it joins the unit of work, which the
+host's context joins, has no endpoint and takes no access context (LIB-API-005).
 
 **Values (D-203).** The host's context joins the unit of work with
 `UseUnitOfWorkAsync(IUnitOfWork work, CancellationToken cancellationToken)`
@@ -412,7 +413,7 @@ registers the record again, encrypting its fields again under the new subject
 containers (AUTHZ-INHERIT-001), so whether a caller may do it is the host's own action,
 which the host asks of the gate before it writes.
 
-*Source: D-015, D-017, D-166, D-203, D-206, D-207*
+*Source: D-015, D-017, D-166, D-203, D-206, D-207, D-221*
 
 Precomputation is what keeps the rule composable into a query and therefore usable
 as a `WHERE` clause. Same-transaction maintenance is why permission data and business
