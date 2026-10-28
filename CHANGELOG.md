@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A person record is a data subject a host keeps data about in their own right who
+  holds no account: one of four states (`PersonRecordState`: `active`, `restricted`,
+  `deleting`, `deleted`, and no `suspended`, since a record signs nothing in) and how it
+  was written (`PersonRecordOrigin`: `collection` where the person gave the data in a
+  host's own screen, `staff` where a member of staff entered it).
 - A host asks which accounts may exercise a permission on a record, or across an
   organization (`IAccessGate.WhoMayAsync`, `GET /admin/access/admitted`), and is
   answered as the single check would admit each account, through groups, containers and

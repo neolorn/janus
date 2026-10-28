@@ -2231,6 +2231,14 @@ Janus.Core.Permission.Equals(Janus.Core.Permission other) -> bool
 Janus.Core.Permission.Permission() -> void
 Janus.Core.Permission.Resource.get -> string!
 Janus.Core.Permissions
+Janus.Core.PersonRecordOrigin
+Janus.Core.PersonRecordOrigin.Collection = 0 -> Janus.Core.PersonRecordOrigin
+Janus.Core.PersonRecordOrigin.Staff = 1 -> Janus.Core.PersonRecordOrigin
+Janus.Core.PersonRecordState
+Janus.Core.PersonRecordState.Active = 0 -> Janus.Core.PersonRecordState
+Janus.Core.PersonRecordState.Deleted = 3 -> Janus.Core.PersonRecordState
+Janus.Core.PersonRecordState.Deleting = 2 -> Janus.Core.PersonRecordState
+Janus.Core.PersonRecordState.Restricted = 1 -> Janus.Core.PersonRecordState
 Janus.Core.PhoneNumber
 Janus.Core.PhoneNumber.Equals(Janus.Core.PhoneNumber other) -> bool
 Janus.Core.PhoneNumber.PhoneNumber() -> void
