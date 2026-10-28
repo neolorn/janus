@@ -622,6 +622,13 @@ public static class Settings
         new("records.collection.lifetime", SettingScope.Runtime, "PT1H", ceiling: "PT24H");
 
     /// <summary>
+    /// How long a record access session lives from its opening, never extended, and an
+    /// offer to attach person records from the proof that made it.
+    /// </summary>
+    public static DurationSetting RecordsAccessLifetime { get; } =
+        new("records.access.lifetime", SettingScope.Runtime, "PT15M", ceiling: "PT1H");
+
+    /// <summary>
     /// How long a contact verified at a collection proves the person: a record whose
     /// contact was last verified longer ago is not reused by a collection, and is reached
     /// by a code or offered to an account only with a reference it holds.
@@ -1093,6 +1100,7 @@ public static class Settings
         TakedownGrace,
         AccountDeletionGrace,
         RecordsCollectionLifetime,
+        RecordsAccessLifetime,
         RecordsProofAge,
         OrganizationMultipleMemberships,
         IdentifierChangeCoolingOff,

@@ -240,6 +240,75 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
         Assert.Empty(await records.DocumentsAsync(subject, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// REC-ACC-001 AC2, AC3: a value reaches the collected records it was verified on
+    /// lately; one verified earlier only by the reference it holds; a record staff
+    /// entered or one attached to an account never.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ACC_001_AValueReachesOnlyTheRecordsItMayAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId recent = Subjects.New();
+        SubjectId older = Subjects.New();
+        SubjectId attached = Subjects.New();
+        SubjectId entered = Subjects.New();
+        string reference = "stay-" + older.Value.ToString("N")[..12];
+
+        await WrittenAsync(Person(recent, organization, created: true));
+        await WrittenAsync(Person(older, organization, created: true) with
+        {
+            Contacts = [new CollectedContact(IdentifierKind.Phone, Number, Noon.AddDays(-30))],
+            Reference = reference,
+        });
+        await WrittenAsync(Person(attached, organization, created: true));
+        await ChangedAsync(attached, record => record.Attach(Subjects.New(), Noon));
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var work = new UnitOfWork(writing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await Directory(writing).EnterAsync(
+                new EnteredPerson(
+                    entered,
+                    organization,
+                    "en",
+                    Name: null,
+                    Age: null,
+                    [new CollectedContact(IdentifierKind.Phone, Number, VerifiedAt: null)],
+                    Reference: null,
+                    Noon),
+                TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        RecordDirectory directory = Directory(reading);
+        IReadOnlyList<byte[]> fingerprints = directory.FingerprintsOf(Number);
+        SubjectId[] ours = [recent, older, attached, entered];
+
+        IReadOnlyList<ReachedRecord> reached = await directory.ReachedAsync(
+            IdentifierKind.Phone, fingerprints, Noon.AddDays(-1), TestContext.Current.CancellationToken);
+        IReadOnlyList<ReachedRecord> referenced = await directory.ReferencedAsync(
+            IdentifierKind.Phone, fingerprints, reference, TestContext.Current.CancellationToken);
+        IReadOnlyList<ReachedRecord> inReach = await directory.InReachAsync(
+            ours, IdentifierKind.Phone, fingerprints, TestContext.Current.CancellationToken);
+
+        Assert.True(await directory.ReachableHoldingAsync(IdentifierKind.Phone, fingerprints, TestContext.Current.CancellationToken));
+        Assert.Equal([recent], reached.Select(record => record.Subject).Where(ours.Contains));
+        Assert.Equal(
+            (organization, Noon, PersonRecordState.Active),
+            (reached.Single(record => record.Subject == recent).Organization,
+                reached.Single(record => record.Subject == recent).CreatedAt,
+                reached.Single(record => record.Subject == recent).State));
+        Assert.Equal([older], referenced.Select(record => record.Subject));
+        Assert.Equal(
+            new[] { recent, older }.OrderBy(subject => subject.Value),
+            inReach.Select(record => record.Subject).OrderBy(subject => subject.Value));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 

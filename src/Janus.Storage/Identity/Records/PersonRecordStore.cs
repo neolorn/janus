@@ -237,17 +237,30 @@ internal sealed class PersonRecordStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<SubjectId>> HoldingContactAsync(
+    public ValueTask<IReadOnlyList<SubjectId>> HoldingContactAsync(
         IdentifierKind kind,
         string value,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        HoldingContactAsync(kind, FingerprintsOf(value), cancellationToken);
+
+    /// <inheritdoc/>
+    public IReadOnlyList<byte[]> FingerprintsOf(string value)
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        IReadOnlyList<byte[]> candidates = Fingerprint.Candidates(Encoding.UTF8.GetBytes(value), ring);
+        return Fingerprint.Candidates(Encoding.UTF8.GetBytes(value), ring);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<SubjectId>> HoldingContactAsync(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprints);
 
         return await context.PersonRecordContacts
-            .Where(contact => contact.Kind == kind && candidates.Contains(contact.Fingerprint))
+            .Where(contact => contact.Kind == kind && fingerprints.Contains(contact.Fingerprint))
             .Select(contact => contact.Subject)
             .Distinct()
             .ToListAsync(cancellationToken)

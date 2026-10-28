@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A person reaches the person records held under their email or phone without an
+  account, through `/records/access`: a code is asked for in a browser
+  (`record-access-code`, or `record-access-none` by email where nothing is held, the
+  answer the same either way), and the code opens a session in that browser alone for
+  `records.access.lifetime` (default 15 minutes, never extended). The session reaches
+  the collected records whose contact was verified within `records.proof.age`, and an older
+  one by the reference it holds; never a record staff entered, one attached to an
+  account or one deleted. Each record reached is audited `identity.record.accessed`.
 - A record of a sensitive type may name a person record as its data subject where the
   person record holds the age answer (the adult affirmation, or the age group where
   `registration.adultaffirmation` is `off`) or is attached to an account that stands;

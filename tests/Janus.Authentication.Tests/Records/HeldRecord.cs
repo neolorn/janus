@@ -26,6 +26,11 @@ internal sealed record HeldRecord(SubjectId Subject, OrganizationId Organization
     public PersonRecordState State { get; set; } = PersonRecordState.Active;
 
     /// <summary>
+    /// What began its deletion, where it is deleting.
+    /// </summary>
+    public DeletionOrigin? DeletingBy { get; set; }
+
+    /// <summary>
     /// The account it is attached to, where it is.
     /// </summary>
     public SubjectId? AttachedTo { get; set; }

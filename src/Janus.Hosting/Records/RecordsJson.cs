@@ -7,8 +7,8 @@ namespace Janus.Hosting.Records;
 /// write.
 /// </summary>
 /// <remarks>
-/// Implements CONV-DESIGN-006, REC-COL-001 and REC-COL-003. Generated at build time, so the shapes
-/// are fixed by something a reader can see.
+/// Implements CONV-DESIGN-006, REC-COL-001, REC-COL-003 and REC-ACC-001. Generated at build
+/// time, so the shapes are fixed by something a reader can see.
 /// </remarks>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -20,4 +20,8 @@ namespace Janus.Hosting.Records;
 [JsonSerializable(typeof(CollectionStateView))]
 [JsonSerializable(typeof(RecordEntryBody))]
 [JsonSerializable(typeof(EnteredRecordView))]
+[JsonSerializable(typeof(RecordAccessRequest))]
+[JsonSerializable(typeof(RecordAccessVerifyRequest))]
+[JsonSerializable(typeof(RecordAccessReferenceRequest))]
+[JsonSerializable(typeof(RecordAccessStateView))]
 internal sealed partial class RecordsJson : JsonSerializerContext;

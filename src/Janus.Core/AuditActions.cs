@@ -429,6 +429,13 @@ public static class AuditActions
     public static AuditAction RecordEntered { get; } = AuditAction.Parse("identity.record.entered");
 
     /// <summary>
+    /// A record access session reached a person record, at its opening or by a
+    /// reference, the record acting and its subject.
+    /// </summary>
+    /// <remarks>Implements REC-ACC-001, chapter 10 section 5.</remarks>
+    public static AuditAction RecordAccessed { get; } = AuditAction.Parse("identity.record.accessed");
+
+    /// <summary>
     /// A social provider's security event naming a linked credential was refused: it
     /// was not signed by the provider's published keys, or it had been carried before.
     /// </summary>

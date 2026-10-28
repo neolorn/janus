@@ -395,6 +395,13 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         Set<CollectionSessionRecord>();
 
     /// <summary>
+    /// The record access sessions asked or open, each naming the person records a code
+    /// reached (REC-ACC-001).
+    /// </summary>
+    public DbSet<RecordAccessSessionRecord> RecordAccessSessions =>
+        Set<RecordAccessSessionRecord>();
+
+    /// <summary>
     /// The verification links a registration in progress has outstanding.
     /// </summary>
     public DbSet<RegistrationLinkRecord> RegistrationLinks =>
@@ -618,6 +625,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new PendingEventConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
         modelBuilder.ApplyConfiguration(new CollectionSessionConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordAccessSessionConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());

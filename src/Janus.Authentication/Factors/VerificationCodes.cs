@@ -17,11 +17,12 @@ namespace Janus.Authentication.Factors;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where the digits are drawn from.</param>
 /// <remarks>
-/// Implements AUTH-FACT-004. A code lives <c>code.verification.lifetime</c> whatever
-/// issued it, dies after <c>code.verification.attempts</c> wrong tries, and is spent by
-/// the first right one, so the same digits never answer twice. Every try is decided
-/// under a lock on the code's row, so concurrent tries count as the same number of
-/// sequential ones and the right code answers once.
+/// Implements AUTH-FACT-004. A verification code lives <c>code.verification.lifetime</c>
+/// whatever issued it and dies after <c>code.verification.attempts</c> wrong tries; an
+/// authentication code issued here is held to the sign-in code's settings instead. A
+/// code is spent by the first right try, so the same digits never answer twice. Every
+/// try is decided under a lock on the code's row, so concurrent tries count as the
+/// same number of sequential ones and the right code answers once.
 /// </remarks>
 internal sealed class VerificationCodes(
     IVerificationCodeStore codes,
@@ -41,16 +42,36 @@ internal sealed class VerificationCodes(
     /// configuration produced.
     /// </returns>
     /// <exception cref="ArgumentNullException">The holder is absent.</exception>
+    public ValueTask<Result<string>> IssueAsync(
+        byte[] holder,
+        CancellationToken cancellationToken) =>
+        IssueAsync(holder, Settings.CodeVerificationLifetime, cancellationToken);
+
+    /// <summary>
+    /// Draws a code living a lifetime of its own and holds it against something,
+    /// replacing whatever that thing had outstanding: an authentication code, which
+    /// lives <c>code.signin.lifetime</c> (AUTH-FACT-004).
+    /// </summary>
+    /// <param name="holder">What the code is issued against.</param>
+    /// <param name="lifetime">The setting the code lives for.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The code as the person reads it, for the message to carry, or the failure the
+    /// configuration produced.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<string>> IssueAsync(
         byte[] holder,
+        DurationSetting lifetime,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(holder);
+        ArgumentNullException.ThrowIfNull(lifetime);
 
         Error? failure = null;
 
-        TimeSpan lifetime = (await configuration
-                .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken)
+        TimeSpan lives = (await configuration
+                .ReadAsync(lifetime, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
 
@@ -70,7 +91,7 @@ internal sealed class VerificationCodes(
         await codes.RemoveAsync(holder, cancellationToken).ConfigureAwait(false);
         await codes
             .AddAsync(
-                VerificationCode.Issue(holder, code, time.GetUtcNow(), lifetime),
+                VerificationCode.Issue(holder, code, time.GetUtcNow(), lives),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -93,16 +114,34 @@ internal sealed class VerificationCodes(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Nothing, or the failure the configuration produced.</returns>
     /// <exception cref="ArgumentNullException">The holder is absent.</exception>
+    public ValueTask<Result> WithholdAsync(
+        byte[] holder,
+        CancellationToken cancellationToken) =>
+        WithholdAsync(holder, Settings.CodeVerificationLifetime, cancellationToken);
+
+    /// <summary>
+    /// Holds against something a record that holds no code and lives a lifetime of its
+    /// own, replacing whatever that thing had outstanding: the stand-in for an
+    /// authentication code that was not sent, presented against as the code would be
+    /// (AUTH-FACT-004, REC-ACC-001).
+    /// </summary>
+    /// <param name="holder">What the record stands against.</param>
+    /// <param name="lifetime">The setting the record lives for.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing, or the failure the configuration produced.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result> WithholdAsync(
         byte[] holder,
+        DurationSetting lifetime,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(holder);
+        ArgumentNullException.ThrowIfNull(lifetime);
 
         Error? failure = null;
 
-        TimeSpan lifetime = (await configuration
-                .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken)
+        TimeSpan lives = (await configuration
+                .ReadAsync(lifetime, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
 
@@ -120,7 +159,7 @@ internal sealed class VerificationCodes(
         await codes.RemoveAsync(holder, cancellationToken).ConfigureAwait(false);
         await codes
             .AddAsync(
-                VerificationCode.Unanswerable(holder, time.GetUtcNow(), lifetime),
+                VerificationCode.Unanswerable(holder, time.GetUtcNow(), lives),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -146,18 +185,36 @@ internal sealed class VerificationCodes(
     /// count with the refusal's other kept writes; a try at a code out of life, or with
     /// none outstanding, writes nothing.
     /// </remarks>
+    public ValueTask<Result> PresentAsync(
+        byte[] holder,
+        [NeverLogged] string entered,
+        CancellationToken cancellationToken) =>
+        PresentAsync(holder, entered, Settings.CodeVerificationAttempts, cancellationToken);
+
+    /// <summary>
+    /// Answers a code held to a cap of its own: an authentication code, which dies after
+    /// <c>code.signin.attempts</c> wrong tries (AUTH-FACT-004).
+    /// </summary>
+    /// <param name="holder">What the code was issued against.</param>
+    /// <param name="entered">The code as it was typed.</param>
+    /// <param name="attempts">The setting the wrong tries are capped at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>As the answer to a verification code.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result> PresentAsync(
         byte[] holder,
         [NeverLogged] string entered,
+        IntegerSetting attempts,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(holder);
         ArgumentNullException.ThrowIfNull(entered);
+        ArgumentNullException.ThrowIfNull(attempts);
 
         Error? failure = null;
 
         int cap = (await configuration
-                .ReadAsync(Settings.CodeVerificationAttempts, cancellationToken)
+                .ReadAsync(attempts, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<int>(error, ref failure));
 

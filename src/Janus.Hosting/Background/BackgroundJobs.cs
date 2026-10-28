@@ -365,6 +365,8 @@ internal static class BackgroundJobs
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<ICollectionSessionStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
+        _ = await services.GetRequiredService<IRecordAccessSessionStore>()
+            .SweepAsync(now, cancellationToken).ConfigureAwait(false);
 
         if (await SweepPendingAsync(services, now, cancellationToken).ConfigureAwait(false) is Error unswept)
         {

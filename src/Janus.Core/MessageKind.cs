@@ -184,4 +184,20 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("credential-unbound")]
     CredentialUnbound = 25,
+
+    /// <summary>
+    /// The code that opens a record access session, an authentication code sent to an
+    /// email or phone a person record holds as a contact verified at a collection
+    /// (REC-ACC-001).
+    /// </summary>
+    [JsonStringEnumMemberName("record-access-code")]
+    RecordAccessCode = 26,
+
+    /// <summary>
+    /// The answer to an ask of a record access code for an address no reachable person
+    /// record holds as a contact verified at a collection, once per window, carrying no
+    /// value (REC-ACC-001).
+    /// </summary>
+    [JsonStringEnumMemberName("record-access-none")]
+    RecordAccessNone = 27,
 }

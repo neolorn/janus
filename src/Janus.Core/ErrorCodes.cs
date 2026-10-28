@@ -549,6 +549,14 @@ public static class ErrorCodes
     public static ErrorCode RecordSignedIn { get; } = ErrorCode.Parse("identity.record.signedin");
 
     /// <summary>
+    /// A path names a subject no person record bears, or one outside the caller's reach:
+    /// a record the record access session does not reach, or one not attached to the
+    /// account, alike.
+    /// </summary>
+    /// <remarks>Implements REC-REC-002, REC-ACC-001, REC-ADM-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RecordNotFound { get; } = ErrorCode.Parse("identity.record.notfound");
+
+    /// <summary>
     /// The date of birth is under eighteen where the deployment takes an adult
     /// affirmation. The registration session has ended; nothing further is accepted in
     /// it.

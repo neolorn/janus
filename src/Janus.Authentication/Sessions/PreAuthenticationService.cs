@@ -167,6 +167,33 @@ internal sealed class PreAuthenticationService(
     }
 
     /// <summary>
+    /// Binds a record access session to the browser that asked for it (REC-ACC-001,
+    /// BFF-CSRF-005a).
+    /// </summary>
+    /// <param name="preAuthentication">The browser's pre-authentication session.</param>
+    /// <param name="access">The record access session it asked for.</param>
+    /// <param name="expiresAt">When the session stops answering at the latest.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of binding them.</returns>
+    /// <exception cref="ArgumentNullException">The session is absent.</exception>
+    public async ValueTask CarryAsync(
+        PreAuthentication preAuthentication,
+        RecordAccessSessionId access,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(preAuthentication);
+
+        preAuthentication.Carry(access, expiresAt);
+
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
     /// Binds a sign-on to the browser that started it (BFF-SESS-006).
     /// </summary>
     /// <param name="preAuthentication">The browser's pre-authentication session.</param>

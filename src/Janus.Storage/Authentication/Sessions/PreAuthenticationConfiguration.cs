@@ -65,6 +65,10 @@ internal sealed class PreAuthenticationConfiguration
             .HasColumnName("collection")
             .HasConversion(id => id!.Value.Value, value => new CollectionSessionId(value));
 
+        builder.Property(contact => contact.RecordAccess)
+            .HasColumnName("record_access")
+            .HasConversion(id => id!.Value.Value, value => new RecordAccessSessionId(value));
+
         // BFF-SESS-006: the row holds what the state fingerprints to and the proof key
         // wrapped, so a database dump yields neither a usable state nor a usable
         // verifier, and the four move together or not at all.
@@ -109,6 +113,19 @@ internal sealed class PreAuthenticationConfiguration
             .WithMany()
             .HasForeignKey(contact => contact.Collection)
             .HasConstraintName("fk_preauthentication_sessions_collection")
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // REC-ACC-001: one browser holds one record access session and a session belongs
+        // to one browser; an ended, replaced or swept session releases the browser.
+        builder.HasIndex(contact => contact.RecordAccess)
+            .HasDatabaseName("ux_preauthentication_sessions_record_access")
+            .IsUnique()
+            .HasFilter("record_access IS NOT NULL");
+
+        builder.HasOne<RecordAccessSessionRecord>()
+            .WithMany()
+            .HasForeignKey(contact => contact.RecordAccess)
+            .HasConstraintName("fk_preauthentication_sessions_record_access")
             .OnDelete(DeleteBehavior.SetNull);
     }
 }

@@ -112,6 +112,7 @@ privacy.request.warninglead integer R
 privacy.workingdays multiple-choice R allowed=friday,monday,saturday,sunday,thursday,tuesday,wednesday minimum=1
 profile.dateofbirth choice R allowed=off,optional,required
 profile.legalname choice R allowed=off,optional,required
+records.access.lifetime duration R ceiling=PT1H
 records.collection.lifetime duration R ceiling=P1D
 records.proof.age duration R floor=P7D ceiling=P365D
 recovery.approvers.required integer R

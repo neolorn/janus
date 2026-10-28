@@ -52,6 +52,13 @@ internal sealed class RequestSession : IRequestAccess
     public CollectionSessionId? Collection => Live is null ? FirstContact?.Collection : null;
 
     /// <summary>
+    /// The record access session the browser carries, where it holds no sign-in session:
+    /// a browser signed in reaches its records through its account, so it carries none
+    /// (REC-ACC-001).
+    /// </summary>
+    public RecordAccessSessionId? Access => Live is null ? FirstContact?.Access : null;
+
+    /// <summary>
     /// The session the request arrived on, where the stage that requires one let the
     /// request through.
     /// </summary>

@@ -382,6 +382,11 @@ internal sealed class Deployment : IAsyncDisposable
     public CollectionSessionStoreInMemory Collections { get; } = new();
 
     /// <summary>
+    /// The record access sessions asked and opened.
+    /// </summary>
+    public RecordAccessSessionStoreInMemory RecordAccess { get; } = new();
+
+    /// <summary>
     /// The person records a collection reads and writes.
     /// </summary>
     public RecordDirectoryInMemory Records { get; } = new();
@@ -985,6 +990,7 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddSingleton<IRegistrationSessionStore>(Registrations);
         _ = services.AddSingleton<ICollectionSessionStore>(Collections);
+        _ = services.AddSingleton<IRecordAccessSessionStore>(RecordAccess);
         _ = services.AddSingleton<IRecordDirectory>(Records);
         _ = services.AddSingleton<IRecordAudit>(RecordAudit);
         _ = services.AddSingleton<IRegistrationSignals>(Signals);
@@ -1163,6 +1169,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IRegistration>(provider =>
             provider.GetRequiredService<RegistrationService>());
         _ = services.AddScoped<CollectionSessions>();
+        _ = services.AddScoped<RecordAccessSessions>();
         _ = services.AddScoped<RecordCollectionService>();
         _ = services.AddScoped<IPersonRecords, PersonRecordService>();
         _ = services.AddScoped<IdentifierService>();

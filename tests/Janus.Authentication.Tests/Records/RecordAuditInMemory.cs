@@ -14,6 +14,7 @@ internal sealed class RecordAuditInMemory : IRecordAudit
 {
     private readonly List<(SubjectId Record, OrganizationId Organization, bool Created, DateTimeOffset At)> _collected = [];
     private readonly List<(SubjectId Acting, SubjectId Record, OrganizationId Organization, bool AgeAnswered, DateTimeOffset At)> _entered = [];
+    private readonly List<(SubjectId Record, OrganizationId Organization, RecordAccessSessionId Session, bool ByReference, DateTimeOffset At)> _accessed = [];
 
     /// <summary>
     /// Every collection recorded, in order.
@@ -26,6 +27,12 @@ internal sealed class RecordAuditInMemory : IRecordAudit
     /// </summary>
     public IReadOnlyList<(SubjectId Acting, SubjectId Record, OrganizationId Organization, bool AgeAnswered, DateTimeOffset At)> Entered =>
         _entered;
+
+    /// <summary>
+    /// Every record a record access session reached, in order.
+    /// </summary>
+    public IReadOnlyList<(SubjectId Record, OrganizationId Organization, RecordAccessSessionId Session, bool ByReference, DateTimeOffset At)> Accessed =>
+        _accessed;
 
     /// <inheritdoc/>
     public ValueTask CollectedAsync(
@@ -51,6 +58,20 @@ internal sealed class RecordAuditInMemory : IRecordAudit
         CancellationToken cancellationToken)
     {
         _entered.Add((acting, record, organization, ageAnswered, at));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask AccessedAsync(
+        SubjectId record,
+        OrganizationId organization,
+        RecordAccessSessionId session,
+        bool byReference,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _accessed.Add((record, organization, session, byReference, at));
 
         return ValueTask.CompletedTask;
     }

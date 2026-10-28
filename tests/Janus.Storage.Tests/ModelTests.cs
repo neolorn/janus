@@ -720,14 +720,15 @@ public sealed class ModelTests
 
             // Not an account field: what a browser carries before it holds a session,
             // keyed as the session table is and carrying the registration session, the
-            // sign-on and the collection session in flight (BFF-CSRF-005a, BFF-CSRF-005b,
-            // BFF-SESS-006, REC-COL-001).
+            // sign-on, the collection session and the record access session in flight
+            // (BFF-CSRF-005a, BFF-CSRF-005b, BFF-SESS-006, REC-COL-001, REC-ACC-001).
             "preauthentication_sessions.collection",
             "preauthentication_sessions.created_at",
             "preauthentication_sessions.csrf_fingerprint",
             "preauthentication_sessions.enrolment",
             "preauthentication_sessions.expires_at",
             "preauthentication_sessions.fingerprint",
+            "preauthentication_sessions.record_access",
             "preauthentication_sessions.registration",
             "preauthentication_sessions.signon_return",
             "preauthentication_sessions.signon_state",
@@ -802,6 +803,19 @@ public sealed class ModelTests
             "read_volume.actor",
             "read_volume.day",
             "read_volume.records",
+
+            // Not an account field: the record access session of REC-ACC-001, which
+            // holds the value it was asked for only as keyed fingerprints, what its
+            // tries are counted against, and the records it reached.
+            "record_access_sessions.created_at",
+            "record_access_sessions.expires_at",
+            "record_access_sessions.fingerprints",
+            "record_access_sessions.id",
+            "record_access_sessions.kind",
+            "record_access_sessions.opened_at",
+            "record_access_sessions.reached",
+            "record_access_sessions.throttled",
+
 
             // Not an account field: one approver standing behind one re-enrolment, on
             // the channel they confirmed the person on, which is held under the

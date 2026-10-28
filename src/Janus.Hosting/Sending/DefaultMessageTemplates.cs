@@ -292,6 +292,26 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "راجع رموز الاستعادة",
                 "أنشئت رموز الاستعادة الخاصة بك منذ مدة. إن لم تعد تعرف مكانها فسجل الدخول وأنشئ مجموعة جديدة.",
                 "أنشئت رموز الاستعادة منذ مدة. إن لم تجدها فأنشئ مجموعة جديدة.")),
+        (
+            MessageKind.RecordAccessCode,
+            new Words(
+                "Your code to see your details",
+                "Your code is {code}. Use it to see the details kept about you under this address. It expires shortly. If you did not ask for it, ignore this message.",
+                "Your code to see your details is {code}."),
+            new Words(
+                "رمز الاطلاع على بياناتك",
+                "رمزك هو {code}. استخدمه للاطلاع على البيانات المحفوظة عنك بهذا العنوان. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
+                "رمز الاطلاع على بياناتك هو {code}.")),
+        (
+            MessageKind.RecordAccessNone,
+            new Words(
+                "Nothing to show for this address",
+                "Someone asked for a code to see the details kept under this address, but there is nothing that can be shown for it by a code. If it was you and you gave your details another way, ask the organization that holds them.",
+                null),
+            new Words(
+                "لا شيء يمكن عرضه لهذا العنوان",
+                "طلب أحدهم رمزا للاطلاع على البيانات المحفوظة بهذا العنوان، ولا يوجد ما يمكن عرضه له برمز. إن كنت أنت وقدمت بياناتك بطريقة أخرى فاطلبها من الجهة التي تحفظها.",
+                null)),
     ];
 
     private static readonly FrozenDictionary<Held, MessageTemplate> Texts = Written();

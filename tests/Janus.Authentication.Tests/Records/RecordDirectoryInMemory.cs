@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Records;
@@ -139,8 +140,74 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
         return ValueTask.CompletedTask;
     }
 
-    private void Enlist()
+    /// <inheritdoc/>
+    public IReadOnlyList<byte[]> FingerprintsOf(string canonical) => [Encoding.UTF8.GetBytes(canonical)];
 
+    /// <inheritdoc/>
+    public ValueTask<bool> ReachableHoldingAsync(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Reaching(kind, fingerprints, verifiedSince: null).Any());
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<ReachedRecord>> ReachedAsync(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        DateTimeOffset verifiedSince,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<ReachedRecord>>([.. Reaching(kind, fingerprints, verifiedSince).Select(Reached)]);
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<ReachedRecord>> ReferencedAsync(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        string reference,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<ReachedRecord>>(
+        [
+            .. Reaching(kind, fingerprints, verifiedSince: null)
+                .Where(record => record.References.Contains(reference, StringComparer.Ordinal))
+                .Select(Reached),
+        ]);
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<ReachedRecord>> InReachAsync(
+        IReadOnlyList<SubjectId> subjects,
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(subjects);
+
+        HeldRecord[] reaching = [.. Reaching(kind, fingerprints, verifiedSince: null)];
+
+        return ValueTask.FromResult<IReadOnlyList<ReachedRecord>>(
+        [
+            .. subjects.SelectMany(subject => reaching.Where(record => record.Subject == subject)).Select(Reached),
+        ]);
+    }
+
+    private static ReachedRecord Reached(HeldRecord record) =>
+        new(record.Subject, record.Organization, record.CreatedAt, record.State);
+
+    // REC-ACC-001: collected, attached to no account, active, restricted or deleting by
+    // its own request, holding the value as a contact verified at a collection.
+    private IEnumerable<HeldRecord> Reaching(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        DateTimeOffset? verifiedSince) =>
+        _records.Values
+            .Where(record => record is { Origin: PersonRecordOrigin.Collection, AttachedTo: null }
+                && (record.State is PersonRecordState.Active or PersonRecordState.Restricted
+                    || record is { State: PersonRecordState.Deleting, DeletingBy: DeletionOrigin.Self })
+                && record.Contacts.TryGetValue(kind, out CollectedContact? held)
+                && held.VerifiedAt is DateTimeOffset verified
+                && (verifiedSince is null || verified >= verifiedSince)
+                && fingerprints.Any(fingerprint => fingerprint.AsSpan().SequenceEqual(Encoding.UTF8.GetBytes(held.Value))))
+            .OrderBy(record => record.Subject.Value);
+
+    private void Enlist()
     {
         if (Work is null)
         {

@@ -2030,6 +2030,8 @@ Janus.Core.MessageKind.NoAccount = 6 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.OobDeletionNotice = 24 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.PrivacyRequestLapsed = 16 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.PrivacyRequestReceived = 15 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.RecordAccessCode = 26 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.RecordAccessNone = 27 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.RecoveryCodesReminder = 20 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.RecoveryLink = 14 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecondStepCode = 2 -> Janus.Core.MessageKind
@@ -4231,6 +4233,7 @@ static Janus.Core.AuditActions.PreferencesChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ProfileChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ProviderEventRejected.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ProviderEventTaken.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RecordAccessed.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecordCollected.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecordEntered.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecoveryApproved.get -> Janus.Core.AuditAction
@@ -4290,6 +4293,7 @@ static Janus.Core.CollectedRecord.operator !=(Janus.Core.CollectedRecord? left, 
 static Janus.Core.CollectedRecord.operator ==(Janus.Core.CollectedRecord? left, Janus.Core.CollectedRecord? right) -> bool
 static Janus.Core.ComplianceRecord.operator !=(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
 static Janus.Core.ComplianceRecord.operator ==(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
+static Janus.Core.Configuration.Settings.RecordsAccessLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordsCollectionLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordsProofAge.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.CookieDeclaration.operator !=(Janus.Core.CookieDeclaration? left, Janus.Core.CookieDeclaration? right) -> bool
@@ -4652,6 +4656,7 @@ static Janus.Core.ErrorCodes.ProviderNonconformant.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PurposeNoConsent.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PurposeNotObjectable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ReactivationTokenInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RecordNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecordSignedIn.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryChannelNotOnAccount.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryReasonRequired.get -> Janus.Core.ErrorCode

@@ -49,7 +49,8 @@ internal sealed class PreAuthenticationStore(
                 record.Registration,
                 record.Enrolment,
                 await ReadAsync(record, cancellationToken).ConfigureAwait(false),
-                record.Collection);
+                record.Collection,
+                record.RecordAccess);
     }
 
     /// <inheritdoc/>
@@ -70,6 +71,7 @@ internal sealed class PreAuthenticationStore(
                     Registration = preAuthentication.Registration,
                     Enrolment = preAuthentication.Enrolment,
                     Collection = preAuthentication.Collection,
+                    RecordAccess = preAuthentication.Access,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -91,6 +93,7 @@ internal sealed class PreAuthenticationStore(
         record.Registration = preAuthentication.Registration;
         record.Enrolment = preAuthentication.Enrolment;
         record.Collection = preAuthentication.Collection;
+        record.RecordAccess = preAuthentication.Access;
 
         await WriteAsync(record, preAuthentication.SignOn, cancellationToken).ConfigureAwait(false);
     }

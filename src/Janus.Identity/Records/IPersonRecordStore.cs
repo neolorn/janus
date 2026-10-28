@@ -109,6 +109,26 @@ internal interface IPersonRecordStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The keyed fingerprints of a contact's value, one under each version of the key a
+    /// contact may be held under (REC-ACC-001).
+    /// </summary>
+    /// <param name="value">The canonical form.</param>
+    /// <returns>The fingerprints.</returns>
+    IReadOnlyList<byte[]> FingerprintsOf(string value);
+
+    /// <summary>
+    /// Finds the records that hold a contact, by fingerprints already taken of its value.
+    /// </summary>
+    /// <param name="kind">An email or a phone.</param>
+    /// <param name="fingerprints">The value's keyed fingerprints.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The subjects of the records that hold it.</returns>
+    ValueTask<IReadOnlyList<SubjectId>> HoldingContactAsync(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a reference a collection gave the record, as a keyed fingerprint alone.
     /// </summary>
     /// <param name="subject">The record's subject.</param>

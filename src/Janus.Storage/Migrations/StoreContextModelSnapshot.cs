@@ -1677,6 +1677,53 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("collection_sessions", "identity");
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Records.RecordAccessSessionRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<byte[]>("Fingerprints")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("fingerprints");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("kind");
+
+                b.Property<DateTimeOffset?>("OpenedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("opened_at");
+
+                b.PrimitiveCollection<Guid[]>("Reached")
+                    .IsRequired()
+                    .HasColumnType("uuid[]")
+                    .HasColumnName("reached");
+
+                b.Property<byte[]>("Throttled")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("throttled");
+
+                b.HasKey("Id")
+                    .HasName("pk_record_access_sessions");
+
+                b.HasIndex("ExpiresAt")
+                    .HasDatabaseName("ix_record_access_sessions_expires_at");
+
+                b.ToTable("record_access_sessions", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Recovery.LossReportRecord", b =>
             {
                 b.Property<Guid>("Credential")
@@ -2243,6 +2290,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
 
+                b.Property<Guid?>("RecordAccess")
+                    .HasColumnType("uuid")
+                    .HasColumnName("record_access");
+
                 b.Property<Guid?>("Registration")
                     .HasColumnType("uuid")
                     .HasColumnName("registration");
@@ -2275,6 +2326,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_preauthentication_sessions_expires_at");
+
+                b.HasIndex("RecordAccess")
+                    .IsUnique()
+                    .HasDatabaseName("ux_preauthentication_sessions_record_access")
+                    .HasFilter("record_access IS NOT NULL");
 
                 b.HasIndex("Registration")
                     .IsUnique()
@@ -4840,6 +4896,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasForeignKey("Collection")
                     .OnDelete(DeleteBehavior.SetNull)
                     .HasConstraintName("fk_preauthentication_sessions_collection");
+
+                b.HasOne("Janus.Storage.Authentication.Records.RecordAccessSessionRecord", null)
+                    .WithMany()
+                    .HasForeignKey("RecordAccess")
+                    .OnDelete(DeleteBehavior.SetNull)
+                    .HasConstraintName("fk_preauthentication_sessions_record_access");
 
                 b.HasOne("Janus.Storage.Authentication.Registration.RegistrationSessionRecord", null)
                     .WithMany()

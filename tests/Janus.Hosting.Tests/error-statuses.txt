@@ -111,6 +111,7 @@ identity.profile.invalid 422
 identity.profile.notaccepted 422
 identity.profile.underage 422
 identity.reactivation.tokeninvalid 422
+identity.record.notfound 404
 identity.record.signedin 409
 identity.registration.incomplete 409
 identity.registration.signedin 409

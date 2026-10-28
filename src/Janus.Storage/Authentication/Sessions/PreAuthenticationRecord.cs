@@ -42,6 +42,12 @@ internal sealed class PreAuthenticationRecord
     public CollectionSessionId? Collection { get; set; }
 
     /// <summary>
+    /// The <c>record_access</c> column: the record access session the browser asked or
+    /// opened (REC-ACC-001).
+    /// </summary>
+    public RecordAccessSessionId? RecordAccess { get; set; }
+
+    /// <summary>
     /// The <c>signon_state</c> column: what the value handed to the browser
     /// fingerprints to, where it has a sign-on in flight.
     /// </summary>

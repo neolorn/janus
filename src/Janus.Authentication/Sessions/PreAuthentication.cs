@@ -73,6 +73,12 @@ internal sealed class PreAuthentication
     public CollectionSessionId? Collection { get; private set; }
 
     /// <summary>
+    /// The record access session this browser asked or opened, where it has one
+    /// (REC-ACC-001).
+    /// </summary>
+    public RecordAccessSessionId? Access { get; private set; }
+
+    /// <summary>
     /// Issues one for a browser that carried nothing.
     /// </summary>
     /// <param name="secret">The token the cookie carries.</param>
@@ -99,6 +105,7 @@ internal sealed class PreAuthentication
     /// <param name="enrolment">The enrolment in flight, where there is one.</param>
     /// <param name="signOn">The sign-on in flight, where there is one.</param>
     /// <param name="collection">The collection session in flight, where there is one.</param>
+    /// <param name="access">The record access session asked or opened, where there is one.</param>
     /// <returns>The pre-authentication session.</returns>
     /// <exception cref="ArgumentNullException">Either fingerprint is absent.</exception>
     public static PreAuthentication Existing(
@@ -109,7 +116,8 @@ internal sealed class PreAuthentication
         RegistrationSessionId? registration,
         EnrolmentSessionId? enrolment = null,
         SignOnAttempt? signOn = null,
-        CollectionSessionId? collection = null)
+        CollectionSessionId? collection = null,
+        RecordAccessSessionId? access = null)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(csrfFingerprint);
@@ -120,6 +128,7 @@ internal sealed class PreAuthentication
             Enrolment = enrolment,
             SignOn = signOn,
             Collection = collection,
+            Access = access,
         };
     }
 
@@ -171,6 +180,23 @@ internal sealed class PreAuthentication
     {
         Collection = collection;
         ExpiresAt = expiresAt;
+    }
+
+    /// <summary>
+    /// Records the record access session this browser has just asked for, which binds
+    /// the code and the session it opens to this browser (REC-ACC-001, BFF-CSRF-005a).
+    /// It never shortens what the browser carries: the browser outlives the session.
+    /// </summary>
+    /// <param name="access">Which record access session.</param>
+    /// <param name="expiresAt">When the session stops answering at the latest.</param>
+    public void Carry(RecordAccessSessionId access, DateTimeOffset expiresAt)
+    {
+        Access = access;
+
+        if (expiresAt > ExpiresAt)
+        {
+            ExpiresAt = expiresAt;
+        }
     }
 
     /// <summary>

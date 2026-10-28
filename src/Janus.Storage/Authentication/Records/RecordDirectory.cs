@@ -12,15 +12,15 @@ using Janus.Privacy.SubjectKeys;
 namespace Janus.Storage.Authentication.Records;
 
 /// <summary>
-/// The person records a collection reads and writes and staff enter, over the identity
-/// area's record store.
+/// The person records a collection reads and writes, staff enter and a code reaches,
+/// over the identity area's record store.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="records">The person records.</param>
 /// <param name="identifiers">The identifiers, whose value locks a collection takes too.</param>
 /// <param name="subjectKeys">Where a new record's data key is created.</param>
 /// <remarks>
-/// Implements REC-COL-002, REC-COL-003, REC-REC-001 and CONV-DESIGN-003.
+/// Implements REC-COL-002, REC-COL-003, REC-REC-001, REC-ACC-001 and CONV-DESIGN-003.
 /// </remarks>
 internal sealed class RecordDirectory(
     StoreContext context,
@@ -132,6 +132,104 @@ internal sealed class RecordDirectory(
                 person.At,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<byte[]> FingerprintsOf(string canonical) => records.FingerprintsOf(canonical);
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ReachableHoldingAsync(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken) =>
+        (await ReachingAsync(kind, fingerprints, verifiedSince: null, among: null, cancellationToken)
+            .ConfigureAwait(false))
+        .Count > 0;
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<ReachedRecord>> ReachedAsync(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        DateTimeOffset verifiedSince,
+        CancellationToken cancellationToken) =>
+        ReachingAsync(kind, fingerprints, verifiedSince, among: null, cancellationToken);
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<ReachedRecord>> ReferencedAsync(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        string reference,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+
+        IReadOnlyList<SubjectId> referenced = await records
+            .HoldingReferenceAsync(reference, cancellationToken)
+            .ConfigureAwait(false);
+
+        return await ReachingAsync(kind, fingerprints, verifiedSince: null, [.. referenced], cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<ReachedRecord>> InReachAsync(
+        IReadOnlyList<SubjectId> subjects,
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(subjects);
+
+        IReadOnlyList<ReachedRecord> reaching = await ReachingAsync(
+                kind,
+                fingerprints,
+                verifiedSince: null,
+                [.. subjects],
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. subjects.SelectMany(subject => reaching.Where(record => record.Subject == subject))];
+    }
+
+    // REC-ACC-001: a code reaches a record collected from the person, attached to no
+    // account, active, restricted or deleting by its own request, whose contact of the
+    // kind is the value and was verified at a collection; where an instant is named, at
+    // or after it. A record staff entered is never reached.
+    private async ValueTask<IReadOnlyList<ReachedRecord>> ReachingAsync(
+        IdentifierKind kind,
+        IReadOnlyList<byte[]> fingerprints,
+        DateTimeOffset? verifiedSince,
+        HashSet<SubjectId>? among,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprints);
+
+        IReadOnlyList<SubjectId> holding = await records
+            .HoldingContactAsync(kind, fingerprints, cancellationToken)
+            .ConfigureAwait(false);
+        var reached = new List<ReachedRecord>();
+
+        foreach (SubjectId subject in holding.OrderBy(id => id.Value))
+        {
+            if ((among is not null && !among.Contains(subject))
+                || await records.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+                    is not { Origin: PersonRecordOrigin.Collection, IsReachable: true } record)
+            {
+                continue;
+            }
+
+            IReadOnlyList<RecordContact> contacts = await records
+                .ContactsAsync(subject, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (contacts.FirstOrDefault(contact => contact.Kind == kind) is { VerifiedAt: DateTimeOffset verified }
+                && (verifiedSince is null || verified >= verifiedSince))
+            {
+                reached.Add(new ReachedRecord(subject, record.Organization, record.CreatedAt, record.State));
+            }
+        }
+
+        return reached;
     }
 
     // What a record takes from a collection or an entry: its language, the name given,

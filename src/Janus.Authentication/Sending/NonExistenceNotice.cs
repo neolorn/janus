@@ -9,10 +9,10 @@ using Janus.Core.Configuration;
 namespace Janus.Authentication.Sending;
 
 /// <summary>
-/// The answer to a recovery, sign-in link or email code whose message is not going
-/// out: an address no account holds is told so, once per window, and every such ask
-/// counts against the sending restrictions as the message would have, so the response
-/// the asker sees is the one an existing address produces.
+/// The answer to a recovery, sign-in link, email code or record access code whose
+/// message is not going out: an address nothing is held for is told so, once per
+/// window, and every such ask counts against the sending restrictions as the message
+/// would have, so the response the asker sees is the one an existing address produces.
 /// </summary>
 /// <param name="configuration">Where the window and the alert threshold come from.</param>
 /// <param name="sending">What carries the message.</param>
@@ -22,13 +22,13 @@ namespace Janus.Authentication.Sending;
 /// <param name="alerts">Where the enumeration-probe alert goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements AUTH-ABUSE-002, AUTH-ABUSE-003, AUTH-ABUSE-004 and OPS-ALERT-001. The real
-/// owner gets their answer and an enumerating attacker learns nothing, because they do
-/// not hold the mailbox. The message names no requester: nothing about the asker
-/// crosses into it. The notice is judged as the message the ask asked for, under that
-/// message's purpose, and an ask the window has already answered draws on the same
-/// restrictions, so a restriction refuses a second ask inside its interval whether or
-/// not an account holds the address (BFF-ABUSE-001, BFF-ABUSE-002).
+/// Implements AUTH-ABUSE-002, AUTH-ABUSE-003, AUTH-ABUSE-004, OPS-ALERT-001 and
+/// REC-ACC-001. The real owner gets their answer and an enumerating attacker learns
+/// nothing, because they do not hold the mailbox. The message names no requester:
+/// nothing about the asker crosses into it. The notice is judged as the message the ask
+/// asked for, under that message's purpose, and an ask the window has already answered
+/// draws on the same restrictions, so a restriction refuses a second ask inside its
+/// interval whether or not an account holds the address (BFF-ABUSE-001, BFF-ABUSE-002).
 /// </remarks>
 internal sealed class NonExistenceNotice(
     IConfigurationStore configuration,
@@ -186,6 +186,11 @@ internal sealed class NonExistenceNotice(
         return Result.Success();
     }
 
+    // REC-ACC-001: an ask of a record access code is told that nothing can be shown by
+    // a code; every other ask, that no account holds the address.
+    private static MessageKind Told(MessageKind asked) =>
+        asked is MessageKind.RecordAccessCode ? MessageKind.RecordAccessNone : MessageKind.NoAccount;
+
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
         failure = error;
@@ -206,7 +211,7 @@ internal sealed class NonExistenceNotice(
         CancellationToken cancellationToken)
     {
         Result<SendReference> sent = await sending
-            .UndertakeAsync(asked with { Message = MessageKind.NoAccount }, cancellationToken)
+            .UndertakeAsync(asked with { Message = Told(asked.Message) }, cancellationToken)
             .ConfigureAwait(false);
 
         if (sent.Match(_ => (Error?)null, error => error) is Error refused)

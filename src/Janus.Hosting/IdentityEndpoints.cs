@@ -53,6 +53,7 @@ public static class IdentityEndpoints
 
         _ = library.MapRegistration();
         _ = library.MapCollection();
+        _ = library.MapRecordAccess();
         _ = library.MapAuthentication();
         _ = library.MapBreakGlass();
         _ = library.MapSignOn();

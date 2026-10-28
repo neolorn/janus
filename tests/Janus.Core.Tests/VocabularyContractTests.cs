@@ -348,6 +348,8 @@ public sealed class VocabularyContractTests
                 "oob-deletion-notice",
                 "privacy-request-lapsed",
                 "privacy-request-received",
+                "record-access-code",
+                "record-access-none",
                 "recovery-codes-reminder",
                 "recovery-link",
                 "secondstep-code",
