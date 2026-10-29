@@ -786,6 +786,54 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// 09 section 7 (D-222): a replace naming an identifier the account does not hold, or
+    /// asked outside single-address mode, is answered 422 <c>identity.identifier.invalid</c>,
+    /// and one naming a locked identifier 409 <c>identity.identifier.locked</c>; none
+    /// stages anything.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AReplaceOfNoHeldOrALockedIdentifierIsRefusedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        HeldIdentifier email = (await _deployment.Identifiers.HeldAsync(Registered(), TestContext.Current.CancellationToken))
+            .All
+            .Single(held => held.Kind is IdentifierKind.Email);
+
+        Answer several = await browser.SendAsync(
+            "PUT", "/account/identifiers/" + email.Id.Value + "/replace", ("value", "replaced@example.test"));
+
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        Answer unheld = await browser.SendAsync(
+            "PUT", "/account/identifiers/" + Guid.CreateVersion7() + "/replace", ("value", "replaced@example.test"));
+
+        await _deployment.Identifiers.TakeCorporateAsync(
+            Registered(),
+            IdentifierId.New(_deployment.Clock),
+            "person@company.example.test",
+            "person@company.example.test",
+            email.Id,
+            _deployment.Clock.GetUtcNow(),
+            maximum: 2,
+            TestContext.Current.CancellationToken);
+
+        Answer locked = await browser.SendAsync(
+            "PUT", "/account/identifiers/" + email.Id.Value + "/replace", ("value", "replaced@example.test"));
+
+        Assert.Equal(
+            [
+                (StatusCodes.Status422UnprocessableEntity, ErrorCodes.IdentifierInvalid.ToString()),
+                (StatusCodes.Status422UnprocessableEntity, ErrorCodes.IdentifierInvalid.ToString()),
+                (StatusCodes.Status409Conflict, ErrorCodes.IdentifierLocked.ToString()),
+            ],
+            [(several.Status, several.Text("code")), (unheld.Status, unheld.Text("code")), (locked.Status, locked.Text("code"))]);
+        _ = await _deployment.CarrySendsAsync();
+
+        Assert.DoesNotContain(_deployment.Mail.Taken, mail => mail.Destination.Value == "replaced@example.test");
+    }
+
+    /// <summary>
     /// REG-IDENT-007 AC9 and chapter 09 (D-190): a repeated replace naming the staged
     /// value from another session of the account is a send the restrictions count,
     /// refused 429 <c>auth.restriction.exceeded</c> inside the minute the first holds
