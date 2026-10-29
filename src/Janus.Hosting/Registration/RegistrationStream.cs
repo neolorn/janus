@@ -22,10 +22,16 @@ namespace Janus.Hosting.Registration;
 /// transaction that verified or completed the step, because the browser that presses
 /// a verification link is not promised to reach the instance the stream is open on.
 /// The state is read back on the poll interval as well, so a channel that is not
-/// heard costs promptness and never an event.
+/// heard costs promptness and never an event. The stream speaks at once and at least
+/// every <see cref="Heartbeat"/>, a comment line where it has nothing else to send, so a
+/// client knows it is connected and an idle proxy keeps it open (D-224).
 /// </remarks>
 internal static class RegistrationStream
 {
+    /// <summary>
+    /// The longest the stream stays silent (chapter 09, <c>GET /register/events</c>).
+    /// </summary>
+    public static readonly TimeSpan Heartbeat = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Answers a browser that carries no registration session, which is a browser
@@ -49,6 +55,7 @@ internal static class RegistrationStream
     /// <param name="session">The registration session.</param>
     /// <param name="signals">What tells the stream the session has changed.</param>
     /// <param name="configuration">Where the poll interval is read from.</param>
+    /// <param name="time">The clock the silence is measured on.</param>
     /// <param name="context">The request.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of streaming it.</returns>
@@ -58,12 +65,14 @@ internal static class RegistrationStream
         RegistrationSessionId session,
         IRegistrationSignals signals,
         IConfigurationStore configuration,
+        TimeProvider time,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(signals);
         ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(context);
 
         context.Response.ContentType = "text/event-stream";
@@ -74,6 +83,9 @@ internal static class RegistrationStream
                 .ConfigureAwait(false))
             .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
+        await SpokenAsync(context, cancellationToken).ConfigureAwait(false);
+
+        DateTimeOffset spoken = time.GetUtcNow();
         string? last = null;
 
         while (!cancellationToken.IsCancellationRequested)
@@ -99,15 +111,29 @@ internal static class RegistrationStream
             {
                 await SentAsync(context, Named(last, written), written, cancellationToken)
                     .ConfigureAwait(false);
+
+                spoken = time.GetUtcNow();
+            }
+            else if (time.GetUtcNow() - spoken >= Heartbeat)
+            {
+                await SpokenAsync(context, cancellationToken).ConfigureAwait(false);
+
+                spoken = time.GetUtcNow();
             }
 
             last = written;
 
+            TimeSpan left = Heartbeat - (time.GetUtcNow() - spoken);
+
             await signals
-                .WaitAsync(session, interval, cancellationToken)
+                .WaitAsync(session, Waited(interval, left), cancellationToken)
                 .ConfigureAwait(false);
         }
     }
+
+    // The poll interval, or less where the silence would otherwise pass the heartbeat.
+    private static TimeSpan Waited(TimeSpan interval, TimeSpan left) =>
+        left <= TimeSpan.Zero ? TimeSpan.Zero : left < interval ? left : interval;
 
     // The three events D-153 names. Which one it is is the difference between the
     // state before and the state now; the data is the state either way.
@@ -119,6 +145,14 @@ internal static class RegistrationStream
         using var read = JsonDocument.Parse(written);
 
         return read.RootElement.GetProperty("step").GetString() ?? string.Empty;
+    }
+
+    // A comment line: it carries nothing and tells the client the stream is open.
+    private static async ValueTask SpokenAsync(HttpContext context, CancellationToken cancellationToken)
+    {
+        await context.Response.WriteAsync(":\n\n", cancellationToken).ConfigureAwait(false);
+
+        await context.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async ValueTask SentAsync(

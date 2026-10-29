@@ -866,17 +866,25 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     // fakes are the test's alone again.
     private static async Task SettledAsync(ResponseBody written)
     {
+        DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (DateTime.UtcNow < giveUp && written.Length is 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        }
+
         await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
 
-        Assert.Equal(0, written.Length);
+        // The comment line the stream opens with, and nothing since (D-224).
+        Assert.Equal(":\n\n", written.Taken());
     }
 
-    // What the stream sent, once it has sent something.
+    // What the stream sent, once it has sent an event.
     private static async Task<string> SentAsync(ResponseBody written)
     {
         DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(10);
 
-        while (DateTime.UtcNow < giveUp && written.Length is 0)
+        while (DateTime.UtcNow < giveUp && !written.Taken().Contains("data: ", StringComparison.Ordinal))
         {
             await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
         }

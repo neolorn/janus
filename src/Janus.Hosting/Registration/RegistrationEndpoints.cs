@@ -564,6 +564,7 @@ internal static class RegistrationEndpoints
         RequestSession browser,
         IRegistrationSignals signals,
         IConfigurationStore configuration,
+        TimeProvider time,
         HttpContext context,
         CancellationToken cancellationToken) =>
         Carried(browser) is not RegistrationSessionId session
@@ -573,6 +574,7 @@ internal static class RegistrationEndpoints
                 session,
                 signals,
                 configuration,
+                time,
                 context,
                 cancellationToken);
 

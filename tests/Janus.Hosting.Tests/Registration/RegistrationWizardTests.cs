@@ -667,7 +667,7 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 
         DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(10);
 
-        while (DateTime.UtcNow < giveUp && written.Length is 0)
+        while (DateTime.UtcNow < giveUp && !written.Taken().Contains("event:", StringComparison.Ordinal))
         {
             await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
         }
@@ -688,6 +688,63 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 
         Assert.Contains("\"verified\":true", streamed, StringComparison.Ordinal);
         Assert.True(Proved(polled, IdentifierKind.Email));
+    }
+
+    /// <summary>
+    /// FE-VER-001 and D-224: the stream sends a comment line at once, before anything
+    /// has changed, and another once 30 seconds pass with nothing else sent, so a client
+    /// knows it is connected and an idle proxy keeps it open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_TheStreamSpeaksAtOnceAndAfterThirtySecondsOfSilenceAsync()
+    {
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+
+        using var abort = new CancellationTokenSource();
+
+        (Task running, ResponseBody written) = browser.Open("/register/events", abort.Token);
+
+        string first = await HeardAsync(written, 1);
+
+        _deployment.Clock.Advance(TimeSpan.FromSeconds(29));
+
+        await Task.Delay(TimeSpan.FromMilliseconds(1500), TestContext.Current.CancellationToken);
+
+        string quiet = written.Taken();
+
+        _deployment.Clock.Advance(TimeSpan.FromSeconds(1));
+
+        string second = await HeardAsync(written, 2);
+
+        await abort.CancelAsync();
+
+        try
+        {
+            await running;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Assert.Equal(":\n\n", first);
+        Assert.Equal(":\n\n", quiet);
+        Assert.Equal(":\n\n:\n\n", second);
+    }
+
+    // What the stream has written once it holds the given number of comment lines, or
+    // all it wrote within ten seconds.
+    private static async Task<string> HeardAsync(ResponseBody written, int comments)
+    {
+        DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (DateTime.UtcNow < giveUp
+            && written.Taken().Split(":\n\n").Length - 1 < comments)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        }
+
+        return written.Taken();
     }
 
     /// <summary>

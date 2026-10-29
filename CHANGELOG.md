@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /register/events` sends its headers and a comment line at once, and a comment
+  line every 30 seconds while it sends nothing else, so a client knows it is connected
+  and an idle proxy keeps the stream open.
 - A `StartupException` carrying a failure names its check: its message is the operator's
   sentence followed by the failure's code and each of its details by name and value, so
   a host that logs the exception alone has the check.
