@@ -1328,6 +1328,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<NoticeCookieCheck>(),
             provider.GetRequiredService<IUnitOfWork>()));
+        _ = services.AddScoped<FrontendSettings>();
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
         _ = services.AddScoped<RestrictionAdministration>();
         _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();

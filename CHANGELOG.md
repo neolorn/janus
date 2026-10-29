@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /settings`, public and answered with `Cache-Control: no-store`, gives a frontend
+  what it renders its screens from: `registration.phone`, the identifier limits, the
+  profile attributes asked for, the password lengths, the social providers declared,
+  each purpose resting on consent or on an objectable basis with what it takes, its
+  consent kind and its governing document, and the `requiredAssurance`, `loginFactors`
+  and `photos` of the policy in force for the signed-in account, for the organization a
+  registration's invitation joins, or else the system's.
 - `POST /account/password` is refused **422** `auth.factor.notpermitted` where the
   policy in force does not hold `password` in `loginFactors`, on every session, an
   enrolment session's included. `GET /enrol` answers, on the enrolment session, the

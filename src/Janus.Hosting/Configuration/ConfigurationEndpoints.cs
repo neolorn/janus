@@ -14,14 +14,16 @@ using Microsoft.AspNetCore.Routing;
 namespace Janus.Hosting.Configuration;
 
 /// <summary>
-/// The runtime configuration endpoints of chapter 09 section 8: reading one key and
-/// changing it.
+/// The runtime configuration endpoints of chapter 09 section 8, reading one key and
+/// changing it, and <c>GET /settings</c>, the settings a frontend renders from.
 /// </summary>
 /// <remarks>
-/// Implements OPS-CFG-002, OPS-CFG-004, LIB-API-005, CONV-CODE-006 and
-/// CONV-DESIGN-006. Each is one line to <see cref="IConfigurationAdministration"/>,
-/// which judges the permission, the direction and the value; a body missing a member
-/// it requires is refused before it is called.
+/// Implements OPS-CFG-002, OPS-CFG-004, LIB-API-005, CONV-CODE-006, CONV-DESIGN-006
+/// and D-224. The two of section 8 are each one line to
+/// <see cref="IConfigurationAdministration"/>, which judges the permission, the
+/// direction and the value; a body missing a member it requires is refused before it
+/// is called. The settings are not an operation and are read by
+/// <see cref="FrontendSettings"/>.
 /// </remarks>
 internal static class ConfigurationEndpoints
 {
@@ -55,6 +57,9 @@ internal static class ConfigurationEndpoints
                 .Binding<ConfigurationKey>("key"))
             .Accepts<ConfigurationBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
+        _ = endpoints.MapGet("/settings", ReadSettingsAsync)
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<FrontendSettingsView>();
 
         return endpoints;
     }
@@ -84,6 +89,26 @@ internal static class ConfigurationEndpoints
                 ConfigurationJson.Default.ConfiguredSettingView,
                 contentType: null,
                 StatusCodes.Status200OK));
+    }
+
+    // D-224: what the screens render from is read afresh on each request, so a change
+    // to a key or to a policy reaches the next screen and no cache holds the old one.
+    private static async Task<IResult> ReadSettingsAsync(
+        FrontendSettings settings,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(context);
+
+        context.Response.Headers.CacheControl = "no-store";
+
+        return TypedResults.Json(
+            await settings.ReadAsync(browser, cancellationToken).ConfigureAwait(false),
+            ConfigurationJson.Default.FrontendSettingsView,
+            contentType: null,
+            StatusCodes.Status200OK);
     }
 
     private static async Task<IResult> ChangeAsync(

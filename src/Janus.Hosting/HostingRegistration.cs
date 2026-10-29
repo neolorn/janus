@@ -229,6 +229,7 @@ public static class HostingRegistration
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<NoticeCookieCheck>(),
             provider.GetRequiredService<IUnitOfWork>()));
+        services.AddScoped<FrontendSettings>();
 
         // AUTH-PASS-004: what a password is screened against, and the record of each
         // screening.

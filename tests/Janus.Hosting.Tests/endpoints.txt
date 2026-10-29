@@ -2719,6 +2719,27 @@ POST /register/verify/{id}
   403 auth.session.csrfinvalid
   422 auth.code.expired auth.code.invalid integration.sms.balancefloor
   429 auth.restriction.exceeded auth.throttled
+GET /settings
+  200
+    application/json
+      registration.phone: AttributeRequirement
+      identifiers.emailMax: number
+      identifiers.phoneMax: number
+      identifiers.usernameEnabled: boolean
+      profile.legalName: AttributeRequirement
+      profile.dateOfBirth: AttributeRequirement
+      password.floorSingleFactor: number
+      password.floorWithMfa: number
+      password.maximum: number
+      providers[]: Factor
+      purposes[].purpose: string
+      purposes[].takes: string
+      purposes[].consentKind: ConsentKind?
+      purposes[].document: string
+      policy.requiredAssurance: AssuranceLevel
+      policy.loginFactors[]: Factor
+      policy.photos: boolean
+  403 auth.session.csrfinvalid
 pipeline
   Concealment
   ErrorTranslation
