@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -148,21 +147,17 @@ public sealed class HostFixture : IAsyncLifetime
                 """);
         }
 
-        // The host writes no personal field, so the key is never used to wrap one; it
-        // is the length a key-encryption key is, and nothing else.
-        byte[] material = new byte[32];
-        RandomNumberGenerator.Fill(material);
-
         var services = new ServiceCollection();
 
         // The cases state when they are evaluated, so the clock does not move under them.
         services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
 
         // LIB-HOST-001, OPS-SEC-001: the keys and the maintenance credential come
-        // through the host's secret source.
+        // through the host's secret source. The key-encryption key is the one the
+        // source fake holds, so a data key one deployment over the fixture wraps another
+        // unwraps.
         services.AddSingleton<ISecretSource>(new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal))
         {
-            KeyEncryptionKeys = new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = material }),
             FingerprintKeys = new(
                 1,
                 new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Encoding.UTF8.GetBytes("the fingerprint key of this deployment") }),

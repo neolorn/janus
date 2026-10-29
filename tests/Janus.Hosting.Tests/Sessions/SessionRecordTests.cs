@@ -9,7 +9,6 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Tests.Authorization;
-using Janus.Privacy.SubjectKeys;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -146,9 +145,6 @@ public sealed class SessionRecordTests(HostFixture host) : IClassFixture<HostFix
 
         await work.BeginAsync(cancellationToken);
 
-        // A session is kept under its person's key, which an account written directly
-        // does not have until its first session asks for it.
-        await services.GetRequiredService<ISubjectKeyStore>().CreateAsync(account, cancellationToken);
         await services.GetRequiredService<ISessionStore>().AddAsync(
             session,
             secret.Fingerprint(),

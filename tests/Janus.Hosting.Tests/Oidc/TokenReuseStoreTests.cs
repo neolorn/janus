@@ -10,7 +10,6 @@ using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Tests.Authorization;
-using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Oidc;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -215,9 +214,6 @@ public sealed class TokenReuseStoreTests(HostFixture host) : IClassFixture<HostF
                     cancellationToken);
             }
 
-            // A session is kept under its person's key, which an account written directly
-            // does not have until its first session asks for it.
-            await provider.GetRequiredService<ISubjectKeyStore>().CreateAsync(subject, cancellationToken);
             await provider.GetRequiredService<ISessionStore>().AddAsync(
                 Session.Begin(
                     session,

@@ -20,7 +20,6 @@ using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Authorization;
 using Janus.Identity.Identifiers;
-using Janus.Privacy.SubjectKeys;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -181,7 +180,6 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
             IVerificationCodeStore codes = scope.ServiceProvider.GetRequiredService<IVerificationCodeStore>();
 
             await work.BeginAsync(cancellationToken);
-            await scope.ServiceProvider.GetRequiredService<ISubjectKeyStore>().CreateAsync(subject, cancellationToken);
 
             foreach ((IdentifierId staged, TimeSpan lifetime) in new[]
             {
@@ -483,9 +481,9 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
             failedAt);
 
     // One of each thing the sweep clears, written through the deployment's own stores at
-    // noon, each lapsing within a few days: the session under its person's key, which an
-    // account written directly does not yet have, and the address given up beside the
-    // primary, which is never given up.
+    // noon, each lapsing within a few days: the session under its person's key, which the
+    // account holds from its creation, and the address given up beside the primary,
+    // which is never given up.
     private static async Task LapsingAsync(
         ServiceProvider seeding,
         SubjectId subject,
@@ -502,7 +500,6 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
         Identifier given = Email(subject, "given@example.test");
 
         await work.BeginAsync(cancellationToken);
-        await services.GetRequiredService<ISubjectKeyStore>().CreateAsync(subject, cancellationToken);
         await services.GetRequiredService<ISessionStore>().AddAsync(
             Session.Begin(
                 SessionId.New(TimeProvider.System),
