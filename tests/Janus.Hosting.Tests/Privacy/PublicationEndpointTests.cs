@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -19,6 +20,8 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
     private readonly Deployment _deployment = new();
+
+    private int _registered;
 
     /// <summary>
     /// A deployment able to register a browser, administered by one organization.
@@ -60,7 +63,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
         Assert.Equal("The governing text.", published.Text("text"));
         Assert.Equal("en", Assert.Single(published.Json().GetProperty("translations").EnumerateArray())
             .GetProperty("language").GetString());
-        Assert.Contains(_deployment.Documents.Versions, version => version.DocumentName == "privacy-notice");
+        Assert.Contains(Written, version => version.DocumentName == "privacy-notice");
     }
 
     /// <summary>
@@ -82,7 +85,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
         Assert.Equal(ErrorCodes.NoticeGoverningTextMissing.ToString(), refused.Text("code"));
-        Assert.DoesNotContain(_deployment.Documents.Versions, version => version.DocumentName == "terms");
+        Assert.DoesNotContain(Written, version => version.DocumentName == "terms");
     }
 
     /// <summary>
@@ -102,7 +105,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
         Assert.Equal("material", refused.Json().GetProperty("details").GetProperty("member").GetString());
-        Assert.Empty(_deployment.Documents.Versions);
+        Assert.Empty(Written);
     }
 
     /// <summary>
@@ -129,7 +132,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, translated.Status);
 
-        DocumentVersion held = Assert.Single(_deployment.Documents.Versions);
+        DocumentVersion held = Assert.Single(Written);
 
         Assert.Equal(version, held.Version);
         Assert.Equal(["en"], held.Translations.Select(translation => translation.Language));
@@ -160,7 +163,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
         Assert.Equal("document", refused.Json().GetProperty("details").GetProperty("member").GetString());
-        Assert.Empty(_deployment.Documents.Versions);
+        Assert.Empty(Written);
     }
 
     /// <summary>
@@ -211,7 +214,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
             Assert.Equal("document", refused.Json().GetProperty("details").GetProperty("member").GetString());
         }
 
-        Assert.Empty(_deployment.Documents.Versions);
+        Assert.Empty(Written);
         Assert.Empty(_deployment.Raised.Waiting);
     }
 
@@ -222,7 +225,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
     [Fact]
     public async Task AUTHZ_CONCEAL_005_AC1_PublicationIsRefusedWithoutThePermissionAsync()
     {
-        Browser browser = await Flow.SignedInAsync(_deployment);
+        Browser browser = await SignedInAsync();
 
         Answer notice = await browser.SendAsync(
             "POST",
@@ -236,7 +239,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status403Forbidden, notice.Status);
         Assert.Equal(StatusCodes.Status403Forbidden, translation.Status);
-        Assert.Empty(_deployment.Documents.Versions);
+        Assert.Empty(Written);
     }
 
     /// <summary>
@@ -255,7 +258,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
             _deployment,
             () => browser.SendAsync("POST", "/admin/documents/terms/versions", governing));
 
-        Assert.Empty(_deployment.Documents.Versions);
+        Assert.Empty(Written);
 
         string version = (await browser.SendAsync("POST", "/admin/documents/terms/versions", governing)).Text("version");
 
@@ -266,14 +269,27 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
                 $"/admin/documents/terms/versions/{version}/translations/en",
                 """{ "text": "The translation." }"""));
 
-        Assert.Empty(Assert.Single(_deployment.Documents.Versions).Translations);
+        Assert.Empty(Assert.Single(Written).Translations);
     }
+
+    // The versions published since the administrator signed in.
+    private IEnumerable<DocumentVersion> Written => _deployment.Documents.Versions.Skip(_registered);
 
     private async Task<Browser> AuthorisedAsync()
     {
+        Browser browser = await SignedInAsync();
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Company, Permissions.NoticePublish);
+
+        return browser;
+    }
+
+    private async Task<Browser> SignedInAsync()
+    {
         Browser browser = await Flow.SignedInAsync(_deployment);
 
-        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Company, Permissions.NoticePublish);
+        // The registration that signed the administrator in accepted the versions it
+        // found, so what a test publishes is what comes after them.
+        _registered = _deployment.Documents.Versions.Count;
 
         return browser;
     }

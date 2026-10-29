@@ -36,7 +36,8 @@ public static class FingerprintKeyScan
 
     /// <summary>
     /// Every column of every base table in the library's schema whose value, read back
-    /// as text, contains any of the forms, by its table and name.
+    /// as text under the C collation whatever the column's, contains any of the forms,
+    /// by its table and name.
     /// </summary>
     /// <param name="connection">An open connection to the database.</param>
     /// <param name="forms">The forms looked for.</param>
@@ -61,7 +62,7 @@ public static class FingerprintKeyScan
                 $"""
                 SELECT EXISTS (
                     SELECT 1 FROM identity.{table} AS stored, unnest(@forms) AS form
-                    WHERE strpos(stored.{column}::text, form) > 0)
+                    WHERE strpos(stored.{column}::text COLLATE "C", form) > 0)
                 """,
                 new { forms });
 

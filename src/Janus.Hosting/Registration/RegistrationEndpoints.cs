@@ -126,7 +126,7 @@ internal static class RegistrationEndpoints
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
                     ErrorCodes.NoticeUnpublished, ErrorCodes.AffirmationRequired,
-                    ErrorCodes.PurposeNoConsent))
+                    ErrorCodes.PurposeNoConsent, ErrorCodes.ConsentSuperseded))
             .Accepts<TermsRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status201Created);
         _ = group.MapPost("/verify/{id}", VerifyAsync)

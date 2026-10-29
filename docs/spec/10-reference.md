@@ -42,7 +42,14 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.username.reserved` **(new)** | The username is on the reserved list; 409 | REG-IDENT-009, D-146, D-166 |
 | `identity.username.invalid` | The username fails the PRECIS UsernameCaseMapped profile, its length bounds, or holds no letter; 422 | REG-IDENT-009, D-155 |
 | `identity.username.coolingoff` **(new)** | A second username change inside `identifiers.username.changecooloff`; `details` carries the cooling-off end; 409 | REG-IDENT-009, D-146, D-166 |
-| `identity.profile.underage` **(new)** | The date of birth is under eighteen on a host with `registration.adultaffirmation` = `required`; the registration session ends; 422 | REG-PROF-002, D-146, D-166 |
+| `identity.profile.underage` **(new)** | The date of birth is under eighteen on a host with `registration.adultaffirmation` = `required`; the registration session, or the collection session (`21` REC-COL-001), ends; 422 | REG-PROF-002, D-146, D-166, D-221 |
+| `identity.record.notfound` | A path names a subject no person record bears, or one outside the caller's reach (`21` REC-ADM-001); in a record access session, a record the session does not reach, and in an account's session one not attached to the account, alike; 404 | REC-REC-002, REC-ACC-001, REC-ADM-001, D-221 |
+| `identity.record.stateconflict` | The operation does not apply to the state the person record is in (section 5.51): a deletion of one not `active` or `restricted`, a cancellation where no window of its own runs, a lift of one not `restricted`, an erasure of one `deleting` or `deleted`, a takedown of one `deleted`; `details.state` names the state; 409 | REC-REC-002, REC-ADM-002, REC-ADM-003, REC-TKD-001, D-221 |
+| `identity.record.followsaccount` | The person record is attached to an account and follows it: an operation acting on its lifecycle by the record's own path (a lift, a cancellation, an erasure, a takedown, an out-of-band request); `details.account` names the account to act on; 409 | REC-ATT-002, D-221 |
+| `identity.record.signedin` | A collection session begun, or a code for a person's records asked, from a browser holding a live sign-in session: nothing is staged or sent; 409 | REC-COL-001, REC-ACC-001, D-221 |
+| `identity.record.nooffer` | An attachment by reference asked where no offer stands on the account's session (`21` REC-ATT-001); 409 | REC-ATT-001, D-221 |
+| `identity.collection.incomplete` | A collection request out of its order: a contact before the age the session asks, an age the session does not ask or already holds; or, at `IRecordCollection.CollectAsync`, a staged contact unverified, an age the session asks unanswered, or no contact at all; 409 | REC-COL-001, REC-COL-002, D-221 |
+| `identity.collection.expired` | `IRecordCollection.CollectAsync` called where the browser of the request being served holds no collection session: none begun, or one expired, ended or spent; nothing is written; 422 | REC-COL-002, D-221 |
 | `identity.profile.invalid` | A profile value the library does not admit: a display name that is not a PRECIS Nickname of 1 to 64 bytes, or a legal name outside 1 to 200 Unicode scalar values; 422 | REG-PROF-001, D-162, D-166 |
 | `identity.profile.notaccepted` | A profile field the deployment does not take from the person: a `legalName` while `profile.legalname` is `off`, a `username` while `identifiers.username.enabled` is off, or any `dateOfBirth`, which is corrected through support; 422 | REG-PROF-001, REG-IDENT-009, D-162, D-166 |
 | `identity.preference.undeclared` **(new)** | A preference key the host did not declare at startup; 422 | REG-PREF-001, D-146, D-166 |
@@ -54,13 +61,13 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.organization.protected` **(new)** | The administrative organization cannot be deleted; 409 | IDN-ORG-004, D-166 |
 | `identity.organization.notfound` | A path under `/admin` whose `{id}` names no organization the deployment holds (`/admin/organizations/{id}/...`); refused before anything is written; 404 | IDN-ORG-003, IDN-MEM-001, API-CONV-003, D-166 |
 | ~~`identity.account.restricted`~~ | *Retired by D-162. A restricted account's refused action answers `authz.restricted` (AUTHZ-GATE-006).* | |
-| `identity.account.notfound` | An administrative operation names in its path a subject no account bears (`/admin/accounts/{subject}/...`); an out-of-band privacy request whose body names such a subject is `api.request.invalid` (422) instead (PRIV-RIGHT-001, D-183); 404 | IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, IDN-ATTR-003, D-166, D-183 |
+| `identity.account.notfound` | An administrative operation names in its path a subject no account bears (`/admin/accounts/{subject}/...`), save the contact and standing reads, which take a person record's subject too (`21` REC-ADM-001); an out-of-band privacy request whose body names a subject neither an account nor a person record bears is `api.request.invalid` (422) instead (PRIV-RIGHT-001, D-183, D-221); 404 | IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, IDN-ATTR-003, D-166, D-183 |
 | `identity.account.stateconflict` | The operation does not apply to the state the account is in: a takedown of a `deleted` account, a suspension of one `deleting` or `deleted`, a reactivation of one no administrator suspended, a restriction lifted from one not `restricted`, a cancellation where no grace window runs. `details.state` names the state (section 5.1) and, where it is `suspended`, `details.suspendedBy` the origin (section 5.12b); 409 | IDN-ACCT-007, IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, D-166 |
 | `identity.takedown.windowelapsed` **(new)** | Takedown reversal requested after its window, whether or not the account has been erased; 422 | IDN-LIFE-003, D-127, D-166 |
 | `identity.change.windowelapsed` **(new)** | Undo of an identifier removal or replace presented after `identifier.change.coolingoff`, or once a write of the value to the account has ended its reservation; 422 | REG-IDENT-006, REG-IDENT-007, D-140, D-146 (was IDN-LIFE-007, IDN-LIFE-010), D-166, D-187 |
 | `identity.takedown.active` **(new)** | A deletion cancellation, or a second takedown, attempted on a takedown-originated `deleting`; use `/takedown/reverse`; 409 | IDN-LIFE-003, D-137, D-166 |
-| `identity.takedown.notfound` | The account holds no takedown to read or reverse (`GET /admin/accounts/{subject}/takedown`, `POST .../takedown/reverse`); 404 | IDN-LIFE-003 AC2, D-166 |
-| `identity.deletion.windowelapsed` **(new)** | The deletion grace window of the account or the organization has closed; cancellation is no longer possible; 422 | IDN-ACCT-007, IDN-ORG-003, D-106, D-166 |
+| `identity.takedown.notfound` | The account, or the person record, holds no takedown to read or reverse (`GET /admin/accounts/{subject}/takedown`, `GET /admin/records/{subject}/takedown`, `POST .../takedown/reverse`); 404 | IDN-LIFE-003 AC2, REC-TKD-001, D-166, D-221 |
+| `identity.deletion.windowelapsed` **(new)** | The deletion grace window of the account, the person record or the organization has closed; cancellation is no longer possible; 422 | IDN-ACCT-007, IDN-ORG-003, REC-ACC-002, D-106, D-166, D-221 |
 | `identity.invitation.expired` | An invitation token that opens no invitation (never issued, revoked, already used, or past its lifetime); at the acknowledgement, an invitation revoked, already acknowledged, past its lifetime, whose organization's deletion was requested or which was erased, or whose inviter no longer holds what issuing it required; at revocation, one already acknowledged; 422 | IDN-LIFE-009a, REG-INV-001, D-106, D-147, D-166 |
 | `identity.invitation.notfound` | No standing invitation answers: `GET /account/invitation` or the acknowledgement names none attached to the signed-in account (one attached to another account is answered alike), or a revocation names one the organization did not issue; 404 | REG-INV-002, IDN-LIFE-009a, D-166 |
 | `identity.invitation.addressrequired` | An invitation into an organization whose mail is integrated names no personal `email`, no `corporateEmail`, or the corporate address as the personal one; `details.member` names `email` or `corporateEmail`; 422 | REG-INV-001, REG-MAIL-001, D-166 |
@@ -157,10 +164,10 @@ message — rewording the human-facing text is free, changing the code is breaki
 | Code | Meaning | Source |
 |---|---|---|
 | `privacy.consent.required` **(new)** | Processing attempted without recorded consent; 403 | PRIV-SENS-002, D-166 |
-| `privacy.consent.superseded` **(new)** | Notice version no longer current; re-consent needed; 422 | PRIV-CONS-007, D-166 |
+| `privacy.consent.superseded` **(new)** | Notice version no longer current; re-consent needed; also a registration's terms step or a collection naming a `noticeVersion` or `termsVersion` that is not the current version of its document (section 5.52), `details.member` naming it (REG-SESS-007, `21` REC-COL-002); 422 | PRIV-CONS-007, REG-SESS-007, REC-COL-002, D-166, D-221, D-222 |
 | `privacy.consent.writtenrequired` **(new)** | Sensitive data requires written consent; 422 | PRIV-BASIS-003, D-166 |
-| `privacy.purpose.noconsent` | A consent is granted or withdrawn, at the dashboard or at the terms step, on a purpose the deployment did not declare or whose basis does not carry `IsConsent`; 422 | PRIV-BASIS-001, PRIV-CONS-011, REG-SESS-007, D-162, D-166 |
-| `privacy.notice.unpublished` | A consent is granted, or an objection recorded, before any version of the document that governs its purpose is published (the privacy notice where the purpose names none); 409 | PRIV-CONS-001, PRIV-CONS-005, PRIV-CONS-007, PRIV-RIGHT-001a, D-162, D-166 |
+| `privacy.purpose.noconsent` | A consent is granted or withdrawn, at the dashboard, at the terms step, at a collection or a staff entry of a person record (`21` REC-COL-002, REC-COL-003), on a purpose the deployment did not declare or whose basis does not carry `IsConsent`; 422 | PRIV-BASIS-001, PRIV-CONS-011, REG-SESS-007, D-162, D-166 |
+| `privacy.notice.unpublished` | A consent is granted, or an objection recorded, before any version of the document that governs its purpose is published (the privacy notice where the purpose names none); also a terms step or a collection naming a version of `terms` or of `privacy-notice` where none is published (section 5.52), `details.document` naming it (D-222); 409 | PRIV-CONS-001, PRIV-CONS-005, PRIV-CONS-007, PRIV-RIGHT-001a, D-162, D-166 |
 | `privacy.document.notfound` | A legal document, or a named version of one, that does not exist or was never published is read, or has a translation filed against it, by a path naming it; a document an invitation's `documents` names that is not published is `api.request.invalid` (422); 404 | PRIV-CONS-005, PRIV-CONS-006, D-162, D-166 |
 | `privacy.request.duplicate` **(new)** | An identical request is already open; 409 | PRIV-RIGHT-001, D-166 |
 | `privacy.request.notfound` | A decision names no privacy request, told only to a caller holding `privacyrequest:manage`; 404 | PRIV-RIGHT-001, D-162, D-166 |
@@ -233,8 +240,8 @@ Format `resource:action` — lowercase, singular resource.
 ### 2.1 Library-owned
 
 Shipped by the library because they govern its own endpoints and operations
-(LIB-API-005). Hosts do not declare these; a host's job may declare the four reads
-`01` IDN-READ-004 names, and no other (D-218).
+(LIB-API-005). Hosts do not declare these; a host's job may declare the four reads `01`
+IDN-READ-004 names, `record:read` and `record:erase`, and no other (D-218, D-221).
 
 | Permission | Governs |
 |---|---|
@@ -253,7 +260,11 @@ Shipped by the library because they govern its own endpoints and operations
 | `account:read` | Reading another person's account and finding an account by an identifier (`01` IDN-READ-003), with the reach of IDN-READ-004; a person's alone (D-218) |
 | `contact:read` | Reading another person's display name, primary verified email and phone, language, time zone and state (`01` IDN-READ-003), with the reach of IDN-READ-004. A host's job may declare it (D-218) |
 | `consent:read` | Reading another person's state, consents and objections (`01` IDN-READ-003), with the reach of IDN-READ-004. A host's job may declare it (D-218) |
-| `takedown:execute` | The minor takedown operation: the trigger, the reversal and the read of its progress (IDN-LIFE-003). Its own permission because of what it does |
+| `takedown:execute` | The minor takedown operation: the trigger, the reversal and the read of its progress, of an account (IDN-LIFE-003) and of a person record (`21` REC-TKD-001, D-221). Its own permission because of what it does |
+| `record:create` | Entering a person record for someone who gave their details to staff (`21` REC-COL-003), asked in the organization the record is entered in (D-221) |
+| `record:read` | Reading and finding person records and the records attached to an account (`21` REC-ADM-001, REC-ATT-002), with the reach REC-ADM-001 gives. A host's job may declare it (D-221) |
+| `record:manage` | Correcting a person record, recording a consent or an objection the person gave staff, exporting a record for the person, lifting its restriction and cancelling its deletion (`21` REC-ADM-002, D-221) |
+| `record:erase` | Erasing a person record the host keeps nothing about any longer (`21` REC-ADM-003). A host's job may declare it (D-221) |
 | `recovery:approve` | Administrative re-enrolment |
 | `session:revoke` | Emergency revocation of all sessions, system-wide |
 | `session:revoke-account` | Revoking one account's sessions (offboarding, suspension) and listing them (`01` IDN-READ-003, D-218) |
@@ -520,6 +531,10 @@ is the empty list.
 | `organization.deletion.grace` | `P30D` | R, floor `P7D` | IDN-ORG-003, D-152 |
 | `takedown.grace` | `P7D` | R, floor `P7D` (the default; D-127 chose the period) | IDN-LIFE-003, D-127, D-152 — access stops at trigger; erasure runs at the end of the window |
 | `account.deletion.grace` | `P30D` | R, floor `P7D` | IDN-ACCT-007, D-113, D-152 |
+| `record.deletion.grace` | `P30D` | R, floor `P7D` | REC-REC-002, REC-ACC-002, D-221: the window of a person record's own deletion and of an out-of-band one; a record attached to an account runs its account's |
+| `records.collection.lifetime` | `PT1H` | R, duration, ceiling `PT24H` | REC-COL-001, D-221: life of a collection session; an expired one is swept and leaves nothing |
+| `records.access.lifetime` | `PT15M` | R, duration, ceiling `PT1H` | REC-ACC-001, REC-ATT-001, D-221: life of a record access session from its opening, never extended, and of an offer to attach from its proof |
+| `records.proof.age` | `P90D` | R, duration, floor `P7D`, ceiling `P365D`; lengthening is loosening | REC-COL-002, REC-ACC-001, REC-ATT-001, D-221: a person record whose contact was last verified at a collection longer ago is reached by a code, or offered to an account, only with a reference it holds, and is not reused by a collection |
 | `organization.multiplememberships` | false | R | IDN-MEM-002 |
 | `identifier.change.coolingoff` | `PT72H` | R, floor `PT72H` (the default; D-134 chose the window) | IDN-LIFE-007, IDN-LIFE-010, D-107, D-134, D-146 — email and phone alike (was `email.change.coolingoff`); since D-146 the **undo window** after an identifier removal or replace, during which the remaining security-notice set holds a one-click restore (REG-IDENT-006, REG-IDENT-007) |
 | `registration.phone` | `required` | R: `required` · `optional`; to `optional` is loosening (OPS-CFG-002) | REG-IDENT-001, D-146: whether an account must hold a verified phone; phone is never the sole identifier |
@@ -538,7 +553,7 @@ is the empty list.
 | `outbox.retry.factor` | 2.0 | R, decimal, floor 1.0 | IDN-LIFE-003a, AUTH-ABUSE-004, D-153, D-162, D-166: multiplier per further attempt |
 | `outbox.retry.maxattempts` | 10 | R, integer, floor 1 | IDN-LIFE-003a, AUTH-ABUSE-004, D-153, D-162, D-166: attempts before a delivery of section 5.50 (an erasure's, a takedown's, a restriction's, a consent's or an objection's) is `failed` with `erasure-delivery-exhausted`, an event is `failed` with `degradation`, or a message is removed with `degradation` scoped `send:<channel>` (about eight hours end to end at the defaults) |
 | `outbox.claim.timeout` | `PT2M` | R, duration, floor `PT30S`, ceiling `PT10M` | CONV-DESIGN-003, INF-BG-001, AUTH-ABUSE-004, D-183, D-186: how long a claim on a row that a delivery job or a send's immediate attempt carries stands, renewed before each delivery of a row that tracks several; an attempt still running then is abandoned as failed, and the next pass may take the row once it is due |
-| `sweep.interval` | `PT5M` | R, duration, ceiling `PT15M` | OPS-OBS-003, AUTH-KEY-003, PRIV-RIGHT-002, PRIV-RET-005, OPS-ALERT-006, D-153, D-166, D-187: one sweep for expired sessions, tokens and codes, identifier adds and replaces whose every record is spent or past its lifetime, elapsed grace and cooling-off windows, privacy request deadlines (PRIV-RIGHT-002), sending-restriction records and every other abuse ledger line its own check no longer reads (PRIV-RET-005), export-limit records an hour old (OPS-ALERT-006) and domain re-verification; a deadline therefore fires within this interval of its instant |
+| `sweep.interval` | `PT5M` | R, duration, ceiling `PT15M` | OPS-OBS-003, AUTH-KEY-003, PRIV-RIGHT-002, PRIV-RET-005, OPS-ALERT-006, D-153, D-166, D-187: one sweep for expired sessions, tokens and codes, identifier adds and replaces whose every record is spent or past its lifetime, elapsed grace and cooling-off windows, privacy request deadlines (PRIV-RIGHT-002), sending-restriction records and every other abuse ledger line its own check no longer reads (PRIV-RET-005), export-limit records an hour old (OPS-ALERT-006) and domain re-verification, and collection sessions, record access sessions, offers to attach and person records' deletion windows (`21`, D-221); a deadline therefore fires within this interval of its instant |
 | `notification.languages` | none; **required** | R, **list** of BCP 47 tags, at least one | IDN-ATTR-001, AUTH-ABUSE-004, AUTH-ABUSE-005, D-031, D-153, D-166, D-186, D-197: the deployment's message languages. Step 3 of the recipient-language resolution sends in all of them: by email one message carrying every language in this order, subject lines joined by a space, `|` and a space and texts by one blank line (IDN-ATTR-001), judged and counted once; by text message one message per language, judged with the weight of their number and each counted by every applicable restriction not marked `resend`; a restriction marked `resend` judges and counts the send once (section 5.16a). Every template is validated in each language at startup |
 | `notification.email.sendingdomain` | — **required** | R, string | INT-MAIL-011, D-153 |
 | `notification.email.relayregistered` | empty | R, **set** of domains | INT-MAIL-011, D-153: domains registered with the Apple private relay; when `apple` is in any effective `loginFactors` and the sending domain is not in this set, the Normal condition `relay-domain-unregistered` fires |
@@ -746,13 +761,14 @@ D-162); nothing else branches on a category.
 
 ### 5.12a Erasure reason
 
-`erasure-request` · `minor-takedown`
+`erasure-request` · `minor-takedown` · `retention`
 
 The `Reason` column of the erasures table (IDN-LIFE-003b) and the third field of the
 off-host erasure record (DR-016) use these spellings and no others. An organization
-erasure erases no account (IDN-ORG-003).
+erasure erases no account (IDN-ORG-003). `retention` is a host's erasure of a person
+record it keeps nothing about any longer (`21` REC-ADM-003, D-221).
 
-*Source: IDN-LIFE-003b, DR-016, D-147, D-166*
+*Source: IDN-LIFE-003b, DR-016, D-147, D-166, D-221*
 
 ### 5.12b Suspension and deletion origin
 
@@ -780,7 +796,11 @@ holds nothing (D-183). An out-of-band erasure fulfilled on an account already
 nothing; on a `deleted` account it is recorded fulfilled and nothing further happens
 (IDN-LIFE-003).
 
-*Source: IDN-LIFE-003, IDN-LIFE-013, PRIV-RIGHT-004, D-137, D-147, D-166, D-183*
+A person record holds `deletingBy`, `restrictionHeld`, `deletionHeld` and
+`deletionHeldSince` as an account does, and no `suspensionHeld`, having no `suspended`
+state (`21` REC-REC-002, D-221).
+
+*Source: IDN-LIFE-003, IDN-LIFE-013, PRIV-RIGHT-004, D-137, D-147, D-166, D-183, D-221*
 
 ### 5.12c Privacy request status and type
 
@@ -931,12 +951,15 @@ but for proof last reached before the session's last downgrade; otherwise `stepu
 ### 5.21 Consent and objection mechanism
 
 The `mechanism` of a consent or objection record: `registration` (the terms step,
-REG-SESS-007) · `dashboard` (`/privacy/consents/*`, `/privacy/objections/*`) ·
-`reconsent` (the PRIV-CONS-007 prompt; recorded by the library for a dashboard grant
-over a superseded, unwithdrawn consent, or over a live one the purpose no longer admits,
-which the grant stamps superseded) · `administrator` (entered on the subject's behalf).
+REG-SESS-007) · `collection` (a person record's collection, `21` REC-COL-002, D-221) ·
+`dashboard` (`/privacy/consents/*`, `/privacy/objections/*`) · `reconsent` (the
+PRIV-CONS-007 prompt; recorded by the library for a dashboard grant over a superseded,
+unwithdrawn consent, or over a live one the purpose no longer admits, which the grant
+stamps superseded) · `administrator` (entered on the subject's behalf, staff's entry and
+record of what a person without an account told them among them, `21` REC-COL-003,
+REC-ADM-002).
 
-*Source: PRIV-CONS-001, PRIV-RIGHT-001a, D-153, D-162, D-166, D-183*
+*Source: PRIV-CONS-001, PRIV-RIGHT-001a, D-153, D-162, D-166, D-183, D-221*
 
 ### 5.22 Age group
 
@@ -1056,8 +1079,8 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `identity.account.deactivated` | routine | The owner deactivated the account | IDN-LIFE-013 |
 | `identity.account.reactivated` | routine; security where an administrator acted | A suspended account was stood back up: by its owner from a deactivation, or by an administrator from an administrator's suspension (the administrator acting, the account the `subject`) | IDN-LIFE-013 |
 | `identity.account.suspended` | security | An administrator suspended an account, or took over the suspension of one its owner deactivated; the administrator acting, the account the `subject`; no organization | IDN-LIFE-013, AUTH-SESS-010 |
-| `identity.deletion.cancelled` | routine; security where an administrator acted | A deletion was cancelled inside its grace window: by the subject from the link, or by an administrator on the subject's behalf, with `details.request` where an out-of-band request began the window | IDN-ACCT-007, IDN-LIFE-003, IDN-LIFE-014 |
-| `identity.deletion.requested` | routine | The owner requested deletion, which opens the grace window | IDN-ACCT-007, IDN-LIFE-014 |
+| `identity.deletion.cancelled` | routine; security where an administrator acted | A deletion was cancelled inside its grace window: by the subject from the link, or from a record access session for a person record, or by an administrator on the subject's behalf, with `details.request` where an out-of-band request began the window | IDN-ACCT-007, IDN-LIFE-003, IDN-LIFE-014, REC-ACC-002, D-221 |
+| `identity.deletion.requested` | routine | The owner requested deletion, which opens the grace window; for a person record, the person from a record access session, the record acting and its `subject` | IDN-ACCT-007, IDN-LIFE-014, REC-ACC-002, D-221 |
 | `identity.invitation.acknowledged` | security | An invitation was acknowledged and its membership attached; `details.invitation`; the person acknowledging is the actor; filed under the organization | REG-INV-001, IDN-LIFE-009a |
 | `identity.invitation.issued` | security | An invitation into an organization was issued; `details.invitation` and nothing it binds, and `details.formerMailbox` with its reason where the invitation names one because the corporate address's mailbox has been held before (section 5.44); filed under the organization | IDN-LIFE-009a, REG-INV-001, REG-MAIL-001 |
 | `identity.invitation.revoked` | security | An unacknowledged invitation was revoked, or replaced by a later one for the same corporate address; `details.invitation` | IDN-LIFE-009a, REG-MAIL-001 |
@@ -1072,9 +1095,14 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `identity.organization.erased` | security | An organization's deletion window elapsed and the erasure executed; principal `organization-erasure`, reason `IDN-ORG-003`; `details.organization`, `details.deletingSince`, `details.membershipsEnded`; no subject; filed under the organization | IDN-ORG-003 |
 | `identity.preferences.changed` | routine | The account's preferences changed, recorded by key and never by value; where an administrator set them, the administrator acting, the account the `subject` and `details.reason` (`01` IDN-READ-003, D-218) | REG-PREF-001, IDN-ATTR-001, D-218 |
 | `identity.profile.changed` | routine | A profile field of the account changed, or its photo was set or removed | REG-PROF-001, IDN-ATTR-002 |
+| `identity.record.accessed` | security | A record access session reached a person record, at its opening or by a reference; the record acting and its `subject`; `details.session`, `details.byReference`; filed under the record's organization | REC-ACC-001, D-221 |
+| `identity.record.attached` | security | A person record was attached to an account; the account acting, the record its `subject`; `details.account`; filed under the record's organization | REC-ATT-001, D-221 |
+| `identity.record.changed` | routine | A person record's name, language or contacts were changed: by the person (the record acting, or the account it is attached to), or by staff with `details.reason`; recorded by field, never by value; the record its `subject` | REC-ACC-002, REC-ADM-002, D-221 |
+| `identity.record.collected` | security | A collection wrote or reused a person record; the record acting and its `subject`; `details.created`; filed under the record's organization | REC-COL-002, D-221 |
+| `identity.record.entered` | security | Staff entered a person record; the staff member acting, the record its `subject`; `details.ageAnswered`; filed under the record's organization | REC-COL-003, D-221 |
 | `identity.secondstep.preferred` | routine | The account's preferred second step changed | IDN-ATTR-008 |
-| `identity.takedown.executed` | security | Phase one of a takedown committed; `details.takedown`, `details.trigger` (section 5.12d), `details.reason`, `details.erasureDue` | IDN-LIFE-003 AC3 |
-| `identity.takedown.reversed` | security | A takedown was reversed inside its window; `details.reason` | IDN-LIFE-003 |
+| `identity.takedown.executed` | security | Phase one of a takedown committed, of an account or of a person record (`21` REC-TKD-001), the one taken down its `subject`; `details.takedown`, `details.trigger` (section 5.12d), `details.reason`, `details.erasureDue` | IDN-LIFE-003 AC3, REC-TKD-001, D-221 |
+| `identity.takedown.reversed` | security | A takedown was reversed inside its window; `details.reason` | IDN-LIFE-003, REC-TKD-001 |
 | `identity.username.changed` | routine | The account's username changed | REG-IDENT-009 |
 | `ops.auditpartitions.maintained` | security | A run of the audit retention job completed; principal `audit-partitions`, reason `PRIV-RET-002`; `details.created`, `details.dropped`, `details.securityRetentionDays`, `details.routineRetentionDays`; no subject, no organization | PRIV-RET-002, INF-BG-002 |
 | `ops.configuration.changed` | security | A runtime setting was changed through the one configuration operation, or a value was set by bootstrap or by `configure` from the server under that command's principal; `details.key`, `details.before` (the value in force, null where the key has no default and no value stood), `details.after`, `details.loosening` and `details.reason`, which every change carries | OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, OPS-CFG-008 |
@@ -1083,21 +1111,21 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `ops.keyrotation.retired` | security | The versions before a completed rotation's were retired once its escrow copy was confirmed sealed; the same details and `details.retired` | OPS-SEC-003 AC3, AC4, AC5 |
 | `ops.keyrotation.started` | security | A rotation started; the same principal and details | OPS-SEC-003 AC5 |
 | `ops.restoretest.completed` | security | A run of the automated restore test ended; principal `restore-test`, reason `DR-007`; `details.outcome` (`passed` · `unrestored` · `undecrypted` · `unresolved` · `overrun`), `details.elapsedSeconds`, `details.objectiveSeconds`, `details.outlived`; no subject, no organization | DR-007 AC2, DR-008 AC2 |
-| `privacy.consent.granted` | security | A consent was granted for a purpose, naming the document version it stands against | PRIV-CONS-001, PRIV-CONS-011 |
-| `privacy.consent.withdrawn` | security | A consent was withdrawn for a purpose | PRIV-CONS-008 |
+| `privacy.consent.granted` | security | A consent was granted for a purpose, naming the document version it stands against; where staff acted for a person record (`21` REC-ADM-002), the staff member acting, the record the `subject`, `details.mechanism` `administrator` and `details.reason` the reason given | PRIV-CONS-001, PRIV-CONS-011, D-223 |
+| `privacy.consent.withdrawn` | security | A consent was withdrawn for a purpose; where staff acted for a person record (`21` REC-ADM-002), the staff member acting, the record the `subject`, `details.mechanism` `administrator` and `details.reason` the reason given | PRIV-CONS-008, D-223 |
 | `privacy.document.published` | security | A version of a legal document was published in its governing language | PRIV-CONS-005 |
 | `privacy.document.translated` | security | A translation was filed against a published version | PRIV-CONS-005, PRIV-CONS-006 |
 | `privacy.erasure.completed` | security | A delivery whose retries were spent was completed by hand, with its erasures row where it is an erasure's; `details.erasure` (the delivery's identifier), `details.kind` (section 5.50) and `details.outstanding` (the required subscribers or purpose handlers that had not confirmed, by name); the operator acting, the one the delivery concerns the `subject` | IDN-LIFE-003a, D-203 |
-| `privacy.erasure.executed` | security | An erasure was carried out; on a replay of the off-host ledger, principal `replay-erasures`, reason `DR-016`, with `details.reason` in its section 5.12a spelling and `details.erasedAt` | PRIV-RIGHT-005, DR-016 |
-| `privacy.export.assembled` | security | A subject export was assembled for the subject | PRIV-RIGHT-003 |
-| `privacy.objection.recorded` | security | An objection to a purpose was recorded | PRIV-RIGHT-001a |
-| `privacy.objection.withdrawn` | security | An objection was withdrawn and the purpose resumed | PRIV-RIGHT-001a |
+| `privacy.erasure.executed` | security | An erasure was carried out; on a replay of the off-host ledger, principal `replay-erasures`, reason `DR-016`, with `details.reason` in its section 5.12a spelling and `details.erasedAt`; for a person record's erasure under `record:erase` (`21` REC-ADM-003), the reason a person or a job gave in `details.statedReason`, `details.reason` staying `retention` | PRIV-RIGHT-005, DR-016, D-223 |
+| `privacy.export.assembled` | security | A subject export was assembled for the subject; for a person record, by a record access session, by the account it is attached to, or by staff for the person (the staff member acting, `21` REC-ADM-002) | PRIV-RIGHT-003, REC-ACC-002, REC-ADM-002, D-221 |
+| `privacy.objection.recorded` | security | An objection to a purpose was recorded; where staff acted for a person record (`21` REC-ADM-002), the staff member acting, the record the `subject`, `details.mechanism` `administrator` and `details.reason` the reason given | PRIV-RIGHT-001a, D-223 |
+| `privacy.objection.withdrawn` | security | An objection was withdrawn and the purpose resumed; where staff acted for a person record (`21` REC-ADM-002), the staff member acting, the record the `subject`, `details.mechanism` `administrator` and `details.reason` the reason given | PRIV-RIGHT-001a, D-223 |
 | `privacy.request.entered` | security | A data subject request was entered on the subject's behalf | PRIV-RIGHT-001, PRIV-RIGHT-002 |
 | `privacy.request.fulfilled` | security | A data subject request was fulfilled | PRIV-RIGHT-002 |
 | `privacy.request.lapsed` | security | A data subject request reached its deadline undecided | PRIV-RIGHT-002 AC3, AC4 |
 | `privacy.request.refused` | security | A data subject request was refused, with the reason recorded | PRIV-RIGHT-002 |
 | `privacy.request.submitted` | security | The subject submitted a data subject request | PRIV-RIGHT-001, PRIV-RIGHT-002 |
-| `privacy.restriction.lifted` | security | An administrator lifted a restriction of processing and the subscribers were told; the administrator acting, the account the `subject`; no organization | PRIV-RIGHT-004 |
+| `privacy.restriction.lifted` | security | An administrator lifted a restriction of processing and the subscribers were told; the administrator acting, the account or the person record the `subject`; no organization for an account, the record's for a person record | PRIV-RIGHT-004, REC-ADM-002, D-221 |
 
 *Source: IDN-AUD-001, PRIV-RET-001, PRIV-RET-002, CONV-NAME-003, D-162, D-166, D-170,
 D-187, D-197, D-206, D-207*
@@ -1112,7 +1140,7 @@ kind lands under.
 
 | Kind | Asked for when | Places | Source |
 |---|---|---|---|
-| `verification-code` | A code alone proves control of an address: the new-device check | `code` | AUTH-FACT-004, AUTH-FACT-016 |
+| `verification-code` | A code alone proves control of an address: the new-device check; a contact staged in a collection session; an account's identifier proven to find its person records, under the `verification` purpose (`21` REC-COL-001, REC-ATT-001) | `code` | AUTH-FACT-004, AUTH-FACT-016, REC-COL-001, REC-ATT-001 |
 | `verification-link` | A code and a link prove control of an address or a number being registered, added or replaced | `code`, `link` | REG-SESS-003, REG-IDENT-004, REG-IDENT-007 |
 | `sign-in-code` | The `emailCode` sign-in code, an authentication code held to `code.signin.lifetime` and `code.signin.attempts`, never sent as a verification code | `code` | AUTH-FACT-003, AUTH-FACT-004 |
 | `signin-link` | A link that signs the person in; the code is shown only by the page opened elsewhere | `link`, `code` | AUTH-FACT-003, REG-SESS-003 |
@@ -1124,6 +1152,9 @@ kind lands under.
 | `recovery-link` | The link a person asked for to set a new password; it restores nothing else, and carries the `signin` purpose (section 5.15) | `link` | AUTH-RECOV-004, AUTH-RECOV-005, REG-IDENT-002 |
 | `alert` | An OPS-ALERT-001 condition the operator has to see | `condition`, `raisedAt`, and the places of section 5.26 its condition carries | OPS-ALERT-001 |
 | `no-account` | The answer to a request made for an address no account holds | none | AUTH-ABUSE-003 |
+| `record-access-code` | The code that opens a record access session, an authentication code held to `code.signin.lifetime` and `code.signin.attempts`, under the `signin` purpose | `code` | REC-ACC-001, D-221 |
+| `record-access-none` | The answer to an ask of a code for an address no reachable person record holds as a contact verified at a collection, once per `abuse.nonexistent.window`, judged under the purpose of the code asked for | none | REC-ACC-001, D-221 |
+| `record-deletion-notice` | A person record's own deletion began its window; sent to its notice contacts, carrying no link, the cancellation being reached by a new code; a security notice to an existing holder (AUTH-ABUSE-004, D-222) | none | REC-ACC-002, D-221, D-222 |
 | `account-exists` | The answer to a registration or a change made with an address an account holds, sent to the holder and never to the person who tried | none | REG-SESS-005, REG-IDENT-008 |
 | `identifier-added` | An identifier was added to the account, a corporate address taken on at an invitation's acknowledgement included; sent to the security-notice set as it stood before | none | REG-IDENT-004, REG-MAIL-001 |
 | `identifier-removed` | An identifier was removed; sent to the remaining security-notice set with the undo link | `link` | REG-IDENT-006, REG-IDENT-007 |
@@ -1134,7 +1165,7 @@ kind lands under.
 | `invitation-link` | The link of an invitation into an organization, sent to the email it binds and to nothing else, under the `signin` purpose (section 5.15) with no subject | `link` | IDN-LIFE-009a, REG-INV-001, REG-MAIL-001 |
 | `deactivation-notice` | The account deactivated itself; carries the link that stands it back up | `link` | IDN-LIFE-013 |
 | `deletion-notice` | The account's own deletion started its grace window; carries the cancel link | `link` | IDN-ACCT-007, IDN-LIFE-014 |
-| `oob-deletion-notice` | An erasure request received out of band was fulfilled and the grace window started; sent to the security-notice set, with no cancel link | none | IDN-LIFE-003 |
+| `oob-deletion-notice` | An erasure request received out of band was fulfilled and the grace window started; sent to the security-notice set, or to a person record's notice contacts (`21` REC-ACC-002), with no cancel link | none | IDN-LIFE-003, REC-ADM-002 |
 | `privacy-request-received` | The automatic receipt of a data subject request entering the queue; not a decision | none | PRIV-RIGHT-002 AC1 |
 | `privacy-request-lapsed` | A subject's out-of-band erasure or rectification request reached its deadline undecided | none | PRIV-RIGHT-002 AC4 |
 | `recovery-codes-reminder` | The one reminder a set of recovery codes gets once it is older than `recovery.codes.reminder`, sent to the security-notice set of an active account, carrying no link; the set is closed once the reminder's send to a channel is admitted, or where the security-notice set holds no channel the pass can reach | none | AUTH-FACT-008 AC5, D-186 |
@@ -1463,11 +1494,20 @@ value is refused with `api.request.malformed` naming `format`.
 The sections of the export, in this order (PRIV-RIGHT-003): `account` · `profile` ·
 `identifiers` · `identifier-backup` · `credentials` · `recovery-codes` · `devices` ·
 `preferences` · `memberships` · `membership-acknowledgements` · `group-memberships` ·
-`grants` · `assurance` · `sessions` · `consents` · `objections`; then each export
-contributor's sections, in contributor name order, none taking a name above
-(PRIV-RIGHT-003, D-203). No section or value name holds a `.` (D-206).
+`grants` · `assurance` · `sessions` · `consents` · `objections` · `records` (each person
+record attached to the account, `21` REC-ATT-002); then each export contributor's
+sections, in contributor name order, none taking a name above (PRIV-RIGHT-003, D-203).
+No section or value name holds a `.` (D-206).
 
-*Source: PRIV-RIGHT-003, PRIV-ROPA-001, `09` `GET /privacy/export`, `09` `GET /admin/ropa`, D-166, D-203, D-206*
+The sections of a person record's export, in this order (`21` REC-ACC-002): `record`
+(state, origin, organization, creation, the age answer and its instant, each notice
+presented and terms accepted) · `profile` (the name) · `identifiers` (each contact with
+its kind and the instant it was verified at a collection) · `preferences` (the language)
+· `consents` · `objections`; then each export contributor's sections for the record's
+subject, as above, none taking `record` or `records` either (D-221).
+
+*Source: PRIV-RIGHT-003, PRIV-ROPA-001, `09` `GET /privacy/export`, `09`
+`GET /admin/ropa`, D-166, D-203, D-206, D-221*
 
 ### 5.47 Provider round-trip intents
 
@@ -1517,6 +1557,25 @@ carry none. The events themselves are unchanged.
 
 *Source: IDN-LIFE-003a, D-203*
 
+### 5.51 Person records
+
+States: `active` · `restricted` · `deleting` · `deleted` (`21` REC-REC-002); a record
+has no `suspended` state. Origin: `collection` (the person gave the data in a host's own
+screen, REC-COL-002) · `staff` (a member of staff entered it for them, REC-COL-003).
+`deletingBy` and the held state are an account's, save `suspensionHeld` (section 5.12b).
+
+*Source: REC-REC-001, REC-REC-002, D-221*
+
+### 5.52 Legal document names
+
+`privacy-notice` (the privacy notice, PRIV-CONS-008a; `GET /privacy/notice`) · `terms`
+(the terms of service: a registration's terms step and a person record's collection
+check `termsVersion` against its current version, REG-SESS-007, `21` REC-COL-002). Every
+other legal document is named by the host under INT-SMS-003's rule. The current version
+of a document is the highest published (PRIV-CONS-005).
+
+*Source: REG-SESS-007, REC-COL-002, D-222*
+
 ---
 
 ## 5a. Step-up actions — library-owned
@@ -1554,6 +1613,11 @@ another person's account or loosens a control has one (`09` section 8a).
 | `session:revokeall` | End every session | `POST /admin/sessions/revoke-all` |
 | `account:takedown` | Execute a takedown | `POST /admin/accounts/{subject}/takedown` |
 | `account:takedownreverse` | Reverse a takedown | `POST /admin/accounts/{subject}/takedown/reverse` |
+| `record:export` | Export a person record for the person | `GET /admin/records/{subject}/export` (`21` REC-ADM-002, D-221) |
+| `record:restrictionlift` | Lift a person record's restriction | `POST /admin/records/{subject}/restriction/lift` (REC-ADM-002) |
+| `record:deletioncancel` | Cancel a person record's deletion on the person's behalf | `POST /admin/records/{subject}/delete/cancel` (REC-ADM-002) |
+| `record:takedown` | Execute a takedown of a person record | `POST /admin/records/{subject}/takedown` (REC-TKD-001) |
+| `record:takedownreverse` | Reverse a takedown of a person record | `POST /admin/records/{subject}/takedown/reverse` (REC-TKD-001) |
 | `privacyrequest:fulfil` | Fulfil a privacy request | `POST /admin/privacy/requests/{id}/fulfil`, for every request type (section 5.12c): an erasure's fulfilment starts a grace window, a restriction's restricts another person's account; refusing is not gated (PRIV-RIGHT-001) |
 | `erasure:complete` | Complete a stuck delivery of host-side work of any kind of section 5.50 manually | `POST /admin/erasures/{id}/complete` |
 | `config:loosen` | Loosen any security setting | `PUT /admin/config/{key}` where the change is a loosening (OPS-CFG-002); a tightening is not gated |
@@ -1567,7 +1631,9 @@ another person's account or loosens a control has one (`09` section 8a).
 
 **Not gated** (D-166): revoking an invitation, which touches no account; creating an
 organization; publishing legal documents and their translations; compliance records;
-refusing a privacy request.
+refusing a privacy request; entering, correcting and erasing a person record, and
+recording a consent or an objection the person gave staff, none of which reaches an
+account's sign-in and the last of which a host's job calls (`21`, D-221).
 
 The name is the key of the policy's `gates` field (section 4.1a) and the value the
 `09` endpoint declares; it follows the `resource:action` shape of CONV-NAME-002 but is
@@ -1591,12 +1657,16 @@ effective identities where a person acted with an access context, as that contex
 them (neither where the event is raised from a link a message carried, with no context,
 AUTHZ-IMP-001), and an idempotency key (INT-MAIL-007). No event names a consumer or a
 consumer's domain (IDN-LIFE-003a). Every event is written to the outbox in the
-transaction that makes it true (CONV-DESIGN-002, IDN-LIFE-003a).
+transaction that makes it true (CONV-DESIGN-002, IDN-LIFE-003a). The subject events
+(`ErasureRequested`, `RestrictionChanged`, `TakedownExecuted`, `TakedownReversed`,
+`ConsentChanged`, `ObjectionChanged`) name a person record's subject as they name an
+account's, and one for each record attached to an account the change applies to (`21`
+REC-ATT-002, D-221).
 
 | Event | Raised when | Consumers |
 |---|---|---|
 | `AccountRegistered` | The one transaction of the terms step has committed (REG-SESS-001, REG-SESS-007): the account exists, `active`, once per account; nothing fires for a registration session that is abandoned or expires | Host welcome — **no mailbox**: provisioning follows the invitation and enabling the membership (REG-MAIL-001) (INT-MAIL-006, IDN-LIFE-009b) |
-| `TakedownReversed` | A takedown reversed inside its window; the account is back in the state it held at the trigger (section 5.12b) | Host: whatever the host did on `TakedownExecuted`, or on the trigger's `AccountSuspended`, is the host's to reconsider against that state |
+| `TakedownReversed` | A takedown reversed inside its window; the account, or the person record (`21` REC-TKD-001), is back in the state it held at the trigger (section 5.12b) | Host: whatever the host did on `TakedownExecuted`, or on the trigger's `AccountSuspended`, is the host's to reconsider against that state |
 | `OrganizationErased` | An organization's grace window elapsed and its erasure committed; carries the organization and the number of memberships ended, and names no subject | Host |
 | `OrganizationCreated` | An organization was created (`POST /admin/organizations`); carries the organization and names no subject (D-218) | Host |
 | `OrganizationDeletionRequested` · `OrganizationDeletionCancelled` | An organization's deletion was requested, suspending it, or cancelled inside its window (IDN-ORG-003); carries the organization and names no subject (D-218) | Host (stop, or resume, its own processing for the organization) |
@@ -1609,14 +1679,16 @@ transaction that makes it true (CONV-DESIGN-002, IDN-LIFE-003a).
 | `IdentifierRemoved` | An identifier was removed (REG-IDENT-006), or a corporate address was retired when a membership ended (REG-MAIL-003); a later undo fires `IdentifierAdded` | Host |
 | `IdentifierPrimaryChanged` | The primary of a kind changed (REG-IDENT-005), including on invitation acknowledgement when the corporate address becomes primary (REG-INV-001) and when a membership ends (REG-MAIL-003) | Host |
 | `AccountSuspended` · `AccountReactivated` | State enters or leaves `suspended`, by the subject or an administrator. `AccountSuspended` is also written at every takedown trigger, whatever state the account held, announcing that access stopped (IDN-LIFE-003) | Host |
-| `AccountDeletionRequested` · `AccountDeletionCancelled` | The grace window starts or is cancelled | Host (pause its own processing for the subject) |
+| `AccountDeletionRequested` · `AccountDeletionCancelled` | The grace window starts or is cancelled, whether the owner or a fulfilled out-of-band erasure request began it; not raised for a takedown (D-222) | Host (pause its own processing for the subject) |
+| `RecordDeletionRequested` · `RecordDeletionCancelled` | A person record's grace window, begun by the person or by an out-of-band request, starts or is cancelled; not raised for a takedown (`21` REC-ACC-002, REC-ADM-002, D-221) | Host (pause its own processing for the subject) |
+| `RecordAttached` | A person record was attached to an account (`21` REC-ATT-001); names the record as `subject` and carries `account`; the record keeps its subject, so nothing the host holds under it moves (D-221) | Host |
 | `ErasureRequested` | The erasure transaction has committed; the host clears the copies the destroyed key does not reach (PRIV-RIGHT-005b) | Every registered subject-event handler — **required** |
 | `RestrictionChanged` | `restricted` set or lifted | Every registered subject-event handler — **required** |
 | `SendingRestrictionChanged` | A named restriction was created, edited or deleted through `/admin/restrictions/{name}` (AUTH-ABUSE-004); carries the restriction name, the actor and whether the change was a loosening. | Audit, alerting (OPS-ALERT-001) |
 | `SendingRestrictionGranted` | Support added credit to one key under a restriction (AUTH-ABUSE-004); carries the restriction name, the credit, the actor and the reason, never the plain key value | Audit, alerting (OPS-ALERT-001) |
 | `DeviceVerified` | A new-device check completed (AUTH-FACT-016); carries the browser identifier and no personal data | Host (optional) |
 | ~~`ExportRequested`~~ | *Retired by D-203.* What the host holds reaches an export through its export contributors when the export is assembled (`IExportContributor`, PRIV-RIGHT-003) | |
-| `TakedownExecuted` | Phase one of a takedown has committed; fires with `AccountSuspended`; `AccountDeletionRequested` does **not** fire for a takedown | Host (stop its own processing for the subject, as a required subscriber) |
+| `TakedownExecuted` | Phase one of a takedown has committed; for an account it fires with `AccountSuspended`, for a person record alone (`21` REC-TKD-001); `AccountDeletionRequested` and `RecordDeletionRequested` do **not** fire for a takedown | Host (stop its own processing for the subject, as a required subscriber) |
 | `MembershipChanged` | A membership begins or ends, one bootstrap attaches included; carries `change` (`began` · `ended`, section 5.39) and `invitation`, the invitation whose acknowledgement began it, null otherwise (`01` IDN-READ-002, D-218) | Host |
 | `ConsentChanged` | A consent granted, withdrawn or superseded; carries the purpose and `change` (`granted` · `withdrawn` · `superseded`, section 5.39); on `withdrawn`, handlers erase data held solely for the purpose (PRIV-CONS-008) | Every registered handler for the purpose — **required** |
 | `ObjectionChanged` | An objection recorded or withdrawn for a purpose on an objectable basis (PRIV-RIGHT-001a) | Every registered handler for the purpose — **required** |

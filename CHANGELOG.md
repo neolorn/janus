@@ -10,6 +10,97 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+`POST /admin/records/{subject}/erase`, under `record:erase` with a required `reason`, erases at once an active or restricted person record the host keeps nothing about any longer, with the new erasure reason `retention` (`ErasureReason.Retention`) on its erasures row and its `ErasureRequested` delivery; the erasure is recorded `privacy.erasure.executed` with the caller its principal, `details.reason` `retention` and the reason given in `details.statedReason`. A record deleting or deleted is refused with `409 identity.record.stateconflict` and one attached to an account with `409 identity.record.followsaccount`. A host's declared job declaring `record:erase` calls `IPersonRecords.EraseAsync` outside a request. A migration admits `retention` on the erasures and outbox rows.
+`POST /admin/records/{subject}/consents/{purpose}/grant` and `/withdraw`, and `POST` and `DELETE /admin/records/{subject}/objections/{purpose}`, record under `record:manage`, with a required `reason`, what the person told staff of: a grant or an objection is a record of its own whose mechanism is `administrator`, and a withdrawal stamps the record it ends, which keeps the mechanism of its making. Each is recorded with the staff member acting, `details.mechanism` `administrator` and `details.reason` the reason given, and answered as `/privacy/consents` and `/privacy/objections` answer; a record attached to an account is refused with `409 identity.record.followsaccount` and one deleting or deleted with `409 identity.record.stateconflict`. `IPersonRecords` gains `GrantConsentAsync`, `WithdrawConsentAsync`, `ObjectAsync` and `WithdrawObjectionAsync`.
+The audit entries of a consent or an objection change name `details.mechanism` and `details.kind` in their written spellings (`dashboard`, `written`), no longer as numbers.
+The documentation of `identity.record.notfound`, `identity.record.stateconflict` and `identity.record.nooffer` in `ErrorCodes` says what the caller does next, as every other code's does.
+`Janus.Testing` gains `TestPeople.Visitor()`, a `TestVisitor`: an `HttpClient` that carries the pre-authentication cookie, the synchronizer token, `X-Identity-Request`, the origin and the fetch metadata, and no sign-in session, for a guest's collection and record access, its first contact made before its first request.
+`POST /admin/records/{subject}/takedown` takes a person record down under `takedown:execute`, behind the step-up `record:takedown`: the record enters its deletion window by `takedown`, holding what it held, every record access session reaching it ends, and `TakedownExecuted` is delivered with no `AccountSuspended`; a second takedown is refused with `409 identity.takedown.active`, an erased record with `409 identity.record.stateconflict`, and a record attached to an account with `409 identity.record.followsaccount`. `GET /admin/records/{subject}/takedown` reads its progress, answering `404 identity.takedown.notfound` for a record that holds none, and `POST /admin/records/{subject}/takedown/reverse`, behind `record:takedownreverse`, reverses it inside its window, restoring what the record held. `IPersonRecords` gains `TakeDownAsync`, `ReadTakedownAsync` and `ReverseTakedownAsync`.
+`GET /admin/records/{subject}/export?format=human|machine` assembles a person record's export for staff to hand to the person, under `record:manage` behind the step-up `record:export`, as the record access session's export answers it, counted against `privacy.export.ratelimit` for the record and recorded `privacy.export.assembled` with the staff member acting. `IPersonRecords` gains `ExportAsync`.
+`POST /admin/records/{subject}/restriction/lift` lifts a person record's restriction under `record:manage`, behind the step-up `record:restrictionlift`, the record returning active and `RestrictionChanged` delivered; `POST /admin/records/{subject}/delete/cancel` cancels a deletion the person or an out-of-band request began, inside its window, behind `record:deletioncancel`, restoring the record as it stood and raising `RecordDeletionCancelled`. A record attached to an account is refused with `409 identity.record.followsaccount`. `IPersonRecords` gains `LiftRestrictionAsync` and `CancelDeletionAsync`.
+`PUT /admin/records/{subject}` corrects a person record on the person's word under `record:manage`, with a required `reason`: its name, language, email and phone; a contact changed is held unverified, so no code reaches it. A restricted record admits it; a record attached to an account is refused with `409 identity.record.followsaccount` and one deleting or deleted with `409 identity.record.stateconflict`. `IPersonRecords` gains `RectifyAsync` and `PersonRecordCorrection`.
+`GET /admin/records/{subject}` reads a person record as the person reads it, with its origin and `attachedTo`, under `record:read` asked in the organization that holds it and admitted there or in the administrative organization; a caller admitted in neither is answered `404 identity.record.notfound` as for a subject no record bears. Nothing of the record but the organization holding it is read before the permission is asked, on every route under `/admin/records/{subject}`. `GET /admin/accounts/{subject}/records?organization=` answers the subjects of the records attached to an account that the organization holds, every one in the administrative organization, with the account reach of the other account reads. `IPersonRecords` gains `ReadAsync` and `AttachedAsync`.
+The step-up actions `record:export`, `record:restrictionlift`, `record:deletioncancel`, `record:takedown` and `record:takedownreverse` gate the staff routes on a person record, each costing what a policy sets for it.
+`POST /admin/records/find` asked in the administrative organization answers the records every organization holds, and an organization the deployment does not hold, or erased, is answered `404 identity.organization.notfound`.
+An attachment of person records is admitted only while the account is active, read under its lock: a restricted account is refused with `authz.restricted`, and an account in any other state with `409 identity.account.stateconflict` naming the state.
+A restriction decided while an account is suspended or deleting restricts each person record attached to it at once, with its own `RestrictionChanged`; the account's later return to restricted changes no record, and the lift lifts each.
+Replacing an identifier refuses one the account does not hold with `422 identity.identifier.invalid`, and a locked one with `409 identity.identifier.locked`.
+An out-of-band erasure request fulfilled for an account raises `AccountDeletionRequested` with the origin `oob-request` and the window's end, as the account's own deletion does.
+`record-deletion-notice` is a security notice: sent to a person record's notice contacts, it is outside the destination restrictions of the sending limits, as `oob-deletion-notice` to them already was.
+`POST /admin/records` refuses an entry giving none of `name`, `email` and `phone` with `422 api.request.invalid` naming `name`, and, where `registration.adultaffirmation` is `required`, a `dateOfBirth` under eighteen with `422 identity.profile.underage`, writing nothing.
+The registration's terms step refuses a `termsVersion` or `noticeVersion` that is not the current version of the terms or the privacy notice with `privacy.consent.superseded` naming the member, and a version of a document with no version published with `privacy.notice.unpublished` naming the document; a collection's `termsVersion` is checked against the terms in the same way.
+A person record attached to an account follows it: the account's restriction and its lift, its deletion window and its cancellation, a takedown and its reversal, and its erasure each apply to every record attached to it in the same transaction, each record holding what it held, with its own `RestrictionChanged`, `TakedownExecuted` and `ErasureRequested` outbox records, its own `RecordDeletionRequested` (with the account's origin and window), `RecordDeletionCancelled` and `TakedownReversed` events, and its own erasures row. An attached record is erased with its account and never by a window of its own.
+An account exercises its rights on each person record attached to it under `/account/records/{subject}`: it reads and rectifies the record, manages its consents and objections, submits a request on it and exports it, the export a step-up action (`privacy:export`) counted for the record. A record not attached to the account answers `identity.record.notfound`. `IPersonRecords` carries each of these rights, from `ReadAttachedAsync` to `SubmitAttachedRequestAsync`, for a host to call as the routes do. The account's own export carries a section `records`, after `objections`, naming each record attached to it.
+A verification an account completes now (the identifiers a registration verified, an added or replacing identifier's code, or a code sent at `POST /account/records/find` to one of its verified emails or phones) offers it the active, unattached person records that hold the value as a contact verified at a collection within `records.proof.age`. The offer is held on the session for `records.access.lifetime` and read at `GET /account/records/offer` as a count and its expiry. `POST /account/records/attach` attaches each record counted, `POST /account/records/attach/reference` attaches an older record by its reference, and `GET /account/records` lists the records attached. Each attachment raises `RecordAttached` and records `identity.record.attached`; a restricted account is refused with `authz.restricted`.
+An out-of-band erasure request fulfilled for a person record takes an active or restricted record into its deletion window by `oob-request`, holding a restriction in force, sends `oob-deletion-notice` to its notice contacts and raises `RecordDeletionRequested`. A request naming a record attached to an account is refused `409 identity.record.followsaccount`, naming the account.
+The contact and standing reads, `IAccounts.ContactAsync` and `IConsents.StandingAsync`, answer a person record's subject as they answer an account's, each answer naming its `kind` (`account` or `record`); a record's contact read carries its name, its contacts as held, verified or not, its language, its state and no time zone. It is answered outside a unit of work the host opened, as an account's is. An organization's reach takes in the person records it holds.
+Staff holding `record:read` in an organization find the person records it holds by an email or a phone, read in its canonical form, or by a reference, at `POST /admin/records/find` and `IPersonRecords.FindAsync`.
+A person record's deletion window, `record.deletion.grace`, closing erases the record as an account's erasure does: its key destroyed, its contact and reference fingerprints neutralised, its row kept `deleted` beside an erasures row, and `ErasureRequested` naming its subject.
+- A person a record access session reaches exercises their rights on each record under
+  `/records/access/{subject}`: its read, its export in both formats, its consents and
+  objections, a restriction or rectification request, a change of its name and
+  language, and its own deletion inside `record.deletion.grace` (30 days), raising
+  `RecordDeletionRequested` and `RecordDeletionCancelled` and sending
+  `record-deletion-notice`. Every message the privacy area sends a record goes to its
+  notice contacts, in its language.
+- A person reaches the person records held under their email or phone without an
+  account, through `/records/access`: a code is asked for in a browser
+  (`record-access-code`, or `record-access-none` by email where nothing is held, the
+  answer the same either way), and the code opens a session in that browser alone for
+  `records.access.lifetime` (default 15 minutes, never extended). The session reaches
+  the collected records whose contact was verified within `records.proof.age`, and an older
+  one by the reference it holds; never a record staff entered, one attached to an
+  account or one deleted. Each record reached is audited `identity.record.accessed`. A
+  browser holding a sign-in session is refused at every step but the end, with
+  `identity.record.signedin`.
+- A record of a sensitive type may name a person record as its data subject where the
+  person record holds the age answer (the adult affirmation, or the age group where
+  `registration.adultaffirmation` is `off`) or is attached to an account that stands;
+  one naming a person record without the answer, or one being deleted or deleted, is
+  refused 422 `api.request.invalid` naming `subject`.
+- Staff enter a person record for someone who gave their details by telephone, in
+  person or on paper with `IPersonRecords.EnterAsync` (`PersonRecordEntry`) or
+  `POST /admin/records`, under `record:create` in the organization named. The record is
+  of origin `staff`, its email and phone unverified; each consent is recorded with the
+  mechanism `administrator`, a date of birth the person gave is recorded as their
+  answer to the age question, and a reference only as a keyed fingerprint. The entry is
+  audited `identity.record.entered` with the staff member acting, and answers 201 with
+  the record's `subject`.
+- The library ships `record:create`, `record:read`, `record:manage` and `record:erase`,
+  the permissions over person records, which the seeded `system-administrator` role
+  holds, a deployment already bootstrapped gaining them at migration. A host's job may
+  declare `record:read` and `record:erase` beside its own permissions.
+- A host writes a person record from its own screen with `IRecordCollection.CollectAsync`
+  (`RecordCollection`, `CollectedRecord`), inside its own unit of work and while the
+  request of a browser holding a collection session is served. It reuses the
+  organization's active, unattached record that holds a contact the session verified,
+  last verified within `records.proof.age` (default 90 days), or creates one of origin
+  `collection`; it records the notice and terms versions, the age answer, one consent
+  per purpose ticked with the new mechanism `collection`, and the reference only as a
+  keyed fingerprint, spends the session and audits `identity.record.collected`. A
+  browser holding no collection session is refused 422 `identity.collection.expired`.
+- A browser with no session collects a guest's details under `/records/collection`: it
+  begins a collection session (asking the age or not), answers the age where asked, and
+  stages and verifies at most one email and one phone with a code. An under-age date
+  locks the session; a signed-in browser is refused 409 `identity.record.signedin`; an
+  age asked and not answered refuses a contact 409 `identity.collection.incomplete`.
+  The session lives `records.collection.lifetime` (default one hour, at most a day),
+  keeps what it staged under a key of its own row, and is swept when it lapses.
+- A grant, or a group member, naming a subject no account bears, a person record's
+  among them, is refused 422 `api.request.invalid` naming `subjectId`; a grant to such a
+  subject failed as a fault before, and such a member was added.
+- The library keeps person records in four tables of its own schema (`person_records`,
+  `person_record_contacts`, `person_record_references`, `person_record_documents`): a
+  record's name, date of birth and contacts under its own data key, its contacts and
+  references found by keyed fingerprint, a reference held in no other form. A
+  subject's consents, objections, exports, privacy requests, erasure and outbox rows now
+  name the subject-key table, which accounts and person records share, rather than the
+  accounts table.
+- A person record is a data subject a host keeps data about in their own right who
+  holds no account: one of four states (`PersonRecordState`: `active`, `restricted`,
+  `deleting`, `deleted`, and no `suspended`, since a record signs nothing in) and how it
+  was written (`PersonRecordOrigin`: `collection` where the person gave the data in a
+  host's own screen, `staff` where a member of staff entered it).
 - A host asks which accounts may exercise a permission on a record, or across an
   organization (`IAccessGate.WhoMayAsync`, `GET /admin/access/admitted`), and is
   answered as the single check would admit each account, through groups, containers and

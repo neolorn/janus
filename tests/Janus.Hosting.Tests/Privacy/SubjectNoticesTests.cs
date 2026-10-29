@@ -1,7 +1,9 @@
 using System;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Records;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Privacy;
@@ -12,8 +14,8 @@ namespace Janus.Hosting.Tests.Privacy;
 
 /// <summary>
 /// Where a message the privacy area needs delivered goes: through the governed send,
-/// which says how many channels of the account admitted it (PRIV-RIGHT-002,
-/// AUTH-ABUSE-004).
+/// which says how many channels of the account or the record admitted it
+/// (PRIV-RIGHT-002, AUTH-ABUSE-004, REC-ACC-002).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class SubjectNoticesTests : IAsyncDisposable
@@ -98,8 +100,42 @@ public sealed class SubjectNoticesTests : IAsyncDisposable
         Assert.Equal(carried, _deployment.Mail.Taken.Count);
     }
 
+    /// <summary>
+    /// REC-ACC-002: a message to a person record goes to its notice contacts, those
+    /// verified at a collection, in the record's language, and to no other contact.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ACC_002_AMessageToARecordGoesToItsNoticeContactsAsync()
+    {
+        const string address = "guest@example.test";
+
+        var record = SubjectId.New(_randomness);
+        DateTimeOffset verified = _deployment.Clock.GetUtcNow();
+
+        _deployment.Records.Hold(
+            new HeldRecord(record, OrganizationId.New(_deployment.Clock), verified)
+            {
+                Language = Language,
+                Contacts =
+                {
+                    [IdentifierKind.Email] = new CollectedContact(IdentifierKind.Email, address, verified),
+                    [IdentifierKind.Phone] = new CollectedContact(IdentifierKind.Phone, "+441632960047", VerifiedAt: null),
+                },
+            });
+
+        Assert.Equal(1, await ToldAsync(record));
+
+        _ = await _deployment.CarrySendsAsync();
+
+        Assert.Equal(address, Assert.Single(_deployment.Mail.Taken).Destination.Value);
+        Assert.Empty(_deployment.Sms.Taken);
+    }
+
     // The receipt, told inside a unit of work as the request's service tells it.
-    private async Task<int> ToldAsync()
+    private async Task<int> ToldAsync() => await ToldAsync(_subject);
+
+    private async Task<int> ToldAsync(SubjectId subject)
     {
         await using AsyncServiceScope scope = _deployment.Scope();
 
@@ -108,7 +144,7 @@ public sealed class SubjectNoticesTests : IAsyncDisposable
         await _deployment.Work.BeginAsync(TestContext.Current.CancellationToken);
 
         int told = await notices.TellAsync(
-            _subject,
+            subject,
             MessageKind.PrivacyRequestReceived,
             source: null,
             TestContext.Current.CancellationToken);

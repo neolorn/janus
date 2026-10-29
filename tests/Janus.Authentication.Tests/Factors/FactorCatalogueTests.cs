@@ -160,10 +160,12 @@ public sealed class FactorCatalogueTests
 
     /// <summary>
     /// AUTH-PRIN-002 AC1: no enum, flag or claim of the library tells a member of
-    /// staff from a customer. The two files that name either are the takedown
+    /// staff from a customer. The three files that name either are the takedown
     /// trigger, whose values are chapter 10 section 5.12d's vocabulary for what
-    /// raised a report, and the testing package's people, whose ways of signing a
-    /// test's person in are LIB-TEST-003's; neither is a property of a principal.
+    /// raised a report, the person record's origin, whose values are section 5.51's
+    /// for who wrote a record, and the testing package's people, whose ways of signing
+    /// a test's person in are LIB-TEST-003's; none is a property of a principal, and
+    /// neither is a record's origin where code names it.
     /// </summary>
     [Fact]
     public void AUTH_PRIN_002_AC1_NoEnumFlagOrClaimDistinguishesStaffFromCustomers()
@@ -177,14 +179,19 @@ public sealed class FactorCatalogueTests
         ];
 
         Assert.Equal(
-            [Path.Combine("Janus.Core", "TakedownTrigger.cs"), Path.Combine("Janus.Testing", "TestPeople.cs")],
+            [
+                Path.Combine("Janus.Core", "PersonRecordOrigin.cs"),
+                Path.Combine("Janus.Core", "TakedownTrigger.cs"),
+                Path.Combine("Janus.Testing", "TestPeople.cs"),
+            ],
             naming);
     }
 
-    // A line of code, comments aside, that names one kind of person.
+    // A line of code, comments and a record's origin aside, that names one kind of
+    // person.
     private static bool Distinguishes(string line)
     {
-        string code = line.TrimStart();
+        string code = line.TrimStart().Replace("PersonRecordOrigin.Staff", string.Empty, StringComparison.Ordinal);
 
         return !code.StartsWith("//", StringComparison.Ordinal)
             && (code.Contains("Staff", StringComparison.Ordinal)

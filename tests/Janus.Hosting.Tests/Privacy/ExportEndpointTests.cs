@@ -101,7 +101,7 @@ public sealed class ExportEndpointTests : IAsyncDisposable
             .GetProperty("sections");
 
         Assert.Equal(
-            ["identifiers", "consents", "objections"],
+            ["identifiers", "consents", "objections", "records"],
             sections.EnumerateArray().Select(section => section.GetProperty("name").GetString()));
 
         Assert.Equal(
@@ -216,11 +216,11 @@ public sealed class ExportEndpointTests : IAsyncDisposable
             .GetProperty("sections");
 
         Assert.Equal(
-            ["identifiers", "consents", "objections", "parcels"],
+            ["identifiers", "consents", "objections", "records", "parcels"],
             sections.EnumerateArray().Select(section => section.GetProperty("name").GetString()));
         Assert.Equal(
             "pn-1001",
-            sections[3].GetProperty("records")[0].GetProperty("tracking-number").GetString());
+            sections[4].GetProperty("records")[0].GetProperty("tracking-number").GetString());
     }
 
     /// <summary>

@@ -213,7 +213,7 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     }
 
     /// <inheritdoc/>
-    public ValueTask CancelDeletionAsync(SubjectId subject, CancellationToken cancellationToken)
+    public ValueTask CancelDeletionAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken)
     {
         _states[subject] = _restrictionHeld.Remove(subject)
             ? AccountState.Restricted

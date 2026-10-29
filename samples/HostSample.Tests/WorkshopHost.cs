@@ -150,6 +150,13 @@ public sealed class WorkshopHost : IAsyncLifetime
     }
 
     /// <summary>
+    /// A guest's browser, signed in as nobody, which carries the browser profile's CSRF
+    /// tokens for what a guest does with no account (LIB-TEST-003).
+    /// </summary>
+    /// <returns>The browser.</returns>
+    public TestVisitor Guest() => People.Visitor();
+
+    /// <summary>
     /// Registers a customer of the workshop through the registration endpoints, with a
     /// phone of their own, which the deployment requires of every account, and a
     /// password, and signs the customer in.
@@ -164,6 +171,20 @@ public sealed class WorkshopHost : IAsyncLifetime
         {
             throw new InvalidOperationException("The customer's address does not read as one.");
         }
+
+        return await CustomerAsync(email, cancellationToken);
+    }
+
+    /// <summary>
+    /// Registers a customer of the workshop under an address the test names, as
+    /// <see cref="CustomerAsync(CancellationToken)"/> registers one.
+    /// </summary>
+    /// <param name="email">The customer's address.</param>
+    /// <param name="cancellationToken">Abandons the registration.</param>
+    /// <returns>The customer's session.</returns>
+    public async Task<TestSession> CustomerAsync(EmailAddress email, CancellationToken cancellationToken)
+    {
+        int customer = Interlocked.Increment(ref _customers);
 
         return await People.CustomerAsync(
             email,

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Model;
 using Janus.Core;
+using Janus.Core.Configuration;
 
 namespace Janus.Authorization.Resources;
 
@@ -15,28 +16,31 @@ namespace Janus.Authorization.Resources;
 /// </summary>
 /// <param name="model">What the host declared about its domain.</param>
 /// <param name="resources">Where the records and their ancestry are written.</param>
-/// <param name="holders">Which subjects hold an account.</param>
+/// <param name="subjects">Which subjects stand as the data subject of sensitive data.</param>
 /// <param name="grants">Where the grants naming a removed record are revoked.</param>
 /// <param name="audit">Where each revocation a removal makes is written down.</param>
 /// <param name="events">Where each revocation a removal makes is announced.</param>
+/// <param name="configuration">Where the rule the age question is answered by is read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements AUTHZ-INHERIT-001, AUTHZ-INHERIT-002, AUTHZ-SCOPE-001, LIB-HOST-002,
-/// AUTHZ-GRANT-003 and IDN-LIFE-002a. A record is placed only in a container of the type
-/// its own type is declared contained in, and only in one of its own organization, so no
-/// record inherits across a boundary the declaration or the organization draws. A record
-/// of a sensitive type is always some account holder's, so every right has an account to
-/// hang off. A container is judged again with its organization's tree held, since a
-/// removal may have taken it away since it was read.
+/// AUTHZ-GRANT-003, IDN-LIFE-002a and REC-AGE-001. A record is placed only in a
+/// container of the type its own type is declared contained in, and only in one of its
+/// own organization, so no record inherits across a boundary the declaration or the
+/// organization draws. A record of a sensitive type is always about an account holder or
+/// a person record that holds the age answer, so every right has a subject to hang off.
+/// A container is judged again with its organization's tree held, since a removal may
+/// have taken it away since it was read.
 /// </remarks>
 internal sealed class ResourceService(
     AuthorizationModel model,
     IResourceStore resources,
-    IAccountHolders holders,
+    IDataSubjects subjects,
     IGrantStore grants,
     IGrantAudit audit,
     IEvents events,
+    IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time) : IResources
 {
@@ -77,15 +81,33 @@ internal sealed class ResourceService(
             ],
             cancellationToken).ConfigureAwait(false);
 
-        // IDN-LIFE-002a AC1: whose account stands is read once for the batch.
-        IReadOnlySet<SubjectId> standing = await holders
-            .HoldingAsync(
+        // IDN-LIFE-002a AC1, REC-AGE-001: whose account or person record stands is read
+        // once for the batch, the age answer by the rule the deployment registers by.
+        Error? unread = null;
+
+        AttributeRequirement affirmation = (await configuration
+                .ReadAsync(Settings.RegistrationAdultAffirmation, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error =>
+            {
+                unread = error;
+
+                return AttributeRequirement.Required;
+            });
+
+        if (unread is not null)
+        {
+            return Result.Failure(unread);
+        }
+
+        IReadOnlySet<SubjectId> standing = await subjects
+            .StandingAsync(
                 [
                     .. registrations
                         .Select(registration => registration.Subject)
                         .OfType<SubjectId>()
                         .Distinct(),
                 ],
+                affirmation is AttributeRequirement.Off,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -299,9 +321,10 @@ internal sealed class ResourceService(
             return Invalid("containedIn");
         }
 
-        // IDN-LIFE-002a AC1: data of a sensitive type about nobody, or about somebody
-        // with no account that stands, would have no route by which a right is
-        // exercised, so it is not registered.
+        // IDN-LIFE-002a AC1, REC-AGE-001: data of a sensitive type about nobody, about
+        // somebody with no account or person record that stands, or about a person record
+        // with no age answer, would have no route by which a right is exercised or no
+        // screen of age before it, so it is not registered.
         if (declared.SensitiveCategories.Count > 0
             && (registration.Subject is not SubjectId subject || !standing.Contains(subject)))
         {

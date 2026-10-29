@@ -98,6 +98,31 @@ public static class Permissions
     public static Permission ConsentRead { get; } = Permission.Parse("consent:read");
 
     /// <summary>
+    /// Entering a person record for someone who gave their details to staff, asked in
+    /// the organization the record is entered in.
+    /// </summary>
+    public static Permission RecordCreate { get; } = Permission.Parse("record:create");
+
+    /// <summary>
+    /// Reading and finding person records and the records attached to an account. A
+    /// host's job may declare it.
+    /// </summary>
+    public static Permission RecordRead { get; } = Permission.Parse("record:read");
+
+    /// <summary>
+    /// Correcting a person record, recording a consent or an objection the person gave
+    /// staff, exporting a record for the person, lifting its restriction and cancelling
+    /// its deletion.
+    /// </summary>
+    public static Permission RecordManage { get; } = Permission.Parse("record:manage");
+
+    /// <summary>
+    /// Erasing a person record the host keeps nothing about any longer. A host's job may
+    /// declare it.
+    /// </summary>
+    public static Permission RecordErase { get; } = Permission.Parse("record:erase");
+
+    /// <summary>
     /// The minor takedown operation.
     /// </summary>
     public static Permission TakedownExecute { get; } = Permission.Parse("takedown:execute");
@@ -185,6 +210,10 @@ public static class Permissions
         OrganizationManage,
         OrganizationRead,
         PrivacyRequestManage,
+        RecordCreate,
+        RecordErase,
+        RecordManage,
+        RecordRead,
         RecoveryApprove,
         RestrictionEdit,
         RestrictionGrant,

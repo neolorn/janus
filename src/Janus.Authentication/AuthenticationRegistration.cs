@@ -16,6 +16,7 @@ using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -156,6 +157,15 @@ internal static class AuthenticationRegistration
 
         services.AddScoped<RegistrationService>();
         services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());
+        services.AddScoped<CollectionSessions>();
+        services.AddScoped<RecordAccessSessions>();
+        services.AddScoped<RecordRights>();
+        services.AddScoped<RecordCollectionService>();
+        services.AddScoped<RecordOffers>();
+        services.AddScoped<RecordAttachments>();
+        services.AddScoped<RecordAdministration>();
+        services.AddScoped<AttachedRecordRights>();
+        services.AddScoped<IPersonRecords, PersonRecordService>();
         services.AddScoped<IdentifierService>();
         services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
         services.AddScoped<AccountLifecycle>();

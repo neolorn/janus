@@ -131,7 +131,7 @@ internal static class AccountEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.ChangePending, ErrorCodes.IdentifierMixedScript,
                     ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.SmsBalanceFloor,
-                    ErrorCodes.RestrictionExceeded)
+                    ErrorCodes.RestrictionExceeded, ErrorCodes.IdentifierInvalid, ErrorCodes.IdentifierLocked)
                 .Binding<IdentifierId>("id"))
             .Accepts<ReplaceIdentifierRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status202Accepted);

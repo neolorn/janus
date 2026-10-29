@@ -83,6 +83,24 @@ internal static class Flow
     }
 
     /// <summary>
+    /// The terms version a terms step accepts: the current version of the terms, one
+    /// published where the test published none (REG-SESS-007).
+    /// </summary>
+    /// <param name="deployment">What the registration talks to.</param>
+    /// <returns>The field.</returns>
+    public static (string Name, object? Value) TermsVersion(Deployment deployment) =>
+        ("termsVersion", Current(deployment, "terms", "terms-3"));
+
+    /// <summary>
+    /// The notice version a terms step accepts: the current version of the privacy
+    /// notice, one published where the test published none (REG-SESS-007).
+    /// </summary>
+    /// <param name="deployment">What the registration talks to.</param>
+    /// <returns>The field.</returns>
+    public static (string Name, object? Value) NoticeVersion(Deployment deployment) =>
+        ("noticeVersion", Current(deployment, "privacy-notice", "notice-2"));
+
+    /// <summary>
     /// A browser that has answered the age step and staged an address.
     /// </summary>
     /// <param name="deployment">What it talks to.</param>
@@ -149,8 +167,8 @@ internal static class Flow
         Answer completed = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", "terms-3"),
-            ("noticeVersion", "notice-2"));
+            Flow.TermsVersion(deployment),
+            Flow.NoticeVersion(deployment));
 
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
 
@@ -276,5 +294,17 @@ internal static class Flow
         }
 
         throw new InvalidOperationException("No message carrying a code went out.");
+    }
+
+    private static string Current(Deployment deployment, string document, string version)
+    {
+        if (deployment.Documents.Versions.LastOrDefault(held => held.DocumentName == document) is DocumentVersion held)
+        {
+            return held.Version;
+        }
+
+        deployment.Documents.Hold(new DocumentVersion(document, version, Language, "text", [], deployment.Clock.GetUtcNow()));
+
+        return version;
     }
 }

@@ -11,6 +11,7 @@ using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
@@ -21,6 +22,7 @@ using Janus.Identity.Audit;
 using Janus.Identity.Identifiers;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
+using Janus.Identity.Records;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
@@ -28,6 +30,7 @@ using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
+using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Grants;
@@ -37,6 +40,7 @@ using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -65,6 +69,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         new ConfigurationStore(context, new DataConnections(context)),
         new DataConnections(context),
         new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+        new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
         new EventOutbox(new PendingEvents(context), work));
 
     /// <summary>
@@ -90,6 +95,94 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(ErasureStatus.AwaitingSubscribers, erasure.Status);
         Assert.Equal(0, erasure.Attempts);
         Assert.Equal(Noon, erasure.RequestedAt);
+    }
+
+    /// <summary>
+    /// REC-REC-003 AC1: after a person record's erasure its key no longer unwraps, so no
+    /// personal field under it decrypts and none is answered, no fingerprint of its
+    /// contacts or references matches, and its row remains, <c>deleted</c>, beside its
+    /// erasures row.
+    /// </summary>
+    [Fact]
+    public async Task REC_REC_003_AC1_AnErasedRecordHoldsNothingThatIdentifiesThePersonAsync()
+    {
+        (SubjectId subject, string number, string reference) = await DeletingRecordAsync();
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+        var records = new PersonRecordStore(reading, _deployment.Ring, _deployment.Randomness);
+        PersonRecordRow row = await reading.PersonRecords
+            .SingleAsync(record => record.Subject == subject, TestContext.Current.CancellationToken);
+        SubjectKeyRecord key = (await reading.SubjectKeys
+            .FindAsync([SubjectKeyId.Of(subject)], TestContext.Current.CancellationToken))!;
+
+        Assert.Equal(PersonRecordState.Deleted, row.State);
+        Assert.Equal(
+            ErasureReason.ErasureRequest,
+            Assert.IsType<Erasure>(await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken)).Reason);
+        Assert.Throws<CryptographicException>(() =>
+            PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, _deployment.Ring));
+        Assert.Empty(await records.ContactsAsync(subject, TestContext.Current.CancellationToken));
+        Assert.Empty(await records.HoldingContactAsync(IdentifierKind.Phone, number, TestContext.Current.CancellationToken));
+        Assert.Empty(await records.HoldingReferenceAsync(reference, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REC-ADM-003 AC1 (D-223): a record a host erases at once, active and in no window,
+    /// reaches <c>deleted</c> beside an erasures row whose reason is <c>retention</c>, as
+    /// the column is written.
+    /// </summary>
+    [Fact]
+    public async Task REC_ADM_003_AC1_ARecordErasedAtOnceCarriesTheRetentionReasonAsync()
+    {
+        (SubjectId subject, _, _) = await ActiveRecordAsync();
+
+        await EraseAsync(subject, ErasureReason.Retention);
+
+        await using StoreContext reading = database.Context();
+        PersonRecordRow row = await reading.PersonRecords
+            .SingleAsync(record => record.Subject == subject, TestContext.Current.CancellationToken);
+        await using NpgsqlConnection connection = await database.OpenAsync();
+        string written = await connection.QuerySingleAsync<string>(
+            "SELECT reason FROM identity.erasures WHERE subject = @subject",
+            new { subject = subject.Value });
+
+        Assert.Equal((PersonRecordState.Deleted, "retention"), (row.State, written));
+    }
+
+    /// <summary>
+    /// REC-REC-003 AC2, IDN-LIFE-003b AC4: a person record's erasure that does not commit
+    /// leaves no erasures row and erases nothing: the record is still in its window, its
+    /// key stands and its contact still matches.
+    /// </summary>
+    [Fact]
+    public async Task REC_REC_003_AC2_ARecordsErasureThatRollsBackErasesNothingAsync()
+    {
+        (SubjectId subject, string number, _) = await DeletingRecordAsync();
+
+        await using (StoreContext erasing = database.Context())
+        await using (var work = new UnitOfWork(erasing))
+        {
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await Eraser(erasing, work).EraseAsync(
+                subject,
+                ErasureReason.ErasureRequest,
+                Noon,
+                TestContext.Current.CancellationToken);
+            await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        var records = new PersonRecordStore(reading, _deployment.Ring, _deployment.Randomness);
+
+        Assert.Null(await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            PersonRecordState.Deleting,
+            (await records.FindBySubjectAsync(subject, TestContext.Current.CancellationToken))!.State);
+        Assert.Equal(
+            [subject],
+            await records.HoldingContactAsync(IdentifierKind.Phone, number, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -1248,7 +1341,8 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
         new PreferenceStore(context, _deployment.Ring, _deployment.Randomness),
         PreferenceDeclarations.None,
-        new OutboxStore(context, new FixedTime(Noon)));
+        new OutboxStore(context, new FixedTime(Noon)),
+        _deployment.Attached(context, new EventsInMemory(), new FixedTime(Noon)));
 
     private static ErasureStore Store(StoreContext context) => new(context);
 
@@ -1356,6 +1450,66 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
               AND payload->>'Actor' IS NULL AND payload->'Subject'->>'Value' = @subject
             """,
             new { subject = subject.Value.ToString() });
+    }
+
+    // A person record a collection wrote, with a name, a verified phone and a
+    // reference, in its own deletion window.
+    private async ValueTask<(SubjectId Subject, string Number, string Reference)> DeletingRecordAsync()
+    {
+        (SubjectId subject, string number, string reference) = await ActiveRecordAsync();
+
+        await using StoreContext changing = database.Context();
+        var records = new PersonRecordStore(changing, _deployment.Ring, _deployment.Randomness);
+        PersonRecord record = (await records.FindBySubjectAsync(subject, TestContext.Current.CancellationToken))!;
+
+        record.RequestDeletion(DeletionOrigin.Self, Noon);
+
+        await records.RecordAsync(record, TestContext.Current.CancellationToken);
+        await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return (subject, number, reference);
+    }
+
+    // A person record a collection wrote, with a name, a verified phone and a
+    // reference, active and in no window.
+    private async ValueTask<(SubjectId Subject, string Number, string Reference)> ActiveRecordAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId subject = Subjects.New();
+        string suffix = subject.Value.ToString("N");
+        string number = "+44163296" + string.Concat(suffix.Where(char.IsAsciiDigit).Take(4)).PadRight(4, '0');
+        string reference = "order-" + suffix[..12];
+
+        Assert.True(DisplayName.TryParse("Mona Saleh", out DisplayName name));
+
+        await using (StoreContext writing = database.Context())
+        await using (var work = new UnitOfWork(writing))
+        {
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await new RecordDirectory(
+                    writing,
+                    new PersonRecordStore(writing, _deployment.Ring, _deployment.Randomness),
+                    new IdentifierStore(writing, _deployment.Ring, _deployment.Randomness),
+                    new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness),
+                    new OutboxStore(writing, TimeProvider.System))
+                .WriteAsync(
+                    new CollectedPerson(
+                        subject,
+                        organization,
+                        Created: true,
+                        "en",
+                        name,
+                        Age: null,
+                        [new CollectedContact(IdentifierKind.Phone, number, Noon)],
+                        reference,
+                        "1",
+                        TermsVersion: null,
+                        Noon),
+                    TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        return (subject, number, reference);
     }
 
     private async ValueTask<SubjectId> DeletingAccountAsync()

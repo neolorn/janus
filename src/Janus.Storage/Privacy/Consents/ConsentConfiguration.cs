@@ -1,6 +1,5 @@
 using System;
 using Janus.Core;
-using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -60,11 +59,9 @@ internal sealed class ConsentConfiguration : IEntityTypeConfiguration<ConsentRec
         builder.Property(consent => consent.WithdrawnAt).HasColumnName("withdrawn_at");
         builder.Property(consent => consent.SupersededAt).HasColumnName("superseded_at");
 
-        builder.HasOne<AccountRecord>()
-            .WithMany()
-            .HasForeignKey(consent => consent.Subject)
-            .HasConstraintName("fk_consents_subject")
-            .OnDelete(DeleteBehavior.Restrict);
+        // REC-REC-001 (D-221): the subject is an account's or a person record's, so its
+        // parent is the subject key row both hold, the key's identifier being a type of
+        // its own; the migration writes the constraint, fk_consents_subject.
 
         // PRIV-CONS-001 AC4: at most one live record a subject and purpose.
         builder.HasIndex(consent => new { consent.Subject, consent.Purpose })

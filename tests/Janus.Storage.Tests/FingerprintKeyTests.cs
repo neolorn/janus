@@ -13,10 +13,12 @@ using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Identity.Identifiers;
+using Janus.Identity.Records;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -61,6 +63,7 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
         typeof(ThrottleLedger),
         typeof(NoticeLedger),
         typeof(RegistrationSourceLedger),
+        typeof(PersonRecordStore),
         typeof(SendLedger),
         typeof(ValueLock),
     ];
@@ -70,9 +73,10 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
     /// <summary>
     /// INF-HOST-003 AC4: once every store that computes a fingerprint has written under
     /// each version of the key (an identifier of each kind, a mailbox, a provider link,
-    /// a throttle failure, a non-existence notice, a registration source and a send under
-    /// a restriction), no column of the library's schema holds either version in any of
-    /// its five written forms, while the scan finds a fingerprint the writes did store.
+    /// a throttle failure, a non-existence notice, a registration source, a send under a
+    /// restriction and a person record's contact and reference), no column of the
+    /// library's schema holds either version in any of its five written forms, while
+    /// the scan finds a fingerprint the writes did store.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -170,6 +174,23 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
         await new NoticeLedger(context, new DataConnections(context), ring)
             .MarkAsync("absent" + tag + "@example.test", Noon, TimeSpan.FromHours(1), cancellationToken);
         await new RegistrationSourceLedger(context, ring).RecordAsync("198.51.100." + tag, Noon, cancellationToken);
+
+        // The record's key row is its parent by a constraint the model does not know, so
+        // it is written before the record names it.
+        SubjectId held = Subjects.New();
+        var records = new PersonRecordStore(context, ring, _deployment.Randomness);
+
+        await new SubjectKeyStore(context, ring, _deployment.Randomness).CreateAsync(held, cancellationToken);
+        _ = await context.SaveChangesAsync(cancellationToken);
+        await records.AddAsync(
+            PersonRecord.Create(held, await _deployment.OrganizationAsync(Noon), PersonRecordOrigin.Collection, Noon, "en"),
+            cancellationToken);
+        _ = await context.SaveChangesAsync(cancellationToken);
+        await records.SetContactAsync(
+            held,
+            new RecordContact(IdentifierKind.Phone, "+44163296002" + tag, Noon),
+            cancellationToken);
+        await records.AddReferenceAsync(held, "stay-" + tag, Noon, cancellationToken);
 
         var sends = new SendLedger(context, new DataConnections(context), ring);
         var destination = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, "destination" + tag + "@example.test");

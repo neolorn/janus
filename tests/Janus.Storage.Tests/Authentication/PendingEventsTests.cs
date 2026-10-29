@@ -395,6 +395,19 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
             Actor = Actor,
         },
         new OrganizationErased(Noon, "organization-erased", new OrganizationId(Guid.CreateVersion7(Noon)), 3),
+        new RecordAttached(Noon, "record-attached", Actor)
+        {
+            Subject = Subject,
+            Actor = Actor,
+            Effective = Actor,
+        },
+        new RecordDeletionCancelled(Noon, "record-deletion-cancelled") { Subject = Subject },
+        new RecordDeletionRequested(Noon, "record-deletion-requested", DeletionOrigin.Self, Noon.AddDays(30))
+        {
+            Subject = Subject,
+            Actor = Subject,
+            Effective = Subject,
+        },
         new RestrictionChanged(Noon, "restriction", Restricted: true) { Subject = Subject },
         new RoleChanged(Noon, "role", "editor", RoleChange.Changed) { Actor = Actor },
         new SendingRestrictionChanged(Noon, "sending-restriction", "sms-per-number", Loosening: true) { Actor = Actor },

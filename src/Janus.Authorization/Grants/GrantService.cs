@@ -25,6 +25,7 @@ namespace Janus.Authorization.Grants;
 /// <param name="grants">Where grants are read and written.</param>
 /// <param name="roles">Where the role a grant names is read.</param>
 /// <param name="groups">Where a group a grant is given to is read.</param>
+/// <param name="accounts">Whether an account bears the subject a grant is given to.</param>
 /// <param name="resources">Where the record a grant is on, and its organization, are read.</param>
 /// <param name="emergency">Which account is granted nothing further.</param>
 /// <param name="audit">Where each grant written or revoked is written down.</param>
@@ -49,6 +50,7 @@ internal sealed class GrantService(
     IRoleStore roles,
     IGroupStore groups,
     IResourceStore resources,
+    IAccountSubjects accounts,
     IEmergencyAccount emergency,
     IGrantAudit audit,
     IEvents events,
@@ -114,9 +116,10 @@ internal sealed class GrantService(
             return Result.Failure<GrantId>(administering);
         }
 
-        if (!await HolderAsync(request.Subject, organization, cancellationToken).ConfigureAwait(false))
+        if (await UnholdableAsync(request.Subject, organization, cancellationToken).ConfigureAwait(false)
+            is Error unholdable)
         {
-            return Result.Failure<GrantId>(Unresolved("subjectId"));
+            return Result.Failure<GrantId>(unholdable);
         }
 
         // OPS-BOOT-002: the break-glass session's account holds what bootstrap gave it
@@ -374,13 +377,21 @@ internal sealed class GrantService(
     }
 
     // A group belongs to one organization, and its members hold what it holds there.
-    private async ValueTask<bool> HolderAsync(
+    // AUTHZ-GRANT-001: a group is held only by a grant of its own organization. IDN-ACCT-007,
+    // REC-REC-001 (D-166, D-221): a body naming a subject no account bears, a person
+    // record's among them, names nothing a grant can be given to.
+    private async ValueTask<Error?> UnholdableAsync(
         GrantSubject subject,
         OrganizationId organization,
         CancellationToken cancellationToken) =>
-        subject.Type != SubjectType.Group
-            || (await groups.FindAsync(new GroupId(subject.Value), cancellationToken).ConfigureAwait(false))
-                ?.Organization == organization;
+        subject.Type == SubjectType.Group
+            ? (await groups.FindAsync(new GroupId(subject.Value), cancellationToken).ConfigureAwait(false))
+                ?.Organization == organization
+                    ? null
+                    : Unresolved("subjectId")
+            : await accounts.BearsAsync(new SubjectId(subject.Value), cancellationToken).ConfigureAwait(false)
+                ? null
+                : Error.From(ErrorCodes.RequestInvalid, "member", JsonSerializer.SerializeToElement("subjectId"));
 
     // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3: a revocation is judged in the organization
     // the grant is scoped to, and that alone is read of it before the gate. A grant the
@@ -494,7 +505,8 @@ internal sealed class GrantService(
         {
             await groups.HoldAsync(grant.Organization, cancellationToken).ConfigureAwait(false);
 
-            standing = await HolderAsync(grant.Subject, grant.Organization, cancellationToken).ConfigureAwait(false);
+            standing = await UnholdableAsync(grant.Subject, grant.Organization, cancellationToken).ConfigureAwait(false)
+                is null;
         }
 
         // AUTHZ-INHERIT-002 (D-203): a grant on a record is written with its organization's

@@ -44,6 +44,11 @@ public sealed class VocabularyContractTests
         "session:revokeall",
         "account:takedown",
         "account:takedownreverse",
+        "record:export",
+        "record:restrictionlift",
+        "record:deletioncancel",
+        "record:takedown",
+        "record:takedownreverse",
         "erasure:complete",
         "config:loosen",
         "alerting:destinations",
@@ -149,7 +154,7 @@ public sealed class VocabularyContractTests
             ["accountstate", "consent", "reauthenticate", "restricted", "stepup"],
             WireNames<CapabilityResidual>());
         Assert.Equal(
-            ["administrator", "dashboard", "reconsent", "registration"],
+            ["administrator", "collection", "dashboard", "reconsent", "registration"],
             WireNames<ConsentMechanism>());
         Assert.Equal(["adult", "minor"], WireNames<AgeGroup>());
     }
@@ -209,6 +214,17 @@ public sealed class VocabularyContractTests
             WireNames<AccountState>());
 
     /// <summary>
+    /// LIB-API-001 AC2: the person record's states and origins of chapter 10 section
+    /// 5.51, which every person record row carries (REC-REC-001, REC-REC-002).
+    /// </summary>
+    [Fact]
+    public void REC_REC_002_ThePersonRecordStatesAndOriginsAreTheContract()
+    {
+        Assert.Equal(["active", "deleted", "deleting", "restricted"], WireNames<PersonRecordState>());
+        Assert.Equal(["collection", "staff"], WireNames<PersonRecordOrigin>());
+    }
+
+    /// <summary>
     /// LIB-API-001 AC2: the origins of chapter 10 section 5.12b and the takedown
     /// triggers of section 5.12d, recorded when a state is entered.
     /// </summary>
@@ -233,7 +249,7 @@ public sealed class VocabularyContractTests
             ["awaiting-subscribers", "complete", "failed"],
             WireNames<ErasureStatus>());
         Assert.Equal(
-            ["erasure-request", "minor-takedown"],
+            ["erasure-request", "minor-takedown", "retention"],
             WireNames<ErasureReason>());
     }
 
@@ -337,6 +353,9 @@ public sealed class VocabularyContractTests
                 "oob-deletion-notice",
                 "privacy-request-lapsed",
                 "privacy-request-received",
+                "record-access-code",
+                "record-access-none",
+                "record-deletion-notice",
                 "recovery-codes-reminder",
                 "recovery-link",
                 "secondstep-code",
@@ -372,6 +391,8 @@ public sealed class VocabularyContractTests
             typeof(AccountState),
             typeof(SuspensionOrigin),
             typeof(DeletionOrigin),
+            typeof(PersonRecordState),
+            typeof(PersonRecordOrigin),
             typeof(ErasureStatus),
             typeof(ErasureReason),
             typeof(DeliveryKind),

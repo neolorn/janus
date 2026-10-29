@@ -11,6 +11,7 @@ using Janus.Authentication.Invitations;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
@@ -22,6 +23,7 @@ using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Records;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
@@ -106,6 +108,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     private readonly RegistrationSourcesInMemory _sources = new();
     private readonly BotDefenceAuditInMemory _signalled = new();
     private readonly EventsInMemory _events = new();
+    private LegalDocumentsInMemory _documents = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
@@ -121,6 +124,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         _restrictions.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
+        _documents.Publish("terms", Terms, Noon);
+        _documents.Publish("privacy-notice", Notice, Noon);
     }
 
     private RegistrationService Service =>
@@ -185,11 +190,13 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             _restrictions,
             new BotDefence(_configuration, _ranges, _sources, _signalled, _work, _verifier, _clock),
             _consents,
+            _documents,
             _configuration,
             _work,
             _events,
             _clock,
-            _randomness);
+            _randomness,
+            new RecordOffers(new RecordOfferStoreInMemory(), new RecordDirectoryInMemory(), _configuration, _clock));
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -3582,6 +3589,56 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             single,
             completed.Browser.Value,
             TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-SESS-007 AC7: a terms step naming a terms or notice version that is not its
+    /// document's current version is refused as superseded, naming it, and one naming a
+    /// document with no version published as unpublished, naming the document; none
+    /// creates an account, and the step with the current versions completes it.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_007_AC7_AVersionNotCurrentIsRefusedAndCreatesNoAccountAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _documents.Publish("terms", "terms-4", Noon);
+        _documents.Publish("privacy-notice", "notice-3", Noon);
+
+        Error terms = Failed(await Service.AcceptTermsAsync(
+            session, Terms, "notice-3", Unticked, Browser, TestContext.Current.CancellationToken));
+        Error notice = Failed(await Service.AcceptTermsAsync(
+            session, "terms-4", Notice, Unticked, Browser, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.ConsentSuperseded, terms.Code);
+        Assert.Equal("termsVersion", terms.Details["member"].GetString());
+        Assert.Equal(ErrorCodes.ConsentSuperseded, notice.Code);
+        Assert.Equal("noticeVersion", notice.Details["member"].GetString());
+        Assert.Empty(_directory.Created);
+
+        _ = Ok(await Service.AcceptTermsAsync(
+            session, "terms-4", "notice-3", Unticked, Browser, TestContext.Current.CancellationToken));
+
+        Assert.Equal("terms-4", Assert.Single(_directory.Created).TermsVersion);
+    }
+
+    /// <summary>
+    /// REG-SESS-007 AC7: a deployment that published no terms refuses the step as
+    /// unpublished, naming the document, and creates no account.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_007_AC7_ADocumentWithNoVersionPublishedIsRefusedAsync()
+    {
+        _documents = new LegalDocumentsInMemory();
+        _documents.Publish("privacy-notice", Notice, Noon);
+
+        RegistrationSessionId session = await SecuredAsync();
+
+        Error refused = Failed(await AcceptedAsync(session));
+
+        Assert.Equal(ErrorCodes.NoticeUnpublished, refused.Code);
+        Assert.Equal("terms", refused.Details["document"].GetString());
+        Assert.Empty(_directory.Created);
     }
 
     /// <summary>

@@ -7,30 +7,38 @@ using Janus.Core.Configuration;
 namespace Janus.Privacy.Erasures;
 
 /// <summary>
-/// The lengths of the two grace windows an account's deletion runs under, and the
-/// instant each deletion's erasure falls due.
+/// The lengths of the grace windows a deletion runs under, an account's or a person
+/// record's, and the instant each deletion's erasure falls due.
 /// </summary>
 /// <param name="Deletion">The length of <c>account.deletion.grace</c>.</param>
 /// <param name="Takedown">The length of <c>takedown.grace</c>.</param>
+/// <param name="RecordDeletion">The length of <c>record.deletion.grace</c>.</param>
 /// <remarks>
-/// Implements IDN-LIFE-003, IDN-LIFE-014 and IDN-ACCT-007. The instant is computed here
-/// and nowhere else, so the sweep that erases, the reversal that is refused at the
-/// window's end and the progress an administrator reads agree on it.
+/// Implements IDN-LIFE-003, IDN-LIFE-014, IDN-ACCT-007 and REC-REC-002. The instant is
+/// computed here and nowhere else, so the sweep that erases, the reversal that is
+/// refused at the window's end and the progress an administrator reads agree on it.
 /// </remarks>
-internal sealed record DeletionWindows(TimeSpan Deletion, TimeSpan Takedown)
+internal sealed record DeletionWindows(TimeSpan Deletion, TimeSpan Takedown, TimeSpan RecordDeletion)
 {
     /// <summary>
-    /// The shorter of the two windows, which bounds how long ago any window that has
-    /// run out began.
+    /// The shortest of the windows, which bounds how long ago any window that has run
+    /// out began.
     /// </summary>
-    public TimeSpan Shortest => Deletion < Takedown ? Deletion : Takedown;
+    public TimeSpan Shortest =>
+        TimeSpan.FromTicks(Math.Min(Math.Min(Deletion.Ticks, Takedown.Ticks), RecordDeletion.Ticks));
 
     /// <summary>
-    /// Reads both lengths.
+    /// The windows a person record's deletion runs under: its own deletion runs
+    /// <c>record.deletion.grace</c> and a takedown's <c>takedown.grace</c> (REC-REC-002).
+    /// </summary>
+    public DeletionWindows ForRecords => this with { Deletion = RecordDeletion };
+
+    /// <summary>
+    /// Reads every length.
     /// </summary>
     /// <param name="configuration">Where they are held.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The two windows.</returns>
+    /// <returns>The windows.</returns>
     /// <exception cref="InvalidOperationException">
     /// A stored length does not read, which is a fault and never a default (CONV-ERR-001).
     /// </exception>
@@ -44,8 +52,10 @@ internal sealed record DeletionWindows(TimeSpan Deletion, TimeSpan Takedown)
             .ConfigureAwait(false);
         TimeSpan takedown = await ReadAsync(configuration, Settings.TakedownGrace, cancellationToken)
             .ConfigureAwait(false);
+        TimeSpan record = await ReadAsync(configuration, Settings.RecordDeletionGrace, cancellationToken)
+            .ConfigureAwait(false);
 
-        return new DeletionWindows(deletion, takedown);
+        return new DeletionWindows(deletion, takedown, record);
     }
 
     /// <summary>

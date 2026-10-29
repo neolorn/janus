@@ -18,6 +18,7 @@ using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
@@ -793,5 +794,6 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
             new ConfigurationStore(context, new DataConnections(context)),
             new DataConnections(context),
             new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+            new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
             new EventOutbox(new PendingEvents(context), work));
 }

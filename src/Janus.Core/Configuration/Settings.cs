@@ -617,6 +617,38 @@ public static class Settings
     public static DurationSetting AccountDeletionGrace { get; } =
         new("account.deletion.grace", SettingScope.Runtime, "P30D", floor: "P7D");
 
+    /// <summary>
+    /// How long a person record's own deletion, or one a request out of band began, stays
+    /// cancellable.
+    /// </summary>
+    public static DurationSetting RecordDeletionGrace { get; } =
+        new("record.deletion.grace", SettingScope.Runtime, "P30D", floor: "P7D");
+
+    /// <summary>How long a collection session lives before it is swept, leaving nothing.</summary>
+    public static DurationSetting RecordsCollectionLifetime { get; } =
+        new("records.collection.lifetime", SettingScope.Runtime, "PT1H", ceiling: "PT24H");
+
+    /// <summary>
+    /// How long a record access session lives from its opening, never extended, and an
+    /// offer to attach person records from the proof that made it.
+    /// </summary>
+    public static DurationSetting RecordsAccessLifetime { get; } =
+        new("records.access.lifetime", SettingScope.Runtime, "PT15M", ceiling: "PT1H");
+
+    /// <summary>
+    /// How long a contact verified at a collection proves the person: a record whose
+    /// contact was last verified longer ago is not reused by a collection, and is reached
+    /// by a code or offered to an account only with a reference it holds.
+    /// </summary>
+    public static DurationSetting RecordsProofAge { get; } =
+        new(
+            "records.proof.age",
+            SettingScope.Runtime,
+            "P90D",
+            floor: "P7D",
+            ceiling: "P365D",
+            loosening: SettingDirection.Increase);
+
     /// <summary>Whether one account may hold memberships in several organizations.</summary>
     public static FlagSetting OrganizationMultipleMemberships { get; } =
         new("organization.multiplememberships", SettingScope.Runtime, false);
@@ -1074,6 +1106,10 @@ public static class Settings
         OrganizationDeletionGrace,
         TakedownGrace,
         AccountDeletionGrace,
+        RecordDeletionGrace,
+        RecordsCollectionLifetime,
+        RecordsAccessLifetime,
+        RecordsProofAge,
         OrganizationMultipleMemberships,
         IdentifierChangeCoolingOff,
         RegistrationPhone,

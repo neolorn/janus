@@ -114,10 +114,16 @@ internal sealed class RegistrationDirectoryInMemory(IIdentifierDirectory? identi
     public ValueTask<string?> LanguageAsync(SubjectId subject, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_languages.GetValueOrDefault(subject));
 
+    /// <summary>
+    /// What is told of each account created, where another fake keeps its state.
+    /// </summary>
+    public Action<NewAccount>? Creating { get; set; }
+
     /// <inheritdoc/>
     public ValueTask CreateAsync(NewAccount account, CancellationToken cancellationToken)
     {
         _created.Add(account);
+        Creating?.Invoke(account);
 
         if (account.Language is string language)
         {

@@ -1,6 +1,5 @@
 using System;
 using Janus.Core;
-using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -69,11 +68,9 @@ internal sealed class PrivacyRequestConfiguration : IEntityTypeConfiguration<Pri
         builder.Property(request => request.WarnedAt).HasColumnName("warned_at");
         builder.Property(request => request.EscalatedAt).HasColumnName("escalated_at");
 
-        builder.HasOne<AccountRecord>()
-            .WithMany()
-            .HasForeignKey(request => request.Subject)
-            .HasConstraintName("fk_privacy_requests_subject")
-            .OnDelete(DeleteBehavior.Restrict);
+        // REC-REC-001 (D-221): the subject is an account's or a person record's, so its
+        // parent is the subject key row both hold, the key's identifier being a type of
+        // its own; the migration writes the constraint, fk_privacy_requests_subject.
 
         // A second request of a type the subject already has open is a duplicate, and
         // that is read on the way in to every submission.

@@ -26,4 +26,27 @@ internal interface IExportSource
     ValueTask<IReadOnlyList<ExportSection>> SectionsAsync(
         SubjectId subject,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The section <c>records</c> of an account's export: each person record attached
+    /// to it (REC-ATT-002, chapter 10 section 5.46).
+    /// </summary>
+    /// <param name="account">The account's subject.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The section.</returns>
+    ValueTask<ExportSection> RecordsAsync(
+        SubjectId account,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Everything a person record holds of its own: the sections <c>record</c>,
+    /// <c>profile</c>, <c>identifiers</c> and <c>preferences</c> of chapter 10 section
+    /// 5.46 (REC-ACC-002).
+    /// </summary>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The sections, in reading order.</returns>
+    ValueTask<IReadOnlyList<ExportSection>> RecordSectionsAsync(
+        SubjectId record,
+        CancellationToken cancellationToken);
 }

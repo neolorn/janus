@@ -8,14 +8,14 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Storage.Authentication.Accounts;
 
 /// <summary>
-/// Whether an account is tied to an organization, read from its memberships and the
-/// records registered in the organization.
+/// Whether a person is tied to an organization, read from their memberships, the records
+/// registered in the organization and the person records it holds.
 /// </summary>
 /// <param name="context">The store.</param>
 /// <remarks>
-/// Implements IDN-READ-004 and AUTHZ-INHERIT-002. A membership that ended ties nothing;
-/// a record ties its data subject for as long as it stays registered in the
-/// organization.
+/// Implements IDN-READ-004, AUTHZ-INHERIT-002 and REC-ADM-001. A membership that ended
+/// ties nothing; a record ties its data subject for as long as it stays registered in
+/// the organization, and a person record its subject to the organization holding it.
 /// </remarks>
 internal sealed class AccountTies(StoreContext context) : IAccountTies
 {
@@ -34,6 +34,11 @@ internal sealed class AccountTies(StoreContext context) : IAccountTies
         || await context.Resources
             .AnyAsync(
                 resource => resource.Subject == subject && resource.Organization == organization,
+                cancellationToken)
+            .ConfigureAwait(false)
+        || await context.PersonRecords
+            .AnyAsync(
+                record => record.Subject == subject && record.Organization == organization,
                 cancellationToken)
             .ConfigureAwait(false);
 }

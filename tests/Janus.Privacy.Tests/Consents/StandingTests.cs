@@ -118,12 +118,33 @@ public sealed class StandingTests : IAsyncDisposable
                 CancellationToken.None))
             .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        Assert.Equal(AccountState.Restricted, standing.State);
+        Assert.Equal((SubjectKind.Account, AccountState.Restricted), (standing.Kind, standing.State));
         ConsentRecord consent = Assert.Single(standing.Consents);
         Assert.Equal((Recommendations, true), (consent.Purpose, consent.WithdrawnAt is not null));
         ObjectionRecord objection = Assert.Single(standing.Objections);
         Assert.Equal((Security, false), (objection.Purpose, objection.WithdrawnAt is not null));
         Assert.Equal(Officer, Assert.Single(_volume.Returned).Context.Acting);
+    }
+
+    /// <summary>
+    /// REC-ADM-001: the standing read answers a person record's subject as an account's,
+    /// naming its kind <c>record</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ADM_001_AStandingOfARecordNamesItsKindAsync()
+    {
+        SubjectId record = new(Guid.Parse("77777777-7777-4777-8777-777777777777"));
+        _states.HoldRecord(record, AccountState.Deleting);
+
+        SubjectStanding standing = (await Consents.StandingAsync(
+                AccessContext.Of(Officer),
+                record,
+                null,
+                CancellationToken.None))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal((SubjectKind.Record, AccountState.Deleting), (standing.Kind, standing.State));
     }
 
     /// <summary>

@@ -417,6 +417,39 @@ public static class AuditActions
     public static AuditAction ProfileChanged { get; } = AuditAction.Parse("identity.profile.changed");
 
     /// <summary>
+    /// A collection wrote or reused a person record, the record acting and its subject.
+    /// </summary>
+    /// <remarks>Implements REC-COL-002, chapter 10 section 5.</remarks>
+    public static AuditAction RecordCollected { get; } = AuditAction.Parse("identity.record.collected");
+
+    /// <summary>
+    /// Staff entered a person record, the staff member acting and the record its subject.
+    /// </summary>
+    /// <remarks>Implements REC-COL-003, chapter 10 section 5.</remarks>
+    public static AuditAction RecordEntered { get; } = AuditAction.Parse("identity.record.entered");
+
+    /// <summary>
+    /// A record access session reached a person record, at its opening or by a
+    /// reference, the record acting and its subject.
+    /// </summary>
+    /// <remarks>Implements REC-ACC-001, chapter 10 section 5.</remarks>
+    public static AuditAction RecordAccessed { get; } = AuditAction.Parse("identity.record.accessed");
+
+    /// <summary>
+    /// A person record was attached to an account, the account acting and the record
+    /// its subject, filed under the record's organization.
+    /// </summary>
+    /// <remarks>Implements REC-ATT-001, chapter 10 section 5.</remarks>
+    public static AuditAction RecordAttached { get; } = AuditAction.Parse("identity.record.attached");
+
+    /// <summary>
+    /// A person record's name, language or contacts were changed, recorded by field and
+    /// never by value, the record its subject.
+    /// </summary>
+    /// <remarks>Implements REC-ACC-002, REC-ADM-002, chapter 10 section 5.</remarks>
+    public static AuditAction RecordChanged { get; } = AuditAction.Parse("identity.record.changed");
+
+    /// <summary>
     /// A social provider's security event naming a linked credential was refused: it
     /// was not signed by the provider's published keys, or it had been carried before.
     /// </summary>

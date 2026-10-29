@@ -2724,17 +2724,19 @@ role, audited with a reason (API-CONV-002), `SendingRestrictionGranted`); a gran
 credit, never a bypass. **Security notices to an existing holder** SHALL be governed
 only by restrictions whose purpose is `notification` (the shipped one is
 `notification.destination`); no restriction whose purpose is `any` counts or refuses
-one, whatever its key. No link or code a person or an administrator asked for carries
-the purpose `notification`: a recovery link and an invitation link carry `signin`, as a
-sign-in link does (REG-IDENT-002, `10` section 5.15), and the link asking the address a
-replace displaces to confirm it carries `verification`, as the new address's code does
-(REG-IDENT-007). `notification` and `notification.destination` therefore count security
-notices and other notices only. The per-destination record SHALL hold the HMAC, the
-fingerprint key version it was computed under (OPS-SEC-003) and the send timestamps
-only, kept apart from the records of the other key kinds. Before a send's counters are
-read, and on every run of the expiry sweep, every destination record whose newest
-timestamp is older than the longest interval the current destination restrictions
-declare SHALL be deleted.
+one, whatever its key. A person record's notice contacts are an existing holder, and
+`record-deletion-notice` and `oob-deletion-notice` sent to them are security notices
+(`21` REC-ACC-002, D-222). No link or code a person or an administrator asked for
+carries the purpose `notification`: a recovery link and an invitation link carry
+`signin`, as a sign-in link does (REG-IDENT-002, `10` section 5.15), and the link asking
+the address a replace displaces to confirm it carries `verification`, as the new
+address's code does (REG-IDENT-007). `notification` and `notification.destination`
+therefore count security notices and other notices only. The per-destination record
+SHALL hold the HMAC, the fingerprint key version it was computed under (OPS-SEC-003) and
+the send timestamps only, kept apart from the records of the other key kinds. Before a
+send's counters are read, and on every run of the expiry sweep, every destination record
+whose newest timestamp is older than the longest interval the current destination
+restrictions declare SHALL be deleted.
 
 **Sending order.** Every area undertakes a send through the governed send
 (`IGovernedSend`, CONV-LAYOUT-002), never through `INotificationHandler` or a transport

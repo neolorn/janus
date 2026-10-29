@@ -263,4 +263,39 @@ public enum StepUpAction
     /// <remarks>Named <c>session:revokeall</c>.</remarks>
     [JsonStringEnumMemberName("session:revokeall")]
     SessionRevokeAll = 35,
+
+    /// <summary>
+    /// Export a person record for the person.
+    /// </summary>
+    /// <remarks>Named <c>record:export</c>.</remarks>
+    [JsonStringEnumMemberName("record:export")]
+    RecordExport = 36,
+
+    /// <summary>
+    /// Lift a person record's restriction.
+    /// </summary>
+    /// <remarks>Named <c>record:restrictionlift</c>.</remarks>
+    [JsonStringEnumMemberName("record:restrictionlift")]
+    RecordRestrictionLift = 37,
+
+    /// <summary>
+    /// Cancel a person record's deletion on the person's behalf.
+    /// </summary>
+    /// <remarks>Named <c>record:deletioncancel</c>.</remarks>
+    [JsonStringEnumMemberName("record:deletioncancel")]
+    RecordDeletionCancel = 38,
+
+    /// <summary>
+    /// Execute a takedown of a person record.
+    /// </summary>
+    /// <remarks>Named <c>record:takedown</c>.</remarks>
+    [JsonStringEnumMemberName("record:takedown")]
+    RecordTakedown = 39,
+
+    /// <summary>
+    /// Reverse a takedown of a person record.
+    /// </summary>
+    /// <remarks>Named <c>record:takedownreverse</c>.</remarks>
+    [JsonStringEnumMemberName("record:takedownreverse")]
+    RecordTakedownReverse = 40,
 }

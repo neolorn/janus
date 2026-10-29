@@ -24,8 +24,6 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 {
     private const string Short = "tenletters12";
     private const string Second = "other@example.test";
-    private const string Terms = "terms-3";
-    private const string Notice = "notice-2";
     private const string Client = "web";
     private const string Solved = "solved";
 
@@ -66,8 +64,8 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
         Answer completed = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", Terms),
-            ("noticeVersion", Notice));
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
 
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
         Assert.Null(completed.Location);
@@ -229,8 +227,8 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
         Answer terms = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", Terms),
-            ("noticeVersion", Notice));
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
 
         Assert.Equal(ErrorCodes.RegistrationIncomplete.ToString(), terms.Text("code"));
     }
@@ -464,8 +462,8 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
         Answer completed = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", Terms),
-            ("noticeVersion", Notice));
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
 
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
         Assert.Empty(completed.Body);

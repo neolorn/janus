@@ -17,6 +17,7 @@ using Janus.Authentication.Identifiers;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -33,6 +34,7 @@ using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Records;
 using Janus.Authentication.Tests.Recovery;
 using Janus.Authentication.Tests.Registration;
 using Janus.Authentication.Tests.Sending;
@@ -191,6 +193,7 @@ internal sealed class Deployment : IAsyncDisposable
         Action<IServiceCollection>? services = null)
     {
         Events = new EventsInMemory { Work = Work };
+        Records.Work = Work;
 
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -213,12 +216,39 @@ internal sealed class Deployment : IAsyncDisposable
 
         // One table holds an account's state in a deployment; here the privacy area
         // keeps its own, so a restriction it decides is carried to the areas that sign
-        // the account in and gate its changes, with the sessions it ends.
+        // the account in and gate its changes, with the sessions it ends, and an account
+        // a registration creates stands active.
         AccountStates.Restricted = async (subject, at) =>
         {
             Accounts.Stands(subject, AccountState.Restricted);
             Restriction.Restrict(subject);
             await Sessions.EndAccountAsync(subject, at, CancellationToken.None);
+        };
+        Directory.Creating = account => Accounts.Stands(account.Subject, AccountState.Active);
+
+        // A person record's takedown is carried the same way to the records area, which
+        // holds the record's own row, with the record access sessions it ends; the
+        // reversal returns the row to what it held at the trigger.
+        Dictionary<SubjectId, (PersonRecordState, DeletionOrigin?, DateTimeOffset?, bool)> heldAtTakedown = [];
+        AccountStates.RecordTakenDown = (record, at) =>
+        {
+            Janus.Authentication.Tests.Records.HeldRecord held = Records.Of(record);
+
+            heldAtTakedown[record] = (held.State, held.DeletingBy, held.DeletingSince, held.RestrictionHeld);
+            held.RestrictionHeld = held.RestrictionHeld || held.State is PersonRecordState.Restricted;
+            held.State = PersonRecordState.Deleting;
+            held.DeletingBy = DeletionOrigin.Takedown;
+            held.DeletingSince = at;
+            _ = RecordAccess.EndReachingAsync(record, CancellationToken.None).AsTask().GetAwaiter().GetResult();
+        };
+        AccountStates.RecordTakedownReversed = (record, _) =>
+        {
+            Janus.Authentication.Tests.Records.HeldRecord held = Records.Of(record);
+
+            if (heldAtTakedown.Remove(record, out (PersonRecordState, DeletionOrigin?, DateTimeOffset?, bool) before))
+            {
+                (held.State, held.DeletingBy, held.DeletingSince, held.RestrictionHeld) = before;
+            }
         };
         SocialProviders = new SocialProvidersInMemory(Clock);
         Secrets = new SecretSourceInMemory(SocialProviders.Credentials);
@@ -374,6 +404,31 @@ internal sealed class Deployment : IAsyncDisposable
     public RegistrationSessionStoreInMemory Registrations { get; } = new();
 
     /// <summary>
+    /// The collection sessions as they stand (REC-COL-001).
+    /// </summary>
+    public CollectionSessionStoreInMemory Collections { get; } = new();
+
+    /// <summary>
+    /// The record access sessions asked and opened.
+    /// </summary>
+    public RecordAccessSessionStoreInMemory RecordAccess { get; } = new();
+
+    /// <summary>
+    /// The offers to attach person records each account session holds.
+    /// </summary>
+    public RecordOfferStoreInMemory RecordOffers { get; } = new();
+
+    /// <summary>
+    /// The person records a collection reads and writes.
+    /// </summary>
+    public RecordDirectoryInMemory Records { get; } = new();
+
+    /// <summary>
+    /// What was recorded of what happened to person records.
+    /// </summary>
+    public RecordAuditInMemory RecordAudit { get; } = new();
+
+    /// <summary>
     /// The datacenter ranges the bot defence reads (AUTH-ABUSE-008).
     /// </summary>
     public DatacenterRangesInMemory Ranges { get; } = new();
@@ -520,6 +575,12 @@ internal sealed class Deployment : IAsyncDisposable
     /// storage unreachable.
     /// </summary>
     public Janus.Privacy.Tests.Erasures.ErasureLedgerInMemory Ledger { get; } = new();
+
+    /// <summary>
+    /// The erasure itself, recorded rather than carried, so a test can read whom it erased
+    /// and why.
+    /// </summary>
+    public Janus.Privacy.Tests.Erasures.SubjectEraserInMemory Eraser { get; } = new();
 
     /// <summary>
     /// What the other areas hold of an export, so a test can arrange it.
@@ -809,6 +870,11 @@ internal sealed class Deployment : IAsyncDisposable
     private Janus.Authorization.Tests.Grants.EmergencyAccountInMemory GrantEmergency { get; } = new();
 
     /// <summary>
+    /// Which subjects an account bears, as the authorization area reads it.
+    /// </summary>
+    public Janus.Authorization.Tests.Grants.AccountSubjectsInMemory AccountSubjects { get; } = new();
+
+    /// <summary>
     /// Names the account the break-glass session belongs to, as bootstrap does.
     /// </summary>
     /// <param name="account">The reserved emergency account.</param>
@@ -892,7 +958,18 @@ internal sealed class Deployment : IAsyncDisposable
 
         context.RequestServices = scope.ServiceProvider;
 
-        await _pipeline(context);
+        // The web server's context factory sets the request on the flow that serves it.
+        IHttpContextAccessor requests = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+        requests.HttpContext = context;
+
+        try
+        {
+            await _pipeline(context);
+        }
+        finally
+        {
+            requests.HttpContext = null;
+        }
 
         // CONV-DESIGN-006: no endpoint answers a code it does not declare, which every
         // request a test sends is held to.
@@ -950,6 +1027,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IEvents>(Events);
 
         _ = services.AddSingleton<IRegistrationSessionStore>(Registrations);
+        _ = services.AddSingleton<ICollectionSessionStore>(Collections);
+        _ = services.AddSingleton<IRecordAccessSessionStore>(RecordAccess);
+        _ = services.AddSingleton<IRecordOfferStore>(RecordOffers);
+        _ = services.AddSingleton<IRecordDirectory>(Records);
+        _ = services.AddSingleton<IRecordAudit>(RecordAudit);
         _ = services.AddSingleton<IRegistrationSignals>(Signals);
         _ = services.AddSingleton<IRegistrationDirectory>(Directory);
         _ = services.AddSingleton<IPreAuthenticationStore>(Contacts);
@@ -1125,6 +1207,16 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RegistrationService>();
         _ = services.AddScoped<IRegistration>(provider =>
             provider.GetRequiredService<RegistrationService>());
+        _ = services.AddScoped<CollectionSessions>();
+        _ = services.AddScoped<RecordAccessSessions>();
+        _ = services.AddScoped<RecordRights>();
+        _ = services.AddScoped<RecordCollectionService>();
+        _ = services.AddScoped<RecordOffers>();
+        _ = services.AddScoped<RecordAttachments>();
+        _ = services.AddScoped<RecordAdministration>();
+        _ = services.AddScoped<AttachedRecordRights>();
+        _ = services.AddScoped<IRecordPrivacy, Janus.Storage.Authentication.Records.RecordPrivacy>();
+        _ = services.AddScoped<IPersonRecords, PersonRecordService>();
         _ = services.AddScoped<IdentifierService>();
         _ = services.AddScoped<IIdentifiers>(provider =>
             provider.GetRequiredService<IdentifierService>());
@@ -1174,7 +1266,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<Supersession>();
         _ = services.AddSingleton<Janus.Privacy.Policies.IReachedSubjects>(Reached);
         _ = services.AddScoped<Janus.Privacy.Policies.SubjectReach>();
-        _ = services.AddScoped<IConsents, ConsentService>();
+        _ = services.AddScoped<ConsentService>();
+        _ = services.AddScoped<IConsents>(provider => provider.GetRequiredService<ConsentService>());
         _ = services.AddSingleton<IPrivacyRequestStore>(Requests);
         _ = services.AddSingleton<IAccountStates>(AccountStates);
         _ = services.AddSingleton<Janus.Privacy.Bases.ILawfulBasisStore>(
@@ -1193,11 +1286,15 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IExportContributor>(ExportContributor);
         _ = services.AddSingleton<IExportNameRule, ExportNames>();
         _ = services.AddSingleton<IFaultEntry, FaultEntry>();
-        _ = services.AddScoped<IExports, ExportService>();
-        _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
+        _ = services.AddScoped<ExportService>();
+        _ = services.AddScoped<IExports>(provider => provider.GetRequiredService<ExportService>());
+        _ = services.AddScoped<Janus.Privacy.Takedowns.TakedownService>();
+        _ = services.AddScoped<ITakedowns>(provider => provider.GetRequiredService<Janus.Privacy.Takedowns.TakedownService>());
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
         _ = services.AddSingleton<IErasureLedger>(Ledger);
         _ = services.AddScoped<IErasures, Janus.Privacy.Erasures.ErasureService>();
+        _ = services.AddSingleton<Janus.Privacy.Erasures.ISubjectEraser>(Eraser);
+        _ = services.AddScoped<Janus.Privacy.Erasures.RecordErasure>();
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
         _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);
@@ -1236,6 +1333,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();
         _ = services.AddSingleton<Janus.Authorization.Gate.IAdministrativeOrganization>(GateAdministrative);
         _ = services.AddSingleton<Janus.Authorization.Grants.IEmergencyAccount>(GrantEmergency);
+        _ = services.AddSingleton<Janus.Authorization.Grants.IAccountSubjects>(AccountSubjects);
         _ = services.AddSingleton<Janus.Authorization.Grants.IGrantStore>(AccessGrants);
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleReferences>(
             new Janus.Hosting.Tests.Authorization.RoleReferencesInMemory(AccessGrants, Invitations, Roles));
@@ -1350,6 +1448,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SourceRateLimiting>();
         _ = services.AddScoped<RequestSession>();
         _ = services.AddScoped<IRequestAccess>(provider => provider.GetRequiredService<RequestSession>());
+        _ = services.AddHttpContextAccessor();
+        _ = services.AddScoped<IRecordCollection, Janus.Hosting.Records.RequestRecordCollection>();
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();

@@ -13,7 +13,7 @@ namespace Janus.Privacy.Requests;
 /// until the takedown's window ends or it is reversed.
 /// </summary>
 /// <remarks>
-/// Implements PRIV-RIGHT-004, IDN-LIFE-003, IDN-LIFE-014, AUTH-SESS-010 and
+/// Implements PRIV-RIGHT-004, IDN-LIFE-003, IDN-LIFE-014, AUTH-SESS-010, REC-TKD-001 and
 /// CONV-DESIGN-003.
 /// Restriction suspends action and never visibility, so nothing here hides, moves or
 /// deletes a record.
@@ -60,6 +60,15 @@ internal interface IAccountStates
     ValueTask<IReadOnlyList<PendingDeletion>> DeletingSinceAsync(
         DateTimeOffset before,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The person records attached to an account and not erased, which its erasure
+    /// erases with it (REC-ATT-002).
+    /// </summary>
+    /// <param name="account">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Their subjects.</returns>
+    ValueTask<IReadOnlyList<SubjectId>> AttachedAsync(SubjectId account, CancellationToken cancellationToken);
 
     /// <summary>
     /// Takes the account's row for a change, to the end of the transaction, where the
@@ -109,6 +118,41 @@ internal interface IAccountStates
     /// </returns>
     ValueTask<bool> ReverseTakedownAsync(
         SubjectId subject,
+        DateTimeOffset now,
+        DeletionWindows windows,
+        CancellationToken cancellationToken);
+    /// <summary>
+    /// Takes a person record down: one active, restricted, or in a window its person or
+    /// an out-of-band request began, enters the takedown's window holding what it held,
+    /// and every record access session reaching it ends in the same transaction
+    /// (REC-TKD-001).
+    /// </summary>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="at">When the takedown was triggered.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether the state changed: a record already taken down, erased or attached to an
+    /// account is not taken down here.
+    /// </returns>
+    ValueTask<bool> TakeDownRecordAsync(
+        SubjectId record,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reverses a person record's takedown and restores what the record held at the
+    /// trigger, judging the window under a lock on the record (REC-TKD-001).
+    /// </summary>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="now">The instant of the reversal.</param>
+    /// <param name="windows">The lengths a record's takedown window is measured by.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether the state changed: only a record deleting by a takedown whose window is
+    /// still open is reversed.
+    /// </returns>
+    ValueTask<bool> ReverseRecordTakedownAsync(
+        SubjectId record,
         DateTimeOffset now,
         DeletionWindows windows,
         CancellationToken cancellationToken);

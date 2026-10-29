@@ -20,6 +20,8 @@ internal sealed class AccountStatesInMemory : IAccountStates
     private readonly Dictionary<SubjectId, DateTimeOffset> _sessionsEnded = [];
     private readonly HashSet<SubjectId> _held = [];
     private readonly HashSet<SubjectId> _reserved = [];
+    private readonly HashSet<SubjectId> _personRecords = [];
+    private readonly Dictionary<SubjectId, SubjectId> _attached = [];
 
     /// <summary>
     /// Puts an account in a state, as a deployment has one.
@@ -27,6 +29,23 @@ internal sealed class AccountStatesInMemory : IAccountStates
     /// <param name="subject">Whose.</param>
     /// <param name="state">Which state.</param>
     public void Hold(SubjectId subject, AccountState state) => _states[subject] = state;
+
+    /// <summary>
+    /// Holds a person record in a state, its states spelled as an account's.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="state">The state.</param>
+    /// <param name="attachedTo">The account it is attached to, where it is.</param>
+    public void HoldRecord(SubjectId subject, AccountState state, SubjectId? attachedTo = null)
+    {
+        _states[subject] = state;
+        _ = _personRecords.Add(subject);
+
+        if (attachedTo is SubjectId account)
+        {
+            _attached[subject] = account;
+        }
+    }
 
     /// <summary>
     /// Marks an account as the reserved emergency account.
@@ -136,6 +155,18 @@ internal sealed class AccountStatesInMemory : IAccountStates
                 .OrderBy(deletion => deletion.Since),
         ]);
 
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<SubjectId>> AttachedAsync(
+        SubjectId account,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<SubjectId>>(
+        [
+            .. _attached
+                .Where(attached => attached.Value == account && Of(attached.Key) is not AccountState.Deleted)
+                .Select(attached => attached.Key)
+                .OrderBy(record => record.Value),
+        ]);
+
     /// <summary>
     /// Puts an account in a grace window somebody else began, as a takedown or the
     /// privacy queue does.
@@ -143,10 +174,11 @@ internal sealed class AccountStatesInMemory : IAccountStates
     /// <param name="subject">Whose.</param>
     /// <param name="origin">What began it.</param>
     /// <param name="since">When the window began.</param>
-    public void Deletes(SubjectId subject, DeletionOrigin origin, DateTimeOffset since)
+    /// <param name="personRecord">Whether the subject is a person record's.</param>
+    public void Deletes(SubjectId subject, DeletionOrigin origin, DateTimeOffset since, bool personRecord = false)
     {
         _states[subject] = AccountState.Deleting;
-        _deletions[subject] = new PendingDeletion(subject, origin, since, HeldSince: null);
+        _deletions[subject] = new PendingDeletion(subject, origin, since, HeldSince: null) { IsPersonRecord = personRecord };
     }
 
     /// <summary>
@@ -194,7 +226,11 @@ internal sealed class AccountStatesInMemory : IAccountStates
                 deletion?.By,
                 deletion?.Since,
                 deletion?.HeldSince,
-                _reserved.Contains(subject)));
+                _reserved.Contains(subject))
+            {
+                IsPersonRecord = _personRecords.Contains(subject),
+                AttachedTo = _attached.TryGetValue(subject, out SubjectId account) ? account : null,
+            });
     }
 
     /// <inheritdoc/>
@@ -257,6 +293,82 @@ internal sealed class AccountStatesInMemory : IAccountStates
         {
             _deletions[subject] = held;
         }
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <summary>
+    /// What a test runs when a person record is taken down, given its subject and the
+    /// instant, as where another table holds the record's state.
+    /// </summary>
+    public Action<SubjectId, DateTimeOffset>? RecordTakenDown { get; set; }
+
+    /// <summary>
+    /// What a test runs when a person record's takedown is reversed, given its subject
+    /// and the state it returns to.
+    /// </summary>
+    public Action<SubjectId, AccountState>? RecordTakedownReversed { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> TakeDownRecordAsync(
+        SubjectId record,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        PendingDeletion? running = _deletions.GetValueOrDefault(record);
+
+        if (!_personRecords.Contains(record)
+            || _attached.ContainsKey(record)
+            || Of(record) is not AccountState found
+            || found is AccountState.Deleted
+            || (found is AccountState.Deleting && running?.By is DeletionOrigin.Takedown))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        PendingDeletion? held = found is AccountState.Deleting ? running : null;
+
+        _found[record] = (found, held);
+        _states[record] = AccountState.Deleting;
+        _deletions[record] = new PendingDeletion(record, DeletionOrigin.Takedown, at, held?.Since) { IsPersonRecord = true };
+        _sessionsEnded[record] = at;
+        RecordTakenDown?.Invoke(record, at);
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> ReverseRecordTakedownAsync(
+        SubjectId record,
+        DateTimeOffset now,
+        DeletionWindows windows,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+
+        if (!_personRecords.Contains(record)
+            || Of(record) is not AccountState.Deleting
+            || _deletions.GetValueOrDefault(record) is not { By: DeletionOrigin.Takedown } taken
+            || now >= windows.ErasureDue(taken.By, taken.Since, taken.HeldSince))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        (AccountState found, PendingDeletion? held) = _found[record];
+
+        _ = _found.Remove(record);
+        _states[record] = found;
+
+        if (held is null)
+        {
+            _ = _deletions.Remove(record);
+        }
+        else
+        {
+            _deletions[record] = held;
+        }
+
+        RecordTakedownReversed?.Invoke(record, found);
 
         return ValueTask.FromResult(true);
     }

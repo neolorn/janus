@@ -212,6 +212,39 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, ID
     }
 
     /// <summary>
+    /// LIB-TEST-003 AC5 (D-222): a state-changing request a guest makes through a visitor
+    /// passes the browser profile's CSRF stages, where the same request from a client that
+    /// carries neither the header nor the token is refused at them, and the visitor
+    /// carries no sign-in session.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_003_AC5_AStateChangingRequestThroughATestVisitorPassesTheCsrfStagesAsync()
+    {
+        using TestVisitor visitor = host.People.Visitor();
+        using var bare = new HttpClient(host.Channel()) { BaseAddress = new Uri(SampleHost.Address.AbsoluteUri + "/") };
+        var asked = new { kind = "email", value = "guest.one@sample.example.test" };
+
+        using HttpResponseMessage accepted = await visitor.PostAsJsonAsync(
+            new Uri("records/access", UriKind.Relative),
+            asked,
+            TestContext.Current.CancellationToken);
+        using HttpResponseMessage refused = await bare.PostAsJsonAsync(
+            new Uri("records/access", UriKind.Relative),
+            asked,
+            TestContext.Current.CancellationToken);
+        using HttpResponseMessage session = await visitor.GetAsync(
+            new Uri("auth/session", UriKind.Relative),
+            TestContext.Current.CancellationToken);
+        JsonElement refusal = await refused.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal("auth.session.csrfinvalid", refusal.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.Unauthorized, session.StatusCode);
+    }
+
+    /// <summary>
     /// LIB-TEST-003: a session steps up with the person's own factor, the administrator's
     /// passkey and the customer's password, through the library's step-up.
     /// </summary>

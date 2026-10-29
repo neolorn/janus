@@ -223,6 +223,13 @@ table callbacks
   column fingerprint_version integer not null
   constraint pk_callbacks PRIMARY KEY (id)
   index ix_callbacks_source_at using btree (source, at)
+table collection_sessions
+  column id uuid not null
+  column expires_at timestamp with time zone not null
+  column wrapped_key bytea not null
+  column enc_session bytea not null
+  constraint pk_collection_sessions PRIMARY KEY (id)
+  index ix_collection_sessions_expires_at using btree (expires_at)
 table compliance_records
   column id integer not null
   column data_owner text
@@ -249,10 +256,10 @@ table consents
   column document text not null
   column id uuid not null
   constraint ck_consents_kind CHECK ((kind = ANY (ARRAY['ordinary'::text, 'written'::text])))
-  constraint ck_consents_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
+  constraint ck_consents_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'collection'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
   constraint ck_consents_purpose CHECK ((length(TRIM(BOTH FROM purpose)) > 0))
   constraint ck_consents_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint fk_consents_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_consents_subject FOREIGN KEY (subject) REFERENCES identity.subject_keys(subject) ON DELETE RESTRICT
   constraint pk_consents PRIMARY KEY (id)
   index ix_consents_live using btree (notice_version) WHERE ((withdrawn_at IS NULL) AND (superseded_at IS NULL))
   index ix_consents_subject using btree (subject, granted_at)
@@ -294,10 +301,10 @@ table erasures
   column status text not null
   column attempts integer not null
   constraint ck_erasures_attempts CHECK ((attempts >= 0))
-  constraint ck_erasures_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text])))
+  constraint ck_erasures_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'retention'::text])))
   constraint ck_erasures_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
   constraint ck_erasures_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint fk_erasures_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_erasures_subject FOREIGN KEY (subject) REFERENCES identity.subject_keys(subject) ON DELETE RESTRICT
   constraint pk_erasures PRIMARY KEY (subject)
   index ix_erasures_outstanding using btree (requested_at) WHERE (status <> 'complete'::text)
 table events
@@ -674,10 +681,10 @@ table objections
   column withdrawn_at timestamp with time zone
   column document text not null
   column id uuid not null
-  constraint ck_objections_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
+  constraint ck_objections_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'collection'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
   constraint ck_objections_purpose CHECK ((length(TRIM(BOTH FROM purpose)) > 0))
   constraint ck_objections_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint fk_objections_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_objections_subject FOREIGN KEY (subject) REFERENCES identity.subject_keys(subject) ON DELETE RESTRICT
   constraint pk_objections PRIMARY KEY (id)
   index ix_objections_subject using btree (subject, recorded_at)
   index ux_objections_standing unique using btree (subject, purpose) WHERE (withdrawn_at IS NULL)
@@ -788,10 +795,10 @@ table outbox
   constraint ck_outbox_change CHECK ((change = ANY (ARRAY['granted'::text, 'lifted'::text, 'recorded'::text, 'set'::text, 'superseded'::text, 'withdrawn'::text])))
   constraint ck_outbox_kind CHECK ((kind = ANY (ARRAY['consent-changed'::text, 'erasure-requested'::text, 'objection-changed'::text, 'restriction-changed'::text, 'takedown-executed'::text])))
   constraint ck_outbox_purpose CHECK ((((kind = ANY (ARRAY['consent-changed'::text, 'objection-changed'::text])) AND (purpose IS NOT NULL) AND (length(TRIM(BOTH FROM purpose)) > 0) AND (change IS NOT NULL)) OR ((kind <> ALL (ARRAY['consent-changed'::text, 'objection-changed'::text])) AND (purpose IS NULL) AND (change IS NULL))))
-  constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text])))
+  constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'retention'::text])))
   constraint ck_outbox_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
   constraint ck_outbox_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint fk_outbox_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_outbox_subject FOREIGN KEY (subject) REFERENCES identity.subject_keys(subject) ON DELETE RESTRICT
   constraint pk_outbox PRIMARY KEY (id)
   index ix_outbox_due using btree (next_attempt_at) WHERE (status = 'awaiting-subscribers'::text)
   index ix_outbox_subject using btree (subject)
@@ -828,6 +835,83 @@ table pending_enrolments
   constraint fk_pending_enrolments_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_pending_enrolments PRIMARY KEY (subject, factor)
   index ix_pending_enrolments_expires_at using btree (expires_at)
+table person_record_contacts
+  column subject uuid not null
+  column kind text not null
+  column fingerprint bytea not null
+  column fingerprint_version integer not null
+  column canonicalisation_version text not null
+  column enc_value bytea not null
+  column verified_at timestamp with time zone
+  constraint ck_person_record_contacts_fingerprint CHECK ((octet_length(fingerprint) = 32))
+  constraint ck_person_record_contacts_kind CHECK ((kind = ANY (ARRAY['email'::text, 'phone'::text])))
+  constraint ck_person_record_contacts_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+  constraint fk_person_record_contacts_subject FOREIGN KEY (subject) REFERENCES identity.person_records(subject) ON DELETE RESTRICT
+  constraint pk_person_record_contacts PRIMARY KEY (subject, kind)
+  index ix_person_record_contacts_fingerprint using btree (kind, fingerprint) WHERE (fingerprint <> decode(repeat('00'::text, 32), 'hex'::text))
+table person_record_documents
+  column documents_id uuid not null
+  column subject uuid not null
+  column notice_version character varying(64) not null
+  column terms_version character varying(64)
+  column recorded_at timestamp with time zone not null
+  constraint ck_person_record_documents_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+  constraint fk_person_record_documents_subject FOREIGN KEY (subject) REFERENCES identity.person_records(subject) ON DELETE RESTRICT
+  constraint pk_person_record_documents PRIMARY KEY (documents_id)
+  index ix_person_record_documents_subject using btree (subject)
+table person_record_references
+  column reference_id uuid not null
+  column subject uuid not null
+  column fingerprint bytea not null
+  column fingerprint_version integer not null
+  column added_at timestamp with time zone not null
+  constraint ck_person_record_references_fingerprint CHECK ((octet_length(fingerprint) = 32))
+  constraint ck_person_record_references_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+  constraint fk_person_record_references_subject FOREIGN KEY (subject) REFERENCES identity.person_records(subject) ON DELETE RESTRICT
+  constraint pk_person_record_references PRIMARY KEY (reference_id)
+  index ix_person_record_references_fingerprint using btree (fingerprint) WHERE (fingerprint <> decode(repeat('00'::text, 32), 'hex'::text))
+  index ix_person_record_references_subject using btree (subject)
+table person_records
+  column subject uuid not null
+  column organization uuid not null
+  column origin text not null
+  column state text not null
+  column created_at timestamp with time zone not null
+  column language text not null
+  column enc_name bytea
+  column restriction_held boolean not null
+  column deleting_by text
+  column deleting_since timestamp with time zone
+  column deletion_held text
+  column deletion_held_since timestamp with time zone
+  column attached_to uuid
+  column attached_at timestamp with time zone
+  column adult_affirmed boolean
+  column age_group text
+  column answered_age_at timestamp with time zone
+  column enc_date_of_birth bytea
+  constraint ck_person_records_age_answer CHECK (((adult_affirmed IS NULL) OR (age_group IS NULL)))
+  constraint ck_person_records_age_group CHECK (((age_group IS NULL) OR (age_group = ANY (ARRAY['adult'::text, 'minor'::text]))))
+  constraint ck_person_records_answered_age_at CHECK (((answered_age_at IS NULL) = ((adult_affirmed IS NULL) AND (age_group IS NULL))))
+  constraint ck_person_records_attached CHECK (((attached_to IS NULL) = (attached_at IS NULL)))
+  constraint ck_person_records_attached_to_not_max_uuid CHECK ((attached_to <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+  constraint ck_person_records_date_of_birth CHECK (((enc_date_of_birth IS NULL) OR (answered_age_at IS NOT NULL)))
+  constraint ck_person_records_deleting CHECK (((deleting_by IS NULL) = (deleting_since IS NULL)))
+  constraint ck_person_records_deleting_by CHECK (((deleting_by IS NULL) OR (deleting_by = ANY (ARRAY['oob-request'::text, 'self'::text, 'takedown'::text]))))
+  constraint ck_person_records_deletion_held CHECK (((deletion_held IS NULL) OR (deletion_held = ANY (ARRAY['oob-request'::text, 'self'::text]))))
+  constraint ck_person_records_deletion_held_since CHECK (((deletion_held IS NULL) = (deletion_held_since IS NULL)))
+  constraint ck_person_records_deletion_held_state CHECK (((deletion_held IS NULL) OR ((state = 'deleting'::text) AND (deleting_by = 'takedown'::text))))
+  constraint ck_person_records_origin CHECK ((origin = ANY (ARRAY['collection'::text, 'staff'::text])))
+  constraint ck_person_records_restriction_held CHECK (((NOT restriction_held) OR (state = 'deleting'::text)))
+  constraint ck_person_records_state CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text, 'deleting'::text, 'restricted'::text])))
+  constraint ck_person_records_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+  constraint fk_person_records_attached_to FOREIGN KEY (attached_to) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_person_records_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT
+  constraint fk_person_records_subject FOREIGN KEY (subject) REFERENCES identity.subject_keys(subject) ON DELETE RESTRICT
+  constraint pk_person_records PRIMARY KEY (subject)
+  index ix_person_records_attached_to using btree (attached_to) WHERE (attached_to IS NOT NULL)
+  index ix_person_records_deleting_since using btree (deleting_since) WHERE (deleting_since IS NOT NULL)
+  index ix_person_records_organization using btree (organization)
 table policy_raises
   column id uuid not null
   column organization uuid
@@ -849,20 +933,26 @@ table preauthentication_sessions
   column signon_return text
   column signon_state bytea
   column signon_verifier bytea
+  column collection uuid
+  column record_access uuid
   constraint ck_preauthentication_sessions_expires_at CHECK ((expires_at > created_at))
   constraint ck_preauthentication_sessions_fingerprint CHECK (((octet_length(fingerprint) = 32) AND (octet_length(csrf_fingerprint) = 32)))
   constraint ck_preauthentication_sessions_signon CHECK ((num_nulls(signon_state, signon_verifier, signon_return) = ANY (ARRAY[0, 3])))
+  constraint fk_preauthentication_sessions_collection FOREIGN KEY (collection) REFERENCES identity.collection_sessions(id) ON DELETE SET NULL
+  constraint fk_preauthentication_sessions_record_access FOREIGN KEY (record_access) REFERENCES identity.record_access_sessions(id) ON DELETE SET NULL
   constraint fk_preauthentication_sessions_registration FOREIGN KEY (registration) REFERENCES identity.registration_sessions(id) ON DELETE SET NULL
   constraint pk_preauthentication_sessions PRIMARY KEY (fingerprint)
   index ix_preauthentication_sessions_expires_at using btree (expires_at)
+  index ux_preauthentication_sessions_collection unique using btree (collection) WHERE (collection IS NOT NULL)
   index ux_preauthentication_sessions_enrolment unique using btree (enrolment) WHERE (enrolment IS NOT NULL)
+  index ux_preauthentication_sessions_record_access unique using btree (record_access) WHERE (record_access IS NOT NULL)
   index ux_preauthentication_sessions_registration unique using btree (registration) WHERE (registration IS NOT NULL)
 table privacy_exports
   column id uuid not null
   column subject uuid not null
   column assembled_at timestamp with time zone not null
   constraint ck_privacy_exports_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint fk_privacy_exports_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_privacy_exports_subject FOREIGN KEY (subject) REFERENCES identity.subject_keys(subject) ON DELETE RESTRICT
   constraint pk_privacy_exports PRIMARY KEY (id)
   index ix_privacy_exports_subject using btree (subject, assembled_at)
 table privacy_requests
@@ -886,7 +976,7 @@ table privacy_requests
   constraint ck_privacy_requests_status CHECK ((status = ANY (ARRAY['deemed-refused-by-lapse'::text, 'fulfilled'::text, 'granted-by-lapse'::text, 'open'::text, 'refused'::text])))
   constraint ck_privacy_requests_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_privacy_requests_type CHECK ((type = ANY (ARRAY['erasure'::text, 'rectification'::text, 'restriction'::text])))
-  constraint fk_privacy_requests_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_privacy_requests_subject FOREIGN KEY (subject) REFERENCES identity.subject_keys(subject) ON DELETE RESTRICT
   constraint pk_privacy_requests PRIMARY KEY (id)
   index ix_privacy_requests_open using btree (warn_at) WHERE (status = 'open'::text)
   index ix_privacy_requests_subject using btree (subject)
@@ -946,6 +1036,25 @@ table read_volume
   constraint ck_read_volume_actor_not_max_uuid CHECK ((actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint pk_read_volume PRIMARY KEY (actor, day)
   index ix_read_volume_day using btree (day)
+table record_access_sessions
+  column id uuid not null
+  column kind text not null
+  column fingerprints bytea not null
+  column throttled bytea not null
+  column created_at timestamp with time zone not null
+  column opened_at timestamp with time zone
+  column expires_at timestamp with time zone not null
+  column reached uuid[] not null
+  constraint pk_record_access_sessions PRIMARY KEY (id)
+  index ix_record_access_sessions_expires_at using btree (expires_at)
+table record_offers
+  column session_id uuid not null
+  column proven jsonb not null
+  column offered uuid[] not null
+  column expires_at timestamp with time zone not null
+  constraint fk_record_offers_session_id FOREIGN KEY (session_id) REFERENCES identity.sessions(id) ON DELETE CASCADE
+  constraint pk_record_offers PRIMARY KEY (session_id)
+  index ix_record_offers_expires_at using btree (expires_at)
 table recovery_approvals
   column subject uuid not null
   column approver uuid not null

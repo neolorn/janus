@@ -250,7 +250,7 @@ steps enrolled under `security.secondStep` (D-162, D-166).
 | `POST /register/identifiers` · `PUT /register/identifiers/{id}` · `DELETE /register/identifiers/{id}` | 4 | Adds a further email or phone within `identifiers.email.max` and `identifiers.phone.max`; Change on an unlocked identifier (re-verification follows); removes an unverified extra. On a locked phone not yet verified, `PUT /register/identifiers/{id}` takes only its own number and sends a new code. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands; `auth.restriction.exceeded` with `retryAt` where a restriction refuses the code's send, identical for a value another account holds or an undo reserves, and nothing is staged (AUTH-ABUSE-004). **409** `identity.identifier.maximum` where the kind's maximum is reached; `identity.identifier.lastofkind` where removal would leave the required minimum unmet; `identity.identifier.locked` for any other value on a locked identifier; **422** `identity.identifier.domainnotallowed` under a domain lock (REG-DOM-001) |
 | `POST /register/confirm` | 4 | Completes the confirm step. **409** `identity.registration.incomplete` while any staged identifier is unverified (REG-SESS-004) |
 | `PUT /register/security` | 5 | Password (**422** `auth.password.blocklisted`, `auth.password.tooshort`, `auth.password.toolong`) and the second-step choice (**400** `api.request.malformed` naming `secondStep` where the choice is none of the four). WebAuthn and TOTP enrolment (`/auth/webauthn/register/*`, `/account/factors/totp/*`) accept the registration session in place of an account session for this step (REG-SESS-006); a label is required (AUTH-FACT-001). Recovery codes are returned once when a second step is enrolled beside a password (AUTH-RECOV-006) |
-| `POST /register/terms` | 6 | Records terms accepted, notice presented, the derived affirmation and the consent controls (REG-SESS-007), runs the one transaction that creates the account `active`, emits `AccountRegistered` once, and signs the person in at the assurance the security step proved. The client captured at `POST /register` is kept on the session this step establishes and read back as `landing` at `GET /auth/session` (REG-SESS-008). **201** with the session cookie set. **422** `identity.affirmation.required` where the affirmation record is absent; **422** `privacy.purpose.noconsent` for a ticked control whose purpose takes no consent; **409** `privacy.notice.unpublished` for a ticked control whose governing document has no published version; **409** `identity.registration.incomplete` where the account would be created without a terms version or a notice version (REG-SESS-007). Nothing is written on any refusal save one: where a staged identifier was taken or reserved since it was staged, the session ends, a kept write (CONV-DESIGN-003), and the request is answered **401** `auth.session.expired` with no `details`, as for an ended session (REG-SESS-005, D-186) |
+| `POST /register/terms` | 6 | Records terms accepted, notice presented, the derived affirmation and the consent controls (REG-SESS-007), runs the one transaction that creates the account `active`, emits `AccountRegistered` once, and signs the person in at the assurance the security step proved. The client captured at `POST /register` is kept on the session this step establishes and read back as `landing` at `GET /auth/session` (REG-SESS-008). **201** with the session cookie set. **422** `identity.affirmation.required` where the affirmation record is absent; **422** `privacy.purpose.noconsent` for a ticked control whose purpose takes no consent; **409** `privacy.notice.unpublished` for a ticked control whose governing document has no published version; **409** `identity.registration.incomplete` where the account would be created without a terms version or a notice version (REG-SESS-007). **422** `privacy.consent.superseded` naming `termsVersion` or `noticeVersion` where it is not the current version of `terms` or `privacy-notice`; **409** `privacy.notice.unpublished` naming the document where none of its versions is published (`10` section 5.52, D-222). Nothing is written on any refusal save one: where a staged identifier was taken or reserved since it was staged, the session ends, a kept write (CONV-DESIGN-003), and the request is answered **401** `auth.session.expired` with no `details`, as for an ended session (REG-SESS-005, D-186) |
 
 *Source: D-146; REG-SESS-002 to REG-SESS-007, REG-IDENT-010, REG-DOM-001, D-162, D-166,
 D-186, D-187*
@@ -1388,15 +1388,15 @@ session, the records staged before it no longer answering (REG-IDENT-007, D-190)
 { "value": "..." }
 ```
 
-**202**: always, whether or not the new value belongs to another account
-(API-CONV-005)
-**403**: `auth.stepup.required`
-**429**: `auth.restriction.exceeded` with `retryAt` where a restriction refuses the
-code's send, identical for a value another account holds or an undo reserves, and
-nothing is staged (AUTH-ABUSE-004)
-**409**: `identity.change.pending` (a replace of another value is already staged for
-this identifier)
-**422**: `identity.identifier.mixedscript`, `identity.identifier.domainnotallowed`
+**202**: always, whether or not the new value belongs to another account (API-CONV-005)
+**403**: `auth.stepup.required` **429**: `auth.restriction.exceeded` with `retryAt`
+where a restriction refuses the code's send, identical for a value another account holds
+or an undo reserves, and nothing is staged (AUTH-ABUSE-004) **409**:
+`identity.change.pending` (a replace of another value is already staged for this
+identifier); `identity.identifier.locked` for a locked identifier (D-222) **422**:
+`identity.identifier.mixedscript`, `identity.identifier.domainnotallowed`;
+`identity.identifier.invalid` for an identifier the account does not hold, or a replace
+outside single-address mode (`10` section 1.1, D-222)
 
 *Source: D-148; D-146, REG-IDENT-007, D-166, D-187, D-189, D-190, D-197*
 
@@ -2156,6 +2156,96 @@ read while authenticated.
 
 ---
 
+## 7a. People without an account
+
+The endpoints of `21-people-without-an-account` (D-221). The collection and the access
+endpoints serve a browser holding no sign-in session, bound through its
+pre-authentication cookie (BFF-CSRF-005a), and carry the CSRF token as every
+state-changing request does (API-CONV-004); each refuses a browser holding a live
+sign-in session with **409** `identity.record.signedin`, and a request whose browser
+holds no collection session, or no record access session, with **401**
+`auth.session.expired`, as a registration endpoint answers for an ended session. A
+record is written by the host's own call, `IRecordCollection.CollectAsync`
+(REC-COL-002), never by an endpoint.
+
+### `POST /records/collection` · `GET /records/collection` · the collection steps
+
+`POST /records/collection` `{ "age": true }` creates a collection session (REC-COL-001)
+and answers **201** with its state; `age` is required. `GET /records/collection` answers
+**200** with the state:
+
+```json
+{
+  "age": "asked",                       // asked · answered · none
+  "expiresAt": "...",
+  "contacts": [ { "kind": "phone", "value": "...", "verified": true } ]
+}
+```
+
+| Endpoint | Does |
+|---|---|
+| `PUT /records/collection/age` | `{ "dateOfBirth": "YYYY-MM-DD" }`: the age answer (REC-AGE-001), as `PUT /register/age` takes it. **204**. **422** `identity.profile.underage` on an adults-only host: the session ends and takes nothing further. **409** `identity.collection.incomplete` where the session does not ask the age or already holds an answer |
+| `PUT /records/collection/email` · `PUT /records/collection/phone` | `{ "value": "..." }`: stages the contact, canonicalised, and sends a code to it (`verification-code`); a contact staged again replaces the one staged. **202** in the same bytes whether or not an account or a record holds the value. **409** `identity.collection.incomplete` where the session asks the age and holds no answer. **422** `identity.identifier.invalid` for a value that is not a well-formed email or phone. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands; `auth.restriction.exceeded` with `retryAt` for a send a restriction refuses, nothing staged (AUTH-ABUSE-004) |
+| `POST /records/collection/verify` | `{ "kind": "phone", "code": "..." }`: verifies the staged contact of that kind (AUTH-FACT-004). **204**. **422** `auth.code.invalid` for each of the first `code.verification.attempts` wrong codes, then `auth.code.expired`, as for a code past its lifetime or a kind the session holds no contact of. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands |
+| `POST /records/collection/abandon` | Ends the session. **204** always |
+
+*Source: REC-COL-001, REC-AGE-001, D-221*
+
+---
+
+### `POST /records/access` · `POST /records/access/verify` · `GET /records/access` · `POST /records/access/reference` · `POST /records/access/end`
+
+| Endpoint | Does |
+|---|---|
+| `POST /records/access` | `{ "kind": "email", "value": "..." }`: sends `record-access-code` where a reachable record holds the value as a contact verified at a collection, `record-access-none` otherwise, once per `abuse.nonexistent.window` (REC-ACC-001). **202** in identical bytes whatever is held, answered before any transport is called (AUTH-ABUSE-003, API-CONV-005). **422** `identity.identifier.invalid` for a value that is not a well-formed email or phone. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands; `auth.restriction.exceeded` with `retryAt` where a restriction refuses the send, the same whether or not a record holds the value (AUTH-ABUSE-002) |
+| `POST /records/access/verify` | `{ "code": "..." }`: opens the record access session (REC-ACC-001). **200** with the state below. **422** `auth.code.invalid` for each of the first `code.signin.attempts` wrong codes, then `auth.code.expired`, as for a code past its lifetime or where no code was asked for in the browser. **429** `auth.throttled` with `retryAt` |
+| `GET /records/access` | **200** the state: `{ "expiresAt": "...", "records": [ { "subject": "...", "organization": "...", "organizationName": "...", "createdAt": "...", "state": "active" } ] }`, the records the session reaches |
+| `POST /records/access/reference` | `{ "reference": "..." }`, 1 to 64 characters after trimming: adds every reachable record holding the session's value and that reference (REC-ACC-001). **200** the state, whether or not one was added. **400** `api.request.malformed` naming `reference` outside its bounds. **429** `auth.throttled` with `retryAt` |
+| `POST /records/access/end` | Ends the session. **204** always |
+
+*Source: REC-ACC-001, AUTH-ABUSE-003, D-221*
+
+---
+
+### `/records/access/{subject}` · `/account/records/{subject}`
+
+The person's rights on one record (REC-ACC-002, REC-ATT-002): under
+`/records/access/{subject}` in a record access session that reaches the record, under
+`/account/records/{subject}` in the session of the account the record is attached to.
+Each answers **404** `identity.record.notfound` for a record the session does not reach,
+or that is not attached to the account, alike.
+
+| Endpoint | Does |
+|---|---|
+| `GET .../{subject}` | **200** `{ subject, organization, organizationName, origin, state, createdAt, name, language, contacts: [ { kind, value, verifiedAt } ], age: { answeredAt, affirmed, ageGroup }, notices: [ { version, presentedAt } ], terms: [ { version, acceptedAt } ] }`, `verifiedAt` null for a contact never verified at a collection, `affirmed` and `ageGroup` as the age answer holds them, `age` null where none was given; never the date of birth |
+| `PUT .../{subject}` | `{ "name": "...", "language": "..." }`, each optional: rectifies them (REC-ACC-002). **204**. **403** `authz.restricted` while the record is `restricted`. **422** `identity.profile.invalid` for a name outside its rule; `api.request.invalid` naming `language` outside `notification.languages`. **409** `identity.record.stateconflict` while it is `deleting` |
+| `GET .../{subject}/export?format=human\|machine` | The record's export (PRIV-RIGHT-003, `10` section 5.46), in the two formats `GET /privacy/export` gives and with its rule for `format`, its rate limit (`privacy.export.ratelimit`, counted for the record) and its contributors. Under `/account/records/{subject}` it requires step-up (`privacy:export`); under `/records/access/{subject}`, none |
+| `GET .../{subject}/consents` · `POST .../{subject}/consents/{purpose}/grant` · `POST .../{subject}/consents/{purpose}/withdraw` | As `GET /privacy/consents` and its grant and withdrawal, for the record |
+| `GET .../{subject}/objections` · `POST .../{subject}/objections/{purpose}` · `DELETE .../{subject}/objections/{purpose}` | As `/privacy/objections`, for the record |
+| `POST .../{subject}/requests` | As `POST /privacy/requests`, for the record; the receipt goes to its notice contacts (REC-ACC-002) |
+| `POST /records/access/{subject}/delete` · `POST /records/access/{subject}/delete/cancel` | Begins the record's own deletion (`record.deletion.grace`), or cancels it inside its window (REC-ACC-002). **204**. **409** `identity.record.stateconflict` where the record is not `active` or `restricted` (begin), or no deletion of its own runs (cancel); `identity.takedown.active` where a takedown's runs. **422** `identity.deletion.windowelapsed` where the window has closed. An attached record's deletion is its account's (`POST /account/delete`) |
+
+*Source: REC-ACC-002, REC-ATT-002, D-221*
+
+---
+
+### `GET /account/records` · `GET /account/records/offer` · `POST /account/records/find` · `POST /account/records/find/verify` · `POST /account/records/attach` · `POST /account/records/attach/reference`
+
+In the account's own session (REC-ATT-001, REC-ATT-002).
+
+| Endpoint | Does |
+|---|---|
+| `GET /account/records` | **200** `[ { subject, organization, organizationName, createdAt, attachedAt } ]`, the records attached to the account |
+| `GET /account/records/offer` | **200** `{ count, expiresAt }`: the records the latest proof offers (REC-ATT-001), a count alone; `count` 0 and `expiresAt` null where no offer stands |
+| `POST /account/records/find` | `{ "identifier": "..." }`, the identifier of one of the account's verified emails or phones: sends `verification-code` to it. **202**. **422** `identity.identifier.invalid` where the account holds no verified email or phone under it. **429** `auth.throttled` or `auth.restriction.exceeded` with `retryAt` |
+| `POST /account/records/find/verify` | `{ "code": "..." }`: proves the identifier now and makes the offer. **200** the offer, as `GET /account/records/offer` answers it. **422** `auth.code.invalid`, then `auth.code.expired`, as at `POST /records/collection/verify`. **429** `auth.throttled` with `retryAt` |
+| `POST /account/records/attach` | Attaches the records the offer counted, each judged again under its lock, and ends the offer. **200** `{ attached }`. **403** `authz.restricted` while the account is `restricted`. **409** `identity.account.stateconflict` where the account, read under its lock, is not `active` (D-222) |
+| `POST /account/records/attach/reference` | `{ "reference": "..." }`: attaches by its reference each record REC-ATT-001 names, inside the offer's life. **200** `{ attached }`, 0 where none matched. **400** `api.request.malformed` naming `reference` outside 1 to 64 characters after trimming. **403** `authz.restricted`. **409** `identity.record.nooffer` where no offer stands; `identity.account.stateconflict` where the account is not `active` (D-222). **429** `auth.throttled` with `retryAt` |
+
+*Source: REC-ATT-001, REC-ATT-002, D-221*
+
+---
+
 ## 8. Administration
 
 All endpoints under `/admin` require the corresponding permission. Denials return 403 —
@@ -2661,12 +2751,48 @@ organization (API-CONV-003). The reserved `emergency` account is refused as a me
 | `GET /admin/accounts/{subject}/takedown` | The account's latest takedown, read from its outbox record from the moment of trigger (IDN-LIFE-003 AC2): **200** `{ takedownId, subject, triggeredAt, erasureDue, reversed, status, attempts, subscribers: [ { name, required, confirmedAt } ] }`, one line per registered subject-event subscriber, `confirmedAt` absent until that subscriber confirms, `status` spelled as `10` section 5.12; `reversed` is `true` and `erasureDue` null once the takedown was reversed, and `status` reads `complete` after a manual completion (IDN-LIFE-003a). **404** `identity.takedown.notfound` where the account holds no takedown; **404** `identity.account.notfound` where the subject names no account |
 | `POST /admin/accounts/{subject}/takedown/reverse` | Reverses a takedown inside its window (an adult misjudged). Restores the state the account held at the trigger (IDN-LIFE-003): the deletion it was in, with its origin and start; else `suspended` with its origin; else `restricted` where a restriction is held; else `active`. Returned to a deletion or a suspension, it keeps a held restriction, and returned to an `oob-request` deletion, that deletion's held suspension (D-183). Host-side actions taken on `TakedownExecuted` are not undone by the library; `TakedownReversed` is written in the reversal's transaction. Records the `reason`, required: body `{ "reason": "..." }`, **400** `api.request.malformed` where it is absent, blank or longer than 1024 characters after trimming. Requires step-up (`account:takedownreverse`), judged after every other refusal. **204** · **404** `identity.takedown.notfound` where the account holds no standing takedown; `identity.account.notfound` where the subject names no account · **422** `identity.takedown.windowelapsed`, from the window's end whether or not the account has been erased |
 
+### Person records — `record:create` · `record:read` · `record:manage` · `record:erase` · `takedown:execute`
+
+A row whose path names a record is asked in the organization that holds the record,
+under the permission it names, and admitted where that permission is held there or in
+the administrative organization, judged as one admission (`21` REC-ADM-001, D-222);
+`POST /admin/records` and the find are asked in the organization their body names, and
+`GET /admin/accounts/{subject}/records` in the one its query names, the administrative
+organization where none is named. A caller admitted in neither, and a subject no record
+bears, are answered **404** `identity.record.notfound` alike, in identical bytes, the
+first refusal recorded against the record's organization as an account read outside its
+reach is recorded (`01` IDN-READ-004); section 8's opening, which answers an identifier
+naming no row as a missing permission, does not govern these rows (D-222). A row acting
+on a record's lifecycle (a lift, a cancellation, an erasure, a takedown) answers a
+record attached to an account **409** `identity.record.followsaccount`,
+`details.account` naming the account (REC-ATT-002). **400** `api.request.malformed`
+names a free-text `reason` blank or past 1024 characters after trimming, or absent where
+the row requires it (D-221).
+
+| Endpoint | Does |
+|---|---|
+| `POST /admin/records` | `record:create`: `{ organization, language, name, email, phone, consents: [ purpose ], dateOfBirth, reference }`, at least one of `name`, `email` and `phone`: enters a record of origin `staff` (REC-COL-003). Not gated. **201** `{ subject }`. **422** `api.request.invalid` naming the member for an organization the deployment does not hold or whose deletion is requested, or a language outside `notification.languages`, and naming `name` where none of the three is given (D-222); `identity.profile.underage` for a `dateOfBirth` under eighteen where `registration.adultaffirmation` is `required`, nothing written (`21` REC-AGE-001, D-222); `identity.identifier.invalid` for an email or phone that is not well formed; `identity.profile.invalid` for a name outside its rule; `privacy.purpose.noconsent` for a purpose that does not rest on consent; **409** `privacy.notice.unpublished` for a consent whose governing document has no published version |
+| `GET /admin/records/{subject}` | `record:read`: **200** the record as `GET /records/access/{subject}` answers it, with `origin` and `attachedTo` (the account, or null) (REC-ADM-001) |
+| `POST /admin/records/find` | `record:read`: `{ organization, kind, value }` or `{ organization, reference }`: **200** `{ subjects }`, the records the organization holds that hold the email or phone, read in its canonical form, or the reference, and, asked in the administrative organization, those every organization holds; an empty list where none does (REC-ADM-001, D-222) · **404** `identity.organization.notfound` where the organization named is none the deployment holds, or is erased |
+| `GET /admin/accounts/{subject}/records?organization={id}` | `record:read`, asked in the organization named, the administrative organization where none is, with the account reach of `01` IDN-READ-004: **200** `{ subjects }`, the records attached to the account that the organization holds, every one in the administrative organization (REC-ATT-002, D-222) · **404** `identity.account.notfound` where no account bears the subject or it lies outside the reach |
+| `PUT /admin/records/{subject}` | `record:manage`: `{ name, language, email, phone, reason }`, `reason` required: corrects them; a contact changed is unverified from then on (REC-ADM-002). Not gated. **204** · **422** as `POST /admin/records` · **409** `identity.record.stateconflict` where the record is `deleting` or `deleted` |
+| `POST /admin/records/{subject}/consents/{purpose}/grant` · `/withdraw` · `POST` · `DELETE /admin/records/{subject}/objections/{purpose}` | `record:manage`: `{ reason }`, required: records what the person told staff, with the mechanism `administrator` and the `reason` as `21` REC-ADM-002 places them (D-223), answered as `/privacy/consents` and `/privacy/objections` answer. Not gated |
+| `GET /admin/records/{subject}/export?format=human\|machine` | `record:manage`: the record's export (REC-ADM-002), as `GET /records/access/{subject}/export` answers it and counted against `privacy.export.ratelimit` for the record. Requires step-up (`record:export`) |
+| `POST /admin/records/{subject}/restriction/lift` | `record:manage`: lifts a restriction, the record returning `active` and `RestrictionChanged` emitted (PRIV-RIGHT-004). Requires step-up (`record:restrictionlift`). **204** · **409** `identity.record.stateconflict` where the record is not `restricted`, one holding a restriction while `deleting` included |
+| `POST /admin/records/{subject}/delete/cancel` | `record:manage`: cancels a deletion begun by `self` or `oob-request`, restoring the record as it stood. Requires step-up (`record:deletioncancel`). **204** · **409** `identity.record.stateconflict` where no window runs; `identity.takedown.active` where `deletingBy = takedown` · **422** `identity.deletion.windowelapsed` where the window has closed |
+| `POST /admin/records/{subject}/erase` | `record:erase`: `{ reason }`, required: erases an `active` or `restricted` record at once, reason `retention`, the `reason` given audited in `details.statedReason` (REC-ADM-003, D-223). Not gated; a host's declared job may call it. **204** · **409** `identity.record.stateconflict` where the record is `deleting` or `deleted` |
+| `POST /admin/records/{subject}/takedown` | `takedown:execute`: `{ trigger, reason }`, as `POST /admin/accounts/{subject}/takedown` takes them: takes the record into `deleting` by `takedown`, ends its access sessions and writes `TakedownExecuted`, with no `AccountSuspended` (REC-TKD-001). Requires step-up (`record:takedown`), judged after every other refusal. **202** `{ takedownId, erasureDue }` · **409** `identity.takedown.active` for a second takedown; `identity.record.stateconflict` where the record is `deleted` |
+| `GET /admin/records/{subject}/takedown` | `takedown:execute`: the record's latest takedown, as `GET /admin/accounts/{subject}/takedown` answers an account's · **404** `identity.takedown.notfound` where it holds none |
+| `POST /admin/records/{subject}/takedown/reverse` | `takedown:execute`: `{ reason }`: reverses it inside its window, restoring what the record held at the trigger (REC-TKD-001). Requires step-up (`record:takedownreverse`), judged after every other refusal. **204** · **404** `identity.takedown.notfound` · **422** `identity.takedown.windowelapsed` |
+
+*Source: REC-COL-003, REC-ADM-001 to REC-ADM-003, REC-ATT-002, REC-TKD-001, D-221*
+
 ### Privacy requests and erasures — `privacyrequest:manage`
 
 | Endpoint | Does |
 |---|---|
 | `GET /admin/privacy/requests` | The queue, each request with its decision deadline and status — `open` · `fulfilled` · `refused` · `granted-by-lapse` · `deemed-refused-by-lapse` (PRIV-RIGHT-002) |
-| `POST /admin/privacy/requests` | Enters an out-of-band request on a subject's behalf, `type` one of `erasure` · `restriction` · `rectification` (`10` section 5.12c; rectification of editable data is account editing and is entered here only where the subject cannot edit it themselves); what an `erasure` fulfilled does follows the account's state (the fulfil row below, IDN-LIFE-003). Records the channel, the identity confirmation performed (D-113), and **`receivedAt`: required, the calendar date (`YYYY-MM-DD`, in `privacy.calendar.timezone`) the request reached the company, never later than today there; the decision clock runs from the end of it** (D-136, D-153). **422** `privacy.request.receivedfuture`. `detail` is optional; where present it is 1 to 1024 characters after trimming (API-CONV-002), as `channel` and the identity confirmation are. An absent or `null` `detail` is recorded as none, never as empty text; a blank one is refused **400** `api.request.malformed` naming `detail`. A subject no account bears is refused **422** `api.request.invalid`, `details.member` the member naming it (D-183) |
+| `POST /admin/privacy/requests` | Enters an out-of-band request on a subject's behalf, `type` one of `erasure` · `restriction` · `rectification` (`10` section 5.12c; rectification of editable data is account editing and is entered here only where the subject cannot edit it themselves); what an `erasure` fulfilled does follows the account's state (the fulfil row below, IDN-LIFE-003). Records the channel, the identity confirmation performed (D-113), and **`receivedAt`: required, the calendar date (`YYYY-MM-DD`, in `privacy.calendar.timezone`) the request reached the company, never later than today there; the decision clock runs from the end of it** (D-136, D-153). **422** `privacy.request.receivedfuture`. `detail` is optional; where present it is 1 to 1024 characters after trimming (API-CONV-002), as `channel` and the identity confirmation are. An absent or `null` `detail` is recorded as none, never as empty text; a blank one is refused **400** `api.request.malformed` naming `detail`. A subject neither an account nor a person record bears is refused **422** `api.request.invalid`, `details.member` the member naming it (D-183, D-221); for a person record, what a fulfilment does follows REC-ADM-002, and one attached to an account is refused **409** `identity.record.followsaccount`, the request being the account's |
 | `POST /admin/privacy/requests/{id}/fulfil` · `/refuse` | The decision. Fulfilment of restriction sets the state; refusal records the reason. Fulfilment of erasure follows the state it finds (IDN-LIFE-003): an account `active` or `restricted` enters `deleting` by `oob-request`, holding a restriction where one is in force; an account `suspended` begins its deletion all the same, holding the suspension with its origin, so that a cancellation returns it to `suspended`; an account already `deleting`, by any origin, has the request recorded fulfilled against the running window, and nothing restarts; an account `deleted` has the request recorded fulfilled, and nothing further happens. Where a window starts, the security-notice set is sent `oob-deletion-notice`, which carries no cancel link. Fulfilment of every request type, rectification included, requires step-up (`privacyrequest:fulfil`); refusing is not gated. Receipt is automatic at creation (D-126); no acknowledge endpoint. **403** `authz.denied` without `privacyrequest:manage`, before the request is read, and for an erasure whose subject is the reserved `emergency` account, once that account is read (OPS-BOOT-002), before the step-up; **404** `privacy.request.notfound` where the identifier names no request; **409** `privacy.request.decided` where it is already decided. Nothing is concealed (section 8, AUTHZ-CONCEAL-005). The fulfilment of an erasure refuses nothing on the account's state, each state having its outcome above, and nothing on its existence, which the entry checked; a deletion that will not begin after that is a fault (D-183) |
 | `GET /admin/erasures` · `GET /admin/erasures/{id}` | Every incomplete delivery of host-side work in one query, an erasure's, a takedown's, a restriction change's, a consent change's and an objection change's alike; per-subscriber state for one (IDN-LIFE-003a, IDN-LIFE-003b): `{ id, kind, subject, purpose, change, reason, status, attempts, subscribers: [ { name, required, confirmedAt } ] }` (D-153, D-203). `id` is the identifier of the outbox record the delivery travels on, whatever its kind; `kind` is spelled as `10` section 5.50 (`erasure` · `takedown` · `restriction` · `consent` · `objection`), `status` as section 5.12, `subscribers` naming the subject-event subscribers or the purpose handlers the delivery is owed to; `purpose` is the purpose a consent or an objection delivery concerns and null for another kind; `change` is the change its event announces, as `10` section 5.50 spells it, and null for an erasure or a takedown; `reason` is an erasure's (`10` section 5.12a) and null for another kind; `required` is true for every purpose handler, each being required (`10` section 5b). A takedown's `takedownId` (`GET /admin/accounts/{subject}/takedown`) is its delivery's `id`. Every kind is listed under `privacyrequest:manage`, whose manual completion path closes every kind (`10` section 2.1). **200** · **404** `privacy.erasure.notfound` where no delivery is held under it |
 | `POST /admin/erasures/{id}/complete` | The manual completion path after exhausted retries, itself recorded (IDN-LIFE-003a): closes a `failed` delivery of any kind of `10` section 5.50 named by its identifier, a takedown's by its `takedownId`. Requires step-up (`erasure:complete`). **204** · **404** `privacy.erasure.notfound` where no delivery is held under the identifier · **409** `privacy.erasure.notfailed` where it is `awaiting-subscribers` or `complete` |
@@ -2720,8 +2846,8 @@ the reach, a `deleted` one, and a subject no account bears are answered **404**
 | `GET /admin/organizations/{id}/invitations` | `membership:read`: **200** `[ { id, roles, issuedAt, expiresAt, issuer, email, phone, corporateAddress } ]`, the standing invitations, an identifier the invitation does not bind null |
 | `GET /admin/accounts/{subject}?organization={id}` | `account:read`: **200** `{ subject, state, createdAt, profile: { displayName, legalName }, identifiers: { emails: [ { value, verified, primary } ], phones: [ { value, verified, primary } ], username }, preferences: { language, timeZone, declared }, memberships: [ organization ] }`, `legalName` absent while `profile.legalname` is off (IDN-READ-003) · **404** as above |
 | `POST /admin/accounts/find` | `account:read`: `{ identifier, organization }`, `organization` optional: the account bearing the email, phone or username, read in its canonical form (IDN-ACCT-004). **200** `{ subject }` · **404** as above |
-| `GET /admin/accounts/{subject}/contact?organization={id}` | `contact:read`: **200** `{ displayName, email, phone, language, timeZone, state }`, `email` and `phone` the primary verified ones, or null · **404** as above |
-| `GET /admin/accounts/{subject}/standing?organization={id}` | `consent:read`: **200** `{ state, consents, objections }`, each consent as `GET /privacy/consents` and each objection as `GET /privacy/objections` answer them · **404** as above |
+| `GET /admin/accounts/{subject}/contact?organization={id}` | `contact:read`: **200** `{ kind, displayName, email, phone, language, timeZone, state }`, `email` and `phone` the primary verified ones, or null; `{subject}` names an account or a person record, `kind` (`account` · `record`) saying which, and for a record `displayName` is its name, `email` and `phone` its contacts as held, verified or not, and `timeZone` null (REC-ADM-001, D-221) · **404** as above, a record outside the reach included |
+| `GET /admin/accounts/{subject}/standing?organization={id}` | `consent:read`: **200** `{ kind, state, consents, objections }`, each consent as `GET /privacy/consents` and each objection as `GET /privacy/objections` answer them; `{subject}` names an account or a person record, as for the contact read (D-221) · **404** as above |
 | `GET /admin/accounts/{subject}/sessions` | `session:revoke-account` in the administrative organization: **200** the account's live sessions as `GET /account/sessions` lists them, none marked current · **404** `identity.account.notfound` where no account bears the subject |
 | `PUT /admin/accounts/{subject}/preferences` | `account:manage` in the administrative organization: `{ language, timeZone, declared, reason }`, the set replaced as `PUT /account/preferences` replaces it, an administrator-only preference admitted; no step-up. **204** · **404** `identity.account.notfound` where no account bears the subject · **422** as `PUT /account/preferences` answers, save `identity.preference.administratoronly`. Recorded as `identity.preferences.changed` with the reason |
 | `GET /admin/access/admitted?type={type}&id={id}&permission={permission}` | `grant:read` in the organization the record belongs to (AUTHZ-GATE-007): **200** `{ subjects, partial, unevaluated }`, the accounts the single check would admit for the permission on the record; with `type` `organization` and its identifier, those its organization-wide grants admit · **403** `authz.denied` for a record the deployment holds no registration for, as `GET /admin/access` refuses it (AUTHZ-DERIVE-007) |

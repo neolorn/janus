@@ -274,6 +274,7 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     /// </summary>
     /// <param name="refusedStatement">A statement over a value beside the subject keys.</param>
     [Theory]
+    [InlineData("SELECT count(wrapped_key)::int FROM identity.collection_sessions")]
     [InlineData("SELECT count(wrapped_key)::int FROM identity.invitations")]
     [InlineData("UPDATE identity.mailboxes SET wrapped_key = wrapped_key WHERE id = id")]
     [InlineData("SELECT count(wrapped_key)::int FROM identity.registration_sessions")]

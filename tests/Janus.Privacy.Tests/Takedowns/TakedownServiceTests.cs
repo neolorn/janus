@@ -39,6 +39,9 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     private static readonly SessionId Browser =
         new(Guid.Parse("44444444-4444-4444-8444-444444444444"));
 
+    private static readonly SubjectId Guest =
+        new(Guid.Parse("55555555-5555-4555-8555-555555555555"));
+
     private readonly AccessGateInMemory _gate = new();
     private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly StepUpGateInMemory _stepUp = new();
@@ -878,6 +881,138 @@ public sealed class TakedownServiceTests : IAsyncDisposable
             _audit.Entries.Select(entry => entry.Action));
     }
 
+    /// <summary>
+    /// REC-TKD-001 AC1: a record is taken into its window by takedown, its access
+    /// sessions ended, <c>TakedownExecuted</c> written naming it and the trigger audited,
+    /// and no suspension is announced, a record having no access to suspend.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_TKD_001_AC1_ARecordIsTakenDownWithNoSuspensionAsync()
+    {
+        _accounts.HoldRecord(Guest, AccountState.Active);
+
+        ExecutedTakedown? takedown = await InWorkAsync(token => Takedowns.TakeDownRecordAsync(
+            AccessContext.Of(Mona), Guest, TakedownTrigger.StaffReport, "seen at the counter", token));
+
+        Delivery delivery = Assert.Single(_outbox.Deliveries);
+
+        Assert.NotNull(takedown);
+        Assert.Equal(
+            (AccountState.Deleting, (DateTimeOffset?)Noon, Noon + Settings.TakedownGrace.Default),
+            (_accounts.Of(Guest), _accounts.SessionsEndedAt(Guest), takedown.ErasureDue));
+        Assert.Equal(
+            (SubjectEventKind.TakedownExecuted, Guest, takedown.Id.Value),
+            (delivery.Kind, delivery.Subject, delivery.Id.Value));
+        Assert.Equal(
+            (AuditActions.TakedownExecuted, Mona, Guest),
+            (_audit.Entries[^1].Action, _audit.Entries[^1].Acting, _audit.Entries[^1].Subject));
+        Assert.Empty(_events.Of<AccountSuspended>());
+    }
+
+    /// <summary>
+    /// REC-TKD-001: a record taken down already, erased, or attached to an account is not
+    /// taken down, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_TKD_001_ARecordTakenDownErasedOrAttachedIsNotTakenDownAsync()
+    {
+        SubjectId erased = new(Guid.Parse("66666666-6666-4666-8666-666666666666"));
+        SubjectId attached = new(Guid.Parse("77777777-7777-4777-8777-777777777777"));
+        _accounts.HoldRecord(Guest, AccountState.Active);
+        _accounts.HoldRecord(erased, AccountState.Deleted);
+        _accounts.HoldRecord(attached, AccountState.Active, attachedTo: Ahmed);
+
+        _ = await InWorkAsync(token => Takedowns.TakeDownRecordAsync(
+            AccessContext.Of(Mona), Guest, TakedownTrigger.StaffReport, "seen", token));
+
+        foreach (SubjectId record in new[] { Guest, erased, attached })
+        {
+            Assert.Null(await InWorkAsync(token => Takedowns.TakeDownRecordAsync(
+                AccessContext.Of(Mona), record, TakedownTrigger.StaffReport, "seen", token)));
+        }
+
+        Assert.Single(_outbox.Deliveries);
+        Assert.Equal(AccountState.Active, _accounts.Of(attached));
+    }
+
+    /// <summary>
+    /// REC-TKD-001 AC2: reversed inside its window, a record returns to what it held at
+    /// the trigger, restricted here, the reversal audited with its reason and announced.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_TKD_001_AC2_AReversedRecordReturnsToWhatItHeldAsync()
+    {
+        _accounts.HoldRecord(Guest, AccountState.Restricted);
+        _ = await InWorkAsync(token => Takedowns.TakeDownRecordAsync(
+            AccessContext.Of(Mona), Guest, TakedownTrigger.CustomerReport, "a parent wrote in", token));
+
+        _clock.Advance(Settings.TakedownGrace.Default - TimeSpan.FromMinutes(1));
+
+        Error? refused = await Takedowns.RecordReversalRefusedAsync(Guest, TestContext.Current.CancellationToken);
+        Error? reversed = await InWorkAsync(token => Takedowns.ReverseRecordTakedownAsync(
+            AccessContext.Of(Mona), Guest, "an adult, misjudged", token));
+
+        TakedownReversed announced = Assert.Single(_events.Of<TakedownReversed>());
+
+        Assert.Equal((null, null), (refused, reversed));
+        Assert.Equal(AccountState.Restricted, _accounts.Of(Guest));
+        Assert.Equal(
+            (AuditActions.TakedownReversed, "an adult, misjudged"),
+            (_audit.Entries[^1].Action, _audit.Entries[^1].Details["reason"].GetString()));
+        Assert.Equal((Guest, Mona), (announced.Subject, announced.Actor));
+    }
+
+    /// <summary>
+    /// REC-TKD-001 AC2: once the takedown's window closes the reversal is refused
+    /// <c>identity.takedown.windowelapsed</c>, and a record holding no takedown is
+    /// answered <c>identity.takedown.notfound</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_TKD_001_AC2_AReversalAfterTheWindowIsRefusedAsync()
+    {
+        SubjectId untaken = new(Guid.Parse("66666666-6666-4666-8666-666666666666"));
+        _accounts.HoldRecord(Guest, AccountState.Active);
+        _accounts.HoldRecord(untaken, AccountState.Active);
+        _ = await InWorkAsync(token => Takedowns.TakeDownRecordAsync(
+            AccessContext.Of(Mona), Guest, TakedownTrigger.CustomerReport, "a parent wrote in", token));
+
+        _clock.Advance(Settings.TakedownGrace.Default);
+
+        Assert.Equal(
+            (ErrorCodes.TakedownWindowElapsed, ErrorCodes.TakedownWindowElapsed, ErrorCodes.TakedownNotFound),
+            ((await Takedowns.RecordReversalRefusedAsync(Guest, TestContext.Current.CancellationToken))?.Code,
+                (await InWorkAsync(token => Takedowns.ReverseRecordTakedownAsync(
+                    AccessContext.Of(Mona), Guest, "too late", token)))?.Code,
+                (await Takedowns.RecordReversalRefusedAsync(untaken, TestContext.Current.CancellationToken))?.Code));
+        Assert.Equal(AccountState.Deleting, _accounts.Of(Guest));
+        Assert.Empty(_events.Of<TakedownReversed>());
+    }
+
+    /// <summary>
+    /// REC-TKD-001: a record's takedown is read as an account's is, and one never taken
+    /// down holds none to read.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_TKD_001_ARecordsTakedownIsReadAsAnAccountsIsAsync()
+    {
+        SubjectId untaken = new(Guid.Parse("66666666-6666-4666-8666-666666666666"));
+        _accounts.HoldRecord(Guest, AccountState.Active);
+        _accounts.HoldRecord(untaken, AccountState.Active);
+        ExecutedTakedown? takedown = await InWorkAsync(token => Takedowns.TakeDownRecordAsync(
+            AccessContext.Of(Mona), Guest, TakedownTrigger.CustomerReport, "a parent wrote in", token));
+
+        TakedownProgress? progress = await Takedowns.RecordProgressAsync(Guest, TestContext.Current.CancellationToken);
+
+        Assert.Equal(takedown?.Id, progress?.Id);
+        Assert.Equal(takedown?.ErasureDue, progress?.ErasureDue);
+        Assert.Null(await Takedowns.RecordProgressAsync(untaken, TestContext.Current.CancellationToken));
+    }
+
     private static TValue Held<TValue>(Result<TValue> outcome) =>
         outcome.Match(
             value => value,
@@ -919,4 +1054,17 @@ public sealed class TakedownServiceTests : IAsyncDisposable
             Ahmed,
             reason,
             TestContext.Current.CancellationToken);
+    // The record's operations run in the unit of work the records area opens.
+    private async ValueTask<TValue> InWorkAsync<TValue>(Func<CancellationToken, ValueTask<TValue>> operation)
+    {
+        CancellationToken token = TestContext.Current.CancellationToken;
+
+        _ = await _work.BeginAsync(token);
+
+        TValue outcome = await operation(token);
+
+        _ = await _work.CommitAsync(token);
+
+        return outcome;
+    }
 }

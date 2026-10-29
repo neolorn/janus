@@ -8,12 +8,14 @@ using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Organizations;
+using Janus.Identity.Records;
 using Janus.Privacy.Exports;
 
 namespace Janus.Storage.Privacy.Exports;
@@ -34,10 +36,12 @@ namespace Janus.Storage.Privacy.Exports;
 /// <param name="groups">Where the groups the account belongs to are.</param>
 /// <param name="sessions">Where the live sessions and their location records are.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
+/// <param name="records">Where a person record and what it holds are.</param>
+/// <param name="attachments">Where the records attached to an account are.</param>
 /// <param name="time">The clock a session's expiry is judged against.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-003, REG-ACCT-001, REG-PREF-001, REG-IDENT-002, AUTH-SESS-013
-/// and CONV-DESIGN-003. The groups of REG-ACCT-001 are carried whole, so the export and
+/// Implements PRIV-RIGHT-003, REC-ACC-002, REC-ATT-002, REG-ACCT-001, REG-PREF-001, REG-IDENT-002,
+/// AUTH-SESS-013 and CONV-DESIGN-003. The groups of REG-ACCT-001 are carried whole, so the export and
 /// the account page answer the same question with the same facts. Every value crosses as
 /// text: an export is read, not computed with, and one representation is one thing that
 /// can disagree with the account page. No secret material crosses: a credential is
@@ -56,6 +60,8 @@ internal sealed class ExportSource(
     IGroupStore groups,
     ISessionStore sessions,
     PreferenceDeclarations declarations,
+    IPersonRecordStore records,
+    IRecordDirectory attachments,
     TimeProvider time) : IExportSource
 {
     /// <inheritdoc/>
@@ -124,6 +130,53 @@ internal sealed class ExportSource(
         ];
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<ExportSection> RecordsAsync(
+        SubjectId account,
+        CancellationToken cancellationToken) =>
+        Listed(
+            "records",
+            (await attachments.AttachedToAsync(account, cancellationToken).ConfigureAwait(false)).Select(Attached));
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No person record bears the subject.</exception>
+    public async ValueTask<IReadOnlyList<ExportSection>> RecordSectionsAsync(
+        SubjectId record,
+        CancellationToken cancellationToken)
+    {
+        PersonRecord held = await records.FindBySubjectAsync(record, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("A record's export names a subject a person record bears.");
+
+        IReadOnlyList<RecordContact> contacts = await records
+            .ContactsAsync(record, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<RecordDocuments> documents = await records
+            .DocumentsAsync(record, cancellationToken)
+            .ConfigureAwait(false);
+
+        Dictionary<string, string> named = Values(capacity: 1);
+
+        if (held.Name is DisplayName name)
+        {
+            named["name"] = name.Value;
+        }
+
+        Dictionary<string, string> spoken = Values(capacity: 1);
+
+        spoken["language"] = held.Language;
+
+        // Chapter 10 section 5.46 (D-221): the record, then each collection's notice and
+        // terms as entries of the same section, as the collection recorded them.
+        return
+        [
+            Listed("record", [Kept(held), .. documents.Select(Presented)]),
+            new ExportSection("profile", [new ExportRecord(named)]),
+            Listed("identifiers", contacts.Select(Contact)),
+            new ExportSection("preferences", [new ExportRecord(spoken)]),
+        ];
+    }
+
     private static ExportSection Listed(
         string name,
         IEnumerable<IReadOnlyDictionary<string, string>> records) =>
@@ -136,6 +189,20 @@ internal sealed class ExportSource(
         at.ToString("O", CultureInfo.InvariantCulture);
 
     private static string Told(bool answer) => answer ? "true" : "false";
+
+    // REC-ATT-002: a record attached to the account is named, and what it holds is its
+    // own export's.
+    private static Dictionary<string, string> Attached(Attachment attached)
+    {
+        Dictionary<string, string> values = Values(capacity: 4);
+
+        values["subject"] = attached.Record.ToString();
+        values["organization"] = attached.Organization.ToString();
+        values["createdAt"] = Moment(attached.CreatedAt);
+        values["attachedAt"] = Moment(attached.AttachedAt);
+
+        return values;
+    }
 
     private static Dictionary<string, string> Filled(HeldProfile profile)
     {
@@ -464,6 +531,73 @@ internal sealed class ExportSource(
     // REG-ACCT-001: the standing group's own fields, the terms step's record among
     // them (REG-SESS-007): the notice the person was shown and the affirmation the
     // age screen derived.
+    // REC-ACC-002: the record's own standing, with the age answer it holds and the date
+    // of birth where it was kept, since an export carries everything held.
+    private static Dictionary<string, string> Kept(PersonRecord record)
+    {
+        Dictionary<string, string> values = Values(capacity: 9);
+
+        values["subject"] = record.Subject.Value.ToString();
+        values["state"] = record.State.ToString();
+        values["origin"] = record.Origin.ToString();
+        values["organization"] = record.Organization.Value.ToString();
+        values["createdAt"] = Moment(record.CreatedAt);
+
+        if (record.Age is not RecordAgeAnswer age)
+        {
+            return values;
+        }
+
+        values["answeredAgeAt"] = Moment(age.AnsweredAt);
+
+        if (age.AdultAffirmed is bool adult)
+        {
+            values["adultAffirmed"] = Told(adult);
+        }
+
+        if (age.Group is AgeGroup band)
+        {
+            values["ageGroup"] = band.ToString();
+        }
+
+        if (age.DateOfBirth is DateOnly born)
+        {
+            values["dateOfBirth"] = born.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+
+        return values;
+    }
+
+    private static Dictionary<string, string> Presented(RecordDocuments documents)
+    {
+        Dictionary<string, string> values = Values(capacity: 3);
+
+        values["noticeVersion"] = documents.NoticeVersion;
+        values["recordedAt"] = Moment(documents.RecordedAt);
+
+        if (documents.TermsVersion is string terms)
+        {
+            values["termsVersion"] = terms;
+        }
+
+        return values;
+    }
+
+    private static Dictionary<string, string> Contact(RecordContact contact)
+    {
+        Dictionary<string, string> values = Values(capacity: 3);
+
+        values["kind"] = contact.Kind.ToString();
+        values["value"] = contact.Value;
+
+        if (contact.VerifiedAt is DateTimeOffset verified)
+        {
+            values["verifiedAt"] = Moment(verified);
+        }
+
+        return values;
+    }
+
     private static Dictionary<string, string> Standing(SubjectId subject, Account? account)
     {
         Dictionary<string, string> values = Values(capacity: 8);

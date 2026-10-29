@@ -1,6 +1,5 @@
 using System;
 using Janus.Core;
-using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -41,10 +40,8 @@ internal sealed class ExportConfiguration : IEntityTypeConfiguration<ExportRecor
         builder.HasIndex(export => new { export.Subject, export.AssembledAt })
             .HasDatabaseName("ix_privacy_exports_subject");
 
-        builder.HasOne<AccountRecord>()
-            .WithMany()
-            .HasForeignKey(export => export.Subject)
-            .HasConstraintName("fk_privacy_exports_subject")
-            .OnDelete(DeleteBehavior.Restrict);
+        // REC-REC-001 (D-221): the subject is an account's or a person record's, so its
+        // parent is the subject key row both hold, the key's identifier being a type of
+        // its own; the migration writes the constraint, fk_privacy_exports_subject.
     }
 }

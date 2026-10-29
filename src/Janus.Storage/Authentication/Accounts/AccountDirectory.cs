@@ -10,6 +10,7 @@ using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Identity.Records;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Accounts;
@@ -26,10 +27,11 @@ namespace Janus.Storage.Authentication.Accounts;
 /// <param name="preferences">Where the preferences are read and written.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
 /// <param name="outbox">Where a lifted restriction is announced to the subscribers.</param>
+/// <param name="attached">Where each transition is carried to the records attached to the account.</param>
 /// <remarks>
-/// Implements REG-ACCT-001, REG-PROF-001, REG-PREF-001, PRIV-RIGHT-004, IDN-LIFE-003 and
-/// CONV-LAYOUT-001. Every write runs inside the caller's transaction, so the whole of
-/// one operation commits or none of it does.
+/// Implements REG-ACCT-001, REG-PROF-001, REG-PREF-001, PRIV-RIGHT-004, IDN-LIFE-003,
+/// REC-ATT-002 and CONV-LAYOUT-001. Every write runs inside the caller's transaction, so
+/// the whole of one operation commits or none of it does.
 /// </remarks>
 internal sealed class AccountDirectory(
     StoreContext context,
@@ -39,7 +41,8 @@ internal sealed class AccountDirectory(
     ISubjectKeyStore keys,
     IPreferenceStore preferences,
     PreferenceDeclarations declarations,
-    IOutboxStore outbox) : IAccountDirectory
+    IOutboxStore outbox,
+    AttachedRecords attached) : IAccountDirectory
 {
     /// <inheritdoc/>
     public async ValueTask<AccountState?> StateAsync(
@@ -134,6 +137,7 @@ internal sealed class AccountDirectory(
                 Delivery.Of(subject, SubjectEventKind.RestrictionChanged, at, restricted: false),
                 cancellationToken)
             .ConfigureAwait(false);
+        await attached.LiftRestrictionAsync(subject, at, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -165,11 +169,13 @@ internal sealed class AccountDirectory(
         account.RequestDeletion(DeletionOrigin.Self, at);
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+        await attached.BeginDeletionAsync(subject, DeletionOrigin.Self, at, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
     public async ValueTask CancelDeletionAsync(
         SubjectId subject,
+        DateTimeOffset at,
         CancellationToken cancellationToken)
     {
         if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
@@ -181,6 +187,7 @@ internal sealed class AccountDirectory(
         account.CancelDeletion();
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+        await attached.CancelDeletionAsync(subject, at, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

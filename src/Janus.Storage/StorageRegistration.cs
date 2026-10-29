@@ -18,6 +18,7 @@ using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -37,6 +38,7 @@ using Janus.Identity.Identifiers;
 using Janus.Identity.Organizations;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
+using Janus.Identity.Records;
 using Janus.Privacy.Bases;
 using Janus.Privacy.Breaches;
 using Janus.Privacy.Consents;
@@ -64,6 +66,7 @@ using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
+using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Recovery;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
@@ -81,6 +84,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy;
 using Janus.Storage.Privacy.Bases;
 using Janus.Storage.Privacy.Breaches;
@@ -167,6 +171,7 @@ internal static class StorageRegistration
         services.AddScoped<ISubjectEraser, SubjectEraser>();
         services.AddScoped<Janus.Privacy.Outbox.IOutboxStore, OutboxStore>();
         services.AddScoped<IPrivacyRequestStore, PrivacyRequestStore>();
+        services.AddScoped<AttachedRecords>();
         services.AddScoped<IAccountStates, AccountStates>();
         services.AddScoped<IExportSource, ExportSource>();
         services.AddScoped<IExportLedger, ExportLedger>();
@@ -185,6 +190,10 @@ internal static class StorageRegistration
             provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IProfilePhotoStore>(provider => new ProfilePhotoStore(
+            provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<IKeyRing>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IPersonRecordStore>(provider => new PersonRecordStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
@@ -212,6 +221,15 @@ internal static class StorageRegistration
             provider.GetRequiredService<DataConnections>(),
             provider.GetRequiredService<DeploymentDataKeyStore>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<ICollectionSessionStore>(provider => new CollectionSessionStore(
+            provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DeploymentDataKeyStore>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IRecordAccessSessionStore, RecordAccessSessionStore>();
+        services.AddScoped<IRecordOfferStore, RecordOfferStore>();
+        services.AddScoped<IRecordDirectory, RecordDirectory>();
+        services.AddScoped<IRecordPrivacy, RecordPrivacy>();
+        services.AddScoped<IRecordAudit, RecordAudit>();
         services.AddScoped<IRegistrationDirectory>(provider => new RegistrationDirectory(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IAccountStore>(),
@@ -318,12 +336,13 @@ internal static class StorageRegistration
         services.AddScoped<IRoleHandOut, RoleHandOut>();
         services.AddScoped<IReadAdmission, ReadAdmission>();
         services.AddScoped<IResourceStore, ResourceStore>();
-        services.AddScoped<IAccountHolders, AccountHolders>();
+        services.AddScoped<IDataSubjects, DataSubjects>();
 
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();
         services.AddScoped<IIndexCatalogue, IndexCatalogue>();
         services.AddScoped<ISubjectRestrictions, SubjectRestrictions>();
         services.AddScoped<IExercisingAccounts, ExercisingAccounts>();
+        services.AddScoped<IAccountSubjects, AccountSubjects>();
         services.AddScoped<IOrganizationSuspensions, OrganizationSuspensions>();
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();

@@ -912,6 +912,80 @@ the person.
 
 ---
 
+## 6f. People without an account
+
+**FE-REC-001** — A host's collection screens SHALL ask the age first where the session
+asks it, verify each contact by a code typed in place, and present the notice, the terms
+and the consent controls as the terms step does.
+
+**Values (D-221).** The screens are the host's own (its store's checkout, its forms),
+built on `09` section 7a: the neutral age screen first where the session asks it
+(`age`), rendered as the registration's step 1 is (FE-REG-005); then each contact with
+its code field and a resend control that shows `retryAt` (FE-API-005); then, before the
+host's own confirmation, the privacy notice presented, shown with no control
+(FE-COMP-003), the terms with their acceptance control where the host has terms, and one
+unticked control per consent-based purpose (FE-COMP-004), each text read from
+`GET /privacy/notice` and `GET /privacy/documents/{document}` with its governing text
+and translations reachable in place (FE-COMP-001). The host's server passes the versions
+shown to `IRecordCollection.CollectAsync` (`21` REC-COL-002); a refusal
+`privacy.consent.superseded` reads the texts again and asks again. A person signed in is
+asked to give their data under their account (`identity.record.signedin`).
+
+*Source: REC-COL-001, REC-COL-002, REC-AGE-001, D-221*
+
+**Acceptance criteria**
+1. Where the session asks the age, no contact field is shown before it is answered.
+2. Every consent control is unticked and governs one purpose; the notice is shown with
+   no acceptance control.
+3. A stale version refused at the collection brings the texts back and asks again,
+   nothing being written.
+
+---
+
+**FE-REC-002** — The account application SHALL provide **Your data**: for a person
+without an account, an email or phone asked for, the code, and every record the session
+reaches with its rights.
+
+**Values (D-221).** A route `/your-data`, reachable signed out, on `09` section 7a: the
+ask (`POST /records/access`), after which the screen says the same thing whatever is
+held (that a code was sent where data is held under the address); the code; then the
+records the session reaches, by organization, each with its read, its export in both
+formats rendered as FE-COMP-006 renders an export, its consents and objections, its name
+and language, its requests, and its deletion and the cancellation of it. A reference
+field ("an older order?") is always shown, whether or not an older record exists, so the
+page tells nothing of records the code does not reach. The session's expiry is shown;
+past it the person asks a new code. Nothing of a record is kept in the browser after the
+session ends.
+
+*Source: REC-ACC-001, REC-ACC-002, D-221*
+
+**Acceptance criteria**
+1. The screen after the ask is the same whatever is held under the address.
+2. The reference field is shown whether or not an older record exists.
+3. Each right of REC-ACC-002 is reached from the page without contacting support.
+
+---
+
+**FE-REC-003** — The account application SHALL show an offer to attach as a count alone,
+attach only on a press, and list the attached records with their rights.
+
+**Values (D-221).** After a registration, an identifier's add or replace, or a find by
+code (`POST /account/records/find`), the account application reads
+`GET /account/records/offer`; where `count` is above 0 it shows the count and one
+control to attach, and nothing of the records; a press calls
+`POST /account/records/attach`, and a reference field attaches older ones. The records
+page lists `GET /account/records`, each record with REC-ATT-002's rights, and carries
+the control that finds earlier records by a code.
+
+*Source: REC-ATT-001, REC-ATT-002, D-221*
+
+**Acceptance criteria**
+1. The offer shows a count alone before the press, and nothing is attached without it.
+2. Each attached record is listed with its read, its export, its consents and its
+   objections.
+
+---
+
 ## 7. Addresses
 
 Postal and delivery addresses are host data (IDN-ATTR-005); the address flow, its

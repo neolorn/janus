@@ -14,6 +14,7 @@ using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Records;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
@@ -108,6 +109,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
                 new OrganizationsInMemory(_memberships),
                 new AccountTiesInMemory()),
             new IdentifierDirectoryInMemory(),
+            new RecordDirectoryInMemory(),
             _memberships,
             Declared,
             new ReadVolumeInMemory(),
@@ -476,7 +478,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Empty(_directory.Lifted);
         Assert.Empty(_audit.Administered);
 
-        await _directory.CancelDeletionAsync(_member, TestContext.Current.CancellationToken);
+        await _directory.CancelDeletionAsync(_member, Noon, TestContext.Current.CancellationToken);
 
         Assert.Equal(AccountState.Restricted, await StateAsync(_member));
     }

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests.BreakGlass;
 using Janus.Authentication.Tests.Factors;
@@ -14,6 +15,7 @@ using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Records;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
@@ -43,6 +45,7 @@ public sealed class AccountReadTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly OrganizationsInMemory _organizations;
     private readonly AccountTiesInMemory _ties = new();
+    private readonly RecordDirectoryInMemory _records = new();
     private readonly ReadVolumeInMemory _volume = new();
     private readonly AccountAuditInMemory _audit = new();
     private readonly SessionStoreInMemory _sessions = new();
@@ -109,6 +112,7 @@ public sealed class AccountReadTests : IAsyncDisposable
                 _clock),
             new AccountReach(_gate, _administrative, _organizations, _ties),
             _identifiers,
+            _records,
             _memberships,
             Declared,
             _volume,
@@ -203,6 +207,61 @@ public sealed class AccountReadTests : IAsyncDisposable
         Assert.Equal("ann@example.test", contact.Email);
         Assert.Null(contact.Phone);
         Assert.Equal(AccountState.Active, contact.State);
+    }
+
+    /// <summary>
+    /// REC-ADM-001 AC3: the contact read of a person record's subject answers its name,
+    /// its contacts as held, verified or not, its language and its state, with no time
+    /// zone and <c>kind</c> <c>record</c>; an account's names <c>account</c>.
+    /// </summary>
+    [Fact]
+    public async Task REC_ADM_001_AC3_TheContactReadOfARecordAnswersItsNameContactsLanguageAndStateAsync()
+    {
+        SubjectId subject = Record(_shop, PersonRecordState.Restricted);
+
+        ContactDetail contact = Read(await Administration.ContactAsync(
+            Clerk, subject, _shop, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            new ContactDetail(
+                SubjectKind.Record,
+                "Rana Haddad",
+                "rana@example.test",
+                "+441632960021",
+                "ar",
+                TimeZone: null,
+                AccountState.Restricted),
+            contact);
+        Assert.Equal(
+            SubjectKind.Account,
+            Read(await Administration.ContactAsync(Clerk, _customer, _shop, TestContext.Current.CancellationToken)).Kind);
+        Assert.Equal(2, _volume.Returned.Count);
+    }
+
+    /// <summary>
+    /// REC-ADM-001 AC1: a record beyond the reach, and a deleted one, are answered exactly
+    /// as a subject nothing bears.
+    /// </summary>
+    [Fact]
+    public async Task REC_ADM_001_AC1_ARecordBeyondTheReachIsAnsweredAsNoneAsync()
+    {
+        var elsewhere = OrganizationId.New(_clock);
+
+        _organizations.Seed(elsewhere);
+
+        SubjectId beyond = Record(elsewhere, PersonRecordState.Active);
+        SubjectId deleted = Record(_shop, PersonRecordState.Deleted);
+
+        Error none = Refused(await Administration.ContactAsync(
+            Clerk, new SubjectId(Guid.NewGuid()), _shop, TestContext.Current.CancellationToken));
+
+        foreach (SubjectId subject in new[] { beyond, deleted })
+        {
+            Error refused = Refused(await Administration.ContactAsync(
+                Clerk, subject, _shop, TestContext.Current.CancellationToken));
+
+            Assert.Equal((none.Code, none.Details), (refused.Code, refused.Details));
+        }
     }
 
     /// <summary>
@@ -379,6 +438,28 @@ public sealed class AccountReadTests : IAsyncDisposable
             reason,
             TestContext.Current.CancellationToken))
         .Match<ErrorCode?>(() => null, error => error.Code);
+
+    // A person record an organization holds, with a verified phone and an unverified
+    // email, tied to the organization as the store ties it.
+    private SubjectId Record(OrganizationId organization, PersonRecordState state)
+    {
+        var record = new HeldRecord(SubjectId.New(_randomness), organization, Noon)
+        {
+            State = state,
+            Language = "ar",
+            Name = Named<DisplayName>("Rana Haddad", DisplayName.TryParse),
+            Contacts =
+            {
+                [IdentifierKind.Email] = new CollectedContact(IdentifierKind.Email, "rana@example.test", VerifiedAt: null),
+                [IdentifierKind.Phone] = new CollectedContact(IdentifierKind.Phone, "+441632960021", Noon),
+            },
+        };
+
+        _records.Hold(record);
+        _ties.Tie(record.Subject, organization);
+
+        return record.Subject;
+    }
 
     private SubjectId Account()
     {

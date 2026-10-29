@@ -240,14 +240,17 @@ public sealed class AccessSeamTests
     }
 
     /// <summary>
-    /// AUTHZ-GATE-006 AC2: a restriction is read in one place and refused in one
-    /// place, so no feature can come to enforce it differently or to forget it.
+    /// AUTHZ-GATE-006 AC2: a restriction is read in one place and refused in one place
+    /// for each kind of acting subject, an account's by the gate and a person record's by
+    /// the record's rights, so no feature can come to enforce it differently or to forget
+    /// it.
     /// </summary>
     [Fact]
     public void AUTHZ_GATE_006_AC2_TheRestrictionIsReadAndRefusedInOnePlace()
     {
         Assert.Equal(
             [
+                Path.Combine("Janus.Authentication", "Records", "RecordRights.cs"),
                 Path.Combine("Janus.Authorization", "Gate", "AccessGate.cs"),
             ],
             Naming("Error.From(ErrorCodes.Restricted)"));

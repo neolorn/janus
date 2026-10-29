@@ -14,6 +14,7 @@ using Janus.Authentication.Invitations;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -26,6 +27,7 @@ using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Records;
 using Janus.Authentication.Tests.Recovery;
 using Janus.Authentication.Tests.Registration;
 using Janus.Authentication.Tests.Sending;
@@ -2556,11 +2558,13 @@ public sealed class CredentialServiceTests : IAsyncDisposable
                 verifier: null,
                 _clock),
             new ConsentsInMemory(),
+            new LegalDocumentsInMemory(),
             _configuration,
             _work,
             _events,
             _clock,
-            _randomness);
+            _randomness,
+            new RecordOffers(new RecordOfferStoreInMemory(), new RecordDirectoryInMemory(), _configuration, _clock));
 
     private WebAuthnService Keys =>
         new(_authenticators, _passwords, _credentials, _configuration, _work, _clock, _randomness);

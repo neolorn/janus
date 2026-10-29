@@ -1,5 +1,6 @@
 using System;
 using Janus.Authentication;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 
@@ -42,6 +43,20 @@ internal sealed class RequestSession : IRequestAccess
     /// 5, D-189).
     /// </summary>
     public EnrolmentSessionId? Enrolment { get; private set; }
+
+    /// <summary>
+    /// The collection session the browser carries, where it holds no sign-in session: a
+    /// browser signed in gives its data under its account, so it carries none (REC-COL-001,
+    /// REC-COL-002).
+    /// </summary>
+    public CollectionSessionId? Collection => Live is null ? FirstContact?.Collection : null;
+
+    /// <summary>
+    /// The record access session the browser carries, where it holds no sign-in session:
+    /// a browser signed in reaches its records through its account, so it carries none
+    /// (REC-ACC-001).
+    /// </summary>
+    public RecordAccessSessionId? Access => Live is null ? FirstContact?.Access : null;
 
     /// <summary>
     /// The session the request arrived on, where the stage that requires one let the

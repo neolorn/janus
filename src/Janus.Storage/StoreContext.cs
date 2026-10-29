@@ -15,6 +15,7 @@ using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
+using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Recovery;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
@@ -31,6 +32,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.Bases;
 using Janus.Storage.Privacy.Consents;
 using Janus.Storage.Privacy.Documents;
@@ -117,6 +119,26 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// The images the accounts show for themselves.
     /// </summary>
     public DbSet<ProfilePhotoRecord> ProfilePhotos => Set<ProfilePhotoRecord>();
+
+    /// <summary>
+    /// The people a host keeps data about who hold no account.
+    /// </summary>
+    public DbSet<PersonRecordRow> PersonRecords => Set<PersonRecordRow>();
+
+    /// <summary>
+    /// The emails and phones the person records hold.
+    /// </summary>
+    public DbSet<RecordContactRow> PersonRecordContacts => Set<RecordContactRow>();
+
+    /// <summary>
+    /// The references collections gave the person records, as fingerprints.
+    /// </summary>
+    public DbSet<RecordReferenceRow> PersonRecordReferences => Set<RecordReferenceRow>();
+
+    /// <summary>
+    /// What each collection presented to the person and what they accepted.
+    /// </summary>
+    public DbSet<RecordDocumentsRow> PersonRecordDocuments => Set<RecordDocumentsRow>();
 
     /// <summary>
     /// What each account has settled about language, time zone and the keys the host
@@ -366,6 +388,27 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         Set<RegistrationSessionRecord>();
 
     /// <summary>
+    /// The collection sessions in progress, each staging the age answer and the contacts
+    /// a host's screen collects (REC-COL-001).
+    /// </summary>
+    public DbSet<CollectionSessionRecord> CollectionSessions =>
+        Set<CollectionSessionRecord>();
+
+    /// <summary>
+    /// The record access sessions asked or open, each naming the person records a code
+    /// reached (REC-ACC-001).
+    /// </summary>
+    public DbSet<RecordAccessSessionRecord> RecordAccessSessions =>
+        Set<RecordAccessSessionRecord>();
+
+    /// <summary>
+    /// The offers to attach person records, one held on an account session after a proof
+    /// (REC-ATT-001).
+    /// </summary>
+    public DbSet<RecordOfferRecord> RecordOffers =>
+        Set<RecordOfferRecord>();
+
+    /// <summary>
     /// The verification links a registration in progress has outstanding.
     /// </summary>
     public DbSet<RegistrationLinkRecord> RegistrationLinks =>
@@ -547,6 +590,10 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new ProfileConfiguration());
         modelBuilder.ApplyConfiguration(new ProfilePhotoConfiguration());
         modelBuilder.ApplyConfiguration(new PreferenceConfiguration());
+        modelBuilder.ApplyConfiguration(new PersonRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordContactConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordReferenceConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordDocumentsConfiguration());
         modelBuilder.ApplyConfiguration(new ErasureConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
         modelBuilder.ApplyConfiguration(new AuditConfiguration());
@@ -584,6 +631,9 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new RaisedAlertConfiguration());
         modelBuilder.ApplyConfiguration(new PendingEventConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
+        modelBuilder.ApplyConfiguration(new CollectionSessionConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordAccessSessionConfiguration());
+        modelBuilder.ApplyConfiguration(new RecordOfferConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());

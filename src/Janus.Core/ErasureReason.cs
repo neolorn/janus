@@ -6,9 +6,9 @@ namespace Janus.Core;
 /// Why an erasure ran.
 /// </summary>
 /// <remarks>
-/// Implements IDN-LIFE-003b and chapter 10 section 5.12a. The erasures table and the
-/// off-host erasure ledger use these spellings and no others. An organization's erasure
-/// erases no account, so it is no reason here (IDN-ORG-003).
+/// Implements IDN-LIFE-003b, REC-ADM-003 and chapter 10 section 5.12a. The erasures table
+/// and the off-host erasure ledger use these spellings and no others. An organization's
+/// erasure erases no account, so it is no reason here (IDN-ORG-003).
 /// </remarks>
 public enum ErasureReason
 {
@@ -23,4 +23,10 @@ public enum ErasureReason
     /// </summary>
     [JsonStringEnumMemberName("minor-takedown")]
     MinorTakedown = 1,
+
+    /// <summary>
+    /// A host erased a person record it keeps nothing about any longer.
+    /// </summary>
+    [JsonStringEnumMemberName("retention")]
+    Retention = 2,
 }

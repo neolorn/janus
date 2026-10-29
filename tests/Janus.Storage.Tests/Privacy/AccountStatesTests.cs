@@ -7,18 +7,24 @@ using Dapper;
 using Janus.Authentication;
 using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
+using Janus.Identity.Records;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Events;
+using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.Requests;
+using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -35,7 +41,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     : IClassFixture<DatabaseFixture>, IDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 23, 12, 0, 0, TimeSpan.Zero);
-    private static readonly DeletionWindows Windows = new(TimeSpan.FromDays(30), TimeSpan.FromDays(30));
+    private static readonly DeletionWindows Windows = new(TimeSpan.FromDays(30), TimeSpan.FromDays(30), TimeSpan.FromDays(30));
     private static readonly DateTimeOffset Due = Noon + TimeSpan.FromDays(30);
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
@@ -142,6 +148,167 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         Assert.Equal(AccountState.Restricted, (await StandingAsync(subject)).State);
         Assert.Equal(0, await LiveAsync(subject));
         Assert.Equal(2, await EndsAnnouncedAsync(subject));
+    }
+
+    /// <summary>
+    /// REC-ACC-002: a restriction request fulfilled on a person record restricts the
+    /// record, one in its own deletion window holding the restriction, and the record's
+    /// standing reads in the account's states.
+    /// </summary>
+    [Fact]
+    public async Task REC_ACC_002_ARecordsRestrictionIsFulfilledOnTheRecordAsync()
+    {
+        SubjectId active = await RecordAsync();
+        SubjectId deleting = await RecordAsync();
+
+        await using (StoreContext changing = database.Context())
+        {
+            var records = new PersonRecordStore(changing, _deployment.Ring, _deployment.Randomness);
+            PersonRecord held = (await records.FindBySubjectAsync(deleting, TestContext.Current.CancellationToken))!;
+
+            held.RequestDeletion(DeletionOrigin.Self, Noon);
+
+            await records.RecordAsync(held, TestContext.Current.CancellationToken);
+            await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        foreach (SubjectId subject in new[] { active, deleting })
+        {
+            await using StoreContext restricting = database.Context();
+            await using var work = new UnitOfWork(restricting);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(await States(restricting, work).RestrictAsync(
+                subject,
+                Noon + TimeSpan.FromHours(1),
+                TestContext.Current.CancellationToken));
+
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        var read = new PersonRecordStore(reading, _deployment.Ring, _deployment.Randomness);
+
+        Assert.Equal(
+            PersonRecordState.Restricted,
+            (await read.FindBySubjectAsync(active, TestContext.Current.CancellationToken))!.State);
+        Assert.True((await read.FindBySubjectAsync(deleting, TestContext.Current.CancellationToken))!.RestrictionHeld);
+        Assert.Equal(
+            (AccountState.Restricted, AccountState.Deleting),
+            ((await StandingAsync(active)).State, (await StandingAsync(deleting)).State));
+    }
+
+    /// <summary>
+    /// REC-ADM-002: an out-of-band erasure begins an active or restricted person record's
+    /// window by <c>oob-request</c>, holding a restriction in force, and begins none for a
+    /// record already in its window; an attached record's standing names its account.
+    /// </summary>
+    [Fact]
+    public async Task REC_ADM_002_AnOutOfBandErasureBeginsARecordsWindowAsync()
+    {
+        SubjectId active = await RecordAsync();
+        SubjectId restricted = await RecordAsync();
+        SubjectId attached = await RecordAsync();
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext changing = database.Context())
+        {
+            var records = new PersonRecordStore(changing, _deployment.Ring, _deployment.Randomness);
+            PersonRecord held = (await records.FindBySubjectAsync(restricted, TestContext.Current.CancellationToken))!;
+            PersonRecord following = (await records.FindBySubjectAsync(attached, TestContext.Current.CancellationToken))!;
+
+            held.Restrict();
+            following.Attach(account, Noon);
+
+            await records.RecordAsync(held, TestContext.Current.CancellationToken);
+            await records.RecordAsync(following, TestContext.Current.CancellationToken);
+            await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        foreach ((SubjectId subject, bool begun) in new[] { (active, true), (restricted, true), (active, false) })
+        {
+            await using StoreContext deleting = database.Context();
+            await using var work = new UnitOfWork(deleting);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(
+                begun,
+                await States(deleting, work).BeginDeletionAsync(
+                    subject,
+                    DeletionOrigin.OutOfBandRequest,
+                    Noon,
+                    TestContext.Current.CancellationToken));
+
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        var read = new PersonRecordStore(reading, _deployment.Ring, _deployment.Randomness);
+        PersonRecord withRestriction = (await read.FindBySubjectAsync(restricted, TestContext.Current.CancellationToken))!;
+
+        Assert.Equal(
+            (AccountState.Deleting, DeletionOrigin.OutOfBandRequest, Noon),
+            ((await StandingAsync(active)).State, (await StandingAsync(active)).DeletingBy, (await StandingAsync(active)).DeletingSince));
+        Assert.Equal((PersonRecordState.Deleting, true), (withRestriction.State, withRestriction.RestrictionHeld));
+        Assert.Equal(
+            (true, account),
+            ((await StandingAsync(attached)).IsPersonRecord, (await StandingAsync(attached)).AttachedTo));
+    }
+
+    /// <summary>
+    /// REC-TKD-001 AC1, AC2: a restricted record is taken down into its window by
+    /// takedown, holding the restriction, once, and the reversal returns it restricted;
+    /// a record attached to an account is not taken down.
+    /// </summary>
+    [Fact]
+    public async Task REC_TKD_001_ARecordIsTakenDownOnceAndReversedToWhatItHeldAsync()
+    {
+        SubjectId record = await RecordAsync();
+        SubjectId attached = await RecordAsync();
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext changing = database.Context())
+        {
+            var records = new PersonRecordStore(changing, _deployment.Ring, _deployment.Randomness);
+            PersonRecord held = (await records.FindBySubjectAsync(record, TestContext.Current.CancellationToken))!;
+            PersonRecord following = (await records.FindBySubjectAsync(attached, TestContext.Current.CancellationToken))!;
+
+            held.Restrict();
+            following.Attach(account, Noon);
+
+            await records.RecordAsync(held, TestContext.Current.CancellationToken);
+            await records.RecordAsync(following, TestContext.Current.CancellationToken);
+            await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            (true, false, false),
+            (await RecordTakenDownAsync(record), await RecordTakenDownAsync(record), await RecordTakenDownAsync(attached)));
+
+        AccountStanding taken = await StandingAsync(record);
+
+        Assert.Equal(
+            (AccountState.Deleting, (DeletionOrigin?)DeletionOrigin.Takedown, (DateTimeOffset?)Noon),
+            (taken.State, taken.DeletingBy, taken.DeletingSince));
+
+        await using (StoreContext reversing = database.Context())
+        {
+            await using var work = new UnitOfWork(reversing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            Assert.True(await States(reversing, work).ReverseRecordTakedownAsync(
+                record,
+                Noon + TimeSpan.FromHours(1),
+                Windows,
+                TestContext.Current.CancellationToken));
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            (AccountState.Restricted, AccountState.Active),
+            ((await StandingAsync(record)).State, (await StandingAsync(attached)).State));
     }
 
     /// <summary>
@@ -610,7 +777,13 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             .Match(() => true, _ => false);
 
     private AccountStates States(StoreContext context, UnitOfWork work) =>
-        new(new AccountStore(context), Sessions(context), new EventOutbox(new PendingEvents(context), work));
+        new(
+            new AccountStore(context),
+            new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
+            Sessions(context),
+            new EventOutbox(new PendingEvents(context), work),
+            _deployment.Attached(context, new EventOutbox(new PendingEvents(context), work), new FixedTime(Noon)),
+            new RecordAccessSessionStore(context));
 
     private SubjectEraser Eraser(StoreContext context, UnitOfWork work) =>
         new(
@@ -619,6 +792,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             new ConfigurationStore(context, new DataConnections(context)),
             new DataConnections(context),
             new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+            new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
             new EventOutbox(new PendingEvents(context), work));
 
     // The second transaction is waiting on the account row the first holds, as the
@@ -656,6 +830,23 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         return reversed;
     }
 
+    private async Task<bool> RecordTakenDownAsync(SubjectId record)
+    {
+        await using StoreContext taking = database.Context();
+        await using var work = new UnitOfWork(taking);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        bool taken = await States(taking, work).TakeDownRecordAsync(
+            record,
+            Noon,
+            TestContext.Current.CancellationToken);
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return taken;
+    }
+
     private SessionStore Sessions(StoreContext context) =>
         new(context, _deployment.Ring, _deployment.Randomness);
 
@@ -672,6 +863,41 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             TestContext.Current.CancellationToken));
 
         await work.CommitAsync(TestContext.Current.CancellationToken);
+    }
+
+    // A person record a collection wrote, of a contact verified then.
+    private async Task<SubjectId> RecordAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId subject = Subjects.New();
+
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await new RecordDirectory(
+                writing,
+                new PersonRecordStore(writing, _deployment.Ring, _deployment.Randomness),
+                new IdentifierStore(writing, _deployment.Ring, _deployment.Randomness),
+                new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness),
+                new OutboxStore(writing, TimeProvider.System))
+            .WriteAsync(
+                new CollectedPerson(
+                    subject,
+                    organization,
+                    Created: true,
+                    "en",
+                    Name: null,
+                    Age: null,
+                    [new CollectedContact(IdentifierKind.Phone, "+441632960046", Noon)],
+                    Reference: null,
+                    "1",
+                    TermsVersion: null,
+                    Noon),
+                TestContext.Current.CancellationToken);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return subject;
     }
 
     private async Task<AccountStanding> StandingAsync(SubjectId subject)

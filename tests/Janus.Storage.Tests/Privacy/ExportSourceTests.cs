@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,6 +8,7 @@ using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
@@ -21,6 +23,7 @@ using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
@@ -30,6 +33,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.Exports;
 using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -548,6 +552,119 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         Assert.False(held.ContainsKey("revokedAt"));
     }
 
+    /// <summary>
+    /// REC-ACC-002 (chapter 10 section 5.46): a person record's export holds its record,
+    /// with each collection's notice and terms after it, then its profile, its
+    /// identifiers and its preferences, and the age answer whole, as an export holds
+    /// everything kept.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ACC_002_ARecordsExportHoldsItsRecordProfileIdentifiersAndPreferencesAsync()
+    {
+        const string number = "+441632960045";
+
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId subject = Subjects.New();
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var work = new UnitOfWork(writing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await new RecordDirectory(
+                    writing,
+                    new PersonRecordStore(writing, _deployment.Ring, _deployment.Randomness),
+                    new IdentifierStore(writing, _deployment.Ring, _deployment.Randomness),
+                    new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness),
+                    new OutboxStore(writing, TimeProvider.System))
+                .WriteAsync(
+                    new CollectedPerson(
+                        subject,
+                        organization,
+                        Created: true,
+                        "en",
+                        Name: null,
+                        new CollectedAge(AdultAffirmed: true, Group: null, new DateOnly(1990, 4, 1), Noon),
+                        [new CollectedContact(IdentifierKind.Phone, number, Noon)],
+                        Reference: null,
+                        "1",
+                        "7",
+                        Noon),
+                    TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<ExportSection> sections = await Source(reading)
+            .RecordSectionsAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["record", "profile", "identifiers", "preferences"], sections.Select(section => section.Name));
+        Assert.Equal(
+            ("Active", "Collection", "1990-04-01", "1", "7"),
+            (sections[0].Records[0].Values["state"],
+                sections[0].Records[0].Values["origin"],
+                sections[0].Records[0].Values["dateOfBirth"],
+                sections[0].Records[1].Values["noticeVersion"],
+                sections[0].Records[1].Values["termsVersion"]));
+        Assert.Equal(number, Assert.Single(sections[2].Records).Values["value"]);
+        Assert.Equal("en", Assert.Single(sections[3].Records).Values["language"]);
+    }
+
+    /// <summary>
+    /// REC-ATT-002 (chapter 10 section 5.46): an account's section <c>records</c> names
+    /// each person record attached to it, with its organization, its creation and its
+    /// attachment, and nothing the record holds.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ATT_002_AnAccountsRecordsNameEachRecordAttachedToItAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        SubjectId subject = Subjects.New();
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var work = new UnitOfWork(writing);
+            RecordDirectory records = Records(writing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await records.WriteAsync(
+                new CollectedPerson(
+                    subject,
+                    organization,
+                    Created: true,
+                    "en",
+                    Name: null,
+                    Age: null,
+                    [new CollectedContact(IdentifierKind.Phone, "+441632960048", Noon)],
+                    Reference: null,
+                    "1",
+                    TermsVersion: null,
+                    Noon),
+                TestContext.Current.CancellationToken);
+            _ = await records.AttachAsync(subject, account, Noon.AddDays(1), TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        ExportSection section = await Source(reading).RecordsAsync(account, TestContext.Current.CancellationToken);
+
+        Assert.Equal("records", section.Name);
+        Assert.Equal(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["subject"] = subject.ToString(),
+                ["organization"] = organization.ToString(),
+                ["createdAt"] = Noon.ToString("O", CultureInfo.InvariantCulture),
+                ["attachedAt"] = Noon.AddDays(1).ToString("O", CultureInfo.InvariantCulture),
+            },
+            Assert.Single(section.Records).Values);
+    }
+
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";
 
@@ -564,7 +681,11 @@ public sealed class ExportSourceTests(DatabaseFixture database)
     {
         await using StoreContext reading = database.Context();
 
-        var source = new ExportSource(
+        return await Source(reading).SectionsAsync(subject, TestContext.Current.CancellationToken);
+    }
+
+    private ExportSource Source(StoreContext reading) =>
+        new(
             new AccountStore(reading),
             new AccountDirectory(
                 reading,
@@ -574,7 +695,8 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 new SubjectKeyStore(reading, _deployment.Ring, _deployment.Randomness),
                 Preferences(reading),
                 Declared,
-                new OutboxStore(reading, new FixedTime(Noon))),
+                new OutboxStore(reading, new FixedTime(Noon)),
+                _deployment.Attached(reading, new EventsInMemory(), new FixedTime(Noon))),
             new IdentifierDirectory(
                 Identifiers(reading),
                 Preferences(reading),
@@ -588,10 +710,17 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             new GroupStore(reading, new DataConnections(reading)),
             Sessions(reading),
             Declared,
+            new PersonRecordStore(reading, _deployment.Ring, _deployment.Randomness),
+            Records(reading),
             new FixedTime(Noon));
 
-        return await source.SectionsAsync(subject, TestContext.Current.CancellationToken);
-    }
+    private RecordDirectory Records(StoreContext context) =>
+        new(
+            context,
+            new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
+            Identifiers(context),
+            new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
+            new OutboxStore(context, TimeProvider.System));
 
     private async Task<IdentifierId> AddedAsync(
         SubjectId subject,

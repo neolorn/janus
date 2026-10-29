@@ -33,4 +33,10 @@ public enum ConsentMechanism
     /// </summary>
     [JsonStringEnumMemberName("administrator")]
     Administrator = 3,
+
+    /// <summary>
+    /// A person record's collection in a host's own screen.
+    /// </summary>
+    [JsonStringEnumMemberName("collection")]
+    Collection = 4,
 }

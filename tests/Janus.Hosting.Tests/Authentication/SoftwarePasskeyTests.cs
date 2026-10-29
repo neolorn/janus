@@ -62,8 +62,8 @@ public sealed class SoftwarePasskeyTests : IAsyncDisposable
         Answer completed = await registering.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", "terms-3"),
-            ("noticeVersion", "notice-2"));
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
 
         Flow.Carried(_deployment);
         _deployment.Clock.Advance(TimeSpan.FromMinutes(5));

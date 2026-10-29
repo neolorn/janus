@@ -1648,6 +1648,111 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Records.CollectionSessionRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<byte[]>("Session")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_session");
+
+                b.Property<byte[]>("WrappedKey")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("wrapped_key");
+
+                b.HasKey("Id")
+                    .HasName("pk_collection_sessions");
+
+                b.HasIndex("ExpiresAt")
+                    .HasDatabaseName("ix_collection_sessions_expires_at");
+
+                b.ToTable("collection_sessions", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Records.RecordAccessSessionRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<byte[]>("Fingerprints")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("fingerprints");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("kind");
+
+                b.Property<DateTimeOffset?>("OpenedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("opened_at");
+
+                b.PrimitiveCollection<Guid[]>("Reached")
+                    .IsRequired()
+                    .HasColumnType("uuid[]")
+                    .HasColumnName("reached");
+
+                b.Property<byte[]>("Throttled")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("throttled");
+
+                b.HasKey("Id")
+                    .HasName("pk_record_access_sessions");
+
+                b.HasIndex("ExpiresAt")
+                    .HasDatabaseName("ix_record_access_sessions_expires_at");
+
+                b.ToTable("record_access_sessions", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Records.RecordOfferRecord", b =>
+            {
+                b.Property<Guid>("SessionId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("session_id");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.PrimitiveCollection<Guid[]>("Offered")
+                    .IsRequired()
+                    .HasColumnType("uuid[]")
+                    .HasColumnName("offered");
+
+                b.Property<string>("Proven")
+                    .IsRequired()
+                    .HasColumnType("jsonb")
+                    .HasColumnName("proven");
+
+                b.HasKey("SessionId")
+                    .HasName("pk_record_offers");
+
+                b.HasIndex("ExpiresAt")
+                    .HasDatabaseName("ix_record_offers_expires_at");
+
+                b.ToTable("record_offers", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Recovery.LossReportRecord", b =>
             {
                 b.Property<Guid>("Credential")
@@ -2192,6 +2297,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("fingerprint");
 
+                b.Property<Guid?>("Collection")
+                    .HasColumnType("uuid")
+                    .HasColumnName("collection");
+
                 b.Property<DateTimeOffset>("CreatedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
@@ -2209,6 +2318,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("ExpiresAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
+
+                b.Property<Guid?>("RecordAccess")
+                    .HasColumnType("uuid")
+                    .HasColumnName("record_access");
 
                 b.Property<Guid?>("Registration")
                     .HasColumnType("uuid")
@@ -2230,6 +2343,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Fingerprint")
                     .HasName("pk_preauthentication_sessions");
 
+                b.HasIndex("Collection")
+                    .IsUnique()
+                    .HasDatabaseName("ux_preauthentication_sessions_collection")
+                    .HasFilter("collection IS NOT NULL");
+
                 b.HasIndex("Enrolment")
                     .IsUnique()
                     .HasDatabaseName("ux_preauthentication_sessions_enrolment")
@@ -2237,6 +2355,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_preauthentication_sessions_expires_at");
+
+                b.HasIndex("RecordAccess")
+                    .IsUnique()
+                    .HasDatabaseName("ux_preauthentication_sessions_record_access")
+                    .HasFilter("record_access IS NOT NULL");
 
                 b.HasIndex("Registration")
                     .IsUnique()
@@ -3599,6 +3722,261 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Identity.Records.PersonRecordRow", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<bool?>("AdultAffirmed")
+                    .HasColumnType("boolean")
+                    .HasColumnName("adult_affirmed");
+
+                b.Property<string>("AgeGroup")
+                    .HasColumnType("text")
+                    .HasColumnName("age_group");
+
+                b.Property<DateTimeOffset?>("AnsweredAgeAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("answered_age_at");
+
+                b.Property<DateTimeOffset?>("AttachedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("attached_at");
+
+                b.Property<Guid?>("AttachedTo")
+                    .HasColumnType("uuid")
+                    .HasColumnName("attached_to");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<byte[]>("DateOfBirth")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_date_of_birth");
+
+                b.Property<string>("DeletingBy")
+                    .HasColumnType("text")
+                    .HasColumnName("deleting_by");
+
+                b.Property<DateTimeOffset?>("DeletingSince")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deleting_since");
+
+                b.Property<string>("DeletionHeld")
+                    .HasColumnType("text")
+                    .HasColumnName("deletion_held");
+
+                b.Property<DateTimeOffset?>("DeletionHeldSince")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deletion_held_since");
+
+                b.Property<string>("Language")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("language");
+
+                b.Property<byte[]>("Name")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_name");
+
+                b.Property<Guid>("Organization")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization");
+
+                b.Property<string>("Origin")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("origin");
+
+                b.Property<bool>("RestrictionHeld")
+                    .HasColumnType("boolean")
+                    .HasColumnName("restriction_held");
+
+                b.Property<string>("State")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("state");
+
+                b.HasKey("Subject")
+                    .HasName("pk_person_records");
+
+                b.HasIndex("AttachedTo")
+                    .HasDatabaseName("ix_person_records_attached_to")
+                    .HasFilter("attached_to IS NOT NULL");
+
+                b.HasIndex("DeletingSince")
+                    .HasDatabaseName("ix_person_records_deleting_since")
+                    .HasFilter("deleting_since IS NOT NULL");
+
+                b.HasIndex("Organization")
+                    .HasDatabaseName("ix_person_records_organization");
+
+                b.ToTable("person_records", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_person_records_age_answer", "adult_affirmed IS NULL OR age_group IS NULL");
+
+                        t.HasCheckConstraint("ck_person_records_age_group", "age_group IS NULL OR age_group IN ('adult', 'minor')");
+
+                        t.HasCheckConstraint("ck_person_records_answered_age_at", "(answered_age_at IS NULL) = (adult_affirmed IS NULL AND age_group IS NULL)");
+
+                        t.HasCheckConstraint("ck_person_records_attached", "(attached_to IS NULL) = (attached_at IS NULL)");
+
+                        t.HasCheckConstraint("ck_person_records_attached_to_not_max_uuid", "attached_to <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_person_records_date_of_birth", "enc_date_of_birth IS NULL OR answered_age_at IS NOT NULL");
+
+                        t.HasCheckConstraint("ck_person_records_deleting", "(deleting_by IS NULL) = (deleting_since IS NULL)");
+
+                        t.HasCheckConstraint("ck_person_records_deleting_by", "deleting_by IS NULL OR deleting_by IN ('oob-request', 'self', 'takedown')");
+
+                        t.HasCheckConstraint("ck_person_records_deletion_held", "deletion_held IS NULL OR deletion_held IN ('oob-request', 'self')");
+
+                        t.HasCheckConstraint("ck_person_records_deletion_held_since", "(deletion_held IS NULL) = (deletion_held_since IS NULL)");
+
+                        t.HasCheckConstraint("ck_person_records_deletion_held_state", "deletion_held IS NULL OR (state = 'deleting' AND deleting_by = 'takedown')");
+
+                        t.HasCheckConstraint("ck_person_records_origin", "origin IN ('collection', 'staff')");
+
+                        t.HasCheckConstraint("ck_person_records_restriction_held", "NOT restriction_held OR state = 'deleting'");
+
+                        t.HasCheckConstraint("ck_person_records_state", "state IN ('active', 'deleted', 'deleting', 'restricted')");
+
+                        t.HasCheckConstraint("ck_person_records_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Records.RecordContactRow", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<string>("Kind")
+                    .HasColumnType("text")
+                    .HasColumnName("kind");
+
+                b.Property<string>("CanonicalisationVersion")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("canonicalisation_version");
+
+                b.Property<byte[]>("Fingerprint")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("fingerprint");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
+                b.Property<byte[]>("Value")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_value");
+
+                b.Property<DateTimeOffset?>("VerifiedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("verified_at");
+
+                b.HasKey("Subject", "Kind")
+                    .HasName("pk_person_record_contacts");
+
+                b.HasIndex("Kind", "Fingerprint")
+                    .HasDatabaseName("ix_person_record_contacts_fingerprint")
+                    .HasFilter("fingerprint <> decode(repeat('00', 32), 'hex')");
+
+                b.ToTable("person_record_contacts", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_person_record_contacts_fingerprint", "octet_length(fingerprint) = 32");
+
+                        t.HasCheckConstraint("ck_person_record_contacts_kind", "kind IN ('email', 'phone')");
+
+                        t.HasCheckConstraint("ck_person_record_contacts_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Records.RecordDocumentsRow", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("documents_id");
+
+                b.Property<string>("NoticeVersion")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("notice_version");
+
+                b.Property<DateTimeOffset>("RecordedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("recorded_at");
+
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<string>("TermsVersion")
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("terms_version");
+
+                b.HasKey("Id")
+                    .HasName("pk_person_record_documents");
+
+                b.HasIndex("Subject")
+                    .HasDatabaseName("ix_person_record_documents_subject");
+
+                b.ToTable("person_record_documents", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_person_record_documents_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Records.RecordReferenceRow", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("reference_id");
+
+                b.Property<DateTimeOffset>("AddedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("added_at");
+
+                b.Property<byte[]>("Fingerprint")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("fingerprint");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.HasKey("Id")
+                    .HasName("pk_person_record_references");
+
+                b.HasIndex("Fingerprint")
+                    .HasDatabaseName("ix_person_record_references_fingerprint")
+                    .HasFilter("fingerprint <> decode(repeat('00', 32), 'hex')");
+
+                b.HasIndex("Subject")
+                    .HasDatabaseName("ix_person_record_references_subject");
+
+                b.ToTable("person_record_references", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_person_record_references_fingerprint", "octet_length(fingerprint) = 32");
+
+                        t.HasCheckConstraint("ck_person_record_references_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Privacy.Bases.LawfulBasisRow", b =>
             {
                 b.Property<string>("Key")
@@ -3698,7 +4076,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_consents_kind", "kind IN ('ordinary', 'written')");
 
-                        t.HasCheckConstraint("ck_consents_mechanism", "mechanism IN ('administrator', 'dashboard', 'reconsent', 'registration')");
+                        t.HasCheckConstraint("ck_consents_mechanism", "mechanism IN ('administrator', 'collection', 'dashboard', 'reconsent', 'registration')");
 
                         t.HasCheckConstraint("ck_consents_purpose", "length(trim(purpose)) > 0");
 
@@ -3757,7 +4135,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("objections", "identity", t =>
                     {
-                        t.HasCheckConstraint("ck_objections_mechanism", "mechanism IN ('administrator', 'dashboard', 'reconsent', 'registration')");
+                        t.HasCheckConstraint("ck_objections_mechanism", "mechanism IN ('administrator', 'collection', 'dashboard', 'reconsent', 'registration')");
 
                         t.HasCheckConstraint("ck_objections_purpose", "length(trim(purpose)) > 0");
 
@@ -3905,7 +4283,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown')");
+                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown', 'retention')");
 
                         t.HasCheckConstraint("ck_erasures_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
 
@@ -4036,7 +4414,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_outbox_purpose", "(kind IN ('consent-changed', 'objection-changed') AND purpose IS NOT NULL AND length(trim(purpose)) > 0 AND change IS NOT NULL) OR (kind NOT IN ('consent-changed', 'objection-changed') AND purpose IS NULL AND change IS NULL)");
 
-                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
+                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown', 'retention')");
 
                         t.HasCheckConstraint("ck_outbox_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
 
@@ -4480,6 +4858,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasConstraintName("fk_policy_raises_organization");
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Records.RecordOfferRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authentication.Sessions.SessionRecord", null)
+                    .WithOne()
+                    .HasForeignKey("Janus.Storage.Authentication.Records.RecordOfferRecord", "SessionId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_record_offers_session_id");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Recovery.LossReportRecord", b =>
             {
                 b.HasOne("Janus.Storage.Authentication.Factors.AuthenticatorRecord", null)
@@ -4542,6 +4930,18 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sessions.PreAuthenticationRecord", b =>
             {
+                b.HasOne("Janus.Storage.Authentication.Records.CollectionSessionRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Collection")
+                    .OnDelete(DeleteBehavior.SetNull)
+                    .HasConstraintName("fk_preauthentication_sessions_collection");
+
+                b.HasOne("Janus.Storage.Authentication.Records.RecordAccessSessionRecord", null)
+                    .WithMany()
+                    .HasForeignKey("RecordAccess")
+                    .OnDelete(DeleteBehavior.SetNull)
+                    .HasConstraintName("fk_preauthentication_sessions_record_access");
+
                 b.HasOne("Janus.Storage.Authentication.Registration.RegistrationSessionRecord", null)
                     .WithMany()
                     .HasForeignKey("Registration")
@@ -4744,24 +5144,50 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasConstraintName("fk_profiles_subject");
             });
 
-        modelBuilder.Entity("Janus.Storage.Privacy.Consents.ConsentRecordRow", b =>
+        modelBuilder.Entity("Janus.Storage.Identity.Records.PersonRecordRow", b =>
             {
                 b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
                     .WithMany()
-                    .HasForeignKey("Subject")
+                    .HasForeignKey("AttachedTo")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("fk_person_records_attached_to");
+
+                b.HasOne("Janus.Storage.Identity.Organizations.OrganizationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Organization")
                     .OnDelete(DeleteBehavior.Restrict)
                     .IsRequired()
-                    .HasConstraintName("fk_consents_subject");
+                    .HasConstraintName("fk_person_records_organization");
             });
 
-        modelBuilder.Entity("Janus.Storage.Privacy.Consents.ObjectionRecordRow", b =>
+        modelBuilder.Entity("Janus.Storage.Identity.Records.RecordContactRow", b =>
             {
-                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                b.HasOne("Janus.Storage.Identity.Records.PersonRecordRow", null)
                     .WithMany()
                     .HasForeignKey("Subject")
                     .OnDelete(DeleteBehavior.Restrict)
                     .IsRequired()
-                    .HasConstraintName("fk_objections_subject");
+                    .HasConstraintName("fk_person_record_contacts_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Records.RecordDocumentsRow", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Records.PersonRecordRow", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_person_record_documents_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Records.RecordReferenceRow", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Records.PersonRecordRow", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_person_record_references_subject");
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentCookieRecord", b =>
@@ -4784,26 +5210,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasConstraintName("fk_legal_document_translations_version");
             });
 
-        modelBuilder.Entity("Janus.Storage.Privacy.Erasures.ErasureRecord", b =>
-            {
-                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
-                    .WithOne()
-                    .HasForeignKey("Janus.Storage.Privacy.Erasures.ErasureRecord", "Subject")
-                    .OnDelete(DeleteBehavior.Restrict)
-                    .IsRequired()
-                    .HasConstraintName("fk_erasures_subject");
-            });
-
-        modelBuilder.Entity("Janus.Storage.Privacy.Exports.ExportRecordRow", b =>
-            {
-                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
-                    .WithMany()
-                    .HasForeignKey("Subject")
-                    .OnDelete(DeleteBehavior.Restrict)
-                    .IsRequired()
-                    .HasConstraintName("fk_privacy_exports_subject");
-            });
-
         modelBuilder.Entity("Janus.Storage.Privacy.Outbox.DeliveryConfirmationRecord", b =>
             {
                 b.HasOne("Janus.Storage.Privacy.Outbox.DeliveryRecord", null)
@@ -4812,26 +5218,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .OnDelete(DeleteBehavior.Cascade)
                     .IsRequired()
                     .HasConstraintName("fk_outbox_confirmations_delivery");
-            });
-
-        modelBuilder.Entity("Janus.Storage.Privacy.Outbox.DeliveryRecord", b =>
-            {
-                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
-                    .WithMany()
-                    .HasForeignKey("Subject")
-                    .OnDelete(DeleteBehavior.Restrict)
-                    .IsRequired()
-                    .HasConstraintName("fk_outbox_subject");
-            });
-
-        modelBuilder.Entity("Janus.Storage.Privacy.Requests.PrivacyRequestRecord", b =>
-            {
-                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
-                    .WithMany()
-                    .HasForeignKey("Subject")
-                    .OnDelete(DeleteBehavior.Restrict)
-                    .IsRequired()
-                    .HasConstraintName("fk_privacy_requests_subject");
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentVersionRecord", b =>

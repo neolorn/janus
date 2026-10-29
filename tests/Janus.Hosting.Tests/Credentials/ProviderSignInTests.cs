@@ -1369,8 +1369,8 @@ public sealed class ProviderSignInTests : IAsyncDisposable
             (await browser.SendAsync(
                 "POST",
                 "/register/terms",
-                ("termsVersion", "terms-3"),
-                ("noticeVersion", "notice-2"))).Status);
+                Flow.TermsVersion(_deployment),
+                Flow.NoticeVersion(_deployment))).Status);
 
         Flow.Carried(_deployment);
 

@@ -822,6 +822,27 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// REC-REC-001 AC3, IDN-ACCT-007 (D-166, D-221): a grant naming a subject no account
+    /// bears, a person record's among them, is refused naming <c>subjectId</c>, and
+    /// nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_REC_001_AC3_AGrantToASubjectNoAccountBearsIsRefusedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        _deployment.AccountSubjects.Unborne(new SubjectId(Holder));
+
+        Answer refused = await GrantedAsync(administrator, "document", "d-1");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), refused.Text("code"));
+        Assert.Equal("subjectId", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(await HeldAsync(Branch));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-001, CONV-DESIGN-003: a group removed while the grant waited for the
     /// organization's groups is no group to give it to, so nothing is written.
     /// </summary>

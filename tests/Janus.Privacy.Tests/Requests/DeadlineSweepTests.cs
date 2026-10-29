@@ -38,6 +38,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
     private readonly AccountStatesInMemory _accounts = new();
     private readonly OutboxStoreInMemory _outbox = new();
     private readonly SubjectNoticesInMemory _notices = new();
+    private readonly EventsInMemory _events = new();
     private readonly PrivacyAlertsInMemory _alerts = new();
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly ConfigurationInMemory _configuration = new();
@@ -66,6 +67,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
             _accounts,
             new RestrictionGrant(_accounts, _outbox),
             _notices,
+            _events,
             _audit,
             _configuration,
             _work,

@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
+using Janus.Identity.Records;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Requests;
+using Janus.Storage.Identity.Records;
 
 namespace Janus.Storage.Privacy.Requests;
 
@@ -16,14 +19,24 @@ namespace Janus.Storage.Privacy.Requests;
 /// the identity area.
 /// </summary>
 /// <param name="accounts">Where accounts are read and their transitions carried.</param>
+/// <param name="records">Where a person record a request names is restricted, and its deletion read.</param>
 /// <param name="sessions">What a restriction or a takedown ends in the transaction that makes it.</param>
 /// <param name="events">Where each session a restriction or a takedown ends is announced.</param>
+/// <param name="attached">Where each transition is carried to the records attached to the account.</param>
+/// <param name="recordSessions">What a record's takedown ends in the transaction that makes it.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-004, IDN-LIFE-003, AUTH-SESS-010 and CONV-DESIGN-003. The
-/// transitions are the account aggregate's, so a state this adapter cannot reach from
-/// is refused there and answered here as no change.
+/// Implements PRIV-RIGHT-004, IDN-LIFE-003, AUTH-SESS-010, REC-ACC-002, REC-REC-003,
+/// REC-ATT-002, REC-TKD-001 and CONV-DESIGN-003. The transitions are the account
+/// aggregate's and the person record's, so a state this adapter cannot reach from is
+/// refused there and answered here as no change.
 /// </remarks>
-internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessions, IEvents events)
+internal sealed class AccountStates(
+    IAccountStore accounts,
+    IPersonRecordStore records,
+    ISessionStore sessions,
+    IEvents events,
+    AttachedRecords attached,
+    IRecordAccessSessionStore recordSessions)
     : IAccountStates
 {
     /// <inheritdoc/>
@@ -64,14 +77,27 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
                     throw new InvalidOperationException(unannounced.Code.ToString());
                 }
 
+                // REC-ATT-002 AC1: each record attached to it is restricted with it.
+                await attached.RestrictAsync(subject, at, cancellationToken).ConfigureAwait(false);
+
                 break;
 
             // PRIV-RIGHT-004: an account away from active holds the restriction, so it
-            // comes back restricted and nothing acts on it meanwhile.
+            // comes back restricted and nothing acts on it meanwhile. A restriction follows
+            // its decision, not the account's state, so each attached record is restricted
+            // at once, held where it is in the window with the account, and the account's
+            // later return to restricted changes no record (REC-ATT-002, D-222).
             case { State: AccountState.Suspended or AccountState.Deleting, RestrictionHeld: false }:
                 account.HoldRestriction();
 
+                await attached.RestrictAsync(subject, at, cancellationToken).ConfigureAwait(false);
+
                 break;
+
+            // REC-ACC-002: a person record's restriction request is fulfilled on the
+            // record, which has no session to end; one in its deletion window holds it.
+            case null:
+                return await RecordRestrictedAsync(subject, cancellationToken).ConfigureAwait(false);
 
             default:
                 return false;
@@ -94,8 +120,14 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         Account? account = await accounts.HoldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (account is null
-            || !(account.State is AccountState.Active or AccountState.Restricted
+        // REC-ADM-002: a person record's out-of-band erasure begins its window as an
+        // active or restricted account's does, holding a restriction in force.
+        if (account is null)
+        {
+            return await RecordDeletionBegunAsync(subject, origin, at, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!(account.State is AccountState.Active or AccountState.Restricted
                 || (account.State is AccountState.Suspended && origin is DeletionOrigin.OutOfBandRequest)))
         {
             return false;
@@ -104,6 +136,7 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         account.RequestDeletion(origin, at);
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+        await attached.BeginDeletionAsync(subject, origin, at, cancellationToken).ConfigureAwait(false);
 
         return true;
     }
@@ -117,6 +150,11 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
             .DeletingSinceAsync(before, cancellationToken)
             .ConfigureAwait(false);
 
+        // REC-REC-003: a person record's window closes into the same erasure.
+        IReadOnlyList<PersonRecord> erasing = await records
+            .DeletingSinceAsync(before, cancellationToken)
+            .ConfigureAwait(false);
+
         return
         [
             .. deleting
@@ -126,22 +164,63 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
                     account.DeletingBy!.Value,
                     account.DeletingSince!.Value,
                     account.DeletionHeldSince)),
+            .. erasing
+                .Where(record => record.DeletingBy is not null && record.DeletingSince is not null)
+                .Select(record => new PendingDeletion(
+                    record.Subject,
+                    record.DeletingBy!.Value,
+                    record.DeletingSince!.Value,
+                    record.DeletionHeldSince)
+                {
+                    IsPersonRecord = true,
+                }),
         ];
     }
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<SubjectId>> AttachedAsync(
+        SubjectId account,
+        CancellationToken cancellationToken) =>
+        records.AttachedToAsync(account, cancellationToken);
+
+    /// <inheritdoc/>
     public async ValueTask<AccountStanding?> StandingAsync(
         SubjectId subject,
-        CancellationToken cancellationToken) =>
-        await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
-            is Account account
-            ? new AccountStanding(
+        CancellationToken cancellationToken)
+    {
+        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Account account)
+        {
+            return new AccountStanding(
                 account.State,
                 account.DeletingBy,
                 account.DeletingSince,
                 account.DeletionHeldSince,
-                account.IsEmergency)
+                account.IsEmergency);
+        }
+
+        // REC-ACC-002: a person record bears its subject as an account does, its states
+        // spelled as the account's, so a request for it is entered and fulfilled alike.
+        return await records.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is PersonRecord record
+            ? new AccountStanding(
+                record.State switch
+                {
+                    PersonRecordState.Active => AccountState.Active,
+                    PersonRecordState.Restricted => AccountState.Restricted,
+                    PersonRecordState.Deleting => AccountState.Deleting,
+                    _ => AccountState.Deleted,
+                },
+                record.DeletingBy,
+                record.DeletingSince,
+                record.DeletionHeldSince,
+                Emergency: false)
+            {
+                IsPersonRecord = true,
+                AttachedTo = record.AttachedTo,
+            }
             : null;
+    }
 
     /// <inheritdoc/>
     public async ValueTask<bool> TakeDownAsync(
@@ -162,6 +241,9 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         account.Takedown(at);
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+
+        // REC-ATT-002 AC4: each record attached to it is taken down with it.
+        await attached.TakeDownAsync(subject, at, cancellationToken).ConfigureAwait(false);
 
         // Chapter 10 section 5b (D-218): no person takes an account down here, so no actor
         // is named; an event not taken fails the takedown, as its unit of work failing does.
@@ -207,6 +289,106 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         account.ReverseTakedown();
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+        await attached.ReverseTakedownAsync(subject, now, cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> TakeDownRecordAsync(
+        SubjectId record,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        // REC-TKD-001: a takedown finds a record in any state but a takedown of its own
+        // and an erasure, holds the one it found, and a record attached to an account is
+        // taken down with it, never alone.
+        if (await records.HoldAsync(record, cancellationToken).ConfigureAwait(false)
+            is not { AttachedTo: null } held
+            || held is { State: PersonRecordState.Deleted }
+            or { State: PersonRecordState.Deleting, DeletingBy: DeletionOrigin.Takedown })
+        {
+            return false;
+        }
+
+        held.Takedown(at);
+
+        await records.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+        _ = await recordSessions.EndReachingAsync(record, cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ReverseRecordTakedownAsync(
+        SubjectId record,
+        DateTimeOffset now,
+        DeletionWindows windows,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+
+        // REC-TKD-001: as an account's, the window is judged again under the lock on the
+        // row, so of a reversal and the erasure at the window's end only one commits.
+        if (await records.HoldAsync(record, cancellationToken).ConfigureAwait(false)
+                is not
+                {
+                    State: PersonRecordState.Deleting,
+                    DeletingBy: DeletionOrigin.Takedown,
+                    DeletingSince: DateTimeOffset since,
+                } held
+            || now >= windows.ErasureDue(DeletionOrigin.Takedown, since, held.DeletionHeldSince))
+        {
+            return false;
+        }
+
+        held.ReverseTakedown();
+
+        await records.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    private async ValueTask<bool> RecordRestrictedAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        PersonRecord? record = await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        switch (record)
+        {
+            case { State: PersonRecordState.Active }:
+                record.Restrict();
+
+                break;
+
+            case { State: PersonRecordState.Deleting, RestrictionHeld: false }:
+                record.HoldRestriction();
+
+                break;
+
+            default:
+                return false;
+        }
+
+        await records.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    private async ValueTask<bool> RecordDeletionBegunAsync(
+        SubjectId subject,
+        DeletionOrigin origin,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not { State: PersonRecordState.Active or PersonRecordState.Restricted } record)
+        {
+            return false;
+        }
+
+        record.RequestDeletion(origin, at);
+
+        await records.RecordAsync(record, cancellationToken).ConfigureAwait(false);
 
         return true;
     }

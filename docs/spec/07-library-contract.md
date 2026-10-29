@@ -92,7 +92,7 @@ breaking.
 |---|---|
 | **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, the encrypted fields and the capabilities of a type, roles, the roles a deployment starts with, the step-up gate and the purpose bound to an action, **derivations**, the host's jobs and cookies (`Capabilities`, `Role`, `Job`, `Cookie`, D-202, D-203, D-204); and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
 | **Permission filter shape** | The expression form and the SQL fragment form |
-| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` and `AppPasswordId` among them, and the value types they take (CONV-DESIGN-004), `RestrictionName` and `DocumentName` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the unit of work every area writes through (`IUnitOfWork`, whose `BeginAsync` answers whether it opened the outermost level, with `AfterCommit`, the registration of work to run after the outermost commit; CONV-DESIGN-003) and event publication (`IEvents`, CONV-DESIGN-002), which no host implements, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements; the request's access a host endpoint reads (`IRequestAccess`, `RequestAccess`, `17` BFF-HOST-001), and the seams a host's own work joins, `IResources`, `ICallbackReferences` and the field cipher of a host's own fields (`IPersonalFields`, `SubjectFields`, PRIV-RIGHT-005a) (D-202, D-203) |
+| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` and `AppPasswordId` among them, and the value types they take (CONV-DESIGN-004), `RestrictionName` and `DocumentName` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the unit of work every area writes through (`IUnitOfWork`, whose `BeginAsync` answers whether it opened the outermost level, with `AfterCommit`, the registration of work to run after the outermost commit; CONV-DESIGN-003) and event publication (`IEvents`, CONV-DESIGN-002), which no host implements, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements; the request's access a host endpoint reads (`IRequestAccess`, `RequestAccess`, `17` BFF-HOST-001), and the seams a host's own work joins, `IResources`, `ICallbackReferences`, the field cipher of a host's own fields (`IPersonalFields`, `SubjectFields`, PRIV-RIGHT-005a) and the collection of a person record (`IRecordCollection`, `RecordCollection`, `CollectedRecord`, `21` REC-COL-002) (D-202, D-203, D-221) |
 | **Extension contracts** | The interfaces a host implements or replaces for the library to call: the export contributors (`IExportContributor`, PRIV-RIGHT-003, D-203); the mail and SMS transports, `INotificationHandler`, whose `SendAsync` answers `Result`, with `SendRequest` (the admitted message: its kind, destination, subject, language, values and the `SendReference` it is carried under, and none of the restrictions' inputs), `SendDestination` and `SendReference` (with `TryParse`, since the store reads a reference back from its row), and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
 | **Emitted events** | Lifecycle event contracts, including the identifier, restriction and device events of D-146 (`IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`, `SendingRestrictionChanged`, `SendingRestrictionGranted`, `DeviceVerified`; `10` section 5b), each delivered to every registered `IEventConsumer<TEvent>` from a row written in the emitting transaction, retried under `outbox.retry.*`, and on exhaustion failed with `degradation`; publication is not replaceable (CONV-DESIGN-002). And the host registrations that answer for them: `ISubjectEventSubscriber`, naming the resource types it covers (`Covers`), and `IPurposeHandler`, named (`Name`) and naming the purposes it handles (`Purposes`), to which each `ConsentChanged` and `ObjectionChanged` of those purposes is delivered through the outbox (`ConsentChangedAsync`, `ObjectionChangedAsync`), confirmed by its success and on exhaustion failed with `erasure-delivery-exhausted` as a subject event's delivery is (PRIV-RIGHT-001a, D-203) |
 | **Database schema** | All library-owned tables |
@@ -195,7 +195,7 @@ contract in `Janus.Core`, and SHALL be exposed **twice**: callable in-process by
 host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The four
 operations named below as called in process only have no endpoint.
 
-*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208, D-218*
+*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208, D-218, D-221*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -215,20 +215,27 @@ the break-glass credential and whether one stands (OPS-BOOT-004, OPS-BOOT-001 AC
 reads of organizations, members, invitations, another person's account, contact details,
 standing and sessions, the setting of another person's preferences (`01` IDN-READ-001 to
 IDN-READ-003), and which accounts may exercise a permission (`03` AUTHZ-GATE-007,
-D-218). The endpoints are enumerated in `09-api-contract`; the permissions in
-`10-reference` §2.1.
+D-218); and the person records (`21`, D-221): their entry, reads and finding,
+correction, the consents and objections staff record, their export for the person,
+restriction lift, deletion and its cancellation, erasure and takedown, the account's
+operations on a record attached to it, and the offer and the attachment
+(`IPersonRecords`). The endpoints are enumerated in `09-api-contract`; the permissions
+in `10-reference` §2.1.
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
-since the session and its cookie are the browser's and not a result a host calls for: the
-social provider round trips (`/auth/providers/{provider}`, their returns and
+since the session and its cookie are the browser's and not a result a host calls for:
+the social provider round trips (`/auth/providers/{provider}`, their returns and
 `/callbacks/providers/{provider}/return`), `/auth/signon` and its return,
 `POST /auth/break-glass`, `/auth/factor`, `/auth/device/verify`, `/auth/step-up` and
-`/register/terms`. The callbacks a gateway or provider sends (`GET /callbacks/sms/dlr`,
-`POST /callbacks/providers/{provider}`), the three well-known documents and the
-provider's protocol endpoints are not operations. Beside its contract an endpoint MAY
-take the browser's own records: its pre-authentication binding, the rotation of its
-session, and the registration signal.
+`/register/terms`; and so do the endpoints of a person record's collection session and
+record access session (`/records/collection` and `/records/access` and every route under
+them, `21` REC-COL-001, REC-ACC-001, D-221), whose sessions are the browser's and whose
+person holds no access context. The callbacks a gateway or provider sends
+(`GET /callbacks/sms/dlr`, `POST /callbacks/providers/{provider}`), the three well-known
+documents and the provider's protocol endpoints are not operations. Beside its contract
+an endpoint MAY take the browser's own records: its pre-authentication binding, the
+rotation of its session, and the registration signal.
 
 **Every operation takes an access context** (AUTHZ-IMP-001) — a person's, which a host's
 endpoint reads from the request with the session it passes beside it (`17` BFF-HOST-001),
@@ -245,20 +252,22 @@ record of a person, and is asked by the key set's endpoint and by the sign-on's 
 of the identity token (BFF-SESS-006), where no person acts and no background work runs.
 
 **Seams that join the host's transaction.** `IResources` (AUTHZ-INHERIT-002),
-`ICallbackReferences` (BFF-MACH-003) and `IPersonalFields`, the cipher of a host's own
-fields (PRIV-RIGHT-005a), are seams, not operations of this contract: each joins the
-host's own work, so none has an endpoint, and none takes an access context. Placing,
-moving or removing a record, and who may read what a record holds, are the host's own
-actions, which the host asks of the gate before it writes or answers. The host's context
-joins the unit of work's connection and transaction with `UseUnitOfWorkAsync`
-(`Janus.Hosting`), so its writes and the library's commit together (AUTHZ-INHERIT-002,
-D-203); an operation whose refusal keeps a write begins the outermost unit of work and
-is never called inside the host's (CONV-DESIGN-003). A context taken from a pool, or
-configured with a connection object it owns, cannot join and is refused with
-`InvalidOperationException`, and a host never returns a joined context to a pool before
-the outermost commit or rollback (AUTHZ-INHERIT-002, D-207); a host asks the gate of an
-action bound to a step-up gate before it begins the unit of work it joins (`08`
-CONV-DESIGN-003, D-207).
+`ICallbackReferences` (BFF-MACH-003), `IPersonalFields`, the cipher of a host's own
+fields (PRIV-RIGHT-005a), and `IRecordCollection`, the collection of a person record
+(`21` REC-COL-002, D-221), are seams, not operations of this contract: each joins the
+host's own work, so none has an endpoint, and none takes an access context;
+`IRecordCollection` is admitted by the collection session the browser of the request
+being served holds. Placing, moving or removing a record, and who may read what a record
+holds, are the host's own actions, which the host asks of the gate before it writes or
+answers. The host's context joins the unit of work's connection and transaction with
+`UseUnitOfWorkAsync` (`Janus.Hosting`), so its writes and the library's commit together
+(AUTHZ-INHERIT-002, D-203); an operation whose refusal keeps a write begins the
+outermost unit of work and is never called inside the host's (CONV-DESIGN-003). A
+context taken from a pool, or configured with a connection object it owns, cannot join
+and is refused with `InvalidOperationException`, and a host never returns a joined
+context to a pool before the outermost commit or rollback (AUTHZ-INHERIT-002, D-207); a
+host asks the gate of an action bound to a step-up gate before it begins the unit of
+work it joins (`08` CONV-DESIGN-003, D-207).
 
 **Operations called in process only.** Four operations are called in process only, and
 none has an endpoint or meets a gate (CONV-DESIGN-002 AC3): read-volume counting
@@ -311,7 +320,7 @@ anyone acts, and reads no record of a person (D-218).
 | **Purpose handlers** | For every purpose resting on consent or on an objectable basis, a registered `IPurposeHandler` naming it (`Purposes`), under a name distinct among the purpose handlers and the subject-event subscribers (`Name`, IDN-LIFE-003a), which handles each `ConsentChanged` and `ObjectionChanged` of the purposes it names, delivered through the outbox (PRIV-RIGHT-001a, PRIV-CONS-008, D-203). **Startup fails otherwise** (PRIV-RIGHT-001a AC3), `details.handler` naming the purpose |
 | **Export contributors** | Each registered `IExportContributor` names the types whose records it holds (`Covers`) and answers its sections of a subject's export (PRIV-RIGHT-003); every type that declares an encrypted field or a sensitive category SHALL be covered by at least one. **Startup fails otherwise** with `model.startup.declarationmissing`, `details.handler` naming the type; contributor names are distinct, each under INT-SMS-003's name rule, a name outside it or given twice failing startup with `model.startup.declarationinvalid`, `details.declaration` `contributor.<name>`, `details.field` `name` (D-203, D-206); the names of the sections and values a contributor answers follow that rule without `.`, judged by `Janus.Hosting` before the assembly takes them (PRIV-RIGHT-003, D-206) |
 | **Cookies** | Every cookie the host sets: `Cookie(name, lifetime, thirdPartyReadable, purpose)`, its lifetime none for one that ends with the browser's session, its purpose none for one strictly necessary and the consent-based purpose it serves for one that is not (PRIV-CONS-006a); a purpose not declared or not resting on consent, a name the library's own cookies take, or a cookie declared twice fails startup with `model.startup.declarationinvalid`, `details.declaration` `cookie.<name>` (D-203) |
-| **Jobs** | Optional: each of the host's background jobs, `Job(name, permissions)`, its name under INT-SMS-003's rule, distinct, and no name of `10` section 5.29 nor `migrate` (D-206), with the host permissions it exercises; its principal is `SystemPrincipal.ForOrganization` naming it (IDN-PRIN-001). A permission not declared, a library-owned one other than `organization:read`, `membership:read`, `contact:read` and `consent:read` (`01` IDN-READ-004, D-218), one bound to a step-up gate or one whose action is `export` fails startup with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`, `details.field` `permissions` (D-202) |
+| **Jobs** | Optional: each of the host's background jobs, `Job(name, permissions)`, its name under INT-SMS-003's rule, distinct, and no name of `10` section 5.29 nor `migrate` (D-206), with the host permissions it exercises; its principal is `SystemPrincipal.ForOrganization` naming it (IDN-PRIN-001). A permission not declared, a library-owned one other than `organization:read`, `membership:read`, `contact:read`, `consent:read` (`01` IDN-READ-004, D-218), `record:read` and `record:erase` (`21`, D-221), one bound to a step-up gate or one whose action is `export` fails startup with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`, `details.field` `permissions` (D-202) |
 | **Governing language** | `legal.governinglanguage`: the default governing language of every legal document version (PRIV-CONS-005). Required, no default; protected once set (OPS-CFG-004) |
 | **Preference declaration** | Each host-declared preference: name, type (`string` · `boolean` · `integer` · `enum` with its values), default, and whether the person or only an administrator may edit it (REG-PREF-001). The declaration MAY be empty; a malformed one fails startup |
 | **Restriction key suppliers** | Optional: for each `host:<name>` restriction key the host uses (AUTH-ABUSE-004), a per-send callback registered under that name that returns the key value the restriction is evaluated against. A restriction naming a `host:<name>` key with no registered supplier fails startup, and a change of the restriction set naming one is refused with `config.value.notallowed`, `details.supplier` naming it. The callback is `Func<SendContext, CancellationToken, ValueTask<string>>`; `SendContext` is a sealed record of `Purpose` (`10` section 5.15), `Kind` (`email` · `sms`), `SubjectId` (nullable) and `Source` (nullable: a send no request asked for has none) (D-153) |
@@ -684,7 +693,12 @@ carries:
   `Software passkey`; and for each a `TestSession`, an `HttpClient` that carries the
   session cookie, the synchronizer token and `X-Identity-Request` (BFF-CSRF-001,
   BFF-CSRF-003) on every request, with the person's subject, and a step-up with the
-  person's passkey or password.
+  person's passkey or password; and a visitor (`TestPeople.Visitor()`, a `TestVisitor`),
+  an `HttpClient` that carries what a `TestSession` carries save a sign-in session (the
+  pre-authentication cookie, the synchronizer token, `X-Identity-Request`, the origin
+  and the fetch metadata), for what a guest does with no account: a collection (`21`
+  REC-COL-001) and the record access (REC-ACC-001), the codes read from the in-memory
+  transports (D-222).
 
 A host's project that references the library's packages, a test project using
 `Janus.Testing` among them, carries the framework reference to `Microsoft.AspNetCore.App`
@@ -692,7 +706,7 @@ itself: the reference a package carries prunes nothing in the project that takes
 without its own the project resolves as packages what the shared framework serves (`08`
 CONV-LAYOUT-001, D-205).
 
-*Source: D-204, D-205, D-206, D-207, D-208, D-210*
+*Source: D-204, D-205, D-206, D-207, D-208, D-210, D-222*
 
 **Acceptance criteria**
 1. A test using only `Janus.Testing` and a host built on the public surface stands a
@@ -705,8 +719,9 @@ CONV-LAYOUT-001, D-205).
 4. A development deployment composed with the stand-ins raises no `degradation` for the
    seams they stand in for, and its balance job records the SMS transport's balance and
    raises no `background-job-failed` (D-208).
-5. A state-changing request made through a `TestSession` passes the browser profile's
-   CSRF stages.
+5. A state-changing request made through a `TestSession`, or through a `TestVisitor`,
+   passes the browser profile's CSRF stages; a `TestVisitor` carries no sign-in session
+   (D-222).
 
 ---
 

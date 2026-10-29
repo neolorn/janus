@@ -39,6 +39,7 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     private readonly AccountStatesInMemory _accounts = new();
     private readonly OutboxStoreInMemory _outbox = new();
     private readonly SubjectNoticesInMemory _notices = new();
+    private readonly EventsInMemory _events = new();
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly AccessGateInMemory _gate = new();
@@ -69,6 +70,7 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
             _accounts,
             new RestrictionGrant(_accounts, _outbox),
             _notices,
+            _events,
             _audit,
             _configuration,
             _work,
@@ -383,6 +385,104 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
 
         Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
         Assert.Equal(DeletionOrigin.OutOfBandRequest, _accounts.Deleting);
+    }
+
+    /// <summary>
+    /// REC-ADM-002 AC1: an out-of-band erasure fulfilled for an active or restricted
+    /// person record begins its window by <c>oob-request</c>, sends
+    /// <c>oob-deletion-notice</c> to it, and raises <c>RecordDeletionRequested</c> closing
+    /// when <c>record.deletion.grace</c> does, the staff member acting.
+    /// </summary>
+    /// <param name="state">Where the record stands.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(AccountState.Active)]
+    [InlineData(AccountState.Restricted)]
+    public async Task REC_ADM_002_AC1_AnOutOfBandErasureOfARecordBeginsItsWindowAsync(AccountState state)
+    {
+        _configuration.Set(Settings.RecordDeletionGrace, TimeSpan.FromDays(10));
+        _accounts.HoldRecord(Ahmed, state);
+
+        Result fulfilled = await ErasedAsync();
+
+        AccountStanding? standing = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+        RecordDeletionRequested requested = Assert.Single(_events.Of<RecordDeletionRequested>());
+
+        Assert.Null(fulfilled.Match(() => (Error?)null, error => error));
+        Assert.Equal((AccountState.Deleting, DeletionOrigin.OutOfBandRequest), (standing?.State, standing?.DeletingBy));
+        Assert.Equal(
+            (Ahmed, Mona, DeletionOrigin.OutOfBandRequest, Noon.AddDays(10)),
+            (requested.Subject, requested.Actor, requested.By, requested.ErasesAt));
+        Assert.Contains(_notices.Told, told => told == (Ahmed, MessageKind.OobDeletionNotice));
+    }
+
+    /// <summary>
+    /// REC-ADM-002, IDN-LIFE-003: an account's out-of-band erasure raises no record's
+    /// event, and a record already in its window has the request recorded fulfilled and
+    /// raises nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ADM_002_OnlyAWindowARecordBeginsRaisesItsEventAsync()
+    {
+        Result account = await ErasedAsync();
+
+        _accounts.HoldRecord(Ahmed, AccountState.Deleting);
+
+        Result running = await ErasedAsync();
+
+        Assert.Null(account.Match(() => (Error?)null, error => error));
+        Assert.Null(running.Match(() => (Error?)null, error => error));
+        Assert.Empty(_events.Of<RecordDeletionRequested>());
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 (D-222): an out-of-band erasure that begins an account's window
+    /// raises <c>AccountDeletionRequested</c> by <c>oob-request</c>, closing when the
+    /// account's grace does, as the owner's own deletion raises it; one fulfilled against
+    /// a window already running raises nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AnOutOfBandWindowOfAnAccountRaisesItsDeletionRequestedAsync()
+    {
+        _configuration.Set(Settings.AccountDeletionGrace, TimeSpan.FromDays(20));
+
+        Assert.Null((await ErasedAsync()).Match(() => (Error?)null, error => error));
+
+        AccountDeletionRequested requested = Assert.Single(_events.Of<AccountDeletionRequested>());
+
+        Assert.Equal(
+            (Ahmed, Mona, DeletionOrigin.OutOfBandRequest, Noon.AddDays(20)),
+            (requested.Subject, requested.Actor, requested.By, requested.ErasesAt));
+
+        _ = await ErasedAsync();
+
+        _ = Assert.Single(_events.Of<AccountDeletionRequested>());
+    }
+
+    /// <summary>
+    /// 09 section 8a, REC-ATT-002: a request naming a person record attached to an
+    /// account is refused <c>identity.record.followsaccount</c>, naming the account, and
+    /// nothing is queued.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ATT_002_ARequestNamingAnAttachedRecordIsTheAccountsAsync()
+    {
+        var account = new SubjectId(Guid.Parse("88888888-8888-4888-8888-888888888888"));
+        _accounts.HoldRecord(Ahmed, AccountState.Active, attachedTo: account);
+
+        Result<PrivacyRequestReceipt> entered = await Requests.EnterAsync(
+            AccessContext.Of(Mona),
+            Entry(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18)),
+            CancellationToken.None);
+
+        Error refused = entered.Match(_ => throw new XunitException("entered"), error => error);
+
+        Assert.Equal(ErrorCodes.RecordFollowsAccount, refused.Code);
+        Assert.Equal(account.Value, refused.Details["account"].GetGuid());
+        Assert.Empty(_requests.Queue);
     }
 
     /// <summary>

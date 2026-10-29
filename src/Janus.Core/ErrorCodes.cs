@@ -526,6 +526,60 @@ public static class ErrorCodes
     public static ErrorCode RegistrationSignedIn { get; } = ErrorCode.Parse("identity.registration.signedin");
 
     /// <summary>
+    /// A collection request arrived out of its order: a contact before the age the
+    /// session asks, or an age the session does not ask or already holds. Read the
+    /// session's state and answer what it asks next.
+    /// </summary>
+    /// <remarks>Implements REC-COL-001, REC-COL-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode CollectionIncomplete { get; } = ErrorCode.Parse("identity.collection.incomplete");
+
+    /// <summary>
+    /// A person record was asked to be collected where the browser of the request being
+    /// served holds no collection session: none begun, or one expired, ended or spent.
+    /// Nothing was written; begin a collection again.
+    /// </summary>
+    /// <remarks>Implements REC-COL-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode CollectionExpired { get; } = ErrorCode.Parse("identity.collection.expired");
+
+    /// <summary>
+    /// The browser asking to give its details already holds a session. Nothing is
+    /// staged or sent for it; the person gives their data under their account.
+    /// </summary>
+    /// <remarks>Implements REC-COL-001, REC-ACC-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RecordSignedIn { get; } = ErrorCode.Parse("identity.record.signedin");
+
+    /// <summary>
+    /// The person record is attached to an account and follows it, so an operation on
+    /// its lifecycle by the record's own path is refused. Act on the account the details
+    /// name instead.
+    /// </summary>
+    /// <remarks>Implements REC-ATT-002, REC-ADM-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RecordFollowsAccount { get; } = ErrorCode.Parse("identity.record.followsaccount");
+
+    /// <summary>
+    /// An attachment by a reference was asked where no offer to attach stands on the
+    /// account's session. Prove one of the account's emails or phones first, which makes
+    /// the offer.
+    /// </summary>
+    /// <remarks>Implements REC-ATT-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RecordNoOffer { get; } = ErrorCode.Parse("identity.record.nooffer");
+
+    /// <summary>
+    /// A path names a subject no person record bears, or one outside the caller's reach:
+    /// a record the record access session does not reach, or one not attached to the
+    /// account, alike. Name the subject of a record within the caller's reach.
+    /// </summary>
+    /// <remarks>Implements REC-REC-002, REC-ACC-001, REC-ADM-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RecordNotFound { get; } = ErrorCode.Parse("identity.record.notfound");
+
+    /// <summary>
+    /// The operation does not apply to the state the person record is in. The details
+    /// name the state.
+    /// </summary>
+    /// <remarks>Implements REC-REC-002, REC-ACC-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RecordStateConflict { get; } = ErrorCode.Parse("identity.record.stateconflict");
+
+    /// <summary>
     /// The date of birth is under eighteen where the deployment takes an adult
     /// affirmation. The registration session has ended; nothing further is accepted in
     /// it.

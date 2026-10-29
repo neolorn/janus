@@ -9,11 +9,13 @@ namespace Janus.Hosting.Privacy;
 /// Where another person stands, as <c>GET /admin/accounts/{subject}/standing</c> answers
 /// it: each consent and objection as the person's own read answers it.
 /// </summary>
-/// <param name="State">Where the account stands.</param>
+/// <param name="Kind">Whether the subject is an account or a person record.</param>
+/// <param name="State">Where the account or the record stands.</param>
 /// <param name="Consents">The person's consent records.</param>
 /// <param name="Objections">The person's objection records.</param>
-/// <remarks>Implements IDN-READ-003 and chapter 09 section 8a.</remarks>
+/// <remarks>Implements IDN-READ-003, REC-ADM-001 and chapter 09 section 8a.</remarks>
 internal sealed record StandingView(
+    SubjectKind Kind,
     AccountState State,
     IReadOnlyList<ConsentView> Consents,
     IReadOnlyList<ObjectionView> Objections)
@@ -29,6 +31,7 @@ internal sealed record StandingView(
         ArgumentNullException.ThrowIfNull(standing);
 
         return new StandingView(
+            standing.Kind,
             standing.State,
             [.. standing.Consents.Select(ConsentView.Of)],
             [.. standing.Objections.Select(ObjectionView.Of)]);

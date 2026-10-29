@@ -55,9 +55,11 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
     /// <summary>
     /// CONV-DESIGN-006 AC3: an endpoint declares the codes the text of its section gives
     /// the routes that text governs. Chapter 09 section 8 gives every route under
-    /// <c>/admin</c> the missing permission, and every route whose path names an
-    /// organization the organization the deployment does not hold; section 2 gives each
-    /// step endpoint of a registration the step that is not the session's.
+    /// <c>/admin</c> the missing permission, save a route whose path names a person
+    /// record, which section 8a answers for a caller admitted nowhere as for a subject no
+    /// record bears (D-222), and every route whose path names an organization the
+    /// organization the deployment does not hold; section 2 gives each step endpoint of a
+    /// registration the step that is not the session's.
     /// </summary>
     [Fact]
     public void CONV_DESIGN_006_AC3_AnEndpointDeclaresWhatItsSectionGivesIt()
@@ -82,7 +84,8 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
             string route = endpoint.RoutePattern.RawText!;
             IReadOnlyList<ErrorCode> declared = EndpointDeclaration.Of(endpoint)!.Codes;
 
-            if (route.StartsWith("/admin/", StringComparison.Ordinal))
+            if (route.StartsWith("/admin/", StringComparison.Ordinal)
+                && !route.StartsWith("/admin/records/{subject}", StringComparison.Ordinal))
             {
                 Assert.True(declared.Contains(ErrorCodes.Denied), $"{route} does not declare {ErrorCodes.Denied}.");
             }

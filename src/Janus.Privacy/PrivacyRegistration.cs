@@ -46,13 +46,15 @@ internal static class PrivacyRegistration
         services.AddScoped<SubjectReach>();
         services.AddScoped<Supersession>();
         services.AddScoped<DocumentSupersession>();
-        services.AddScoped<IConsents, ConsentService>();
+        services.AddScoped<ConsentService>();
+        services.AddScoped<IConsents>(provider => provider.GetRequiredService<ConsentService>());
         services.AddScoped<WorkingCalendar>();
         services.AddScoped<RestrictionGrant>();
         services.AddScoped<DeadlineSweep>();
         services.AddScoped<HolidayListWatch>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
-        services.AddScoped<ITakedowns, TakedownService>();
+        services.AddScoped<TakedownService>();
+        services.AddScoped<ITakedowns>(provider => provider.GetRequiredService<TakedownService>());
 
         // DR-016: the off-host ledger is the deployment's to register; one it does not
         // register leaves its erasures completing without a line, the residual R-A13
@@ -70,8 +72,10 @@ internal static class PrivacyRegistration
             provider.GetRequiredService<TimeProvider>()));
 
         services.AddScoped<DeletionSweep>();
+        services.AddScoped<RecordErasure>();
         services.AddScoped<OrganizationErasureSweep>();
-        services.AddScoped<IExports, ExportService>();
+        services.AddScoped<ExportService>();
+        services.AddScoped<IExports>(provider => provider.GetRequiredService<ExportService>());
         services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         services.AddScoped<LawfulBasisSeed>();
         services.AddScoped<IAuditTrail, AuditTrailService>();

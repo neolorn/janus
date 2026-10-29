@@ -345,8 +345,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // refusals are those of its records; a consent-based purpose, which no data subject's
     // consent can admit there, is refused as it is for a person. A read of the library
     // IDN-READ-004 lets a job declare reaches its organization as a host permission does,
-    // and a read it does not declare is refused (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001
-    // AC6, IDN-READ-004 AC3, AUTHZ-GATE-005, D-207, D-208, D-218).
+    // and so does a permission over person records a job may declare; one it does not
+    // declare is refused (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, IDN-READ-004 AC3,
+    // AUTHZ-GATE-005, D-207, D-208, D-218, D-221).
     private static readonly (string Scenario, Decided Decided)[] JobOrganizations =
     [
         ("a declared job asking a permission its declaration names, of its organization", Decided.Allowed),
@@ -361,6 +362,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         (
             "a declared job asking a library read its declaration names, of its organization while a request is served",
             Decided.Denied),
+        ("a declared job asking a record permission its declaration names, of its organization", Decided.Allowed),
+        ("a declared job asking a record permission its declaration does not name, of its organization", Decided.Denied),
     ];
 
     // A grant written in an organization, which names no record of a list and so runs
@@ -984,6 +987,141 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(0, await GrantRefusalsAsync(context, deployment.Organization));
         Assert.Equal(2, await GrantsInAsync(deployment.Organization));
         Assert.Equal(1, await StandingAsync(standing));
+    }
+
+    /// <summary>
+    /// REC-AGE-001 AC1, AUTHZ-INHERIT-002, IDN-LIFE-002a (D-221): a record of a sensitive
+    /// type naming a person record as its data subject is registered on the record's age
+    /// answer. One naming a record that holds no affirmation, or one that holds it and is
+    /// being deleted, is refused 422 <c>api.request.invalid</c> naming <c>subject</c>; one
+    /// naming a record collected with the age answered, or attached to an account that
+    /// stands, is admitted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_AGE_001_AC1_ASensitiveRecordUnderAPersonRecordIsRegisteredOnItsAgeAnswerAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+        _ = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        SubjectId unanswered = await deployment.PersonRecordAsync(cancellationToken);
+        SubjectId answered = await deployment.PersonRecordAsync(cancellationToken);
+        SubjectId leaving = await deployment.PersonRecordAsync(cancellationToken);
+        SubjectId attached = await deployment.PersonRecordAsync(cancellationToken);
+        ResourceReference workspace = Reference(Workspace);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+
+        await using (NpgsqlConnection connection = await host.OpenAsync())
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE identity.person_records SET adult_affirmed = true, answered_age_at = @at
+                WHERE subject = ANY(@affirmed);
+                UPDATE identity.person_records
+                SET state = 'deleting', deleting_by = 'self', deleting_since = @at
+                WHERE subject = @leaving;
+                UPDATE identity.person_records SET attached_to = @account, attached_at = @at
+                WHERE subject = @attached;
+                """,
+                new
+                {
+                    affirmed = new[] { answered.Value, leaving.Value },
+                    leaving = leaving.Value,
+                    account = account.Value,
+                    attached = attached.Value,
+                    at = DateTimeOffset.UtcNow,
+                },
+                cancellationToken: cancellationToken));
+        }
+
+        async Task<Decided> RegisteredAsync(SubjectId subject)
+        {
+            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+            return (await scope.ServiceProvider.GetRequiredService<IResources>().RegisterAsync(
+                    new ResourceRegistration(Reference(Document), deployment.Organization, workspace, subject),
+                    cancellationToken))
+                .Match(
+                    () => Decided.Allowed,
+                    error =>
+                    {
+                        Assert.Equal(ErrorCodes.RequestInvalid, error.Code);
+                        Assert.Equal("subject", error.Details["member"].GetString());
+
+                        return Decided.Denied;
+                    });
+        }
+
+        Assert.Equal(
+            [Decided.Denied, Decided.Allowed, Decided.Denied, Decided.Allowed],
+            [
+                await RegisteredAsync(unanswered),
+                await RegisteredAsync(answered),
+                await RegisteredAsync(leaving),
+                await RegisteredAsync(attached),
+            ]);
+    }
+
+    /// <summary>
+    /// REC-REC-001 AC3, IDN-ACCT-007 (D-166, D-221): a person record holds no grant and no
+    /// group membership. A grant to its subject and a member naming it are each refused
+    /// 422 <c>api.request.invalid</c> naming <c>subjectId</c>, as one naming a subject no
+    /// account bears, to a caller the gate admits; nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_REC_001_AC3_AGrantAndAGroupMemberNamingAPersonRecordAreRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        RoleName managing = await deployment.RoleAsync([Permissions.GrantManage, Permissions.GroupManage], cancellationToken);
+        SubjectId caller = await deployment.AccountAsync(cancellationToken);
+        SubjectId record = await deployment.PersonRecordAsync(cancellationToken);
+        GroupId group = await deployment.GroupAsync(cancellationToken);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), managing, null, false, null, deployment.Organization, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        SessionId session = await SteppedUpAsync(scope.ServiceProvider, caller);
+        int held = await GrantsInAsync(deployment.Organization);
+
+        Result<GrantId> granted = await scope.ServiceProvider.GetRequiredService<IGrants>().GrantAsync(
+            AccessContext.Of(caller),
+            session,
+            OrganizationWideGrant(record, role, deployment.Organization),
+            cancellationToken);
+        Result joined = await scope.ServiceProvider.GetRequiredService<IGroups>().AddMemberAsync(
+            AccessContext.Of(caller),
+            session,
+            group,
+            GrantSubject.Of(record),
+            "Joins the team.",
+            cancellationToken);
+
+        Error grantRefusal = granted.Match(_ => throw new InvalidOperationException("The grant was written."), error => error);
+        Error memberRefusal = joined.Match(() => throw new InvalidOperationException("The member was added."), error => error);
+
+        Assert.All(
+            new[] { grantRefusal, memberRefusal },
+            refusal =>
+            {
+                Assert.Equal(ErrorCodes.RequestInvalid, refusal.Code);
+                Assert.Equal("subjectId", refusal.Details["member"].GetString());
+            });
+        Assert.Equal(held, await GrantsInAsync(deployment.Organization));
+        Assert.Equal(0, await GrantRefusalsAsync(AccessContext.Of(caller), deployment.Organization));
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.group_members WHERE member_id = @record;",
+            new { record = record.Value },
+            cancellationToken: cancellationToken)));
     }
 
     /// <summary>
@@ -2149,17 +2287,19 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             await ConsentedAsync(account);
         }
 
-        Permission asked = scenario.Contains("a library read its declaration does not name", StringComparison.Ordinal)
-            ? Permissions.MembershipRead
-            : scenario.Contains("a library read", StringComparison.Ordinal)
-                ? Permissions.ContactRead
-                : scenario.Contains("does not name", StringComparison.Ordinal)
-                    ? HostPermissions.Retain
-                    : scenario.Contains("consent-bound", StringComparison.Ordinal)
-                        ? HostPermissions.Recommend
-                        : scenario.Contains("modifying", StringComparison.Ordinal)
-                            ? HostPermissions.Edit
-                            : HostPermissions.Read;
+        Permission asked = scenario switch
+        {
+            _ when scenario.Contains("a record permission its declaration does not name", StringComparison.Ordinal) =>
+                Permissions.RecordRead,
+            _ when scenario.Contains("a record permission", StringComparison.Ordinal) => Permissions.RecordErase,
+            _ when scenario.Contains("a library read its declaration does not name", StringComparison.Ordinal) =>
+                Permissions.MembershipRead,
+            _ when scenario.Contains("a library read", StringComparison.Ordinal) => Permissions.ContactRead,
+            _ when scenario.Contains("does not name", StringComparison.Ordinal) => HostPermissions.Retain,
+            _ when scenario.Contains("consent-bound", StringComparison.Ordinal) => HostPermissions.Recommend,
+            _ when scenario.Contains("modifying", StringComparison.Ordinal) => HostPermissions.Edit,
+            _ => HostPermissions.Read,
+        };
 
         return new Case(host, deployment, account, record, sibling, outer, outer, asked);
     }

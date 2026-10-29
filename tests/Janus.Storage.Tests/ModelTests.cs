@@ -240,6 +240,14 @@ public sealed class ModelTests
             "callbacks.rejected",
             "callbacks.source",
 
+            // Not an account field: the collection session of REC-COL-001, which reserves
+            // nothing: everything it stages is one blob under its own key, discarded whole
+            // when it ends.
+            "collection_sessions.enc_session",
+            "collection_sessions.expires_at",
+            "collection_sessions.id",
+            "collection_sessions.wrapped_key",
+
             // Not an account field: the three cells of the records of processing no
             // derivation can fill, held at one row because there is one register
             // (PRIV-ROPA-001).
@@ -659,6 +667,48 @@ public sealed class ModelTests
             "pending_enrolments.subject",
             "pending_enrolments.wrong_attempts",
 
+            // Not an account field: a person record, a data subject of its own who holds
+            // no account (`21` REC-REC-001): its contacts, under its key with a
+            // fingerprint beside each; its references, as fingerprints alone; what its
+            // collections presented and the person accepted; and the record itself, with
+            // its state, the held state an account's has save the suspension, its name
+            // and age answer under its key, and the account it is attached to.
+            "person_record_contacts.canonicalisation_version",
+            "person_record_contacts.enc_value",
+            "person_record_contacts.fingerprint",
+            "person_record_contacts.fingerprint_version",
+            "person_record_contacts.kind",
+            "person_record_contacts.subject",
+            "person_record_contacts.verified_at",
+            "person_record_documents.documents_id",
+            "person_record_documents.notice_version",
+            "person_record_documents.recorded_at",
+            "person_record_documents.subject",
+            "person_record_documents.terms_version",
+            "person_record_references.added_at",
+            "person_record_references.fingerprint",
+            "person_record_references.fingerprint_version",
+            "person_record_references.reference_id",
+            "person_record_references.subject",
+            "person_records.adult_affirmed",
+            "person_records.age_group",
+            "person_records.answered_age_at",
+            "person_records.attached_at",
+            "person_records.attached_to",
+            "person_records.created_at",
+            "person_records.deleting_by",
+            "person_records.deleting_since",
+            "person_records.deletion_held",
+            "person_records.deletion_held_since",
+            "person_records.enc_date_of_birth",
+            "person_records.enc_name",
+            "person_records.language",
+            "person_records.organization",
+            "person_records.origin",
+            "person_records.restriction_held",
+            "person_records.state",
+            "person_records.subject",
+
             // Not an account field: a requirement a scope's policy raised and when the
             // run-up to it began, one row per scope per field, which a sign-in that does
             // not yet meet it is told of (AUTH-FACT-017).
@@ -669,13 +719,16 @@ public sealed class ModelTests
             "policy_raises.value",
 
             // Not an account field: what a browser carries before it holds a session,
-            // keyed as the session table is and carrying the registration session and
-            // the sign-on in flight (BFF-CSRF-005a, BFF-CSRF-005b, BFF-SESS-006).
+            // keyed as the session table is and carrying the registration session, the
+            // sign-on, the collection session and the record access session in flight
+            // (BFF-CSRF-005a, BFF-CSRF-005b, BFF-SESS-006, REC-COL-001, REC-ACC-001).
+            "preauthentication_sessions.collection",
             "preauthentication_sessions.created_at",
             "preauthentication_sessions.csrf_fingerprint",
             "preauthentication_sessions.enrolment",
             "preauthentication_sessions.expires_at",
             "preauthentication_sessions.fingerprint",
+            "preauthentication_sessions.record_access",
             "preauthentication_sessions.registration",
             "preauthentication_sessions.signon_return",
             "preauthentication_sessions.signon_state",
@@ -750,6 +803,26 @@ public sealed class ModelTests
             "read_volume.actor",
             "read_volume.day",
             "read_volume.records",
+
+            // Not an account field: the record access session of REC-ACC-001, which
+            // holds the value it was asked for only as keyed fingerprints, what its
+            // tries are counted against, and the records it reached.
+            "record_access_sessions.created_at",
+            "record_access_sessions.expires_at",
+            "record_access_sessions.fingerprints",
+            "record_access_sessions.id",
+            "record_access_sessions.kind",
+            "record_access_sessions.opened_at",
+            "record_access_sessions.reached",
+            "record_access_sessions.throttled",
+
+            // Not an account field: the offer to attach of REC-ATT-001, held on an
+            // account session, which holds the values proved only as keyed
+            // fingerprints and names the records it counted by their subjects.
+            "record_offers.expires_at",
+            "record_offers.offered",
+            "record_offers.proven",
+            "record_offers.session_id",
 
             // Not an account field: one approver standing behind one re-enrolment, on
             // the channel they confirmed the person on, which is held under the

@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Privacy.SubjectKeys;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 namespace Janus.Hosting.Tests.Authorization;
@@ -19,7 +21,9 @@ namespace Janus.Hosting.Tests.Authorization;
 /// <remarks>
 /// The rows are written through hand-written statements rather than through the
 /// library's own ports, so that what the gate reads is a database in a stated shape and
-/// not a database the gate's own writers produced.
+/// not a database the gate's own writers produced. An account's data key is the one row
+/// written through the library, as registration writes it, since a wrapped key cannot be
+/// stated by hand; the gate reads nothing of it.
 /// </remarks>
 internal sealed class Deployment(HostFixture fixture)
 {
@@ -262,6 +266,53 @@ internal sealed class Deployment(HostFixture fixture)
             VALUES (@subject, @at, 'active');
             """,
             new { subject = subject.Value, at = Noon },
+            cancellationToken: cancellationToken));
+
+        // REC-REC-001 (D-221): a subject's privacy rows name its key row, which an
+        // account holds from its creation.
+        await using AsyncServiceScope scope = fixture.Services.CreateAsyncScope();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+        await scope.ServiceProvider.GetRequiredService<ISubjectKeyStore>().CreateAsync(subject, cancellationToken);
+        await work.CommitAsync(cancellationToken);
+
+        return subject;
+    }
+
+    /// <summary>
+    /// Writes an active person record of the case's organization, with its data key.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The subject the record was issued.</returns>
+    public async Task<SubjectId> PersonRecordAsync(CancellationToken cancellationToken)
+    {
+        SubjectId subject;
+
+        using (var randomness = RandomNumberGenerator.Create())
+        {
+            subject = SubjectId.New(randomness);
+        }
+
+        // REC-REC-001 (D-221): the record's key row is its parent, as an account's is.
+        await using (AsyncServiceScope scope = fixture.Services.CreateAsyncScope())
+        {
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            await work.BeginAsync(cancellationToken);
+            await scope.ServiceProvider.GetRequiredService<ISubjectKeyStore>().CreateAsync(subject, cancellationToken);
+            await work.CommitAsync(cancellationToken);
+        }
+
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO identity.person_records
+                (subject, organization, origin, state, created_at, language, restriction_held)
+            VALUES (@subject, @organization, 'collection', 'active', @at, 'en', false);
+            """,
+            new { subject = subject.Value, organization = Organization.Value, at = Noon },
             cancellationToken: cancellationToken));
 
         return subject;
