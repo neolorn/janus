@@ -570,38 +570,49 @@ internal sealed class PrivacyRequestService(
         }
     }
 
-    // REC-ADM-002: a person record's window an out-of-band request began is announced
-    // in the transaction that begins it, with the instant it closes.
+    // IDN-LIFE-003, REC-ADM-002: a window an out-of-band request began is announced in
+    // the transaction that begins it, with the instant it closes, as the owner's own
+    // deletion announces it: an account's with its grace, a person record's with its own
+    // (D-222).
     private async ValueTask<Result<bool>> BegunAsync(
         AccessContext context,
         SubjectId subject,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false) is not { IsPersonRecord: true })
-        {
-            return Result.Success(true);
-        }
+        bool record = await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false)
+            is { IsPersonRecord: true };
 
         TimeSpan grace = (await configuration
-                .ReadAsync(Settings.RecordDeletionGrace, cancellationToken).ConfigureAwait(false))
+                .ReadAsync(record ? Settings.RecordDeletionGrace : Settings.AccountDeletionGrace, cancellationToken)
+                .ConfigureAwait(false))
             .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        return (await events
+        string key = string.Create(CultureInfo.InvariantCulture, $"{subject.Value}");
+
+        Result published = record
+            ? await events
                 .PublishAsync(
-                    new RecordDeletionRequested(
-                        now,
-                        string.Create(CultureInfo.InvariantCulture, $"{subject.Value}@{now.UtcTicks}"),
-                        DeletionOrigin.OutOfBandRequest,
-                        now + grace)
+                    new RecordDeletionRequested(now, key, DeletionOrigin.OutOfBandRequest, now + grace)
                     {
                         Subject = subject,
                         Actor = context.Acting,
                         Effective = context.Effective,
                     },
                     cancellationToken)
-                .ConfigureAwait(false))
-            .Match(() => Result.Success(true), Result.Failure<bool>);
+                .ConfigureAwait(false)
+            : await events
+                .PublishAsync(
+                    new AccountDeletionRequested(now, key, DeletionOrigin.OutOfBandRequest, now + grace)
+                    {
+                        Subject = subject,
+                        Actor = context.Acting,
+                        Effective = context.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        return published.Match(() => Result.Success(true), Result.Failure<bool>);
     }
 
     private static bool Away(AccountStanding standing) =>

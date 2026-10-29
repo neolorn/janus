@@ -437,6 +437,31 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003 (D-222): an out-of-band erasure that begins an account's window
+    /// raises <c>AccountDeletionRequested</c> by <c>oob-request</c>, closing when the
+    /// account's grace does, as the owner's own deletion raises it; one fulfilled against
+    /// a window already running raises nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AnOutOfBandWindowOfAnAccountRaisesItsDeletionRequestedAsync()
+    {
+        _configuration.Set(Settings.AccountDeletionGrace, TimeSpan.FromDays(20));
+
+        Assert.Null((await ErasedAsync()).Match(() => (Error?)null, error => error));
+
+        AccountDeletionRequested requested = Assert.Single(_events.Of<AccountDeletionRequested>());
+
+        Assert.Equal(
+            (Ahmed, Mona, DeletionOrigin.OutOfBandRequest, Noon.AddDays(20)),
+            (requested.Subject, requested.Actor, requested.By, requested.ErasesAt));
+
+        _ = await ErasedAsync();
+
+        _ = Assert.Single(_events.Of<AccountDeletionRequested>());
+    }
+
+    /// <summary>
     /// 09 section 8a, REC-ATT-002: a request naming a person record attached to an
     /// account is refused <c>identity.record.followsaccount</c>, naming the account, and
     /// nothing is queued.
