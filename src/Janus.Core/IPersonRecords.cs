@@ -42,7 +42,8 @@ public interface IPersonRecords
 
     /// <summary>
     /// The person records an organization holds that hold an email or a phone, read in
-    /// its canonical form, under <c>record:read</c> in that organization.
+    /// its canonical form, under <c>record:read</c> in that organization; asked in the
+    /// administrative organization, those every organization holds.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="organization">The organization the finding is asked in.</param>
@@ -51,7 +52,9 @@ public interface IPersonRecords
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The records' subjects, none where no record holds the value, or the refusal:
-    /// <c>authz.denied</c> where the caller does not hold the permission there.
+    /// <c>identity.organization.notfound</c> where the deployment holds no such
+    /// organization or erased it, <c>authz.denied</c> where the caller does not hold the
+    /// permission there.
     /// </returns>
     /// <exception cref="ArgumentNullException">The context or the value is absent.</exception>
     ValueTask<Result<IReadOnlyList<SubjectId>>> FindAsync(
@@ -63,7 +66,8 @@ public interface IPersonRecords
 
     /// <summary>
     /// The person records an organization holds that hold a reference, under
-    /// <c>record:read</c> in that organization.
+    /// <c>record:read</c> in that organization; asked in the administrative organization,
+    /// those every organization holds.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="organization">The organization the finding is asked in.</param>

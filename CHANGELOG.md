@@ -10,6 +10,7 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+`POST /admin/records/find` asked in the administrative organization answers the records every organization holds, and an organization the deployment does not hold, or erased, is answered `404 identity.organization.notfound`.
 An attachment of person records is admitted only while the account is active, read under its lock: a restricted account is refused with `authz.restricted`, and an account in any other state with `409 identity.account.stateconflict` naming the state.
 A restriction decided while an account is suspended or deleting restricts each person record attached to it at once, with its own `RestrictionChanged`; the account's later return to restricted changes no record, and the lift lifts each.
 Replacing an identifier refuses one the account does not hold with `422 identity.identifier.invalid`, and a locked one with `409 identity.identifier.locked`.

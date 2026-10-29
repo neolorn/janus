@@ -170,6 +170,71 @@ public sealed class RecordFindTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-ADM-001 (D-222): a finding asked in the administrative organization answers
+    /// the records every organization holds that hold the value.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_001_AFindingInTheAdministrativeOrganizationAnswersEveryOrganizationsRecordsAsync()
+    {
+        var administration = OrganizationId.New(_deployment.Clock);
+        _deployment.Administers(administration);
+        SubjectId shops = Holding(_shop, IdentifierKind.Phone, Number, Noon);
+        SubjectId others = Holding(_other, IdentifierKind.Phone, Number, verifiedAt: null);
+        SubjectId referenced = Referenced(_other, "order-9902");
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        _deployment.Gate.Grant(Staff(), administration, Permissions.RecordRead);
+
+        Answer byPhone = await browser.SendAsync(
+            "POST",
+            "/admin/records/find",
+            ("organization", administration.Value),
+            ("kind", "phone"),
+            ("value", Number));
+        Answer byReference = await browser.SendAsync(
+            "POST",
+            "/admin/records/find",
+            ("organization", administration.Value),
+            ("reference", "order-9902"));
+
+        Assert.Equal(
+            [.. new[] { shops, others }.Select(subject => subject.Value).Order()],
+            Subjects(byPhone));
+        Assert.Equal([referenced.Value], Subjects(byReference));
+    }
+
+    /// <summary>
+    /// REC-ADM-001 (D-222): an organization the deployment never held, and one it erased,
+    /// are answered 404 <c>identity.organization.notfound</c>.
+    /// </summary>
+    /// <param name="erased">Whether the organization named was held and erased.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task REC_ADM_001_AFindingInAnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync(bool erased)
+    {
+        var named = OrganizationId.New(_deployment.Clock);
+
+        if (erased)
+        {
+            _deployment.Organizations.Seed(named, erasedAt: Noon);
+        }
+
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        _deployment.Gate.Grant(Staff(), named, Permissions.RecordRead);
+
+        Answer answer = await browser.SendAsync(
+            "POST",
+            "/admin/records/find",
+            ("organization", named.Value),
+            ("kind", "phone"),
+            ("value", Number));
+
+        Assert.Equal((404, ErrorCodes.OrganizationNotFound.ToString()), (answer.Status, answer.Text("code")));
+    }
+
+    /// <summary>
     /// 09 section 8a: a body of neither shape is refused 400 <c>api.request.malformed</c>
     /// naming the member out of its rule.
     /// </summary>

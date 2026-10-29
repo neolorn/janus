@@ -41,7 +41,8 @@ internal static class RecordEndpoints
             .Produces<EnteredRecordView>(StatusCodes.Status201Created);
 
         _ = SessionRequired.On(endpoints.MapPost("/admin/records/find", FindAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.RequestMalformed, ErrorCodes.Denied))
+            .Declares(EndpointDeclaration.Answering(
+                ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.OrganizationNotFound))
             .Accepts<RecordFindBody>(MediaTypeNames.Application.Json)
             .Produces<RecordSubjectsView>(StatusCodes.Status200OK);
 

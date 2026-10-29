@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Registration;
 using Janus.Core;
@@ -27,6 +28,7 @@ namespace Janus.Authentication.Records;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a new record's subject identifier is drawn from.</param>
 /// <param name="attachments">What an account does to attach the records a proof offers it.</param>
+/// <param name="reach">Where a finding is asked, and whether it reaches every organization.</param>
 /// <remarks>
 /// Implements REC-COL-003, REC-AGE-001, REC-ADM-001, REC-ATT-001, PRIV-CONS-001 and
 /// chapter 09 sections 7a and 8a.
@@ -43,7 +45,8 @@ internal sealed class PersonRecordService(
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness,
-    RecordAttachments attachments) : IPersonRecords
+    RecordAttachments attachments,
+    AccountReach reach) : IPersonRecords
 {
     private const int ReferenceMaximum = 64;
 
@@ -173,7 +176,11 @@ internal sealed class PersonRecordService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(value);
 
-        if (await DeniedAsync(context, organization, cancellationToken).ConfigureAwait(false) is Error denied)
+        Result<AdmittedRead> asked = await reach
+            .AskedAsync(context, Permissions.RecordRead, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (asked.Match(_ => (Error?)null, error => error) is Error denied)
         {
             return Result.Failure<IReadOnlyList<SubjectId>>(denied);
         }
@@ -187,7 +194,7 @@ internal sealed class PersonRecordService(
         }
 
         return Result.Success(await records
-            .HoldingAsync(organization, kind, records.FingerprintsOf(canonical), cancellationToken)
+            .HoldingAsync(Searched(asked), kind, records.FingerprintsOf(canonical), cancellationToken)
             .ConfigureAwait(false));
     }
 
@@ -201,7 +208,11 @@ internal sealed class PersonRecordService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(reference);
 
-        if (await DeniedAsync(context, organization, cancellationToken).ConfigureAwait(false) is Error denied)
+        Result<AdmittedRead> asked = await reach
+            .AskedAsync(context, Permissions.RecordRead, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (asked.Match(_ => (Error?)null, error => error) is Error denied)
         {
             return Result.Failure<IReadOnlyList<SubjectId>>(denied);
         }
@@ -213,7 +224,7 @@ internal sealed class PersonRecordService(
         }
 
         return Result.Success(await records
-            .ReferencingAsync(organization, CanonicalForm.Of(trimmed), cancellationToken)
+            .ReferencingAsync(Searched(asked), CanonicalForm.Of(trimmed), cancellationToken)
             .ConfigureAwait(false));
     }
 
@@ -375,15 +386,11 @@ internal sealed class PersonRecordService(
         return null;
     }
 
-    // REC-ADM-001: a finding is asked in the organization named, under record:read.
-    private async ValueTask<Error?> DeniedAsync(
-        AccessContext context,
-        OrganizationId organization,
-        CancellationToken cancellationToken) =>
-        (await gate
-            .RequireAsync(context, Permissions.RecordRead, organization, cancellationToken)
-            .ConfigureAwait(false))
-        .Match<Error?>(() => null, error => error);
+    // REC-ADM-001, D-222: a finding is asked in the organization named, under record:read,
+    // and searches the records it holds; asked in the administrative organization, those
+    // every organization holds.
+    private static OrganizationId? Searched(Result<AdmittedRead> asked) =>
+        asked.Match(read => read.Administrative ? null : (OrganizationId?)read.Organization, _ => null);
 
     private static string? Canonical(IdentifierKind kind, string entered) =>
         kind switch

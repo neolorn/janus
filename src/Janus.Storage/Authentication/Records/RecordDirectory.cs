@@ -196,7 +196,7 @@ internal sealed class RecordDirectory(
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<SubjectId>> HoldingAsync(
-        OrganizationId organization,
+        OrganizationId? organization,
         IdentifierKind kind,
         IReadOnlyList<byte[]> fingerprints,
         CancellationToken cancellationToken) =>
@@ -208,7 +208,7 @@ internal sealed class RecordDirectory(
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<SubjectId>> ReferencingAsync(
-        OrganizationId organization,
+        OrganizationId? organization,
         string reference,
         CancellationToken cancellationToken) =>
         await HeldByAsync(
@@ -386,9 +386,10 @@ internal sealed class RecordDirectory(
         await records.RecordAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
-    // Those of some records the organization holds, in the order of their subjects.
+    // Those of some records the organization holds, or every organization where none is
+    // named, in the order of their subjects.
     private async ValueTask<IReadOnlyList<SubjectId>> HeldByAsync(
-        OrganizationId organization,
+        OrganizationId? organization,
         IReadOnlyList<SubjectId> subjects,
         CancellationToken cancellationToken)
     {
@@ -397,13 +398,22 @@ internal sealed class RecordDirectory(
             return [];
         }
 
-        List<SubjectId> held = await context.PersonRecords
-            .Where(record => record.Organization == organization && subjects.Contains(record.Subject))
+        IQueryable<PersonRecordRow> holding = context.PersonRecords
+            .Where(record => subjects.Contains(record.Subject));
+
+        // D-222: a finding asked in the administrative organization searches every
+        // organization's records.
+        if (organization is OrganizationId held)
+        {
+            holding = holding.Where(record => record.Organization == held);
+        }
+
+        List<SubjectId> found = await holding
             .Select(record => record.Subject)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return [.. held.OrderBy(subject => subject.Value)];
+        return [.. found.OrderBy(subject => subject.Value)];
     }
 
     // REC-ACC-001: a code reaches a record collected from the person, attached to no

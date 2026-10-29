@@ -190,7 +190,7 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<SubjectId>> HoldingAsync(
-        OrganizationId organization,
+        OrganizationId? organization,
         IdentifierKind kind,
         IReadOnlyList<byte[]> fingerprints,
         CancellationToken cancellationToken) =>
@@ -204,7 +204,7 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<SubjectId>> ReferencingAsync(
-        OrganizationId organization,
+        OrganizationId? organization,
         string reference,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<SubjectId>>(
@@ -357,9 +357,9 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
         new(record.Subject, record.Organization, record.CreatedAt, record.State);
 
     // A deleted record's fingerprints are neutralised, so nothing finds it.
-    private IEnumerable<HeldRecord> HeldBy(OrganizationId organization) =>
+    private IEnumerable<HeldRecord> HeldBy(OrganizationId? organization) =>
         _records.Values
-            .Where(record => record.Organization == organization && record.State is not PersonRecordState.Deleted)
+            .Where(record => (organization is null || record.Organization == organization) && record.State is not PersonRecordState.Deleted)
             .OrderBy(record => record.Subject.Value);
 
     // REC-ACC-001: collected, attached to no account, active, restricted or deleting by
