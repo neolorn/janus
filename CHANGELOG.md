@@ -10,6 +10,7 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+A restriction decided while an account is suspended or deleting restricts each person record attached to it at once, with its own `RestrictionChanged`; the account's later return to restricted changes no record, and the lift lifts each.
 Replacing an identifier refuses one the account does not hold with `422 identity.identifier.invalid`, and a locked one with `409 identity.identifier.locked`.
 An out-of-band erasure request fulfilled for an account raises `AccountDeletionRequested` with the origin `oob-request` and the window's end, as the account's own deletion does.
 `record-deletion-notice` is a security notice: sent to a person record's notice contacts, it is outside the destination restrictions of the sending limits, as `oob-deletion-notice` to them already was.

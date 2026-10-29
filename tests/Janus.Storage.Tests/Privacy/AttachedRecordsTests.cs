@@ -117,6 +117,38 @@ public sealed class AttachedRecordsTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// REC-ATT-002 AC5: a restriction decided while the account is suspended restricts
+    /// each record attached to it at once, with <c>RestrictionChanged</c> for each; the
+    /// account's reactivation into restricted changes no record.
+    /// </summary>
+    [Fact]
+    public async Task REC_ATT_002_AC5_ARestrictionDecidedWhileSuspendedRestrictsEachRecordAtOnceAsync()
+    {
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        SubjectId attached = await AttachedAsync(account);
+
+        await InWorkAsync(async (context, work) =>
+        {
+            await Directory(context, work).SuspendAsync(account, TestContext.Current.CancellationToken);
+
+            return true;
+        });
+        await InWorkAsync((context, work) => States(context, work).RestrictAsync(account, Noon, TestContext.Current.CancellationToken).AsTask());
+
+        Assert.Equal(PersonRecordState.Restricted, await StateAsync(attached));
+
+        await InWorkAsync(async (context, work) =>
+        {
+            await Directory(context, work).ReinstateAsync(account, TestContext.Current.CancellationToken);
+
+            return true;
+        });
+
+        Assert.Equal(PersonRecordState.Restricted, await StateAsync(attached));
+        Assert.Equal([(attached, SubjectEventKind.RestrictionChanged, true)], await ToldAsync(attached));
+    }
+
+    /// <summary>
     /// REC-ATT-002: an account's deletion window takes each record attached to it into
     /// <c>deleting</c> with the account's origin, its <c>RecordDeletionRequested</c>
     /// carrying the account's window; the record's own sweep never reads it, and the

@@ -80,16 +80,14 @@ internal sealed class AccountStates(
                 break;
 
             // PRIV-RIGHT-004: an account away from active holds the restriction, so it
-            // comes back restricted and nothing acts on it meanwhile. Its records in the
-            // window with it hold it as well; a suspension changes no attached record
-            // (REC-ATT-002).
+            // comes back restricted and nothing acts on it meanwhile. A restriction follows
+            // its decision, not the account's state, so each attached record is restricted
+            // at once, held where it is in the window with the account, and the account's
+            // later return to restricted changes no record (REC-ATT-002, D-222).
             case { State: AccountState.Suspended or AccountState.Deleting, RestrictionHeld: false }:
                 account.HoldRestriction();
 
-                if (account.State is AccountState.Deleting)
-                {
-                    await attached.RestrictAsync(subject, at, cancellationToken).ConfigureAwait(false);
-                }
+                await attached.RestrictAsync(subject, at, cancellationToken).ConfigureAwait(false);
 
                 break;
 
