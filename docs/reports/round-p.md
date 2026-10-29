@@ -223,7 +223,8 @@ base". The project is given where two test classes share a name.
     - `RecordFindTests.REC_ADM_001_AFindingInAnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync`;
     - `RecordFindTests.REC_ADM_001_AFindingWithoutTheReadPermissionInTheOrganizationIsDeniedAsync`;
     - `RecordFindTests.REC_ADM_001_AValueNoRecordHoldsAnswersAnEmptyListAsync`;
-    - `StandingTests.REC_ADM_001_AStandingOfARecordNamesItsKindAsync`.
+    - `StandingTests.REC_ADM_001_AStandingOfARecordNamesItsKindAsync`;
+    - `RecordDirectoryTests.REC_ADM_001_TheOrganizationHoldingARecordIsReadAloneAsync`.
 - REC-ADM-002, every route but the consent and objection rows (Q12):
   - AC1:
     - `PrivacyRequestTests.REC_ADM_002_AC1_AnOutOfBandErasureOfARecordBeginsItsWindowAsync`;
@@ -292,8 +293,13 @@ base". The project is given where two test classes share a name.
   the endpoint, error status and schema baselines (`endpoints.txt`, `error-statuses.txt`,
   `schema.txt`), brought up to date with each route, code and table; the public surface
   analysers over `PublicAPI.Unshipped.txt`.
-- LIB-API-005: `IRecordCollection.CollectAsync` and `IPersonRecords`, proven by the
-  REC-COL-002, REC-ADM-001, REC-ADM-002 and REC-TKD-001 tests above.
+- LIB-API-005: `IRecordCollection.CollectAsync` and `IPersonRecords`, the account's
+  rights on a record attached to it among its operations (`07`), proven by the
+  REC-COL-002, REC-ATT-002, REC-ADM-001, REC-ADM-002 and REC-TKD-001 tests above, and by
+  `IdentityEndpointsTests.LIB_API_005_AC1_NoEndpointCarriesLogicItsServiceDoesNotAsync`
+  and `IdentityEndpointsTests.LIB_API_005_AC3_EveryEndpointResolvesExactlyOneServiceOfTheContractAsync`.
+- CONV-DESIGN-002 AC3, each record operation meeting its gate before it reads:
+  `PublicSurfaceTests.CONV_DESIGN_002_AC3_EveryOperationMeetsTheGateBeforeItReadsOrWrites`.
 - LIB-TEST-003 AC5, `TestPeople.Visitor()`: `PeopleTests.LIB_TEST_003_AC5_AStateChangingRequestThroughATestVisitorPassesTheCsrfStagesAsync`.
 - LIB-TEST-004, the round's row: the two `GuestTests` above, a guest's walk-in at the
   sample's counter collecting a record with the age answered and the consent recorded,
@@ -376,6 +382,15 @@ base". The project is given where two test classes share a name.
     answered as a subject no record bears.
   - Rule: the gate exempts the routes whose path names a person record from that
     declaration and from nothing else.
+- `PublicSurfaceTests.CONV_DESIGN_002_AC3` (test infrastructure):
+  - What was out of step: the gate's list of the operations on the caller's own records
+    lacks those of `IPersonRecords` an account asks on itself (the records attached to
+    it, the offer, the find code and the rights on an attached record), each of which
+    asks whose account is asking before any call.
+  - Governing item: REC-ATT-002, a person's own context reading its own, and
+    AUTHZ-GATE-006, no permission governing a person's own records.
+  - Rule: the list names them, and the gate reads each as it reads the account's own
+    operations.
 - Suppressions:
   - CA1711 on `IRecordCollection` and `RecordCollection`, each with its justification in
     the attribute: LIB-API-005 and REC-COL-002 name both.
@@ -647,6 +662,21 @@ LIB-TEST-004).
   changed. 61a7ea53 adds the record access session tables without their lines in
   `tests/Janus.Storage.Tests/schema.txt`, which d3b67b4d adds; the storage integration
   suite fails on 61a7ea53 alone.
+- The pipeline's runs on 8cc13f56: red, in the contract, integration, truth-table and
+  sample-host jobs. a2e23633 to f17b435d fix each cause, the tests the runs named run
+  green here:
+  - the gate order of a record's contact read and of the routes under
+    `/admin/records/{subject}`, and the attached record's rights carried by
+    `IPersonRecords` (LIB-API-005): a2e23633, fe946c11, f02d4a67;
+  - the codes the record routes declare, `endpoints.txt` brought up to date, and the
+    remediation sentence of each record code: 617aaa34, f17b435d;
+  - tests seeding an account without the subject key it is now made with, a fixture
+    key-encryption key no other deployment held, a collection staging its contact
+    before its age, a dump search under a case-insensitive collation, the fingerprint
+    scan missing the record store, an erased record's key proven through a read that
+    answers none, and the key rotation's reset leaving the rows that name a key:
+    63b68b5d, 2c39c09a, c6d3a7a5, 42d19fdf, 68381249, 3305244c, 659af305;
+  - the sample's analyser finding (CA1861): df39b986.
 - Checks before the push: green. Every unit test passes (5002 in eleven projects), the
   commit-message gate passes over the round's commits, and the full-history secret scan
   finds nothing.
