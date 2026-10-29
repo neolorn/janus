@@ -550,8 +550,8 @@ public static class ErrorCodes
 
     /// <summary>
     /// The person record is attached to an account and follows it, so an operation on
-    /// its lifecycle by the record's own path is refused; the details name the account
-    /// to act on.
+    /// its lifecycle by the record's own path is refused. Act on the account the details
+    /// name instead.
     /// </summary>
     /// <remarks>Implements REC-ATT-002, REC-ADM-002, chapter 10 section 1.1.</remarks>
     public static ErrorCode RecordFollowsAccount { get; } = ErrorCode.Parse("identity.record.followsaccount");

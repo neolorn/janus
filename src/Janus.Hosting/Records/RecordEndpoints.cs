@@ -88,7 +88,7 @@ internal static class RecordEndpoints
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/records/{subject}/takedown", ReadTakedownAsync))
             .Declares(EndpointDeclaration
-                .Answering(ErrorCodes.RecordNotFound, ErrorCodes.Denied, ErrorCodes.TakedownNotFound)
+                .Answering(ErrorCodes.RecordNotFound, ErrorCodes.TakedownNotFound)
                 .Binding<SubjectId>("subject"))
             .Produces<TakedownProgressView>();
 
@@ -416,7 +416,7 @@ internal static class RecordEndpoints
         EndpointDeclaration
             .Answering(
             [
-                ErrorCodes.RecordNotFound, ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                ErrorCodes.RecordNotFound, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
                 ErrorCodes.RecordFollowsAccount, .. codes,
             ])
             .Binding<SubjectId>("subject");

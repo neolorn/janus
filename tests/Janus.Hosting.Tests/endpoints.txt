@@ -252,8 +252,8 @@ PUT /account/identifiers/{id}/replace
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
-  409 identity.change.pending
-  422 identity.identifier.domainnotallowed identity.identifier.mixedscript integration.sms.balancefloor
+  409 identity.change.pending identity.identifier.locked
+  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript integration.sms.balancefloor
   429 auth.restriction.exceeded
 POST /account/identifiers/{id}/undo
   request application/json
@@ -432,6 +432,7 @@ POST /account/records/attach
       attached: number
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.restricted
+  409 identity.account.stateconflict
 POST /account/records/attach/reference
   request application/json
     reference: string
@@ -441,7 +442,7 @@ POST /account/records/attach/reference
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.restricted
-  409 identity.record.nooffer
+  409 identity.account.stateconflict identity.record.nooffer
   429 auth.throttled
 POST /account/records/find
   request application/json
@@ -750,6 +751,14 @@ POST /admin/accounts/{subject}/reactivate
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   404 identity.account.notfound
   409 identity.account.stateconflict
+GET /admin/accounts/{subject}/records
+  200
+    application/json
+      subjects[]: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.organization.notfound
 POST /admin/accounts/{subject}/restriction/lift
   204
   400 api.request.malformed
@@ -1462,7 +1471,7 @@ POST /admin/records
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied authz.restricted
   409 privacy.notice.unpublished
-  422 api.request.invalid identity.identifier.invalid identity.profile.invalid privacy.purpose.noconsent
+  422 api.request.invalid identity.identifier.invalid identity.profile.invalid identity.profile.underage privacy.purpose.noconsent
 POST /admin/records/find
   request application/json
     organization: Guid?
@@ -1475,6 +1484,120 @@ POST /admin/records/find
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
+  404 identity.organization.notfound
+GET /admin/records/{subject}
+  200
+    application/json
+      subject: Guid
+      organization: Guid
+      organizationName: string
+      origin: PersonRecordOrigin
+      state: PersonRecordState
+      createdAt: DateTimeOffset
+      name: string
+      language: string
+      contacts[].kind: IdentifierKind
+      contacts[].value: string
+      contacts[].verifiedAt: DateTimeOffset?
+      age.answeredAt: DateTimeOffset
+      age.affirmed: boolean?
+      age.ageGroup: AgeGroup?
+      notices[].version: string
+      notices[].presentedAt: DateTimeOffset
+      terms[].version: string
+      terms[].acceptedAt: DateTimeOffset
+      attachedTo: Guid?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound
+PUT /admin/records/{subject}
+  request application/json
+    name: string
+    language: string
+    email: string
+    phone: string
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict
+  422 api.request.invalid identity.identifier.invalid identity.profile.invalid
+POST /admin/records/{subject}/delete/cancel
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict identity.takedown.active
+  422 identity.deletion.windowelapsed
+GET /admin/records/{subject}/export
+  200
+    application/json
+      subject: string
+      assembledAt: DateTimeOffset
+      sections[].name: string
+      sections[].records[]{}: string
+    application/json
+      subject: string
+      assembledAt: DateTimeOffset
+      values{}: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict
+  429 auth.throttled
+  500 system.fault
+POST /admin/records/{subject}/restriction/lift
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict
+GET /admin/records/{subject}/takedown
+  200
+    application/json
+      takedownId: Guid
+      subject: Guid
+      triggeredAt: DateTimeOffset
+      erasureDue: DateTimeOffset?
+      reversed: boolean
+      status: ErasureStatus
+      attempts: number
+      subscribers[].name: string
+      subscribers[].required: boolean
+      subscribers[].confirmedAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.record.notfound identity.takedown.notfound
+POST /admin/records/{subject}/takedown
+  request application/json
+    trigger: TakedownTrigger?
+    reason: string
+  202
+    application/json
+      takedownId: Guid
+      erasureDue: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict identity.takedown.active
+POST /admin/records/{subject}/takedown/reverse
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  404 identity.record.notfound identity.takedown.notfound
+  409 identity.record.followsaccount
+  422 identity.takedown.windowelapsed
 POST /admin/recovery/approve
   request application/json
     subject: string
@@ -2498,7 +2621,7 @@ POST /register/terms
   401 auth.session.expired
   403 auth.session.csrfinvalid
   409 identity.registration.incomplete privacy.notice.unpublished
-  422 identity.affirmation.required privacy.purpose.noconsent
+  422 identity.affirmation.required privacy.consent.superseded privacy.purpose.noconsent
 POST /register/verify/{id}
   request application/json
     code: string
