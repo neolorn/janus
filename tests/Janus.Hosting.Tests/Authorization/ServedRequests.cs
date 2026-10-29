@@ -109,6 +109,10 @@ internal sealed class ServedRequests : IAsyncDisposable
         builder.Services.AddSingleton<ISecretSource>(HostFixture.Secrets(fixture.MaintenanceConnectionString));
         HostFixture.Sourced(builder.Services, fixture.ConnectionString);
 
+        // LIB-HOST-001, LIB-HOST-003: where the provider started below answers, which its
+        // options are built from.
+        builder.Services.AddSingleton(new AuthenticationAddresses("https://identity.example.test/signin", "https://identity.example.test"));
+
         // LIB-HOST-001: the library's endpoints send through the transports a host
         // registers, and a link they send lands where the deployment declares its
         // applications are.
