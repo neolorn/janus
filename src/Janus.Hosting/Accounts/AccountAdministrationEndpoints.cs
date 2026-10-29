@@ -378,7 +378,7 @@ internal static class AccountAdministrationEndpoints
 
     // 09 section 8a: the organization a read is asked in may be left out, which asks it
     // in the administrative organization; one given that does not read is malformed.
-    private static bool Asked(string? organization, out OrganizationId? named)
+    internal static bool Asked(string? organization, out OrganizationId? named)
     {
         named = null;
 

@@ -173,6 +173,15 @@ internal interface IRecordDirectory
     ValueTask<RecordStanding?> HoldAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads where one person record stands, taking no lock: where a path naming it is
+    /// admitted, and whether it is attached (REC-ADM-001, REC-ATT-002).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Where it stands, or nothing where no record bears the subject.</returns>
+    ValueTask<RecordStanding?> StandingAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Changes the name and the language of an active record held for the change
     /// (REC-ACC-002).
     /// </summary>

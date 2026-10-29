@@ -35,4 +35,5 @@ namespace Janus.Hosting.Records;
 [JsonSerializable(typeof(RecordsAttachedView))]
 [JsonSerializable(typeof(RecordRectificationRequest))]
 [JsonSerializable(typeof(RecordView))]
+[JsonSerializable(typeof(HeldRecordView))]
 internal sealed partial class RecordsJson : JsonSerializerContext;

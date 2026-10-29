@@ -18,6 +18,7 @@ namespace Janus.Authentication.Records;
 /// <param name="Age">The answer to the age question, where one was given.</param>
 /// <param name="Notices">Each notice version its collections presented.</param>
 /// <param name="Terms">Each terms version its collections recorded as accepted.</param>
+/// <param name="AttachedTo">The account it is attached to, where it is.</param>
 /// <remarks>Implements REC-ACC-002, chapter 09 section 7a.</remarks>
 internal sealed record ReadRecord(
     SubjectId Subject,
@@ -30,4 +31,5 @@ internal sealed record ReadRecord(
     IReadOnlyList<CollectedContact> Contacts,
     RecordAge? Age,
     IReadOnlyList<RecordDocument> Notices,
-    IReadOnlyList<RecordDocument> Terms);
+    IReadOnlyList<RecordDocument> Terms,
+    SubjectId? AttachedTo);

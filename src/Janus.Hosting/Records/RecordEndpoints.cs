@@ -4,6 +4,7 @@ using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Hosting.Accounts;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -16,7 +17,7 @@ namespace Janus.Hosting.Records;
 /// someone who holds no account.
 /// </summary>
 /// <remarks>
-/// Implements REC-COL-003, REC-ADM-001 and LIB-API-005. Each maps one operation of
+/// Implements REC-COL-003, REC-ADM-001, REC-ATT-002 and LIB-API-005. Each maps one operation of
 /// <see cref="IPersonRecords"/>.
 /// </remarks>
 internal static class RecordEndpoints
@@ -45,6 +46,18 @@ internal static class RecordEndpoints
                 ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.OrganizationNotFound))
             .Accepts<RecordFindBody>(MediaTypeNames.Application.Json)
             .Produces<RecordSubjectsView>(StatusCodes.Status200OK);
+
+        _ = SessionRequired.On(endpoints.MapGet("/admin/records/{subject}", ReadAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.RecordNotFound).Binding<SubjectId>("subject"))
+            .Produces<HeldRecordView>();
+
+        _ = SessionRequired.On(endpoints.MapGet("/admin/accounts/{subject}/records", AttachedAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.OrganizationNotFound,
+                    ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces<RecordSubjectsView>();
 
         return endpoints;
     }
@@ -140,6 +153,43 @@ internal static class RecordEndpoints
 
         return Found(await records
             .FindAsync(browser.Asking, organization, kind, value, cancellationToken)
+            .ConfigureAwait(false));
+    }
+
+    // REC-ADM-001: the record as the person reads it, with its origin and its account.
+    private static async Task<IResult> ReadAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await records.ReadAsync(browser.Asking, subject, cancellationToken).ConfigureAwait(false),
+            record => TypedResults.Json(HeldRecordView.Of(record), RecordsJson.Default.HeldRecordView));
+    }
+
+    // REC-ATT-002: the records attached to an account that the organization asked in
+    // holds.
+    private static async Task<IResult> AttachedAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        string? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        if (!AccountAdministrationEndpoints.Asked(organization, out OrganizationId? named))
+        {
+            return Answers.Malformed(nameof(organization));
+        }
+
+        return Found(await records
+            .AttachedAsync(browser.Asking, subject, named, cancellationToken)
             .ConfigureAwait(false));
     }
 

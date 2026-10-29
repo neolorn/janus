@@ -232,18 +232,23 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
                     .. record.Documents
                         .Where(held => held.TermsVersion is not null)
                         .Select(held => new RecordDocument(held.TermsVersion!, held.At)),
-                ])
+                ],
+                record.AttachedTo)
             : null);
 
     /// <inheritdoc/>
     public ValueTask<RecordStanding?> HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        StandingAsync(subject, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<RecordStanding?> StandingAsync(SubjectId subject, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_records.TryGetValue(subject, out HeldRecord? record)
             ? new RecordStanding(
                 record.Organization,
                 record.State,
                 record.DeletingBy,
                 record.DeletingSince,
-                record.AttachedTo is not null)
+                record.AttachedTo)
             : null);
 
     /// <inheritdoc/>

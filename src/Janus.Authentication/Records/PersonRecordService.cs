@@ -29,6 +29,9 @@ namespace Janus.Authentication.Records;
 /// <param name="randomness">Where a new record's subject identifier is drawn from.</param>
 /// <param name="attachments">What an account does to attach the records a proof offers it.</param>
 /// <param name="reach">Where a finding is asked, and whether it reaches every organization.</param>
+/// <param name="accounts">Whether an account whose attached records are read exists.</param>
+/// <param name="volume">Where a person's reads of records are counted.</param>
+/// <param name="admission">Where a path naming a record is admitted.</param>
 /// <remarks>
 /// Implements REC-COL-003, REC-AGE-001, REC-ADM-001, REC-ATT-001, PRIV-CONS-001 and
 /// chapter 09 sections 7a and 8a.
@@ -46,7 +49,10 @@ internal sealed class PersonRecordService(
     TimeProvider time,
     RandomNumberGenerator randomness,
     RecordAttachments attachments,
-    AccountReach reach) : IPersonRecords
+    AccountReach reach,
+    IAccountDirectory accounts,
+    IReadVolume volume,
+    IReadAdmission admission) : IPersonRecords
 {
     private const int ReferenceMaximum = 64;
 
@@ -229,6 +235,83 @@ internal sealed class PersonRecordService(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Result<PersonRecordDetail>> ReadAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if ((await AdmittedAsync(context, Permissions.RecordRead, subject, cancellationToken).ConfigureAwait(false))
+            .Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return Result.Failure<PersonRecordDetail>(refused);
+        }
+
+        if (await records.ReadAsync(subject, cancellationToken).ConfigureAwait(false) is not ReadRecord read)
+        {
+            return Result.Failure<PersonRecordDetail>(Error.From(ErrorCodes.RecordNotFound));
+        }
+
+        OrganizationStanding? holding = await organizations
+            .FindAsync(read.Organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        // OPS-ALERT-005: a person's read of a record counts toward their read volume; a
+        // system principal's reads are nobody's and are not counted.
+        return (await volume.ReturnedAsync(context, 1, cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Success(Detail(read, holding?.Name ?? string.Empty)), Result.Failure<PersonRecordDetail>);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<SubjectId>>> AttachedAsync(
+        AccessContext context,
+        SubjectId account,
+        OrganizationId? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // REC-ATT-002: a person's own context reads its own.
+        if (context.Effective is SubjectId own && own.Equals(account))
+        {
+            return Result.Success<IReadOnlyList<SubjectId>>(
+            [
+                .. (await records.AttachedToAsync(account, cancellationToken).ConfigureAwait(false))
+                    .Select(attached => attached.Record),
+            ]);
+        }
+
+        return await (await reach.AskedAsync(context, Permissions.RecordRead, organization, cancellationToken).ConfigureAwait(false))
+            .Match(
+                read => AttachedWithinAsync(read, account, cancellationToken),
+                error => ValueTask.FromResult(Result.Failure<IReadOnlyList<SubjectId>>(error)))
+            .ConfigureAwait(false);
+    }
+
+    private async ValueTask<Result<IReadOnlyList<SubjectId>>> AttachedWithinAsync(
+        AdmittedRead read,
+        SubjectId account,
+        CancellationToken cancellationToken)
+    {
+        // IDN-READ-004: an account outside the reach is answered as one no person bears.
+        if (await accounts.StateAsync(account, cancellationToken).ConfigureAwait(false) is null or AccountState.Deleted
+            || !await reach.ReachesAsync(read, account, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure<IReadOnlyList<SubjectId>>(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        // D-222: the attached records the organization holds, every one in the
+        // administrative organization.
+        return Result.Success<IReadOnlyList<SubjectId>>(
+        [
+            .. (await records.AttachedToAsync(account, cancellationToken).ConfigureAwait(false))
+                .Where(attached => read.Administrative || attached.Organization == read.Organization)
+                .Select(attached => attached.Record),
+        ]);
+    }
+
+    /// <inheritdoc/>
     public ValueTask<Result<IReadOnlyList<AttachedRecord>>> ListAttachedAsync(
         AccessContext context,
         CancellationToken cancellationToken) =>
@@ -385,6 +468,48 @@ internal sealed class PersonRecordService(
 
         return null;
     }
+
+    // REC-ADM-001 (D-222): a path naming a record is asked in the organization that holds
+    // it and admitted where the permission is held there or in the administrative
+    // organization, as one admission; a caller admitted in neither is answered as a
+    // subject no record bears, in the same bytes, the gate having recorded its refusal
+    // against the record's organization.
+    private async ValueTask<Result<RecordStanding>> AdmittedAsync(
+        AccessContext context,
+        Permission permission,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (await records.StandingAsync(subject, cancellationToken).ConfigureAwait(false) is not RecordStanding standing)
+        {
+            return Result.Failure<RecordStanding>(Error.From(ErrorCodes.RecordNotFound));
+        }
+
+        if (await admission.RefusedAsync(context, permission, standing.Organization, cancellationToken).ConfigureAwait(false)
+            is not Error refused)
+        {
+            return Result.Success(standing);
+        }
+
+        return Result.Failure<RecordStanding>(
+            refused.Code == ErrorCodes.Denied ? Error.From(ErrorCodes.RecordNotFound) : refused);
+    }
+
+    private static PersonRecordDetail Detail(ReadRecord read, string organizationName) =>
+        new(
+            read.Subject,
+            read.Organization,
+            organizationName,
+            read.Origin,
+            read.State,
+            read.CreatedAt,
+            read.Name,
+            read.Language,
+            [.. read.Contacts.Select(contact => new PersonRecordContact(contact.Kind, contact.Value, contact.VerifiedAt))],
+            read.Age is RecordAge age ? new PersonRecordAge(age.AdultAffirmed, age.Group, age.AnsweredAt) : null,
+            [.. read.Notices.Select(notice => new PersonRecordDocument(notice.Version, notice.At))],
+            [.. read.Terms.Select(terms => new PersonRecordDocument(terms.Version, terms.At))],
+            read.AttachedTo);
 
     // REC-ADM-001, D-222: a finding is asked in the organization named, under record:read,
     // and searches the records it holds; asked in the administrative organization, those

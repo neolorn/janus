@@ -85,6 +85,49 @@ public interface IPersonRecords
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads a person record under <c>record:read</c>, asked in the organization that
+    /// holds it and admitted where the permission is held there or in the administrative
+    /// organization.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The record as staff read it, or the refusal: <c>identity.record.notfound</c>
+    /// alike where no record bears the subject and where the caller is admitted in
+    /// neither organization.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<PersonRecordDetail>> ReadAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The subjects of the person records attached to an account: a person's own context
+    /// reads its own; another's is read under <c>record:read</c> in the organization
+    /// named, the administrative organization where none is, with the account reach of
+    /// IDN-READ-004, and answers the attached records that organization holds, every one
+    /// in the administrative organization.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="account">The account.</param>
+    /// <param name="organization">The organization the read is asked in, or nothing.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The subjects, in the order the records were attached, or the refusal:
+    /// <c>identity.organization.notfound</c> where the deployment holds no organization
+    /// named or erased it, <c>identity.account.notfound</c> where no account bears the
+    /// subject or it lies outside the reach, the gate's refusal otherwise.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<IReadOnlyList<SubjectId>>> AttachedAsync(
+        AccessContext context,
+        SubjectId account,
+        OrganizationId? organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The person records attached to the asking account.
     /// </summary>
     /// <param name="context">The account asking.</param>

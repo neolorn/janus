@@ -10,6 +10,7 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+`GET /admin/records/{subject}` reads a person record as the person reads it, with its origin and `attachedTo`, under `record:read` asked in the organization that holds it and admitted there or in the administrative organization; a caller admitted in neither is answered `404 identity.record.notfound` as for a subject no record bears. `GET /admin/accounts/{subject}/records?organization=` answers the subjects of the records attached to an account that the organization holds, every one in the administrative organization, with the account reach of the other account reads. `IPersonRecords` gains `ReadAsync` and `AttachedAsync`.
 The step-up actions `record:export`, `record:restrictionlift`, `record:deletioncancel`, `record:takedown` and `record:takedownreverse` gate the staff routes on a person record, each costing what a policy sets for it.
 `POST /admin/records/find` asked in the administrative organization answers the records every organization holds, and an organization the deployment does not hold, or erased, is answered `404 identity.organization.notfound`.
 An attachment of person records is admitted only while the account is active, read under its lock: a restricted account is refused with `authz.restricted`, and an account in any other state with `409 identity.account.stateconflict` naming the state.

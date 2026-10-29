@@ -251,19 +251,17 @@ internal sealed class RecordDirectory(
                 .. documents
                     .Where(held => held.TermsVersion is not null)
                     .Select(held => new RecordDocument(held.TermsVersion!, held.RecordedAt)),
-            ]);
+            ],
+            record.AttachedTo);
     }
 
     /// <inheritdoc/>
     public async ValueTask<RecordStanding?> HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
-        await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false) is PersonRecord record
-            ? new RecordStanding(
-                record.Organization,
-                record.State,
-                record.DeletingBy,
-                record.DeletingSince,
-                record.AttachedTo is not null)
-            : null;
+        Standing(await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false));
+
+    /// <inheritdoc/>
+    public async ValueTask<RecordStanding?> StandingAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        Standing(await records.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false));
 
     /// <inheritdoc/>
     public ValueTask RectifyAsync(
@@ -370,6 +368,11 @@ internal sealed class RecordDirectory(
 
         return record.Organization;
     }
+
+    private static RecordStanding? Standing(PersonRecord? record) =>
+        record is null
+            ? null
+            : new RecordStanding(record.Organization, record.State, record.DeletingBy, record.DeletingSince, record.AttachedTo);
 
     // A transition of the record the caller holds: the row is read under the lock the
     // caller took, changed by the aggregate, and carried back.
