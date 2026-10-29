@@ -24,6 +24,7 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 {
     private const string Short = "tenletters12";
     private const string Second = "other@example.test";
+    private const string Third = "another@example.test";
     private const string Client = "web";
     private const string Solved = "solved";
 
@@ -786,6 +787,68 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
             "POST",
             "/account/identifiers/" + staged + "/abandon",
             ("linkToken", token));
+
+        Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
+        Assert.Empty(_deployment.Pending.All);
+    }
+
+    /// <summary>
+    /// FE-VER-001 AC8 and D-224: a registration link pressed from a landing that holds no
+    /// identifier, sending the nil UUID, verifies what its token names.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_ARegistrationLinkPressedUnderTheNilIdentifierVerifiesAsync()
+    {
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+
+        string token = Flow.Token(_deployment, IdentifierKind.Email);
+
+        Answer pressed = await browser.SendAsync(
+            "POST",
+            "/register/verify/" + Guid.Empty,
+            ("linkToken", token),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status204NoContent, pressed.Status);
+        Assert.True(Proved(await browser.SendAsync("GET", "/register"), IdentifierKind.Email));
+    }
+
+    /// <summary>
+    /// FE-VER-001 AC8 and D-224: an account's identifier link, pressed under the nil UUID,
+    /// verifies in the browser that added it and is abandoned from another, each by what
+    /// its token names.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_AnIdentifierLinkUnderTheNilIdentifierActsOnWhatItsTokenNamesAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _ = await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Second));
+
+        string first = Flow.Token(_deployment, IdentifierKind.Email);
+
+        Answer verified = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + Guid.Empty + "/verify",
+            ("linkToken", first),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status204NoContent, verified.Status);
+        Assert.Empty(_deployment.Pending.All);
+
+        _ = await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Third));
+
+        string second = Flow.Token(_deployment, IdentifierKind.Email);
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/register");
+
+        Answer ended = await elsewhere.SendAsync(
+            "POST",
+            "/account/identifiers/" + Guid.Empty + "/abandon",
+            ("linkToken", second));
 
         Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
         Assert.Empty(_deployment.Pending.All);
