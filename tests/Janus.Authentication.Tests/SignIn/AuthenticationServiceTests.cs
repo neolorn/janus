@@ -324,6 +324,73 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-015 AC9 (D-224): the answer that asks for the second step tells whether
+    /// the call completing it may trust the browser, and the completion carries the
+    /// same; a sign-in completed by its first factor alone is offered nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_015_AC9_TheSecondStepsAnswerTellsWhetherItsCompletionMayTrustTheBrowserAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        SignInProgress alone = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Holds(subject, Factor.Totp);
+
+        SignInChallenge began = await BeganAsync(Address);
+        SignInProgress asked = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        SignInOutcome completed = await TrustedAsync();
+
+        Assert.Equal(SignInStatus.Complete, alone.Status);
+        Assert.False(alone.TrustDeviceOffered);
+        Assert.Equal(SignInStatus.FactorRequired, asked.Status);
+        Assert.True(asked.TrustDeviceOffered);
+        Assert.Equal(SignInStatus.Complete, completed.Progress.Status);
+        Assert.True(completed.Progress.TrustDeviceOffered);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-015 AC9 (D-224): the second step's answer offers no trust where its
+    /// completion could record none: on a restricted account, and while the password is
+    /// below the single-factor floor.
+    /// </summary>
+    /// <param name="restricted">
+    /// Whether the account is restricted; otherwise its password is below the floor.
+    /// </param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_FACT_015_AC9_TheSecondStepsAnswerOffersNoTrustItsCompletionCouldNotRecordAsync(bool restricted)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Remembered(subject);
+
+        if (restricted)
+        {
+            _accounts.Stands(subject, AccountState.Restricted);
+        }
+        else
+        {
+            Password held = await _passwords.FindAsync(subject, TestContext.Current.CancellationToken)
+                ?? throw new InvalidOperationException("The account holds no password.");
+
+            await _passwords.SetAsync(
+                Password.Existing(subject, held.Hash, meetsSingleFactorFloor: false, held.SetAt),
+                TestContext.Current.CancellationToken);
+        }
+
+        SignInChallenge began = await BeganAsync(Address);
+        SignInProgress asked = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+
+        Assert.Equal(SignInStatus.FactorRequired, asked.Status);
+        Assert.False(asked.TrustDeviceOffered);
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 (D-166): trusting a browser writes to the account, so a restricted
     /// account's sign-in is not offered it and records none where it asks, while an
     /// active account's same sign-in is offered it.

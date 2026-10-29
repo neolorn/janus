@@ -389,6 +389,8 @@ internal sealed class AuthenticationService(
             {
                 WebAuthn = await NamedAsync(open, subject, wanted, FirstAccepted(open), cancellationToken)
                     .ConfigureAwait(false),
+                TrustDeviceOffered = await OffersTrustAsync(open, subject, policy, wanted, cancellationToken)
+                    .ConfigureAwait(false),
             });
     }
 
@@ -1834,6 +1836,8 @@ internal sealed class AuthenticationService(
                 {
                     WebAuthn = await NamedAsync(open, subject, wanted, FirstAccepted(open), cancellationToken)
                         .ConfigureAwait(false),
+                    TrustDeviceOffered = await OffersTrustAsync(open, subject, policy, wanted, cancellationToken)
+                        .ConfigureAwait(false),
                 },
                 Session: null,
                 Remembered: null,
@@ -2225,6 +2229,23 @@ internal sealed class AuthenticationService(
             remembered,
             trust ?? (trusted is null ? null : OpaqueToken.Of(trusted))));
     }
+
+    // AUTH-FACT-015 AC9 (D-224): a sign-in asked for its second step is told whether the
+    // call that completes it may trust the browser, on the terms that call is judged
+    // by, so the choice is offered beside the step; asked for a first factor, it is not.
+    private async ValueTask<bool> OffersTrustAsync(
+        Challenge open,
+        SubjectId subject,
+        Policy policy,
+        List<Factor> wanted,
+        CancellationToken cancellationToken) =>
+        FirstAccepted(open)
+        && wanted.Any(entry => FactorCatalogue.Of(entry).CanBeSecondFactor)
+        && DeviceService.MayOffer(
+            policy,
+            await MeetsSingleFactorFloorAsync(subject, cancellationToken).ConfigureAwait(false))
+        && await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not AccountState.Restricted;
 
     private async ValueTask<bool> MeetsSingleFactorFloorAsync(
         SubjectId subject,

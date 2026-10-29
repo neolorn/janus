@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A sign-in asked for its second step is told on that `factorRequired` answer whether
+  the call completing it may trust the browser (`trustDeviceOffered`: a policy below
+  AAL2, a password at the single-factor floor, an account not restricted), and the
+  `complete` answer carries the same; every other answer carries false.
 - `POST /recovery/username` `{ token }` answers **200** `{ username }`, the primary
   email of the account a self-service recovery link was issued for, and spends nothing,
   so a reset form can carry the username a password manager pairs with the new password;

@@ -50,7 +50,20 @@ internal sealed class DeviceService(
     public static bool MayTrust(
         Policy policy,
         Assurance reached,
-        bool passwordMeetsSingleFactorFloor)
+        bool passwordMeetsSingleFactorFloor) =>
+        MayOffer(policy, passwordMeetsSingleFactorFloor) && reached.Level >= AssuranceLevel.Aal2;
+
+    /// <summary>
+    /// Whether a sign-in completed by a second step may trust the browser, which is what
+    /// the answer asking for that step tells beside it (AUTH-FACT-015 AC9, D-224).
+    /// </summary>
+    /// <param name="policy">The principal's policy.</param>
+    /// <param name="passwordMeetsSingleFactorFloor">
+    /// Whether the account's password is long enough to stand alone.
+    /// </param>
+    /// <returns>Whether the offer is made.</returns>
+    /// <exception cref="ArgumentNullException">The policy is absent.</exception>
+    public static bool MayOffer(Policy policy, bool passwordMeetsSingleFactorFloor)
     {
         ArgumentNullException.ThrowIfNull(policy);
 
@@ -59,9 +72,7 @@ internal sealed class DeviceService(
         // trusted device a password below the single-factor floor would complete a
         // sign-in alone, which is the one thing that floor exists to prevent
         // (AUTH-PASS-001a).
-        return policy.RequiredAssurance < AssuranceLevel.Aal2
-            && passwordMeetsSingleFactorFloor
-            && reached.Level >= AssuranceLevel.Aal2;
+        return policy.RequiredAssurance < AssuranceLevel.Aal2 && passwordMeetsSingleFactorFloor;
     }
 
     /// <summary>
