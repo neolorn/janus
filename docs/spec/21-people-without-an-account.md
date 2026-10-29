@@ -650,39 +650,50 @@ person who reaches it by no code, under `record:manage`.
   on, so a code never reaches a contact staff wrote.
   `POST /admin/records/{subject}/consents/{purpose}/grant` · `/withdraw` and `POST` ·
   `DELETE /admin/records/{subject}/objections/{purpose}` record what the person told
-  staff, with the mechanism `administrator` and a `reason`.
+  staff, with the mechanism `administrator` and a `reason` (D-223). A grant or an
+  objection staff enter is a record of its own whose mechanism is `administrator`
+  (PRIV-CONS-001); a withdrawal stamps its instant on the record it ends, which keeps
+  the mechanism of its making. Staff's part is the audit entry's: the staff member
+  acting, the record the `subject`, `details.mechanism` `administrator` and
+  `details.reason` the reason given (`10` section 5.24), on every one of the four.
 
-*Source: D-221*
+*Source: D-221, D-223*
 
 **Acceptance criteria**
 1. An out-of-band erasure request fulfilled for a record begins its window and sends
    `oob-deletion-notice` to its notice contacts; cancelling it returns the record as it
    was.
 2. A contact staff correct is unverified afterwards, and a code to it reaches nothing.
-3. A consent withdrawn by staff is recorded with the mechanism `administrator` and
-   raises `ConsentChanged` `withdrawn`.
+3. A consent withdrawn by staff stamps its record withdrawn, is audited
+   `privacy.consent.withdrawn` with the staff member acting, `details.mechanism`
+   `administrator` and `details.reason`, and raises `ConsentChanged` `withdrawn`; a
+   consent staff grant is a record whose mechanism is `administrator`.
 
 ---
 
 **REC-ADM-003** — A host SHALL be able to erase a person record it no longer keeps
 anything about, under `record:erase`.
 
-**Values (D-221).** `IPersonRecords.EraseAsync` (`POST /admin/records/{subject}/erase`),
-under `record:erase` in the record's organization, with a required `reason`, erases an
-`active` or `restricted` record at once (REC-REC-003, reason `retention`); one
-`deleting` or `deleted` is refused with `identity.record.stateconflict`, one attached
-with `identity.record.followsaccount`. A host's declared job may declare `record:erase`,
-so the host's retention job erases a record when the last thing it kept about the person
-has gone (PRIV-RET-001). Nothing erases a record on its own: the library holds no host
-table and cannot know whether the host still keeps data under the record's key
-(LIB-HOST-002).
+**Values (D-221, D-223).** `IPersonRecords.EraseAsync`
+(`POST /admin/records/{subject}/erase`), under `record:erase` in the record's
+organization, with a required `reason`, erases an `active` or `restricted` record at
+once (REC-REC-003, reason `retention`); one `deleting` or `deleted` is refused with
+`identity.record.stateconflict`, one attached with `identity.record.followsaccount`. The
+erasure's audit entry, `privacy.erasure.executed`, carries `details.reason` `retention`
+in its section 5.12a spelling, as every erasure's does, and the reason given in
+`details.statedReason`, whether a person or a job gave it. A host's declared job may
+declare `record:erase`, so the host's retention job erases a record when the last thing
+it kept about the person has gone (PRIV-RET-001). Nothing erases a record on its own:
+the library holds no host table and cannot know whether the host still keeps data under
+the record's key (LIB-HOST-002).
 
-*Source: D-221*
+*Source: D-221, D-223*
 
 **Acceptance criteria**
 1. A job declaring `record:erase` erases an `active` record outside a request; the
-   erasure is recorded with its principal and reason, and its erasures row carries
-   `retention`.
+   erasure is audited with its principal, `details.reason` `retention` and the reason
+   given in `details.statedReason`, and its erasures row carries `retention`; a staff
+   member's erasure is audited the same way, the staff member its principal.
 2. An erasure of a record that is `deleting` is refused with
    `identity.record.stateconflict` and changes nothing.
 

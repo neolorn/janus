@@ -18638,6 +18638,40 @@ sections 1.4, 5.25, 5.52 and 5b; `20` REG-SESS-007; `implementation-plan.md` (se
 
 ---
 
+## D-223 — Round P questions 12 and 13: where staff's mechanism and reasons are recorded
+
+**Date:** 2026-10-29 · **Status:** accepted · **Amends:** D-221
+
+Round P's report asked two more questions, each about where a reason or a mechanism
+staff give is kept.
+
+- **Q12, staff's consent and objection rows: reading B.** A grant or an objection staff
+  enter for a person record is a record of its own whose mechanism is `administrator`,
+  as PRIV-CONS-001 already allows; a withdrawal stamps its instant on the record it
+  ends, which keeps the mechanism of its making, so the record never says who withdrew
+  it. Staff's part is told by the audit entry of each of the four actions: the staff
+  member acting, the record the `subject`, `details.mechanism` `administrator` and
+  `details.reason` the reason given, as an administrator's other changes carry their
+  reason (`identity.preferences.changed`, `identity.membership.ended`). No column and no
+  migration. *Rejected:* a withdrawal mechanism on the consent and objection records (a
+  column for what the audit entry already holds); a withdrawal by staff ending the
+  record and writing a new one (a consent withdrawn would then look granted again).
+- **Q13, the erasure's reason: reading A, one key for every caller.**
+  `privacy.erasure.executed` keeps `details.reason` in its section 5.12a spelling,
+  `retention` here, as every erasure's entry does, since the off-host ledger's replay
+  reads it; the reason a person or a job gives to `POST /admin/records/{subject}/erase`
+  is `details.statedReason`. *Rejected:* the stated reason in `details.reason` and the
+  spelling moved (every other erasure's entry would read differently); the route a job's
+  alone (D-221 lets staff erase a record a host no longer keeps anything about).
+
+**Propagated to:** `21` REC-ADM-002 (values, criterion 3), REC-ADM-003 (values,
+criterion 1); `09` section 8a (the consent and objection rows, the erase row); `10`
+section 5.24 (`privacy.consent.granted`, `privacy.consent.withdrawn`,
+`privacy.objection.recorded`, `privacy.objection.withdrawn`,
+`privacy.erasure.executed`); `implementation-plan.md` (round P's row).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18870,6 +18904,7 @@ sections 1.4, 5.25, 5.52 and 5b; `20` REG-SESS-007; `implementation-plan.md` (se
 | A standalone library: Milestone 2 is the release, and the deployment is a host's | D-220 |
 | Round P: people without an account | D-221 |
 | Round P questions 1 to 11: the terms document, staff rows, notices, an attached record's restriction, a guest's browser | D-222 |
+| Round P questions 12 and 13: where staff's mechanism and reasons are recorded | D-223 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
