@@ -2416,7 +2416,7 @@ POST /recovery/complete
   204
   400 api.request.malformed
   403 auth.session.csrfinvalid
-  422 auth.recovery.tokenexpired auth.recovery.tokeninvalid
+  422 auth.password.blocklisted auth.password.toolong auth.password.tooshort auth.recovery.tokenexpired auth.recovery.tokeninvalid
 POST /recovery/report-loss
   request application/json
     credentialId: string

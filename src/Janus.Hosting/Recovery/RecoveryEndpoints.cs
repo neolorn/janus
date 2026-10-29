@@ -48,7 +48,8 @@ internal static class RecoveryEndpoints
         _ = group.MapPost("/complete", CompleteAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired))
+                    ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired, ErrorCodes.PasswordTooShort,
+                    ErrorCodes.PasswordTooLong, ErrorCodes.PasswordBlocklisted))
             .Accepts<CompleteRecoveryRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync))

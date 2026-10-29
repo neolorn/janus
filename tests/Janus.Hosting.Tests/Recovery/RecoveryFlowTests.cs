@@ -170,6 +170,40 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-005 and D-224: a password the link would set that its screening
+    /// refuses is answered with the refusal the password's set gives, and the token
+    /// still sets an accepted one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_005_APasswordTheScreeningRefusesIsAnsweredWithItsRefusalAsync()
+    {
+        _ = await RegisteredAsync();
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address));
+
+        string token = Token();
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/recovery/complete",
+            ("token", token),
+            ("password", "short"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.PasswordTooShort.ToString(), refused.Text("code"));
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync(
+                "POST",
+                "/recovery/complete",
+                ("token", token),
+                ("password", NewPassword))).Status);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002 and D-147: the two links are separate tokens with one endpoint
     /// each, so the self-service link opens no enrolment session.
     /// </summary>

@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /recovery/complete` declares the refusals of the password it sets, 422
+  `auth.password.tooshort`, `auth.password.toolong` and `auth.password.blocklisted`, as
+  every route that sets a password does.
 - `POST /admin/records/{subject}/erase`, under `record:erase` with a required `reason`,
   erases at once an active or restricted person record the host keeps nothing about any
   longer, with the new erasure reason `retention` (`ErasureReason.Retention`) on its
