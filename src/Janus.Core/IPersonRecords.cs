@@ -415,4 +415,195 @@ public interface IPersonRecords
         string reference,
         string source,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads a record attached to the asking account, as a record access session reads
+    /// it, whatever state the record is in.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The record, or the refusal: <c>authz.denied</c> where the context is no person's;
+    /// <c>identity.record.notfound</c> where no record attached to the account bears the
+    /// subject.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<PersonRecordDetail>> ReadAttachedAsync(
+        AccessContext context,
+        SubjectId record,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Rectifies the name, the language, or both, of a record attached to the asking
+    /// account.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="name">The name given, or nothing to leave it.</param>
+    /// <param name="language">The language given, or nothing to leave it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>authz.denied</c>; <c>identity.record.notfound</c>;
+    /// <c>identity.record.stateconflict</c> where the record is neither active nor
+    /// restricted; <c>authz.restricted</c>; <c>identity.profile.invalid</c>;
+    /// <c>api.request.invalid</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result> RectifyAttachedAsync(
+        AccessContext context,
+        SubjectId record,
+        string? name,
+        string? language,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Assembles the export of a record attached to the asking account, behind the
+    /// step-up the account's own export asks, counted against the limit for the record.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The export, or the refusal: <c>authz.denied</c>; <c>identity.record.notfound</c>;
+    /// <c>identity.record.stateconflict</c>; <c>auth.stepup.required</c>;
+    /// <c>auth.throttled</c>; <c>system.fault</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<SubjectExport>> ExportAttachedAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId record,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The consents of a record attached to the asking account.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The consents, or the refusal: <c>authz.denied</c>; <c>identity.record.notfound</c>;
+    /// <c>identity.record.stateconflict</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<IReadOnlyList<ConsentRecord>>> AttachedConsentsAsync(
+        AccessContext context,
+        SubjectId record,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Grants a consent for a record attached to the asking account, recorded for the
+    /// record as given on its dashboard.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>authz.denied</c>; <c>identity.record.notfound</c>;
+    /// <c>identity.record.stateconflict</c>; <c>privacy.notice.unpublished</c>;
+    /// <c>privacy.purpose.noconsent</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the purpose is absent.</exception>
+    ValueTask<Result> GrantAttachedConsentAsync(
+        AccessContext context,
+        SubjectId record,
+        string purpose,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Withdraws a consent of a record attached to the asking account.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>authz.denied</c>; <c>identity.record.notfound</c>;
+    /// <c>identity.record.stateconflict</c>; <c>privacy.purpose.noconsent</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the purpose is absent.</exception>
+    ValueTask<Result> WithdrawAttachedConsentAsync(
+        AccessContext context,
+        SubjectId record,
+        string purpose,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The objections of a record attached to the asking account.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The objections, or the refusal: <c>authz.denied</c>;
+    /// <c>identity.record.notfound</c>; <c>identity.record.stateconflict</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<IReadOnlyList<ObjectionRecord>>> AttachedObjectionsAsync(
+        AccessContext context,
+        SubjectId record,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Objects, for a record attached to the asking account, to a purpose, recorded for
+    /// the record as given on its dashboard.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>authz.denied</c>; <c>identity.record.notfound</c>;
+    /// <c>identity.record.stateconflict</c>; <c>privacy.notice.unpublished</c>;
+    /// <c>privacy.purpose.notobjectable</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the purpose is absent.</exception>
+    ValueTask<Result> ObjectForAttachedAsync(
+        AccessContext context,
+        SubjectId record,
+        string purpose,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Withdraws an objection of a record attached to the asking account.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>authz.denied</c>; <c>identity.record.notfound</c>;
+    /// <c>identity.record.stateconflict</c>; <c>privacy.purpose.notobjectable</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the purpose is absent.</exception>
+    ValueTask<Result> WithdrawAttachedObjectionAsync(
+        AccessContext context,
+        SubjectId record,
+        string purpose,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Submits a restriction or a rectification request for a record attached to the
+    /// asking account, its receipt going to the record's notice contacts. The record's
+    /// erasure is its account's, as its deletion is.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="type">What is requested.</param>
+    /// <param name="detail">What the person wrote, trimmed and 1 to 1024 characters long.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The receipt, or the refusal: <c>authz.denied</c>; <c>identity.record.notfound</c>;
+    /// <c>identity.record.stateconflict</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the detail is absent.</exception>
+    ValueTask<Result<PrivacyRequestReceipt>> SubmitAttachedRequestAsync(
+        AccessContext context,
+        SubjectId record,
+        PrivacyRequestType type,
+        string detail,
+        CancellationToken cancellationToken);
 }

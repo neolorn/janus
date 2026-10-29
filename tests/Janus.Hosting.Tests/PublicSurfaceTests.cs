@@ -185,9 +185,10 @@ public sealed class PublicSurfaceTests
     private const string ScopeResolution = "ScopeOfAsync";
 
     // CONV-DESIGN-002 AC3: the operations on the caller's own account, credentials,
-    // sessions, consent, requests and invitations. No permission governs them
-    // (AUTHZ-GATE-006, IDN-ACCT-007), so their gate step is asking whose account is
-    // asking, and it is asked before any call is made.
+    // sessions, consent, requests, invitations and the records attached to it
+    // (REC-ATT-002). No permission governs them (AUTHZ-GATE-006, IDN-ACCT-007), so
+    // their gate step is asking whose account is asking, and it is asked before any
+    // call is made.
     private static readonly string[] OwnOperations =
     [
         nameof(IAccount) + "." + nameof(IAccount.DeactivateAsync),
@@ -213,6 +214,21 @@ public sealed class PublicSurfaceTests
         nameof(IInvitations) + "." + nameof(IInvitations.AcknowledgeAsync),
         nameof(IInvitations) + "." + nameof(IInvitations.AttachedAsync),
         nameof(IOidc) + "." + nameof(IOidc.ClaimsAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.AttachedAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.AttachedConsentsAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.AttachedObjectionsAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.ExportAttachedAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.GrantAttachedConsentAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.ListAttachedAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.ObjectForAttachedAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.ReadAttachedAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.ReadOfferAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.RectifyAttachedAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.SendFindCodeAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.SubmitAttachedRequestAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.VerifyFindCodeAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.WithdrawAttachedConsentAsync),
+        nameof(IPersonRecords) + "." + nameof(IPersonRecords.WithdrawAttachedObjectionAsync),
         nameof(IPrivacyRequests) + "." + nameof(IPrivacyRequests.SubmitAsync),
         nameof(IRecovery) + "." + nameof(IRecovery.ReportLossAsync),
         nameof(ISessions) + "." + nameof(ISessions.EndAsync),

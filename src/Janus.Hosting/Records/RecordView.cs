@@ -62,4 +62,29 @@ internal sealed record RecordView(
             [.. record.Notices.Select(notice => new RecordNoticeView(notice.Version, notice.At))],
             [.. record.Terms.Select(terms => new RecordTermsView(terms.Version, terms.At))]);
     }
+
+    /// <summary>
+    /// Shows a record attached to the asking account.
+    /// </summary>
+    /// <param name="detail">The record.</param>
+    /// <returns>Its view.</returns>
+    /// <exception cref="ArgumentNullException">The record is absent.</exception>
+    public static RecordView Of(PersonRecordDetail detail)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+
+        return new RecordView(
+            detail.Subject.Value,
+            detail.Organization.Value,
+            detail.OrganizationName,
+            detail.Origin,
+            detail.State,
+            detail.CreatedAt,
+            detail.Name,
+            detail.Language,
+            [.. detail.Contacts.Select(contact => new RecordContactView(contact.Kind, contact.Value, contact.VerifiedAt))],
+            detail.Age is PersonRecordAge age ? new RecordAgeView(age.AnsweredAt, age.AdultAffirmed, age.Group) : null,
+            [.. detail.Notices.Select(notice => new RecordNoticeView(notice.Version, notice.At))],
+            [.. detail.Terms.Select(terms => new RecordTermsView(terms.Version, terms.At))]);
+    }
 }

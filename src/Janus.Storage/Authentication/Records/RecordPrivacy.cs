@@ -23,6 +23,15 @@ internal sealed class RecordPrivacy(ExportService exports, TakedownService taked
         SubjectId record,
         CancellationToken cancellationToken) =>
         exports.AssembleOnBehalfAsync(acting, breakGlassReason, record, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<SubjectExport>> ExportAttachedAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId record,
+        CancellationToken cancellationToken) =>
+        exports.AssembleAttachedAsync(context, session, record, cancellationToken);
+
     /// <inheritdoc/>
     public ValueTask<ExecutedTakedown?> TakeDownAsync(
         AccessContext context,

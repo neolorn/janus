@@ -29,6 +29,25 @@ internal interface IRecordPrivacy
         string? breakGlassReason,
         SubjectId record,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Assembles the export of a record attached to the asking account, behind the
+    /// step-up the account's own export asks, counted against the limit for the record.
+    /// </summary>
+    /// <param name="context">The account asking.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The export, or <c>auth.stepup.required</c>, <c>auth.throttled</c>,
+    /// <c>system.fault</c>.
+    /// </returns>
+    ValueTask<Result<SubjectExport>> ExportAttachedAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId record,
+        CancellationToken cancellationToken);
+
     /// <summary>
     /// Takes the record down inside the unit of work the caller opened, the record held
     /// under its lock: the takedown's window begins, every record access session reaching

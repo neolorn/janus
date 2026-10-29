@@ -3,12 +3,10 @@ using System.Collections.Generic;
 using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Privacy;
-using Janus.Privacy.Exports;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -92,49 +90,37 @@ internal static class AttachedRecordRightsEndpoints
             .Binding<SubjectId>("subject");
 
     private static async Task<IResult> ReadAsync(
-        RecordAttachments attachments,
-        RecordRights rights,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(rights);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: false, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
 
         return Answers.Of(
-            await rights.ReadAsync(subject, cancellationToken).ConfigureAwait(false),
-            reading => TypedResults.Json(RecordView.Of(reading), RecordsJson.Default.RecordView));
+            await records.ReadAttachedAsync(browser.Asking, subject, cancellationToken).ConfigureAwait(false),
+            detail => TypedResults.Json(RecordView.Of(detail), RecordsJson.Default.RecordView));
     }
 
     private static async Task<IResult> RectifyAsync(
-        RecordAttachments attachments,
-        RecordRights rights,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(rights);
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: true, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
 
         RecordRectificationRequest request = await JsonBody
             .ReadAsync<RecordRectificationRequest>(context.Request, cancellationToken)
             .ConfigureAwait(false);
 
         return Answers.Of(
-            await rights
-                .RectifyAsync(subject, request.Name, request.Language, attached: true, cancellationToken)
+            await records
+                .RectifyAttachedAsync(browser.Asking, subject, request.Name, request.Language, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
@@ -142,20 +128,14 @@ internal static class AttachedRecordRightsEndpoints
     // REC-ATT-002: PRIV-RIGHT-003's routine for the record, behind the step-up the
     // account's own export asks.
     private static async Task<IResult> ExportAsync(
-        RecordAttachments attachments,
-        ExportService exports,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         string? format,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(exports);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: true, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
 
         if (PrivacyEndpoints.Arranged(format) is not Func<SubjectExport, IResult> arrangement)
         {
@@ -163,138 +143,104 @@ internal static class AttachedRecordRightsEndpoints
         }
 
         return Answers.Of(
-            await exports
-                .AssembleAttachedAsync(browser.Asking, browser.Required.Id, subject, cancellationToken)
+            await records
+                .ExportAttachedAsync(browser.Asking, browser.Required.Id, subject, cancellationToken)
                 .ConfigureAwait(false),
             arrangement);
     }
 
     private static async Task<IResult> ConsentsAsync(
-        RecordAttachments attachments,
-        IConsents consents,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(consents);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: true, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
 
         return Answers.Of(
-            await consents.ReadAsync(AccessContext.Of(subject), cancellationToken).ConfigureAwait(false),
+            await records.AttachedConsentsAsync(browser.Asking, subject, cancellationToken).ConfigureAwait(false),
             PrivacyEndpoints.Held);
     }
 
     private static async Task<IResult> GrantAsync(
-        RecordAttachments attachments,
-        IConsents consents,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         string purpose,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(consents);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: true, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
 
         return Answers.Of(
-            await consents
-                .GrantAsync(AccessContext.Of(subject), purpose, ConsentMechanism.Dashboard, cancellationToken)
+            await records
+                .GrantAttachedConsentAsync(browser.Asking, subject, purpose, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
 
     private static async Task<IResult> WithdrawAsync(
-        RecordAttachments attachments,
-        IConsents consents,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         string purpose,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(consents);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: true, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
 
         return Answers.Of(
-            await consents.WithdrawAsync(AccessContext.Of(subject), purpose, cancellationToken).ConfigureAwait(false),
+            await records
+                .WithdrawAttachedConsentAsync(browser.Asking, subject, purpose, cancellationToken)
+                .ConfigureAwait(false),
             Nothing);
     }
 
     private static async Task<IResult> ObjectionsAsync(
-        RecordAttachments attachments,
-        IConsents consents,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(consents);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: true, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
 
         return Answers.Of(
-            await consents.ObjectionsAsync(AccessContext.Of(subject), cancellationToken).ConfigureAwait(false),
+            await records.AttachedObjectionsAsync(browser.Asking, subject, cancellationToken).ConfigureAwait(false),
             PrivacyEndpoints.Standing);
     }
 
     private static async Task<IResult> ObjectAsync(
-        RecordAttachments attachments,
-        IConsents consents,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         string purpose,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(consents);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: true, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
 
         return Answers.Of(
-            await consents
-                .ObjectAsync(AccessContext.Of(subject), purpose, ConsentMechanism.Dashboard, cancellationToken)
+            await records
+                .ObjectForAttachedAsync(browser.Asking, subject, purpose, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
 
     private static async Task<IResult> WithdrawObjectionAsync(
-        RecordAttachments attachments,
-        IConsents consents,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         string purpose,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(consents);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: true, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
 
         return Answers.Of(
-            await consents
-                .WithdrawObjectionAsync(AccessContext.Of(subject), purpose, cancellationToken)
+            await records
+                .WithdrawAttachedObjectionAsync(browser.Asking, subject, purpose, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
@@ -302,21 +248,15 @@ internal static class AttachedRecordRightsEndpoints
     // REC-ACC-002: a restriction or a rectification, as the account's own, its receipt
     // going to the record's notice contacts.
     private static async Task<IResult> SubmitAsync(
-        RecordAttachments attachments,
-        IPrivacyRequests requests,
+        IPersonRecords records,
         RequestSession browser,
         SubjectId subject,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(requests);
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
-
-        if (await RefusedAsync(attachments, browser, subject, admitting: true, cancellationToken).ConfigureAwait(false)
-            is Error refused)
-        {
-            return Answers.Refused(refused);
-        }
 
         PrivacyRequestBody body = await JsonBody
             .ReadAsync<PrivacyRequestBody>(context.Request, cancellationToken)
@@ -335,25 +275,9 @@ internal static class AttachedRecordRightsEndpoints
         }
 
         return Answers.Of(
-            await requests
-                .SubmitAsync(AccessContext.Of(subject), type, detail, cancellationToken)
+            await records
+                .SubmitAttachedRequestAsync(browser.Asking, subject, type, detail, cancellationToken)
                 .ConfigureAwait(false),
             PrivacyEndpoints.Receipted);
-    }
-
-    // Chapter 09 section 7a: the record attached to the account first; then, for a right
-    // other than the read, the record's state, which is its account's.
-    private static async ValueTask<Error?> RefusedAsync(
-        RecordAttachments attachments,
-        RequestSession browser,
-        SubjectId subject,
-        bool admitting,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(attachments);
-        ArgumentNullException.ThrowIfNull(browser);
-
-        return (await attachments.ReachesAsync(browser.Asking, subject, cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(reached => admitting ? RecordRights.Unadmitted(reached) : null, error => error);
     }
 }

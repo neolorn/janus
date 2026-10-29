@@ -1208,6 +1208,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RecordOffers>();
         _ = services.AddScoped<RecordAttachments>();
         _ = services.AddScoped<RecordAdministration>();
+        _ = services.AddScoped<AttachedRecordRights>();
         _ = services.AddScoped<IRecordPrivacy, Janus.Storage.Authentication.Records.RecordPrivacy>();
         _ = services.AddScoped<IPersonRecords, PersonRecordService>();
         _ = services.AddScoped<IdentifierService>();

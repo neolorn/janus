@@ -32,6 +32,7 @@ namespace Janus.Authentication.Records;
 /// <param name="accounts">Whether an account whose attached records are read exists.</param>
 /// <param name="volume">Where a person's reads of records are counted.</param>
 /// <param name="administration">What staff do to a record for the person who reaches it by no code.</param>
+/// <param name="attached">The person's rights on a record attached to their account.</param>
 /// <remarks>
 /// Implements REC-COL-003, REC-AGE-001, REC-ADM-001, REC-ATT-001, PRIV-CONS-001 and
 /// chapter 09 sections 7a and 8a.
@@ -52,7 +53,8 @@ internal sealed class PersonRecordService(
     AccountReach reach,
     IAccountDirectory accounts,
     IReadVolume volume,
-    RecordAdministration administration) : IPersonRecords
+    RecordAdministration administration,
+    AttachedRecordRights attached) : IPersonRecords
 {
     private const int ReferenceMaximum = 64;
 
@@ -416,6 +418,85 @@ internal sealed class PersonRecordService(
         CancellationToken cancellationToken) =>
         attachments.AttachByReferenceAsync(context, session, reference, source, cancellationToken);
 
+    /// <inheritdoc/>
+    public ValueTask<Result<PersonRecordDetail>> ReadAttachedAsync(
+        AccessContext context,
+        SubjectId record,
+        CancellationToken cancellationToken) =>
+        attached.ReadAsync(context, record, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> RectifyAttachedAsync(
+        AccessContext context,
+        SubjectId record,
+        string? name,
+        string? language,
+        CancellationToken cancellationToken) =>
+        attached.RectifyAsync(context, record, name, language, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<SubjectExport>> ExportAttachedAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId record,
+        CancellationToken cancellationToken) =>
+        attached.ExportAsync(context, session, record, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<IReadOnlyList<ConsentRecord>>> AttachedConsentsAsync(
+        AccessContext context,
+        SubjectId record,
+        CancellationToken cancellationToken) =>
+        attached.ConsentsAsync(context, record, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> GrantAttachedConsentAsync(
+        AccessContext context,
+        SubjectId record,
+        string purpose,
+        CancellationToken cancellationToken) =>
+        attached.GrantAsync(context, record, purpose, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> WithdrawAttachedConsentAsync(
+        AccessContext context,
+        SubjectId record,
+        string purpose,
+        CancellationToken cancellationToken) =>
+        attached.WithdrawAsync(context, record, purpose, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<IReadOnlyList<ObjectionRecord>>> AttachedObjectionsAsync(
+        AccessContext context,
+        SubjectId record,
+        CancellationToken cancellationToken) =>
+        attached.ObjectionsAsync(context, record, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> ObjectForAttachedAsync(
+        AccessContext context,
+        SubjectId record,
+        string purpose,
+        CancellationToken cancellationToken) =>
+        attached.ObjectAsync(context, record, purpose, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> WithdrawAttachedObjectionAsync(
+        AccessContext context,
+        SubjectId record,
+        string purpose,
+        CancellationToken cancellationToken) =>
+        attached.WithdrawObjectionAsync(context, record, purpose, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<PrivacyRequestReceipt>> SubmitAttachedRequestAsync(
+        AccessContext context,
+        SubjectId record,
+        PrivacyRequestType type,
+        string detail,
+        CancellationToken cancellationToken) =>
+        attached.SubmitAsync(context, record, type, detail, cancellationToken);
+
     // What the person gave, judged before anything is written: the language, the name,
     // each contact and the reference.
     private static Error? Taken(
@@ -527,7 +608,8 @@ internal sealed class PersonRecordService(
         return null;
     }
 
-    private static PersonRecordDetail Detail(ReadRecord read, string organizationName) =>
+    // The record as the person reads it, with its origin and the account it is attached to.
+    internal static PersonRecordDetail Detail(ReadRecord read, string organizationName) =>
         new(
             read.Subject,
             read.Organization,
