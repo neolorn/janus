@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A sign-in whose first factor is an `emailLink` or `emailCode` delivered to the
+  account's primary email, or the code a sign-in link's page showed for such a link, is
+  no longer held by the new-device check: the browser is remembered for
+  `device.verification.lifetime` and `DeviceVerified` is raised, as a completed check
+  does. A link or code delivered to another email or to a phone is held as before, its
+  check's code going to the primary email.
 - A staged registration's absent byte arrays are no longer written as empty ones, so a
   staged provider or TOTP credential and an identifier with no link outstanding read
   back as they were staged, and a link row is never written with an empty fingerprint.

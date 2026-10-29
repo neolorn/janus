@@ -4739,6 +4739,131 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): an email code sent to the primary email, presented
+    /// from a browser the account has not been seen on, completes without the check,
+    /// remembers the browser and raises <c>DeviceVerified</c>; no check code is sent.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_AnEmailCodeToThePrimaryEmailCompletesWithoutTheCheckAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        int sent = _notifications.Mail.Count;
+        SignInProgress reached = Reached(await PresentAsync(began.Challenge, Factor.EmailCode, Code()));
+
+        Assert.Equal(SignInStatus.Complete, reached.Status);
+        Assert.NotNull(reached.Session);
+        Assert.Equal(sent, _notifications.Mail.Count);
+        await RememberedOnceAsync(subject);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): a sign-in link sent to the primary email, pressed in
+    /// the browser that asked for it, completes without the check and remembers the
+    /// browser.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_ALinkToThePrimaryEmailCompletesWithoutTheCheckAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+
+        (string challenge, string token, string browser) = await AskedAsync(subject);
+
+        SignInLanding pressed = await LandedAsync(challenge, browser, token, press: true);
+
+        Assert.Equal(SignInStatus.Complete, pressed.SignedIn!.Status);
+        Assert.NotNull(pressed.SignedIn.Session);
+        await RememberedOnceAsync(subject);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): the code a sign-in link's page showed, for a link sent
+    /// to the primary email and typed where the sign-in began, completes without the
+    /// check and remembers the browser.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_TheCodeALinksPageShowedCompletesWithoutTheCheckAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+
+        (string challenge, string token, _) = await AskedAsync(subject);
+
+        SignInLanding away = await LandedAsync(challenge, browser: null, token, press: true);
+        SignInProgress reached = Reached(await PresentAsync(challenge, Factor.EmailLink, away.Code!));
+
+        Assert.Equal(SignInStatus.Complete, reached.Status);
+        await RememberedOnceAsync(subject);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): an email code sent to another verified email proved
+    /// no primary mailbox, so the sign-in is held and its check's code goes to the
+    /// primary email.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_AnEmailCodeToAnotherEmailIsHeldWithItsCodeToThePrimaryAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        _ = _identifiers.Verified(subject, IdentifierKind.Email, Second);
+
+        Enables(Factor.EmailCode);
+
+        SignInChallenge began = await BeganAsync(Second);
+
+        _ = await Service.SendCodeAsync(Second, Language, Source, TestContext.Current.CancellationToken);
+
+        SignInProgress reached = Reached(await PresentAsync(began.Challenge, Factor.EmailCode, Code()));
+
+        Assert.Equal(SignInStatus.DeviceVerificationRequired, reached.Status);
+        Assert.Null(reached.Session);
+        Assert.Equal(Address, _notifications.Mail[^1].Destination.Canonical);
+        Assert.Equal(MessageKind.VerificationCode, _notifications.Mail[^1].Message);
+        Assert.Empty(_events.Published.OfType<DeviceVerified>());
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): a sign-in link sent to a phone proved no mailbox, so
+    /// the sign-in is held and its check's code goes to the primary email.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_APhoneLinkIsHeldWithItsCodeToThePrimaryAsync()
+    {
+        _ = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+
+        SignInChallenge began = await BeganAsync(Number);
+        var browser = OpaqueToken.Draw(_randomness);
+
+        _ = await Service.SendLinkAsync(Number, Language, Source, browser.Value, TestContext.Current.CancellationToken);
+
+        SignInLanding pressed = (await Service.LandAsync(
+                began.Challenge,
+                browser.Value,
+                _notifications.Texts[^1].Token(),
+                Factor.PhoneLink,
+                press: true,
+                Browser,
+                Source,
+                TestContext.Current.CancellationToken))
+            .Match(landing => landing, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal(SignInStatus.DeviceVerificationRequired, pressed.SignedIn!.Status);
+        Assert.Equal(Address, _notifications.Mail[^1].Destination.Canonical);
+        Assert.Empty(_events.Published.OfType<DeviceVerified>());
+    }
+
+    /// <summary>
     /// REG-IDENT-006 AC6 and CONV-LOG-005 AC1: a sign-in link sent to an address the
     /// account has removed since does not sign in; the press is refused
     /// <c>auth.factor.rejected</c>, recorded against the account and counted.
@@ -6344,6 +6469,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _clock.GetUtcNow() + TimeSpan.FromDays(1),
             [1],
             TestContext.Current.CancellationToken);
+
+    // AUTH-FACT-016 AC8: a sign-in the primary email's factor exempted remembers the
+    // browser once, as a completed check does, and announces it once.
+    private async Task RememberedOnceAsync(SubjectId subject)
+    {
+        IReadOnlyList<Device> standing = await _devices.StandingOfAsync(
+            subject,
+            _clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(DeviceKind.Remembered, Assert.Single(standing).Kind);
+        _ = Assert.Single(_events.Published.OfType<DeviceVerified>());
+    }
 
     private void Remembered(SubjectId subject) =>
         _configuration.Set(Settings.DeviceVerificationEnabled, false);

@@ -664,7 +664,7 @@ internal sealed class AuthenticationService(
         // A refusal the factor's judgement answers comes back counted and recorded,
         // save that of a second-factor security key's assertion presented as a passkey
         // before a first factor, which is neither (AUTH-FACT-002b AC9).
-        bool changeRequired = (await AcceptsAsync(
+        (bool changeRequired, IdentifierId? mailbox) = (await AcceptsAsync(
                     open,
                     subject,
                     presented,
@@ -672,7 +672,7 @@ internal sealed class AuthenticationService(
                     token => CountAsync(attempt, presented.Factor, subject, trusted, token),
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<bool>(error, ref refusal));
+            .Match(value => value, error => Withheld<(bool, IdentifierId?)>(error, ref refusal));
 
         if (refusal is not null)
         {
@@ -701,6 +701,7 @@ internal sealed class AuthenticationService(
                 origin,
                 presented.TrustDevice,
                 changeRequired,
+                mailbox,
                 remembered,
                 trusted,
                 cancellationToken)
@@ -909,7 +910,7 @@ internal sealed class AuthenticationService(
                     token => StepUpFailAsync(attempt, live, presented.Factor, token),
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<bool>(error, ref refusal));
+            .Match(value => value.ChangeRequired, error => Withheld<bool>(error, ref refusal));
 
         if (refusal is not null)
         {
@@ -1150,6 +1151,7 @@ internal sealed class AuthenticationService(
                     origin,
                     trustDevice: false,
                     changeRequired: false,
+                    held.Email,
                     remembered,
                     trusted: null,
                     cancellationToken)
@@ -1161,6 +1163,12 @@ internal sealed class AuthenticationService(
 
     private static FactorProperties[] Properties(IReadOnlyCollection<Factor> presented) =>
         [.. presented.Select(FactorCatalogue.Of)];
+
+    // A factor no message delivered proves no mailbox (AUTH-FACT-016).
+    private static Result<(bool ChangeRequired, IdentifierId? Mailbox)> Unproved(Result<bool> accepted) =>
+        accepted.Match(
+            changeRequired => Result.Success<(bool, IdentifierId?)>((changeRequired, null)),
+            Result.Failure<(bool, IdentifierId?)>);
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {
@@ -1331,7 +1339,8 @@ internal sealed class AuthenticationService(
     // the entry's name, and only what that service accepted is recorded against the
     // challenge (AUTH-FACT-001). What comes back
     // beside the acceptance is whether the account is to be asked to change the
-    // password it just used (AUTH-PASS-004).
+    // password it just used (AUTH-PASS-004), and the email a link or code accepted was
+    // delivered to, which that factor proved the mailbox of (AUTH-FACT-016).
     // A refusal comes back counted and recorded already, by the count its caller hands
     // in: a factor whose refusal keeps a write of its own (a code's wrong try, a
     // counter that did not advance) commits that write with the count, in one unit of
@@ -1340,7 +1349,7 @@ internal sealed class AuthenticationService(
     // before any first factor has been accepted is what a ceremony is told, since a
     // second-factor security key that answers one there is refused as a second step is
     // (AUTH-FACT-002b AC9).
-    private async ValueTask<Result<bool>> AcceptsAsync(
+    private async ValueTask<Result<(bool ChangeRequired, IdentifierId? Mailbox)>> AcceptsAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
@@ -1353,8 +1362,9 @@ internal sealed class AuthenticationService(
         {
             if (properties.IsWebAuthn)
             {
-                return await CeremonyAsync(open, subject, presented, beforeFirstFactor, counted, cancellationToken)
-                    .ConfigureAwait(false);
+                return Unproved(
+                    await CeremonyAsync(open, subject, presented, beforeFirstFactor, counted, cancellationToken)
+                        .ConfigureAwait(false));
             }
 
             if (FactorCatalogue.Delivered.Contains(presented.Factor))
@@ -1371,10 +1381,10 @@ internal sealed class AuthenticationService(
 
         if (refusal is null)
         {
-            return Result.Success(changeRequired);
+            return Result.Success<(bool, IdentifierId?)>((changeRequired, null));
         }
 
-        return Result.Failure<bool>(
+        return Result.Failure<(bool, IdentifierId?)>(
             Refuses(refusal)
                 ? await KeptAsync(counted, cancellationToken).ConfigureAwait(false) ?? refusal
                 : refusal);
@@ -1573,7 +1583,7 @@ internal sealed class AuthenticationService(
     // those alone; and a right code's spend commits in it, with the release of what
     // its send counted once, whether the sign-in then goes on or a refusal follows it
     // (AUTH-ABUSE-004, CONV-DESIGN-003).
-    private async ValueTask<Result<bool>> CodeAsync(
+    private async ValueTask<Result<(bool ChangeRequired, IdentifierId? Mailbox)>> CodeAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
@@ -1588,14 +1598,14 @@ internal sealed class AuthenticationService(
         // this one.
         if (held is null || !held.Answers(open.Fingerprint))
         {
-            return Result.Failure<bool>(
+            return Result.Failure<(bool, IdentifierId?)>(
                 await KeptAsync(counted, cancellationToken).ConfigureAwait(false) ?? Error.From(ErrorCodes.CodeExpired));
         }
 
         if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
-            return Result.Failure<bool>(notBegun);
+            return Result.Failure<(bool, IdentifierId?)>(notBegun);
         }
 
         Result spent = await links
@@ -1604,7 +1614,7 @@ internal sealed class AuthenticationService(
 
         if (spent.Match<Error?>(() => null, error => error) is Error refusal)
         {
-            return Result.Failure<bool>(
+            return Result.Failure<(bool, IdentifierId?)>(
                 await RefusedAsync(refusal, Answered(refusal), counted, cancellationToken).ConfigureAwait(false));
         }
 
@@ -1618,7 +1628,7 @@ internal sealed class AuthenticationService(
         // attempt whose record and counts commit with the spend and its release.
         if (await UnansweredAsync(held, cancellationToken).ConfigureAwait(false) is Error unanswered)
         {
-            return Result.Failure<bool>(
+            return Result.Failure<(bool, IdentifierId?)>(
                 await RefusedAsync(unanswered, kept: true, counted, cancellationToken).ConfigureAwait(false));
         }
 
@@ -1626,18 +1636,18 @@ internal sealed class AuthenticationService(
         // so that a wrong code learns nothing of the lock (REG-DOM-001).
         if (await links.LockedAsync(held, cancellationToken).ConfigureAwait(false) is Error locked)
         {
-            return Result.Failure<bool>(await SpentAsync(locked, counted, cancellationToken).ConfigureAwait(false));
+            return Result.Failure<(bool, IdentifierId?)>(await SpentAsync(locked, counted, cancellationToken).ConfigureAwait(false));
         }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
-            return Result.Failure<bool>(notCommitted);
+            return Result.Failure<(bool, IdentifierId?)>(notCommitted);
         }
 
         open.Accepted(presented.Factor);
 
-        return Result.Success(false);
+        return Result.Success<(bool, IdentifierId?)>((false, held.Email));
     }
 
     // AUTH-FACT-004 AC7, AUTH-RECOV-007: what refuses a right code of a second step the
@@ -1772,6 +1782,7 @@ internal sealed class AuthenticationService(
         SessionOrigin origin,
         bool trustDevice,
         bool changeRequired,
+        IdentifierId? mailbox,
         string? remembered,
         string? trusted,
         CancellationToken cancellationToken)
@@ -1859,6 +1870,22 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(failure);
         }
 
+        // AUTH-FACT-016 (D-224): a link or code delivered to the primary email proved
+        // the mailbox the check's code would go to, so the browser is remembered as a
+        // completed check remembers it and the sign-in is not held.
+        if (checks && await PrimaryAsync(subject, mailbox, cancellationToken).ConfigureAwait(false))
+        {
+            OpaqueToken? browser = (await devices
+                    .VerifiedAsync(subject, origin.Device, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(token => (OpaqueToken?)token, error => Withheld<OpaqueToken?>(error, ref failure));
+
+            return failure is not null
+                ? Result.Failure<SignInOutcome>(failure)
+                : await CompleteAsync(open, subject, origin, trustDevice, changeRequired, browser, trusted, cancellationToken)
+                    .ConfigureAwait(false);
+        }
+
         return checks
             ? await HoldAsync(open, subject, reached, origin.Source, changeRequired, cancellationToken)
                 .ConfigureAwait(false)
@@ -1893,6 +1920,16 @@ internal sealed class AuthenticationService(
             ? await domainLock.RefusedAsync(subject, opened.Canonical, cancellationToken).ConfigureAwait(false)
             : Error.From(ErrorCodes.FactorRejected);
     }
+
+    // AUTH-FACT-016 (D-224): whether the email a link or code was delivered to is the
+    // account's primary email, the mailbox the new-device check's code goes to.
+    private async ValueTask<bool> PrimaryAsync(
+        SubjectId subject,
+        IdentifierId? mailbox,
+        CancellationToken cancellationToken) =>
+        mailbox is IdentifierId email
+        && (await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false)).Find(email)
+            is { Kind: IdentifierKind.Email, IsPrimary: true };
 
     // REG-IDENT-006 AC6: whether the sign-in was opened with an address the account
     // has given up since, which no factor presented to it signs in with.
