@@ -76,6 +76,7 @@ public sealed class CollectionSessionStoreTests(DatabaseFixture database) : ICla
         var contact = PreAuthentication.Issue(secret, OpaqueToken.Of("the-csrf-of-a-collecting-browser"), Noon, TimeSpan.FromHours(2));
 
         contact.Carry(lapsed.Id, lapsed.ExpiresAt);
+        lapsed.AnswerAge(adult: true, new DateOnly(1990, 1, 1), group: null, Noon);
         lapsed.Stage(IdentifierKind.Phone, Number);
 
         await using (StoreContext writing = database.Context())
@@ -117,6 +118,7 @@ public sealed class CollectionSessionStoreTests(DatabaseFixture database) : ICla
         CollectionSession moved = Opened();
         CollectionSession other = Opened();
 
+        moved.AnswerAge(adult: true, new DateOnly(1990, 1, 1), group: null, Noon);
         moved.Stage(IdentifierKind.Phone, Number);
 
         await using (StoreContext writing = database.Context())
