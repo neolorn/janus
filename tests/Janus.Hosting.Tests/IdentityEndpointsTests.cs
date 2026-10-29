@@ -92,6 +92,9 @@ public sealed class IdentityEndpointsTests
         "GET /.well-known/change-password",
         "GET /.well-known/passkey-endpoints",
         "GET /.well-known/webauthn",
+        // The settings a frontend draws its screens from, which read the deployment's
+        // settings and no record (chapter 07, D-224).
+        "GET /settings",
     ];
 
     // A public interface of Janus.Core an endpoint may read that is not an operation:
