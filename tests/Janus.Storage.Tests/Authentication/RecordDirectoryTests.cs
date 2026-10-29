@@ -348,6 +348,28 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// AUTHZ-SCOPE-001, REC-ADM-001: the organization holding a record is read alone, for
+    /// the gate to be asked there, and nothing is read for a subject no record bears.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ADM_001_TheOrganizationHoldingARecordIsReadAloneAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId subject = Subjects.New();
+
+        await WrittenAsync(Person(subject, organization, created: true));
+
+        await using StoreContext reading = database.Context();
+        RecordDirectory directory = Directory(reading);
+
+        Assert.Equal(
+            ((OrganizationId?)organization, (OrganizationId?)null),
+            (await directory.HolderAsync(subject, TestContext.Current.CancellationToken),
+                await directory.HolderAsync(Subjects.New(), TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// REC-ACC-002, REC-REC-002: a record held for a change takes a new name and language,
     /// begins its own deletion holding the restriction it is under, and returns
     /// restricted when the deletion is cancelled.

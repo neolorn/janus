@@ -267,6 +267,14 @@ internal sealed class RecordDirectory(
         Standing(await records.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false));
 
     /// <inheritdoc/>
+    public async ValueTask<OrganizationId?> HolderAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        await context.PersonRecords
+            .Where(row => row.Subject == subject)
+            .Select(row => (OrganizationId?)row.Organization)
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public ValueTask RectifyAsync(
         SubjectId subject,
         DisplayName? name,

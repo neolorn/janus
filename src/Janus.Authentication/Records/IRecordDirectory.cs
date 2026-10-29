@@ -182,6 +182,15 @@ internal interface IRecordDirectory
     ValueTask<RecordStanding?> StandingAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads which organization holds one person record and nothing else of it, which is
+    /// where a path naming the record is asked (AUTHZ-SCOPE-001, D-222).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The organization, or nothing where no record bears the subject.</returns>
+    ValueTask<OrganizationId?> HolderAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Changes the name and the language of an active record held for the change
     /// (REC-ACC-002).
     /// </summary>

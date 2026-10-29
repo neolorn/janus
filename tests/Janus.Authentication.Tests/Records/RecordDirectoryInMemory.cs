@@ -252,6 +252,10 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
             : null);
 
     /// <inheritdoc/>
+    public ValueTask<OrganizationId?> HolderAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_records.TryGetValue(subject, out HeldRecord? record) ? record.Organization : (OrganizationId?)null);
+
+    /// <inheritdoc/>
     public ValueTask RectifyAsync(
         SubjectId subject,
         DisplayName? name,

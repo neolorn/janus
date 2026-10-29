@@ -69,20 +69,27 @@ internal sealed class RecordAdministration(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (await records.StandingAsync(subject, cancellationToken).ConfigureAwait(false) is not RecordStanding standing)
+        if (await ScopeOfAsync(subject, cancellationToken).ConfigureAwait(false) is not OrganizationId organization)
         {
             return Result.Failure<RecordStanding>(Error.From(ErrorCodes.RecordNotFound));
         }
 
-        if (await admission.RefusedAsync(context, permission, standing.Organization, cancellationToken).ConfigureAwait(false)
-            is not Error refused)
+        if (await admission.RefusedAsync(context, permission, organization, cancellationToken).ConfigureAwait(false)
+            is Error refused)
         {
-            return Result.Success(standing);
+            return Result.Failure<RecordStanding>(
+                refused.Code == ErrorCodes.Denied ? Error.From(ErrorCodes.RecordNotFound) : refused);
         }
 
-        return Result.Failure<RecordStanding>(
-            refused.Code == ErrorCodes.Denied ? Error.From(ErrorCodes.RecordNotFound) : refused);
+        return await records.StandingAsync(subject, cancellationToken).ConfigureAwait(false) is RecordStanding standing
+            ? Result.Success(standing)
+            : Result.Failure<RecordStanding>(Error.From(ErrorCodes.RecordNotFound));
     }
+
+    // AUTHZ-SCOPE-001, D-222: where a path naming a record is asked, the organization that
+    // holds it.
+    private ValueTask<OrganizationId?> ScopeOfAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        records.HolderAsync(subject, cancellationToken);
 
     /// <summary>
     /// Corrects a record on the person's word: a contact changed is held unverified
@@ -260,57 +267,61 @@ internal sealed class RecordAdministration(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
-        TimeSpan grace = (await configuration
-                .ReadAsync(Settings.RecordDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
-
         return await (await AdmittedAsync(context, Permissions.RecordManage, subject, cancellationToken).ConfigureAwait(false))
-            .Match(
-                admitted => ChangedAsync(
-                    context,
-                    Permissions.RecordManage,
-                    subject,
-                    admitted,
-                    standing => Uncancellable(standing, time.GetUtcNow() - grace),
-                    (acting, session, StepUpAction.RecordDeletionCancel),
-                    async (standing, token) =>
-                    {
-                        DateTimeOffset now = time.GetUtcNow();
+            .Match<ValueTask<Result>>(
+                async admitted =>
+                {
+                    TimeSpan grace = (await configuration
+                            .ReadAsync(Settings.RecordDeletionGrace, cancellationToken).ConfigureAwait(false))
+                        .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
-                        // IDN-LIFE-003: the cancellation of a window an out-of-band
-                        // request began is recorded against that request.
-                        PrivacyRequestId? request = standing is
+                    return await ChangedAsync(
+                        context,
+                        Permissions.RecordManage,
+                        subject,
+                        admitted,
+                        standing => Uncancellable(standing, time.GetUtcNow() - grace),
+                        (acting, session, StepUpAction.RecordDeletionCancel),
+                        async (standing, token) =>
                         {
-                            DeletingBy: DeletionOrigin.OutOfBandRequest,
-                            DeletingSince: DateTimeOffset since,
-                        }
-                            ? await accounts.ErasureRequestAsync(subject, since, token).ConfigureAwait(false)
-                            : null;
+                            DateTimeOffset now = time.GetUtcNow();
 
-                        await records.CancelDeletionAsync(subject, token).ConfigureAwait(false);
+                            // IDN-LIFE-003: the cancellation of a window an out-of-band
+                            // request began is recorded against that request.
+                            PrivacyRequestId? request = standing is
+                            {
+                                DeletingBy: DeletionOrigin.OutOfBandRequest,
+                                DeletingSince: DateTimeOffset since,
+                            }
+                                ? await accounts.ErasureRequestAsync(subject, since, token).ConfigureAwait(false)
+                                : null;
 
-                        if ((await events
-                                .PublishAsync(
-                                    new RecordDeletionCancelled(now, Key(subject, now))
-                                    {
-                                        Subject = subject,
-                                        Actor = acting,
-                                        Effective = context.Effective,
-                                    },
-                                    token)
-                                .ConfigureAwait(false))
-                            .Match(() => (Error?)null, error => error) is Error unpublished)
-                        {
-                            return unpublished;
-                        }
+                            await records.CancelDeletionAsync(subject, token).ConfigureAwait(false);
 
-                        await audit
-                            .CancelledOnBehalfAsync(acting, context.BreakGlassReason, subject, request, now, token)
-                            .ConfigureAwait(false);
+                            if ((await events
+                                    .PublishAsync(
+                                        new RecordDeletionCancelled(now, Key(subject, now))
+                                        {
+                                            Subject = subject,
+                                            Actor = acting,
+                                            Effective = context.Effective,
+                                        },
+                                        token)
+                                    .ConfigureAwait(false))
+                                .Match(() => (Error?)null, error => error) is Error unpublished)
+                            {
+                                return unpublished;
+                            }
 
-                        return null;
-                    },
-                    cancellationToken),
+                            await audit
+                                .CancelledOnBehalfAsync(acting, context.BreakGlassReason, subject, request, now, token)
+                                .ConfigureAwait(false);
+
+                            return null;
+                        },
+                        cancellationToken)
+                        .ConfigureAwait(false);
+                },
                 error => ValueTask.FromResult(Result.Failure(error)))
             .ConfigureAwait(false);
     }
