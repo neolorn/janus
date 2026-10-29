@@ -619,6 +619,109 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-SEC-001, FE-PM-002 (D-224): the opening of an enrolment session carries the
+    /// document <c>GET /enrol</c> answers on it: the username, whether a password is
+    /// set, the credentials the policy admits, and no emails while the mailbox stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_TheEnrolmentSessionsOpeningCarriesTheDocumentItsReadAnswersAsync()
+    {
+        _ = await SignedInAsync();
+
+        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+
+        Browser browser = await ArrivedAsync();
+
+        Answer opened = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+        Answer read = await browser.SendAsync("GET", "/enrol");
+        JsonElement document = read.Json();
+
+        Assert.Equal(StatusCodes.Status200OK, opened.Status);
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.True(JsonElement.DeepEquals(opened.Json(), document));
+        Assert.Equal(Flow.Address, read.Text("username"));
+        Assert.True(document.GetProperty("password").GetProperty("set").GetBoolean());
+        Assert.Equal(
+            [.. new (Factor Factor, string Named)[]
+                {
+                    (Factor.Password, "password"),
+                    (Factor.Passkey, "passkey"),
+                    (Factor.SecurityKey, "securityKey"),
+                    (Factor.Totp, "totp"),
+                }
+                .Where(offer => Janus.Core.Policies.SystemDefault.LoginFactors.Contains(offer.Factor))
+                .Select(offer => offer.Named)],
+            document.GetProperty("offers").EnumerateArray().Select(offer => offer.GetString()));
+        Assert.False(document.GetProperty("mailboxLost").GetBoolean());
+        Assert.Equal(0, document.GetProperty("identifiers").GetArrayLength());
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002 (D-224): where the approver recorded the mailbox as lost, the
+    /// enrolment document names the account's emails, so the replace names the one it
+    /// replaces; a browser carrying no enrolment session is asked nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheEnrolmentDocumentNamesTheEmailsWhereTheMailboxWasLostAsync()
+    {
+        _ = await SignedInAsync();
+
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        await LinkedAsync(subject, mailboxLost: true);
+
+        Browser browser = await ArrivedAsync();
+        Browser none = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        Answer read = await browser.SendAsync("GET", "/enrol");
+        Answer unheld = await none.SendAsync("GET", "/enrol");
+        JsonElement named = Assert.Single(read.Json().GetProperty("identifiers").EnumerateArray());
+
+        Assert.True(read.Json().GetProperty("mailboxLost").GetBoolean());
+        Assert.Equal((await EmailAsync(subject)).ToString(), named.GetProperty("id").GetString());
+        Assert.Equal(Flow.Address, named.GetProperty("value").GetString());
+        Assert.True(named.GetProperty("primary").GetBoolean());
+        Assert.Equal(StatusCodes.Status401Unauthorized, unheld.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), unheld.Text("code"));
+    }
+
+    /// <summary>
+    /// FE-SEC-001 (D-224): a password is refused 422 <c>auth.factor.notpermitted</c>
+    /// where the policy in force does not hold <c>password</c> in <c>loginFactors</c>,
+    /// an enrolment session's included, and the enrolment stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_APasswordThePolicyDoesNotAdmitIsRefusedOnTheEnrolmentSessionAsync()
+    {
+        _ = await SignedInAsync();
+
+        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>(
+                    Janus.Core.Policies.SystemDefault.LoginFactors.Where(factor => factor is not Factor.Password)),
+            });
+
+        Answer refused = await browser.SendAsync("POST", "/account/password", ("password", Replacement));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.FactorNotPermitted.ToString(), refused.Text("code"));
+        Assert.NotEmpty(_deployment.Links.Held);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002 and chapter 09 section 3: the enrolment session is usable only
     /// against the endpoints the chapter names for it, and the recovery codes are not
     /// one of them, so a browser holding that session and no other is answered there as

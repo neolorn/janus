@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /account/password` is refused **422** `auth.factor.notpermitted` where the
+  policy in force does not hold `password` in `loginFactors`, on every session, an
+  enrolment session's included. `GET /enrol` answers, on the enrolment session, the
+  document the enrolment screen renders from (`username`, `password`, `offers`,
+  `mailboxLost`, `identifiers` where the mailbox was recorded lost, and `expiresAt`),
+  and `POST /enrol/begin`'s **200** carries the same; `IRecovery.ReadEnrolmentAsync`
+  answers it as an `EnrolmentDocument`.
 - A sign-in asked for its second step is told on that `factorRequired` answer whether
   the call completing it may trust the browser (`trustDeviceOffered`: a policy below
   AAL2, a password at the single-factor floor, an account not restricted), and the

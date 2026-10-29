@@ -184,6 +184,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
     // method and path: the only routes on which stage 5 resolves one.
     private static readonly string[] Reached =
     [
+        "GET /enrol",
         "POST /account/factors/totp/begin",
         "POST /account/factors/totp/confirm",
         "POST /account/identifiers/{id}/verify",

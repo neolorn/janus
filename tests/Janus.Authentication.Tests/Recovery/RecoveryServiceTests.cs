@@ -1158,6 +1158,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _accounts,
             _authenticators,
             Passwords,
+            _passwords,
             Policies,
             Sessions,
             new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),

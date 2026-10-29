@@ -363,7 +363,7 @@ POST /account/password
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
-  422 auth.password.blocklisted auth.password.toolong auth.password.tooshort
+  422 auth.factor.notpermitted auth.password.blocklisted auth.password.toolong auth.password.tooshort
 DELETE /account/photo
   204
   401 auth.session.expired
@@ -2024,13 +2024,34 @@ GET /callbacks/sms/dlr
   409 integration.callback.inprogress
   422 integration.callback.rejected
   429 integration.callback.rejected
+GET /enrol
+  200
+    application/json
+      username: string
+      password.set: boolean
+      password.changedAt: DateTimeOffset?
+      offers[]: Factor
+      mailboxLost: boolean
+      identifiers[].id: string
+      identifiers[].value: string
+      identifiers[].primary: boolean
+      expiresAt: DateTimeOffset
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
 POST /enrol/begin
   request application/json
     token: string
   200
     application/json
-      expiresAt: DateTimeOffset
+      username: string
+      password.set: boolean
+      password.changedAt: DateTimeOffset?
+      offers[]: Factor
       mailboxLost: boolean
+      identifiers[].id: string
+      identifiers[].value: string
+      identifiers[].primary: boolean
+      expiresAt: DateTimeOffset
   400 api.request.malformed
   403 auth.session.csrfinvalid
   422 auth.enrolment.tokeninvalid auth.recovery.tokenexpired

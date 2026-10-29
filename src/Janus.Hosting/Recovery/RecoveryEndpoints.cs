@@ -89,6 +89,9 @@ internal static class RecoveryEndpoints
                     ErrorCodes.RecoveryTokenExpired, ErrorCodes.EnrolmentTokenInvalid))
             .Accepts<EnrolmentRequest>(MediaTypeNames.Application.Json)
             .Produces<EnrolmentSessionView>();
+        _ = EnrolmentRoute.On(endpoints.MapGet("/enrol", ReadEnrolmentAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired))
+            .Produces<EnrolmentSessionView>();
 
         return endpoints;
     }
@@ -352,12 +355,35 @@ internal static class RecoveryEndpoints
             .CarryAsync(contact, session.Id, session.ExpiresAt, cancellationToken)
             .ConfigureAwait(false);
 
-        return TypedResults.Json(
-            EnrolmentSessionView.Of(session),
+        // D-224: the opening carries the document GET /enrol answers.
+        return Answers.Of(
+            await recovery.ReadEnrolmentAsync(session.Id, cancellationToken).ConfigureAwait(false),
+            Enrolment);
+    }
+
+    // 09 GET /enrol (D-224): the enrolment screen reads its document on the enrolment
+    // session the browser carries, and a browser carrying none is asked nothing.
+    private static async Task<IResult> ReadEnrolmentAsync(
+        IRecovery recovery,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(recovery);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return browser.Enrolment is not EnrolmentSessionId opened
+            ? Nobody()
+            : Answers.Of(
+                await recovery.ReadEnrolmentAsync(opened, cancellationToken).ConfigureAwait(false),
+                Enrolment);
+    }
+
+    private static IResult Enrolment(EnrolmentDocument document) =>
+        TypedResults.Json(
+            EnrolmentSessionView.Of(document),
             RecoveryJson.Default.EnrolmentSessionView,
             contentType: null,
             StatusCodes.Status200OK);
-    }
 
     // BFF-STEP-001: the endpoints that read this are mounted as ones that need a
     // session, so the stage that requires one has already answered a request that

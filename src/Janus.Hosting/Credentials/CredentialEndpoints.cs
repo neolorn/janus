@@ -43,7 +43,7 @@ internal static class CredentialEndpoints
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.PasswordBlocklisted, ErrorCodes.PasswordTooShort,
-                    ErrorCodes.PasswordTooLong))
+                    ErrorCodes.PasswordTooLong, ErrorCodes.FactorNotPermitted))
             .Accepts<SetPasswordRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(account.MapDelete("/credentials/{id}", RemoveAsync))

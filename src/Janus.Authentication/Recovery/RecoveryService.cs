@@ -31,6 +31,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="accounts">Where the account's standing is read.</param>
 /// <param name="authenticators">Where the account's credentials are read.</param>
 /// <param name="passwords">What screens and sets a password.</param>
+/// <param name="passwordStore">Whether the account holds a password, and since when.</param>
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="sessions">What ends the sessions a changed credential invalidates.</param>
 /// <param name="stepUp">What the approver's session has to have proved.</param>
@@ -67,6 +68,7 @@ internal sealed class RecoveryService(
     IAccountDirectory accounts,
     IAuthenticatorStore authenticators,
     PasswordService passwords,
+    IPasswordStore passwordStore,
     PolicyResolution policies,
     SessionService sessions,
     StepUpGuard stepUp,
@@ -83,6 +85,10 @@ internal sealed class RecoveryService(
     TimeProvider time,
     RandomNumberGenerator randomness) : IRecovery
 {
+    // 09 GET /enrol (D-224): the credentials an enrolment session may set, in the order
+    // the document names them.
+    private static readonly Factor[] Enrollable = [Factor.Password, Factor.Passkey, Factor.SecurityKey, Factor.Totp];
+
     private static readonly IReadOnlyDictionary<string, string> Nothing =
         new Dictionary<string, string>(capacity: 0, StringComparer.Ordinal);
 
@@ -435,6 +441,56 @@ internal sealed class RecoveryService(
         // never given one of its own.
         return Result.Success(
             new EnrolmentSession(opened, link.Subject, link.ExpiresAt, link.MailboxLost));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<EnrolmentDocument>> ReadEnrolmentAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken)
+    {
+        RecoveryLink? link = await links.FindAsync(session, cancellationToken).ConfigureAwait(false);
+
+        if (link is null || link.HasExpired(time.GetUtcNow()))
+        {
+            return Result.Failure<EnrolmentDocument>(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(link.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<EnrolmentDocument>(failure);
+        }
+
+        IReadOnlyList<HeldIdentifier> emails =
+            (await identifiers.HeldAsync(link.Subject, cancellationToken).ConfigureAwait(false))
+                .OfKind(IdentifierKind.Email);
+        Password? password = await passwordStore.FindAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+
+        // FE-PM-002, REG-IDENT-001: the username is the primary email, which an account
+        // always holds, so a session whose account holds none is a fault.
+        HeldIdentifier primary = emails.FirstOrDefault(email => email.IsPrimary)
+            ?? throw new InvalidOperationException("The account holds no primary email.");
+
+        // FE-SEC-001 (D-224): the session offers the credentials the policy admits, and
+        // names the emails a replace may name only where the mailbox was recorded lost.
+        return Result.Success(new EnrolmentDocument(
+            primary.Entered,
+            new PasswordStatus(password is not null, password?.SetAt),
+            [.. Enrollable.Where(policy.LoginFactors.Contains)],
+            link.MailboxLost,
+            link.MailboxLost
+                ? [.. emails.Select(email => new IdentifierSummary(
+                    email.Id,
+                    email.Entered,
+                    email.IsVerified,
+                    email.IsPrimary,
+                    email.IsLocked || email.IsPersonal))]
+                : [],
+            link.ExpiresAt));
     }
 
     /// <inheritdoc/>

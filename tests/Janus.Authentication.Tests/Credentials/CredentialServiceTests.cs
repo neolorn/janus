@@ -205,6 +205,43 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-SEC-001 (D-224): where the policy in force does not hold <c>password</c> in its
+    /// login factors, a password is refused <c>auth.factor.notpermitted</c> on every
+    /// session, an account's and an enrolment session's alike, and nothing is announced.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_APasswordThePolicyDoesNotAdmitIsRefusedOnEverySessionAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        EnrolmentSession opened = await OpenedAsync(await AccountAsync(password: false));
+
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Core.Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>(
+                    Core.Policies.SystemDefault.LoginFactors.Where(factor => factor is not Factor.Password)),
+            });
+        _events.Published.Clear();
+
+        Result held = await Service.SetPasswordAsync(
+            Authority(subject, session),
+            Another,
+            Source,
+            TestContext.Current.CancellationToken);
+        Result enrolling = await Service.SetPasswordAsync(
+            CredentialAuthority.Of(opened.Id),
+            Another,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorNotPermitted, held.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(ErrorCodes.FactorNotPermitted, enrolling.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_events.Of<CredentialEnrolled>());
+    }
+
+    /// <summary>
     /// AUTH-STEP-007 AC4: a password set on an existing account, by the person in a
     /// session or through the enrolment session an approved recovery opened, is
     /// announced as an enrolment of the catalogue entry <c>password</c> with no
@@ -2632,6 +2669,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _accounts,
             _authenticators,
             Passwords,
+            _passwords,
             Policies,
             Sessions,
             Guard,

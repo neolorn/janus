@@ -1059,6 +1059,23 @@ Janus.Core.EnrolledCredential.RecoveryCodes.get -> System.Collections.Generic.IR
 Janus.Core.EnrolledCredential.RecoveryCodes.init -> void
 Janus.Core.EnrolledCredential.SecondCredential.get -> Janus.Core.CredentialRedundancy?
 Janus.Core.EnrolledCredential.SecondCredential.init -> void
+Janus.Core.EnrolmentDocument
+Janus.Core.EnrolmentDocument.<Clone>$() -> Janus.Core.EnrolmentDocument!
+Janus.Core.EnrolmentDocument.Deconstruct(out string! Username, out Janus.Core.PasswordStatus! Password, out System.Collections.Generic.IReadOnlyList<Janus.Core.Factor>! Offers, out bool MailboxLost, out System.Collections.Generic.IReadOnlyList<Janus.Core.IdentifierSummary!>! Identifiers, out System.DateTimeOffset ExpiresAt) -> void
+Janus.Core.EnrolmentDocument.EnrolmentDocument(string! Username, Janus.Core.PasswordStatus! Password, System.Collections.Generic.IReadOnlyList<Janus.Core.Factor>! Offers, bool MailboxLost, System.Collections.Generic.IReadOnlyList<Janus.Core.IdentifierSummary!>! Identifiers, System.DateTimeOffset ExpiresAt) -> void
+Janus.Core.EnrolmentDocument.Equals(Janus.Core.EnrolmentDocument? other) -> bool
+Janus.Core.EnrolmentDocument.ExpiresAt.get -> System.DateTimeOffset
+Janus.Core.EnrolmentDocument.ExpiresAt.init -> void
+Janus.Core.EnrolmentDocument.Identifiers.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.IdentifierSummary!>!
+Janus.Core.EnrolmentDocument.Identifiers.init -> void
+Janus.Core.EnrolmentDocument.MailboxLost.get -> bool
+Janus.Core.EnrolmentDocument.MailboxLost.init -> void
+Janus.Core.EnrolmentDocument.Offers.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Factor>!
+Janus.Core.EnrolmentDocument.Offers.init -> void
+Janus.Core.EnrolmentDocument.Password.get -> Janus.Core.PasswordStatus!
+Janus.Core.EnrolmentDocument.Password.init -> void
+Janus.Core.EnrolmentDocument.Username.get -> string!
+Janus.Core.EnrolmentDocument.Username.init -> void
 Janus.Core.EnrolmentSession
 Janus.Core.EnrolmentSession.<Clone>$() -> Janus.Core.EnrolmentSession!
 Janus.Core.EnrolmentSession.Deconstruct(out Janus.Core.EnrolmentSessionId Id, out Janus.Core.SubjectId Subject, out System.DateTimeOffset ExpiresAt, out bool MailboxLost) -> void
@@ -1585,6 +1602,7 @@ Janus.Core.IRecovery.BeginAsync(string! identifier, string! language, string! so
 Janus.Core.IRecovery.BeginEnrolmentAsync(string! token, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.EnrolmentSession!>>
 Janus.Core.IRecovery.CancelLossAsync(Janus.Core.AccessContext? context, Janus.Core.AuthenticatorId credential, string? cancelToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRecovery.CompleteAsync(string! token, string! password, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRecovery.ReadEnrolmentAsync(Janus.Core.EnrolmentSessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.EnrolmentDocument!>>
 Janus.Core.IRecovery.ReportLossAsync(Janus.Core.AccessContext! context, Janus.Core.AuthenticatorId credential, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.LossReported!>>
 Janus.Core.IRecovery.UsernameAsync(string! token, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<string!>>
 Janus.Core.IRegistration
@@ -3811,6 +3829,9 @@ override Janus.Core.EncryptedFieldDeclaration.ToString() -> string!
 override Janus.Core.EnrolledCredential.Equals(object? obj) -> bool
 override Janus.Core.EnrolledCredential.GetHashCode() -> int
 override Janus.Core.EnrolledCredential.ToString() -> string!
+override Janus.Core.EnrolmentDocument.Equals(object? obj) -> bool
+override Janus.Core.EnrolmentDocument.GetHashCode() -> int
+override Janus.Core.EnrolmentDocument.ToString() -> string!
 override Janus.Core.EnrolmentSession.Equals(object? obj) -> bool
 override Janus.Core.EnrolmentSession.GetHashCode() -> int
 override Janus.Core.EnrolmentSession.ToString() -> string!
@@ -4742,6 +4763,8 @@ static Janus.Core.EncryptedFieldDeclaration.operator !=(Janus.Core.EncryptedFiel
 static Janus.Core.EncryptedFieldDeclaration.operator ==(Janus.Core.EncryptedFieldDeclaration? left, Janus.Core.EncryptedFieldDeclaration? right) -> bool
 static Janus.Core.EnrolledCredential.operator !=(Janus.Core.EnrolledCredential? left, Janus.Core.EnrolledCredential? right) -> bool
 static Janus.Core.EnrolledCredential.operator ==(Janus.Core.EnrolledCredential? left, Janus.Core.EnrolledCredential? right) -> bool
+static Janus.Core.EnrolmentDocument.operator !=(Janus.Core.EnrolmentDocument? left, Janus.Core.EnrolmentDocument? right) -> bool
+static Janus.Core.EnrolmentDocument.operator ==(Janus.Core.EnrolmentDocument? left, Janus.Core.EnrolmentDocument? right) -> bool
 static Janus.Core.EnrolmentSession.operator !=(Janus.Core.EnrolmentSession? left, Janus.Core.EnrolmentSession? right) -> bool
 static Janus.Core.EnrolmentSession.operator ==(Janus.Core.EnrolmentSession? left, Janus.Core.EnrolmentSession? right) -> bool
 static Janus.Core.EnrolmentSessionId.New(System.TimeProvider! time) -> Janus.Core.EnrolmentSessionId

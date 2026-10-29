@@ -115,6 +115,19 @@ public interface IRecovery
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads the document the enrolment screen renders from, on the enrolment session
+    /// (D-224).
+    /// </summary>
+    /// <param name="session">The enrolment session the browser carries.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The document, or <c>auth.session.expired</c> where the session is no longer open.
+    /// </returns>
+    ValueTask<Result<EnrolmentDocument>> ReadEnrolmentAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reports a credential lost, which suspends it at once and notifies every
     /// recorded channel. Asks no step-up: the person reporting has lost the factor a
     /// gate would ask for.
