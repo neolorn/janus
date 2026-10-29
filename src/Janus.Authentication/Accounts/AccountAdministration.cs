@@ -611,16 +611,28 @@ internal sealed class AccountAdministration(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        // REC-ADM-001: a person record's subject is answered as an account's is, the
-        // answer naming its kind.
-        if (await records.HoldAsync(subject, cancellationToken).ConfigureAwait(false) is RecordStanding standing)
+        return await (await reach.AskedAsync(context, Permissions.ContactRead, organization, cancellationToken).ConfigureAwait(false))
+            .Match(
+                read => AdmittedContactAsync(context, read, subject, cancellationToken),
+                error => ValueTask.FromResult(Result.Failure<ContactDetail>(error)))
+            .ConfigureAwait(false);
+    }
+
+    // REC-ADM-001: a person record's subject is answered as an account's is, the answer
+    // naming its kind.
+    private async ValueTask<Result<ContactDetail>> AdmittedContactAsync(
+        AccessContext context,
+        AdmittedRead read,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (await records.StandingAsync(subject, cancellationToken).ConfigureAwait(false) is RecordStanding standing)
         {
-            return await RecordContactAsync(context, subject, standing, organization, cancellationToken)
+            return await RecordContactAsync(context, read, subject, standing, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        Result<AccountState> reached = await ReachedAsync(context, Permissions.ContactRead, subject, organization, cancellationToken)
-            .ConfigureAwait(false);
+        Result<AccountState> reached = await WithinAsync(read, subject, cancellationToken).ConfigureAwait(false);
 
         if (reached.Match(_ => (Error?)null, error => error) is Error refused)
         {
@@ -883,26 +895,13 @@ internal sealed class AccountAdministration(
     // answered as an account no person bears, in the same bytes.
     private async ValueTask<Result<ContactDetail>> RecordContactAsync(
         AccessContext context,
+        AdmittedRead read,
         SubjectId subject,
         RecordStanding standing,
-        OrganizationId? organization,
         CancellationToken cancellationToken)
     {
-        Result<AdmittedRead> asked = await reach
-            .AskedAsync(context, Permissions.ContactRead, organization, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (asked.Match(_ => (Error?)null, error => error) is Error refused)
-        {
-            return Result.Failure<ContactDetail>(refused);
-        }
-
         if (standing.State is PersonRecordState.Deleted
-            || !await asked
-                .Match(
-                    read => reach.ReachesAsync(read, subject, cancellationToken),
-                    _ => ValueTask.FromResult(false))
-                .ConfigureAwait(false)
+            || !await reach.ReachesAsync(read, subject, cancellationToken).ConfigureAwait(false)
             || await records.ReadAsync(subject, cancellationToken).ConfigureAwait(false) is not ReadRecord record)
         {
             return Result.Failure<ContactDetail>(Error.From(ErrorCodes.AccountNotFound));
