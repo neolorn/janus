@@ -177,10 +177,17 @@ internal static class OidcRegistration
         // Chapter 09 section 9 (D-224): the provider answers at the address the host
         // declares and nowhere else. Its issuer is that address exactly and each route is
         // that address followed by the route's path, so a request for one of them at any
-        // other address is not the provider's and goes on to the host's routing.
+        // other address is not the provider's and goes on to the host's routing. A
+        // deployment that declared no addresses is refused at startup (LIB-HOST-001,
+        // AUTH-SESS-012), so the options are built without them for that refusal alone.
         _ = services.AddOptions<OpenIddictServerOptions>()
-            .Configure<AuthenticationAddresses>((options, addresses) =>
+            .Configure<IServiceProvider>((options, provider) =>
             {
+                if (provider.GetService<AuthenticationAddresses>() is not AuthenticationAddresses addresses)
+                {
+                    return;
+                }
+
                 options.Issuer = new Uri(addresses.Provider, UriKind.Absolute);
                 ProvidedAt(options.AuthorizationEndpointUris, addresses, Authorization);
                 ProvidedAt(options.PushedAuthorizationEndpointUris, addresses, PushedAuthorization);
