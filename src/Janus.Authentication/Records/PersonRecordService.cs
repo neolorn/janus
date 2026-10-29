@@ -31,7 +31,7 @@ namespace Janus.Authentication.Records;
 /// <param name="reach">Where a finding is asked, and whether it reaches every organization.</param>
 /// <param name="accounts">Whether an account whose attached records are read exists.</param>
 /// <param name="volume">Where a person's reads of records are counted.</param>
-/// <param name="admission">Where a path naming a record is admitted.</param>
+/// <param name="administration">What staff do to a record for the person who reaches it by no code.</param>
 /// <remarks>
 /// Implements REC-COL-003, REC-AGE-001, REC-ADM-001, REC-ATT-001, PRIV-CONS-001 and
 /// chapter 09 sections 7a and 8a.
@@ -52,7 +52,7 @@ internal sealed class PersonRecordService(
     AccountReach reach,
     IAccountDirectory accounts,
     IReadVolume volume,
-    IReadAdmission admission) : IPersonRecords
+    RecordAdministration administration) : IPersonRecords
 {
     private const int ReferenceMaximum = 64;
 
@@ -242,7 +242,7 @@ internal sealed class PersonRecordService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if ((await AdmittedAsync(context, Permissions.RecordRead, subject, cancellationToken).ConfigureAwait(false))
+        if ((await administration.AdmittedAsync(context, Permissions.RecordRead, subject, cancellationToken).ConfigureAwait(false))
             .Match(_ => (Error?)null, error => error) is Error refused)
         {
             return Result.Failure<PersonRecordDetail>(refused);
@@ -262,6 +262,14 @@ internal sealed class PersonRecordService(
         return (await volume.ReturnedAsync(context, 1, cancellationToken).ConfigureAwait(false))
             .Match(() => Result.Success(Detail(read, holding?.Name ?? string.Empty)), Result.Failure<PersonRecordDetail>);
     }
+
+    /// <inheritdoc/>
+    public ValueTask<Result> RectifyAsync(
+        AccessContext context,
+        SubjectId subject,
+        PersonRecordCorrection correction,
+        CancellationToken cancellationToken) =>
+        administration.RectifyAsync(context, subject, correction, cancellationToken);
 
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<SubjectId>>> AttachedAsync(
@@ -467,32 +475,6 @@ internal sealed class PersonRecordService(
         }
 
         return null;
-    }
-
-    // REC-ADM-001 (D-222): a path naming a record is asked in the organization that holds
-    // it and admitted where the permission is held there or in the administrative
-    // organization, as one admission; a caller admitted in neither is answered as a
-    // subject no record bears, in the same bytes, the gate having recorded its refusal
-    // against the record's organization.
-    private async ValueTask<Result<RecordStanding>> AdmittedAsync(
-        AccessContext context,
-        Permission permission,
-        SubjectId subject,
-        CancellationToken cancellationToken)
-    {
-        if (await records.StandingAsync(subject, cancellationToken).ConfigureAwait(false) is not RecordStanding standing)
-        {
-            return Result.Failure<RecordStanding>(Error.From(ErrorCodes.RecordNotFound));
-        }
-
-        if (await admission.RefusedAsync(context, permission, standing.Organization, cancellationToken).ConfigureAwait(false)
-            is not Error refused)
-        {
-            return Result.Success(standing);
-        }
-
-        return Result.Failure<RecordStanding>(
-            refused.Code == ErrorCodes.Denied ? Error.From(ErrorCodes.RecordNotFound) : refused);
     }
 
     private static PersonRecordDetail Detail(ReadRecord read, string organizationName) =>

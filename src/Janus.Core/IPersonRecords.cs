@@ -104,6 +104,31 @@ public interface IPersonRecords
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Corrects a person record on the person's word under <c>record:manage</c>, admitted
+    /// as <see cref="ReadAsync"/> is: a contact changed is unverified from then on, so a
+    /// code never reaches a contact staff wrote. A restricted record admits it.
+    /// </summary>
+    /// <param name="context">The staff member correcting it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="correction">What is corrected, and why.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>api.request.malformed</c> naming <c>reason</c> where it is blank or past 1024
+    /// characters after trimming; <c>identity.profile.invalid</c>,
+    /// <c>api.request.invalid</c> naming <c>language</c> or
+    /// <c>identity.identifier.invalid</c> for a member out of its rule;
+    /// <c>identity.record.followsaccount</c> naming the account a record is attached to;
+    /// <c>identity.record.stateconflict</c> where it is deleting or deleted.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the correction is absent.</exception>
+    ValueTask<Result> RectifyAsync(
+        AccessContext context,
+        SubjectId subject,
+        PersonRecordCorrection correction,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The subjects of the person records attached to an account: a person's own context
     /// reads its own; another's is read under <c>record:read</c> in the organization
     /// named, the administrative organization where none is, with the account reach of

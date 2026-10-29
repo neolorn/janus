@@ -3526,6 +3526,22 @@ Janus.Core.PersonRecordDetail.Deconstruct(out Janus.Core.SubjectId Subject, out 
 Janus.Core.PersonRecordDetail.Equals(Janus.Core.PersonRecordDetail? other) -> bool
 Janus.Core.IPersonRecords.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PersonRecordDetail!>>
 Janus.Core.IPersonRecords.AttachedAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId account, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>!>>
+Janus.Core.PersonRecordCorrection
+Janus.Core.PersonRecordCorrection.<Clone>$() -> Janus.Core.PersonRecordCorrection!
+Janus.Core.PersonRecordCorrection.Name.get -> string?
+Janus.Core.PersonRecordCorrection.Name.init -> void
+Janus.Core.PersonRecordCorrection.Language.get -> string?
+Janus.Core.PersonRecordCorrection.Language.init -> void
+Janus.Core.PersonRecordCorrection.Email.get -> string?
+Janus.Core.PersonRecordCorrection.Email.init -> void
+Janus.Core.PersonRecordCorrection.Phone.get -> string?
+Janus.Core.PersonRecordCorrection.Phone.init -> void
+Janus.Core.PersonRecordCorrection.Reason.get -> string!
+Janus.Core.PersonRecordCorrection.Reason.init -> void
+Janus.Core.PersonRecordCorrection.PersonRecordCorrection(string? Name, string? Language, string? Email, string? Phone, string! Reason) -> void
+Janus.Core.PersonRecordCorrection.Deconstruct(out string? Name, out string? Language, out string? Email, out string? Phone, out string! Reason) -> void
+Janus.Core.PersonRecordCorrection.Equals(Janus.Core.PersonRecordCorrection? other) -> bool
+Janus.Core.IPersonRecords.RectifyAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.PersonRecordCorrection! correction, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 abstract Janus.Core.Configuration.Setting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
 abstract Janus.Core.DomainEvent.<Clone>$() -> Janus.Core.DomainEvent!
 abstract Janus.Core.SubjectFields.Decrypt(Janus.Core.ResourceType type, string! field, System.ReadOnlyMemory<byte> stored) -> Janus.Core.Result<string!>
@@ -4247,6 +4263,9 @@ override Janus.Core.PersonRecordDocument.ToString() -> string!
 override Janus.Core.PersonRecordDetail.Equals(object? obj) -> bool
 override Janus.Core.PersonRecordDetail.GetHashCode() -> int
 override Janus.Core.PersonRecordDetail.ToString() -> string!
+override Janus.Core.PersonRecordCorrection.Equals(object? obj) -> bool
+override Janus.Core.PersonRecordCorrection.GetHashCode() -> int
+override Janus.Core.PersonRecordCorrection.ToString() -> string!
 override abstract Janus.Core.SubjectEvent.<Clone>$() -> Janus.Core.SubjectEvent!
 override sealed Janus.Core.AccountDeletionCancelled.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.AccountDeletionRequested.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -5302,6 +5321,8 @@ static Janus.Core.PersonRecordDocument.operator !=(Janus.Core.PersonRecordDocume
 static Janus.Core.PersonRecordDocument.operator ==(Janus.Core.PersonRecordDocument? left, Janus.Core.PersonRecordDocument? right) -> bool
 static Janus.Core.PersonRecordDetail.operator !=(Janus.Core.PersonRecordDetail? left, Janus.Core.PersonRecordDetail? right) -> bool
 static Janus.Core.PersonRecordDetail.operator ==(Janus.Core.PersonRecordDetail? left, Janus.Core.PersonRecordDetail? right) -> bool
+static Janus.Core.PersonRecordCorrection.operator !=(Janus.Core.PersonRecordCorrection? left, Janus.Core.PersonRecordCorrection? right) -> bool
+static Janus.Core.PersonRecordCorrection.operator ==(Janus.Core.PersonRecordCorrection? left, Janus.Core.PersonRecordCorrection? right) -> bool
 virtual Janus.Core.Configuration.Setting<TValue>.Loosens(TValue before, TValue after) -> bool
 virtual Janus.Core.DomainEvent.EqualityContract.get -> System.Type!
 virtual Janus.Core.DomainEvent.Equals(Janus.Core.DomainEvent? other) -> bool

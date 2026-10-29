@@ -17,11 +17,13 @@ namespace Janus.Hosting.Records;
 /// someone who holds no account.
 /// </summary>
 /// <remarks>
-/// Implements REC-COL-003, REC-ADM-001, REC-ATT-002 and LIB-API-005. Each maps one operation of
+/// Implements REC-COL-003, REC-ADM-001, REC-ADM-002, REC-ATT-002 and LIB-API-005. Each maps one operation of
 /// <see cref="IPersonRecords"/>.
 /// </remarks>
 internal static class RecordEndpoints
 {
+    private static readonly IResult Nothing = TypedResults.NoContent();
+
     /// <summary>
     /// Mounts them.
     /// </summary>
@@ -50,6 +52,16 @@ internal static class RecordEndpoints
         _ = SessionRequired.On(endpoints.MapGet("/admin/records/{subject}", ReadAsync))
             .Declares(EndpointDeclaration.Answering(ErrorCodes.RecordNotFound).Binding<SubjectId>("subject"))
             .Produces<HeldRecordView>();
+
+        _ = SessionRequired.On(endpoints.MapPut("/admin/records/{subject}", RectifyAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RecordNotFound, ErrorCodes.RequestMalformed, ErrorCodes.Restricted,
+                    ErrorCodes.RequestInvalid, ErrorCodes.ProfileInvalid, ErrorCodes.IdentifierInvalid,
+                    ErrorCodes.RecordFollowsAccount, ErrorCodes.RecordStateConflict)
+                .Binding<SubjectId>("subject"))
+            .Accepts<RecordCorrectionBody>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/accounts/{subject}/records", AttachedAsync))
             .Declares(EndpointDeclaration
@@ -169,6 +181,33 @@ internal static class RecordEndpoints
         return Answers.Of(
             await records.ReadAsync(browser.Asking, subject, cancellationToken).ConfigureAwait(false),
             record => TypedResults.Json(HeldRecordView.Of(record), RecordsJson.Default.HeldRecordView));
+    }
+
+    // REC-ADM-002: what the person told staff, a contact changed held unverified.
+    private static async Task<IResult> RectifyAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        RecordCorrectionBody body = await JsonBody
+            .ReadAsync<RecordCorrectionBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Answers.Of(
+            await records
+                .RectifyAsync(
+                    browser.Asking,
+                    subject,
+                    new PersonRecordCorrection(body.Name, body.Language, body.Email, body.Phone, body.Reason ?? string.Empty),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     // REC-ATT-002: the records attached to an account that the organization asked in

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Records;
 using Janus.Authentication.Tests.Records;
@@ -11,8 +12,8 @@ using Xunit;
 namespace Janus.Hosting.Tests.Records;
 
 /// <summary>
-/// Staff reading a person record and the records attached to an account
-/// (REC-ADM-001, REC-ATT-002, chapter 09 section 8a).
+/// Staff reading and correcting a person record, and reading the records attached to an account
+/// (REC-ADM-001, REC-ADM-002, REC-ATT-002, chapter 09 section 8a).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class RecordAdministrationTests : IAsyncDisposable
@@ -168,6 +169,87 @@ public sealed class RecordAdministrationTests : IAsyncDisposable
         Assert.Equal(Without(none), Without(beyond));
     }
 
+    /// <summary>
+    /// REC-ADM-002 AC2: a contact staff correct is held unverified afterwards, a code to
+    /// it reaches nothing, and the change is recorded by field with the reason given.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_AC2_AContactStaffCorrectIsUnverifiedAndReachesNothingAsync()
+    {
+        const string corrected = "+441632960022";
+        SubjectId record = Holding(_shop);
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer answer = await browser.SendAsync(
+            "PUT",
+            "/admin/records/" + record.Value,
+            ("phone", corrected),
+            ("reason", "Told us by telephone"));
+
+        CollectedContact held = _deployment.Records.Of(record).Contacts[IdentifierKind.Phone];
+        Assert.Equal(StatusCodes.Status204NoContent, answer.Status);
+        Assert.Equal((corrected, (DateTimeOffset?)null), (held.Value, held.VerifiedAt));
+        Assert.False(await _deployment.Records.ReachableHoldingAsync(IdentifierKind.Phone, [Encoding.UTF8.GetBytes(corrected)], TestContext.Current.CancellationToken));
+        Assert.Equal(
+            (Staff(), record, "phone", "Told us by telephone"),
+            _deployment.RecordAudit.Changed.Select(changed => (changed.Acting, changed.Record, changed.Field, changed.Reason)).Single());
+    }
+
+    /// <summary>
+    /// REC-ADM-002, AUTHZ-GATE-006 (D-222): a restricted record admits staff's correction,
+    /// being how a rectification request is fulfilled.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_ARestrictedRecordAdmitsStaffsCorrectionAsync()
+    {
+        SubjectId record = Holding(_shop);
+        _deployment.Records.Of(record).State = PersonRecordState.Restricted;
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer answer = await browser.SendAsync(
+            "PUT", "/admin/records/" + record.Value, ("name", "Amal Haddad"), ("reason", "Spelling"));
+
+        Assert.Equal(StatusCodes.Status204NoContent, answer.Status);
+        Assert.Equal("Amal Haddad", _deployment.Records.Of(record).Name?.Value);
+    }
+
+    /// <summary>
+    /// REC-ADM-002, 09 section 8a: a correction without a reason is refused
+    /// <c>api.request.malformed</c> naming <c>reason</c>, one of a record in its deletion
+    /// window <c>identity.record.stateconflict</c>, and one of a record attached to an
+    /// account <c>identity.record.followsaccount</c> naming it; none changes the record.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_ACorrectionIsRefusedWithoutReasonInItsWindowOrAttachedAsync()
+    {
+        SubjectId plain = Holding(_shop);
+        SubjectId deleting = Holding(_shop);
+        _deployment.Records.Of(deleting).State = PersonRecordState.Deleting;
+        var account = SubjectId.New(Randomness);
+        SubjectId attached = Attached(Holding(_shop), account, Noon);
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer unreasoned = await browser.SendAsync("PUT", "/admin/records/" + plain.Value, ("language", "en"));
+        Answer windowed = await browser.SendAsync(
+            "PUT", "/admin/records/" + deleting.Value, ("language", "en"), ("reason", "Asked"));
+        Answer followed = await browser.SendAsync(
+            "PUT", "/admin/records/" + attached.Value, ("language", "en"), ("reason", "Asked"));
+
+        Assert.Equal(
+            (StatusCodes.Status400BadRequest, ErrorCodes.RequestMalformed.ToString(), "reason"),
+            (unreasoned.Status, unreasoned.Text("code"), unreasoned.Json().GetProperty("details").GetProperty("member").GetString()));
+        Assert.Equal(
+            (StatusCodes.Status409Conflict, ErrorCodes.RecordStateConflict.ToString()),
+            (windowed.Status, windowed.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status409Conflict, ErrorCodes.RecordFollowsAccount.ToString(), account.Value.ToString()),
+            (followed.Status, followed.Text("code"), followed.Json().GetProperty("details").GetProperty("account").GetString()));
+        Assert.Empty(_deployment.RecordAudit.Changed);
+    }
+
     private static Guid[] Subjects(Answer answer) =>
         [.. answer.Json().GetProperty("subjects").EnumerateArray().Select(subject => subject.GetGuid())];
 
@@ -175,6 +257,15 @@ public sealed class RecordAdministrationTests : IAsyncDisposable
         answer.Body.Replace(answer.Text("correlationId"), string.Empty, StringComparison.Ordinal);
 
     private SubjectId Staff() => _deployment.Directory.Created[^1].Subject;
+
+    // A signed-in staff member holding record:manage in an organization.
+    private async Task<Browser> ManagingAsync(OrganizationId organization)
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        _deployment.Gate.Grant(Staff(), organization, Permissions.RecordManage);
+
+        return browser;
+    }
 
     // A signed-in staff member holding record:read in an organization.
     private async Task<Browser> ReadingAsync(OrganizationId organization)

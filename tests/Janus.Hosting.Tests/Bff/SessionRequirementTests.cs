@@ -164,6 +164,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "PUT /admin/config/{key}",
         "PUT /admin/organizations/{id}/memberships/{subject}/end",
         "PUT /admin/organizations/{id}/policy",
+        "PUT /admin/records/{subject}",
         "PUT /admin/restrictions/{name}",
         "PUT /admin/documents/{document}/versions/{version}/translations/{language}",
     ];

@@ -163,6 +163,7 @@ internal static class AuthenticationRegistration
         services.AddScoped<RecordCollectionService>();
         services.AddScoped<RecordOffers>();
         services.AddScoped<RecordAttachments>();
+        services.AddScoped<RecordAdministration>();
         services.AddScoped<IPersonRecords, PersonRecordService>();
         services.AddScoped<IdentifierService>();
         services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());

@@ -1182,6 +1182,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RecordCollectionService>();
         _ = services.AddScoped<RecordOffers>();
         _ = services.AddScoped<RecordAttachments>();
+        _ = services.AddScoped<RecordAdministration>();
         _ = services.AddScoped<IPersonRecords, PersonRecordService>();
         _ = services.AddScoped<IdentifierService>();
         _ = services.AddScoped<IIdentifiers>(provider =>

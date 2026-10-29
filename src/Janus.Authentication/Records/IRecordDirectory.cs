@@ -197,6 +197,21 @@ internal interface IRecordDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Writes a contact staff corrected in a record held for the change, unverified from
+    /// then on, so a code never reaches it (REC-ADM-002).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="kind">Whether it is an email or a phone.</param>
+    /// <param name="value">The value, in its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of carrying the change.</returns>
+    ValueTask CorrectContactAsync(
+        SubjectId subject,
+        IdentifierKind kind,
+        string value,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Starts the deletion grace window of a record held for the change, active or
     /// restricted, a restriction in force held through it (REC-REC-002).
     /// </summary>

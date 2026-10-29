@@ -286,6 +286,14 @@ internal sealed class RecordDirectory(
             cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask CorrectContactAsync(
+        SubjectId subject,
+        IdentifierKind kind,
+        string value,
+        CancellationToken cancellationToken) =>
+        records.SetContactAsync(subject, new RecordContact(kind, value, VerifiedAt: null), cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask BeginDeletionAsync(
         SubjectId subject,
         DeletionOrigin by,

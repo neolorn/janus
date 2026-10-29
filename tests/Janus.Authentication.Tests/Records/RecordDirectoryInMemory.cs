@@ -269,6 +269,20 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
     }
 
     /// <inheritdoc/>
+    public ValueTask CorrectContactAsync(
+        SubjectId subject,
+        IdentifierKind kind,
+        string value,
+        CancellationToken cancellationToken)
+    {
+        Enlist();
+
+        _records[subject].Contacts[kind] = new CollectedContact(kind, value, VerifiedAt: null);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask BeginDeletionAsync(
         SubjectId subject,
         DeletionOrigin by,

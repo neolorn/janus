@@ -22,6 +22,7 @@ namespace Janus.Hosting.Records;
 [JsonSerializable(typeof(RecordEntryBody))]
 [JsonSerializable(typeof(EnteredRecordView))]
 [JsonSerializable(typeof(RecordFindBody))]
+[JsonSerializable(typeof(RecordCorrectionBody))]
 [JsonSerializable(typeof(RecordSubjectsView))]
 [JsonSerializable(typeof(RecordAccessRequest))]
 [JsonSerializable(typeof(RecordAccessVerifyRequest))]
