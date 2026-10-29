@@ -558,7 +558,8 @@ public static class ErrorCodes
 
     /// <summary>
     /// An attachment by a reference was asked where no offer to attach stands on the
-    /// account's session.
+    /// account's session. Prove one of the account's emails or phones first, which makes
+    /// the offer.
     /// </summary>
     /// <remarks>Implements REC-ATT-001, chapter 10 section 1.1.</remarks>
     public static ErrorCode RecordNoOffer { get; } = ErrorCode.Parse("identity.record.nooffer");
@@ -566,13 +567,13 @@ public static class ErrorCodes
     /// <summary>
     /// A path names a subject no person record bears, or one outside the caller's reach:
     /// a record the record access session does not reach, or one not attached to the
-    /// account, alike.
+    /// account, alike. Name the subject of a record within the caller's reach.
     /// </summary>
     /// <remarks>Implements REC-REC-002, REC-ACC-001, REC-ADM-001, chapter 10 section 1.1.</remarks>
     public static ErrorCode RecordNotFound { get; } = ErrorCode.Parse("identity.record.notfound");
 
     /// <summary>
-    /// The operation does not apply to the state the person record is in; the details
+    /// The operation does not apply to the state the person record is in. The details
     /// name the state.
     /// </summary>
     /// <remarks>Implements REC-REC-002, REC-ACC-002, chapter 10 section 1.1.</remarks>
