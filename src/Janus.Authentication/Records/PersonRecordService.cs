@@ -112,6 +112,15 @@ internal sealed class PersonRecordService(
 
         DateTimeOffset now = time.GetUtcNow();
 
+        // REC-AGE-001, PRIV-MINOR-001: on an adults-only host the service is not for the
+        // person an under-age answer describes, so nothing is written for them.
+        if (entry.DateOfBirth is DateOnly answered
+            && affirmation is not AttributeRequirement.Off
+            && !RegistrationService.IsAdult(answered, DateOnly.FromDateTime(now.UtcDateTime)))
+        {
+            return Refused(Error.From(ErrorCodes.ProfileUnderage));
+        }
+
         var person = new EnteredPerson(
             SubjectId.New(randomness),
             entry.Organization,
@@ -271,6 +280,13 @@ internal sealed class PersonRecordService(
         if (!languages.Contains(entry.Language, StringComparer.Ordinal))
         {
             return Invalid("language");
+        }
+
+        // REC-COL-003: a record holds at least one of the three, and the refusal names the
+        // first (D-222).
+        if (entry is { Name: null, Email: null, Phone: null })
+        {
+            return Invalid("name");
         }
 
         if (entry.Name is string entered)

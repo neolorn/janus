@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -169,6 +170,32 @@ public sealed class RecordEntryTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-AGE-001, PRIV-MINOR-001: on an adults-only host an entry whose date of birth
+    /// is under eighteen is refused as under age, and nothing is written or audited.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_AGE_001_AnUnderAgeEntryOnAnAdultsOnlyHostWritesNothingAsync()
+    {
+        Browser browser = await EnteringAsync();
+        var today = DateOnly.FromDateTime(_deployment.Clock.GetUtcNow().UtcDateTime);
+
+        Answer answer = await browser.SendAsync(
+            "POST",
+            "/admin/records",
+            ("organization", _shop.Value),
+            ("language", "en"),
+            ("phone", Number),
+            ("dateOfBirth", today.AddYears(-17).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+
+        Assert.Equal(
+            (422, "identity.profile.underage"),
+            (answer.Status, answer.Text("code")));
+        Assert.Empty(_deployment.Records.All);
+        Assert.Empty(_deployment.RecordAudit.Entered);
+    }
+
+    /// <summary>
     /// REC-COL-003, PRIV-RIGHT-005c: the reference is kept in its folded form alone.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -198,6 +225,7 @@ public sealed class RecordEntryTests : IAsyncDisposable
     [InlineData("a name outside its rule", 422, "identity.profile.invalid", null)]
     [InlineData("a purpose that does not rest on consent", 422, "privacy.purpose.noconsent", null)]
     [InlineData("a consent whose governing document has no published version", 409, "privacy.notice.unpublished", null)]
+    [InlineData("none of name, email and phone", 422, "api.request.invalid", "name")]
     [InlineData("a reference outside its bounds", 400, "api.request.malformed", "reference")]
     [InlineData("no organization", 400, "api.request.malformed", "organization")]
     public async Task REC_COL_003_AnEntryOutsideItsRulesIsRefusedAndKeepsNothingAsync(
@@ -211,7 +239,7 @@ public sealed class RecordEntryTests : IAsyncDisposable
         string language = "en";
         string? name = null;
         string? email = null;
-        string phone = Number;
+        string? phone = Number;
         string[] consents = [];
         string? reference = null;
 
@@ -243,6 +271,9 @@ public sealed class RecordEntryTests : IAsyncDisposable
                 break;
             case "a reference outside its bounds":
                 reference = new string('r', 65);
+                break;
+            case "none of name, email and phone":
+                phone = null;
                 break;
         }
 

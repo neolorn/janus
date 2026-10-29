@@ -36,7 +36,7 @@ internal static class RecordEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.RequestInvalid, ErrorCodes.IdentifierInvalid, ErrorCodes.ProfileInvalid,
-                    ErrorCodes.PurposeNoConsent, ErrorCodes.NoticeUnpublished))
+                    ErrorCodes.ProfileUnderage, ErrorCodes.PurposeNoConsent, ErrorCodes.NoticeUnpublished))
             .Accepts<RecordEntryBody>(MediaTypeNames.Application.Json)
             .Produces<EnteredRecordView>(StatusCodes.Status201Created);
 
