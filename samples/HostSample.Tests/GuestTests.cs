@@ -28,6 +28,9 @@ public sealed partial class GuestTests(WorkshopHost host) : IClassFixture<Worksh
     // the test waits out between two codes to one guest.
     private static readonly TimeSpan PastTheRestriction = TimeSpan.FromMinutes(2);
 
+    // The purpose the counter records the guest's consent to.
+    private static readonly string[] Consents = ["adapting grips"];
+
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     /// <summary>
@@ -163,7 +166,7 @@ public sealed partial class GuestTests(WorkshopHost host) : IClassFixture<Worksh
                 need,
                 noticeVersion = notice.Body!.Value.GetProperty("version").GetString(),
                 termsVersion = terms.Body!.Value.GetProperty("version").GetString(),
-                consents = new[] { "adapting grips" },
+                consents = Consents,
             },
             Cancellation);
 
