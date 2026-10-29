@@ -62,13 +62,13 @@ internal static class AccountRecordEndpoints
             .Accepts<RecordFindVerifyRequest>(MediaTypeNames.Application.Json)
             .Produces<RecordOfferView>();
         _ = SessionRequired.On(group.MapPost("/attach", AttachAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted, ErrorCodes.AccountStateConflict))
             .Produces<RecordsAttachedView>();
         _ = SessionRequired.On(group.MapPost("/attach/reference", AttachByReferenceAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Restricted, ErrorCodes.RecordNoOffer,
-                    ErrorCodes.Throttled))
+                    ErrorCodes.Throttled, ErrorCodes.AccountStateConflict))
             .Accepts<RecordAttachReferenceRequest>(MediaTypeNames.Application.Json)
             .Produces<RecordsAttachedView>();
 

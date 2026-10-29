@@ -25,6 +25,7 @@ namespace Janus.Authentication.Records;
 /// <param name="audit">Where each attachment is recorded.</param>
 /// <param name="organizations">The organizations, whose names the list shows.</param>
 /// <param name="identifiers">The account's identifiers, which a code to find its records goes to.</param>
+/// <param name="accounts">The account, whose state an attachment is decided on under its lock.</param>
 /// <param name="restriction">What refuses a restricted account's attachment.</param>
 /// <param name="codes">The codes a find is proved by.</param>
 /// <param name="sending">The governed send a code goes out through.</param>
@@ -47,6 +48,7 @@ internal sealed class RecordAttachments(
     IRecordAudit audit,
     IOrganizationDirectory organizations,
     IIdentifierDirectory identifiers,
+    IAccountDirectory accounts,
     ISettingsRestriction restriction,
     VerificationCodes codes,
     IGovernedSend sending,
@@ -312,7 +314,10 @@ internal sealed class RecordAttachments(
     /// <param name="context">The account asking.</param>
     /// <param name="session">The session the request arrived on.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>How many were attached, or <c>authz.denied</c>, <c>authz.restricted</c>.</returns>
+    /// <returns>
+    /// How many were attached, or <c>authz.denied</c>, <c>authz.restricted</c>,
+    /// <c>identity.account.stateconflict</c>.
+    /// </returns>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<int>> AttachAsync(
         AccessContext context,
@@ -376,7 +381,8 @@ internal sealed class RecordAttachments(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// How many were attached, or <c>authz.denied</c>, <c>authz.restricted</c>,
-    /// <c>identity.record.nooffer</c>, <c>auth.throttled</c>.
+    /// <c>identity.record.nooffer</c>, <c>auth.throttled</c>,
+    /// <c>identity.account.stateconflict</c>.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<int>> AttachByReferenceAsync(
@@ -700,6 +706,29 @@ internal sealed class RecordAttachments(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        // REC-ATT-001 (D-222): an attachment is admitted only while the account is active,
+        // read under its lock in the attachment's transaction, so an attached record never
+        // enters a state its account has already left; a restricted account is refused
+        // where its restriction is judged.
+        await accounts.HoldAsync(account, cancellationToken).ConfigureAwait(false);
+
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error restricted)
+        {
+            return Result.Failure<int>(restricted);
+        }
+
+        if (await accounts.StateAsync(account, cancellationToken).ConfigureAwait(false) is not AccountState state)
+        {
+            return Result.Failure<int>(Error.From(ErrorCodes.Denied));
+        }
+
+        if (state is not AccountState.Active)
+        {
+            return Result.Failure<int>(AccountAdministration.StateConflict(
+                state,
+                await accounts.SuspendedByAsync(account, cancellationToken).ConfigureAwait(false)));
+        }
+
         int attached = 0;
 
         foreach (SubjectId record in candidates)

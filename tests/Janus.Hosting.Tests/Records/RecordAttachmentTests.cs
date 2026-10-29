@@ -352,6 +352,45 @@ public sealed class RecordAttachmentTests : IAsyncDisposable
         Assert.Null(_deployment.Records.Of(record).AttachedTo);
     }
 
+    /// <summary>
+    /// REC-ATT-001 AC5: an attachment asked of an account that is no longer active when it
+    /// is read under its lock is refused with <c>identity.account.stateconflict</c> naming
+    /// the state, and attaches nothing.
+    /// </summary>
+    /// <param name="state">Where the account stands when the attachment is asked.</param>
+    /// <param name="written">The state as the refusal names it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(AccountState.Suspended, "suspended")]
+    [InlineData(AccountState.Deleting, "deleting")]
+    public async Task REC_ATT_001_AC5_AnAccountNoLongerActiveAttachesNothingAsync(AccountState state, string written)
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId record = Held(IdentifierKind.Phone, Flow.Number, verifiedAgo: TimeSpan.FromHours(1));
+
+        string phone = Assert.Single((await browser.SendAsync("GET", "/account")).Json()
+                .GetProperty("identifiers")
+                .GetProperty("phones")
+                .EnumerateArray())
+            .GetProperty("id")
+            .GetString()!;
+
+        _ = await browser.SendAsync("POST", "/account/records/find", ("identifier", phone));
+        _ = await _deployment.CarrySendsAsync();
+        _ = await browser.SendAsync("POST", "/account/records/find/verify", ("code", Flow.Code(_deployment, IdentifierKind.Phone)));
+
+        _deployment.Accounts.Stands(_deployment.Directory.Created[^1].Subject, state);
+
+        Answer refused = await browser.SendAsync("POST", "/account/records/attach");
+
+        Assert.Equal(
+            (StatusCodes.Status409Conflict, ErrorCodes.AccountStateConflict.ToString()),
+            (refused.Status, refused.Text("code")));
+        Assert.Equal(written, refused.Json().GetProperty("details").GetProperty("state").GetString());
+        Assert.Null(_deployment.Records.Of(record).AttachedTo);
+        Assert.Empty(_deployment.Events.Of<RecordAttached>());
+    }
+
     // A record collected in the shop, holding a contact verified at a collection some
     // time ago, and a reference where one is named.
     private SubjectId Held(IdentifierKind kind, string value, TimeSpan verifiedAgo, string? reference = null)

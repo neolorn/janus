@@ -167,7 +167,9 @@ public interface IPersonRecords
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// How many were attached, none where no offer stands, or the refusal:
-    /// <c>authz.restricted</c> while the account is restricted.
+    /// <c>authz.restricted</c> while the account is restricted;
+    /// <c>identity.account.stateconflict</c> where the account, read under its lock, is
+    /// in any other state but active.
     /// </returns>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     ValueTask<Result<int>> AttachAsync(
@@ -189,7 +191,8 @@ public interface IPersonRecords
     /// <returns>
     /// How many were attached, none where none matched, or the refusal:
     /// <c>authz.restricted</c>; <c>identity.record.nooffer</c> where no offer stands;
-    /// <c>auth.throttled</c>.
+    /// <c>auth.throttled</c>; <c>identity.account.stateconflict</c> where the account is
+    /// not active.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     ValueTask<Result<int>> AttachByReferenceAsync(
