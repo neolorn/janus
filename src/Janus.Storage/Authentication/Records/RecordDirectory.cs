@@ -7,6 +7,7 @@ using Janus.Authentication.Records;
 using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Identity.Records;
+using Janus.Privacy.Outbox;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Records;
 using Microsoft.EntityFrameworkCore;
@@ -21,15 +22,17 @@ namespace Janus.Storage.Authentication.Records;
 /// <param name="records">The person records.</param>
 /// <param name="identifiers">The identifiers, whose value locks a collection takes too.</param>
 /// <param name="subjectKeys">Where a new record's data key is created.</param>
+/// <param name="outbox">Where a lifted restriction is announced to the subscribers.</param>
 /// <remarks>
 /// Implements REC-COL-002, REC-COL-003, REC-REC-001, REC-REC-002, REC-ACC-001, REC-ACC-002,
-/// REC-ATT-001, REC-ADM-001 and CONV-DESIGN-003.
+/// REC-ATT-001, REC-ADM-001, REC-ADM-002 and CONV-DESIGN-003.
 /// </remarks>
 internal sealed class RecordDirectory(
     StoreContext context,
     IPersonRecordStore records,
     IIdentifierStore identifiers,
-    ISubjectKeyStore subjectKeys) : IRecordDirectory
+    ISubjectKeyStore subjectKeys,
+    IOutboxStore outbox) : IRecordDirectory
 {
     /// <inheritdoc/>
     public ValueTask LockValuesAsync(
@@ -292,6 +295,15 @@ internal sealed class RecordDirectory(
         string value,
         CancellationToken cancellationToken) =>
         records.SetContactAsync(subject, new RecordContact(kind, value, VerifiedAt: null), cancellationToken);
+
+    /// <inheritdoc/>
+    public async ValueTask LiftRestrictionAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        await ChangedAsync(subject, record => record.LiftRestriction(), cancellationToken).ConfigureAwait(false);
+        await outbox
+            .AddAsync(Delivery.Of(subject, SubjectEventKind.RestrictionChanged, at, restricted: false), cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public ValueTask BeginDeletionAsync(

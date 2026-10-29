@@ -7,10 +7,13 @@ using Dapper;
 using Janus.Authentication.Records;
 using Janus.Core;
 using Janus.Identity.Records;
+using Janus.Privacy.Outbox;
 using Janus.Storage.Authentication.Records;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Records;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.SubjectKeys;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;
 
@@ -387,6 +390,38 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// REC-ADM-002, PRIV-RIGHT-004: a restricted record held for the change is lifted to
+    /// active, and the lift is put on the outbox for the subscribers.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_ADM_002_ALiftedRecordIsActiveAndTheSubscribersAreToldAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId subject = Subjects.New();
+
+        await WrittenAsync(Person(subject, organization, created: true));
+        await ChangedAsync(subject, record => record.Restrict());
+
+        RecordStanding? restricted = await HeldAsync(
+            subject,
+            directory => directory.LiftRestrictionAsync(subject, Noon.AddDays(1), TestContext.Current.CancellationToken));
+        RecordStanding? lifted = await HeldAsync(subject, _ => ValueTask.CompletedTask);
+
+        await using StoreContext reading = database.Context();
+
+        DeliveryRecord told = await reading.Outbox
+            .SingleAsync(delivery => delivery.Subject == subject, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            (PersonRecordState.Restricted, PersonRecordState.Active),
+            (restricted!.State, lifted!.State));
+        Assert.Equal(
+            (SubjectEventKind.RestrictionChanged, false, Noon.AddDays(1)),
+            (told.Kind, told.Restricted, told.RaisedAt));
+    }
+
+    /// <summary>
     /// REC-ACC-002: a record's notice contacts are those verified at a collection, or,
     /// where none was, every contact it holds, with the record's language.
     /// </summary>
@@ -549,7 +584,8 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
             context,
             records,
             new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
-            new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness));
+            new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
+            new OutboxStore(context, TimeProvider.System));
     }
 
     private async Task WrittenAsync(CollectedPerson person)

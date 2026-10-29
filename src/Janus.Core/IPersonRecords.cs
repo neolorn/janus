@@ -129,6 +129,52 @@ public interface IPersonRecords
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Lifts a person record's restriction under <c>record:manage</c>, admitted as
+    /// <see cref="ReadAsync"/> is, behind the step-up <c>record:restrictionlift</c>: the
+    /// record returns active and <c>RestrictionChanged</c> is announced.
+    /// </summary>
+    /// <param name="context">The staff member lifting it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>identity.record.followsaccount</c> naming the account a record is attached to;
+    /// <c>identity.record.stateconflict</c> where it is not restricted, one holding a
+    /// restriction in its deletion window included; then the step-up's.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result> LiftRestrictionAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Cancels a person record's deletion begun by the person or by a request that
+    /// arrived out of band under <c>record:manage</c>, admitted as <see cref="ReadAsync"/>
+    /// is, behind the step-up <c>record:deletioncancel</c>, restoring the record as it
+    /// stood.
+    /// </summary>
+    /// <param name="context">The staff member cancelling it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>identity.record.followsaccount</c> naming the account a record is attached to;
+    /// <c>identity.takedown.active</c> where a takedown began it;
+    /// <c>identity.record.stateconflict</c> where no window runs;
+    /// <c>identity.deletion.windowelapsed</c> where it has closed; then the step-up's.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result> CancelDeletionAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The subjects of the person records attached to an account: a person's own context
     /// reads its own; another's is read under <c>record:read</c> in the organization
     /// named, the administrative organization where none is, with the account reach of

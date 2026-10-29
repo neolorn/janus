@@ -63,6 +63,15 @@ internal static class RecordEndpoints
             .Accepts<RecordCorrectionBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
+        _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/restriction/lift", LiftRestrictionAsync))
+            .Declares(Changing(ErrorCodes.RecordStateConflict))
+            .Produces(StatusCodes.Status204NoContent);
+
+        _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/delete/cancel", CancelDeletionAsync))
+            .Declares(Changing(
+                ErrorCodes.RecordStateConflict, ErrorCodes.TakedownActive, ErrorCodes.DeletionWindowElapsed))
+            .Produces(StatusCodes.Status204NoContent);
+
         _ = SessionRequired.On(endpoints.MapGet("/admin/accounts/{subject}/records", AttachedAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -210,6 +219,40 @@ internal static class RecordEndpoints
             Nothing);
     }
 
+    // REC-ADM-002, PRIV-RIGHT-004: the record returns active, the change announced.
+    private static async Task<IResult> LiftRestrictionAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await records
+                .LiftRestrictionAsync(browser.Asking, browser.Required.Id, subject, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    // REC-ADM-002 AC1: the record returns as it stood before its window began.
+    private static async Task<IResult> CancelDeletionAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await records
+                .CancelDeletionAsync(browser.Asking, browser.Required.Id, subject, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
     // REC-ATT-002: the records attached to an account that the organization asked in
     // holds.
     private static async Task<IResult> AttachedAsync(
@@ -231,6 +274,16 @@ internal static class RecordEndpoints
             .AttachedAsync(browser.Asking, subject, named, cancellationToken)
             .ConfigureAwait(false));
     }
+
+    // 09 section 8a: a row acting on a record's lifecycle, behind a step-up.
+    private static EndpointDeclaration Changing(params ErrorCode[] codes) =>
+        EndpointDeclaration
+            .Answering(
+            [
+                ErrorCodes.RecordNotFound, ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                ErrorCodes.RecordFollowsAccount, .. codes,
+            ])
+            .Binding<SubjectId>("subject");
 
     private static IResult Found(Result<IReadOnlyList<SubjectId>> found) =>
         Answers.Of(

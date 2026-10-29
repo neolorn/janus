@@ -1445,7 +1445,8 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     writing,
                     new PersonRecordStore(writing, _deployment.Ring, _deployment.Randomness),
                     new IdentifierStore(writing, _deployment.Ring, _deployment.Randomness),
-                    new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness))
+                    new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness),
+                    new OutboxStore(writing, TimeProvider.System))
                 .WriteAsync(
                     new CollectedPerson(
                         subject,

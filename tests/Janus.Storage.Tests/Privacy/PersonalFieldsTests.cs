@@ -9,6 +9,7 @@ using Janus.Core;
 using Janus.Storage.Authentication.Records;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Records;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -445,7 +446,8 @@ public sealed class PersonalFieldsTests(DatabaseFixture database) : IClassFixtur
             context,
             new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
             new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
-            new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness));
+            new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
+            new OutboxStore(context, TimeProvider.System));
 
     // A person record a collection wrote, of a contact verified then, under a key of its
     // own subject.

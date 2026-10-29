@@ -212,6 +212,16 @@ internal interface IRecordDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Lifts the restriction of a restricted record held for the change, and announces
+    /// the change to the subscribers (PRIV-RIGHT-004, REC-ADM-002).
+    /// </summary>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of carrying the change.</returns>
+    ValueTask LiftRestrictionAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Starts the deletion grace window of a record held for the change, active or
     /// restricted, a restriction in force held through it (REC-REC-002).
     /// </summary>

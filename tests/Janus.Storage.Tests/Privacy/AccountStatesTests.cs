@@ -22,6 +22,7 @@ using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Records;
 using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.Requests;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
@@ -806,7 +807,8 @@ public sealed class AccountStatesTests(DatabaseFixture database)
                 writing,
                 new PersonRecordStore(writing, _deployment.Ring, _deployment.Randomness),
                 new IdentifierStore(writing, _deployment.Ring, _deployment.Randomness),
-                new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness))
+                new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness),
+                new OutboxStore(writing, TimeProvider.System))
             .WriteAsync(
                 new CollectedPerson(
                     subject,

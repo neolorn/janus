@@ -6,13 +6,14 @@ using System.Threading.Tasks;
 using Janus.Authentication.Records;
 using Janus.Authentication.Tests.Records;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Records;
 
 /// <summary>
-/// Staff reading and correcting a person record, and reading the records attached to an account
+/// Staff reading, correcting, lifting and cancelling a person record, and reading the records attached to an account
 /// (REC-ADM-001, REC-ADM-002, REC-ATT-002, chapter 09 section 8a).
 /// </summary>
 [Trait("kind", "unit")]
@@ -250,6 +251,94 @@ public sealed class RecordAdministrationTests : IAsyncDisposable
         Assert.Empty(_deployment.RecordAudit.Changed);
     }
 
+    /// <summary>
+    /// REC-ADM-002, PRIV-RIGHT-004 (09 section 8a): a stepped-up holder of
+    /// <c>record:manage</c> lifts a record's restriction; a second finds none to lift,
+    /// and once the proof is no longer recent the lift is refused with the step-up code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_ARecordsRestrictionIsLiftedBehindTheStepUpAsync()
+    {
+        SubjectId record = Holding(_shop);
+        SubjectId later = Holding(_shop);
+        _deployment.Records.Of(record).State = PersonRecordState.Restricted;
+        _deployment.Records.Of(later).State = PersonRecordState.Restricted;
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer lifted = await browser.SendAsync("POST", $"/admin/records/{record.Value}/restriction/lift");
+        Answer again = await browser.SendAsync("POST", $"/admin/records/{record.Value}/restriction/lift");
+
+        _deployment.Clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+
+        Answer stale = await browser.SendAsync("POST", $"/admin/records/{later.Value}/restriction/lift");
+
+        Assert.Equal(
+            (StatusCodes.Status204NoContent, PersonRecordState.Active),
+            (lifted.Status, _deployment.Records.Of(record).State));
+        Assert.Equal(
+            (StatusCodes.Status409Conflict, ErrorCodes.RecordStateConflict.ToString()),
+            (again.Status, again.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status403Forbidden, ErrorCodes.StepUpRequired.ToString(), PersonRecordState.Restricted),
+            (stale.Status, stale.Text("code"), _deployment.Records.Of(later).State));
+    }
+
+    /// <summary>
+    /// REC-ADM-002 AC1: a deletion an out-of-band request began is cancelled by staff
+    /// inside its window, the record returning as it was, restricted, and
+    /// <c>RecordDeletionCancelled</c> announced with the staff member acting.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_AC1_CancellingAnOutOfBandDeletionReturnsTheRecordAsItWasAsync()
+    {
+        SubjectId record = Holding(_shop);
+        HeldRecord held = _deployment.Records.Of(record);
+        held.State = PersonRecordState.Deleting;
+        held.RestrictionHeld = true;
+        held.DeletingBy = DeletionOrigin.OutOfBandRequest;
+        held.DeletingSince = _deployment.Clock.GetUtcNow().AddDays(-1);
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer cancelled = await browser.SendAsync("POST", $"/admin/records/{record.Value}/delete/cancel");
+
+        RecordDeletionCancelled announced = Assert.Single(_deployment.Events.Of<RecordDeletionCancelled>());
+        Assert.Equal(
+            (StatusCodes.Status204NoContent, PersonRecordState.Restricted, (DeletionOrigin?)null),
+            (cancelled.Status, held.State, held.DeletingBy));
+        Assert.Equal((record, Staff()), (announced.Subject, announced.Actor));
+    }
+
+    /// <summary>
+    /// REC-ADM-002 (09 section 8a): a takedown's window is refused
+    /// <c>identity.takedown.active</c>, one whose window has closed
+    /// <c>identity.deletion.windowelapsed</c>, and a record in none
+    /// <c>identity.record.stateconflict</c>; none is cancelled.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_ACancellationIsRefusedForATakedownAClosedWindowOrNoneAsync()
+    {
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+        SubjectId takenDown = Deleting(Holding(_shop), DeletionOrigin.Takedown, now.AddDays(-1));
+        SubjectId closed = Deleting(Holding(_shop), DeletionOrigin.Self, now - Settings.RecordDeletionGrace.Default);
+        SubjectId active = Holding(_shop);
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer takedown = await browser.SendAsync("POST", $"/admin/records/{takenDown.Value}/delete/cancel");
+        Answer elapsed = await browser.SendAsync("POST", $"/admin/records/{closed.Value}/delete/cancel");
+        Answer none = await browser.SendAsync("POST", $"/admin/records/{active.Value}/delete/cancel");
+
+        Assert.Equal(
+            [ErrorCodes.TakedownActive.ToString(), ErrorCodes.DeletionWindowElapsed.ToString(), ErrorCodes.RecordStateConflict.ToString()],
+            new[] { takedown, elapsed, none }.Select(answer => answer.Text("code")));
+        Assert.Equal(
+            [PersonRecordState.Deleting, PersonRecordState.Deleting],
+            new[] { takenDown, closed }.Select(subject => _deployment.Records.Of(subject).State));
+        Assert.Empty(_deployment.Events.Of<RecordDeletionCancelled>());
+    }
+
     private static Guid[] Subjects(Answer answer) =>
         [.. answer.Json().GetProperty("subjects").EnumerateArray().Select(subject => subject.GetGuid())];
 
@@ -287,6 +376,16 @@ public sealed class RecordAdministrationTests : IAsyncDisposable
         _deployment.Records.Hold(record);
 
         return record.Subject;
+    }
+
+    private SubjectId Deleting(SubjectId record, DeletionOrigin by, DateTimeOffset since)
+    {
+        HeldRecord held = _deployment.Records.Of(record);
+        held.State = PersonRecordState.Deleting;
+        held.DeletingBy = by;
+        held.DeletingSince = since;
+
+        return record;
     }
 
     private SubjectId Attached(SubjectId record, SubjectId account, DateTimeOffset at)

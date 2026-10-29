@@ -283,6 +283,16 @@ internal sealed class RecordDirectoryInMemory : IRecordDirectory
     }
 
     /// <inheritdoc/>
+    public ValueTask LiftRestrictionAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        Enlist();
+
+        _records[subject].State = PersonRecordState.Active;
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask BeginDeletionAsync(
         SubjectId subject,
         DeletionOrigin by,

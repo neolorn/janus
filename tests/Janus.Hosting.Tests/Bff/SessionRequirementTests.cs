@@ -141,6 +141,8 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /admin/privacy/requests/{request}/refuse",
         "POST /admin/records",
         "POST /admin/records/find",
+        "POST /admin/records/{subject}/delete/cancel",
+        "POST /admin/records/{subject}/restriction/lift",
         "POST /admin/recovery/approve",
         "POST /admin/restrictions/{name}/grant",
         "POST /admin/roles",

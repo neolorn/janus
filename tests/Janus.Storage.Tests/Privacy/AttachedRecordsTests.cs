@@ -367,7 +367,8 @@ public sealed class AttachedRecordsTests(DatabaseFixture database)
                     writing,
                     Records(writing),
                     new IdentifierStore(writing, _deployment.Ring, _deployment.Randomness),
-                    new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness))
+                    new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness),
+                    new OutboxStore(writing, TimeProvider.System))
                 .WriteAsync(
                     new CollectedPerson(
                         subject,

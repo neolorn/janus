@@ -576,7 +576,8 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                     writing,
                     new PersonRecordStore(writing, _deployment.Ring, _deployment.Randomness),
                     new IdentifierStore(writing, _deployment.Ring, _deployment.Randomness),
-                    new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness))
+                    new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness),
+                    new OutboxStore(writing, TimeProvider.System))
                 .WriteAsync(
                     new CollectedPerson(
                         subject,
@@ -718,7 +719,8 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             context,
             new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
             Identifiers(context),
-            new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness));
+            new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
+            new OutboxStore(context, TimeProvider.System));
 
     private async Task<IdentifierId> AddedAsync(
         SubjectId subject,

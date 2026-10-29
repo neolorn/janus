@@ -272,6 +272,22 @@ internal sealed class PersonRecordService(
         administration.RectifyAsync(context, subject, correction, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<Result> LiftRestrictionAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        administration.LiftRestrictionAsync(context, session, subject, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> CancelDeletionAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        administration.CancelDeletionAsync(context, session, subject, cancellationToken);
+
+    /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<SubjectId>>> AttachedAsync(
         AccessContext context,
         SubjectId account,

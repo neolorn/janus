@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Organizations;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -12,12 +15,16 @@ namespace Janus.Authentication.Records;
 
 /// <summary>
 /// What staff do to a person record for the person who reaches it by no code: correct
-/// it on their word.
+/// it on their word, lift its restriction and cancel its deletion.
 /// </summary>
 /// <param name="records">The person records.</param>
 /// <param name="admission">Where a path naming a record is admitted.</param>
 /// <param name="recordAudit">Where a change of the record's fields is recorded.</param>
-/// <param name="configuration">Where the message languages are read.</param>
+/// <param name="audit">Where a lift or a cancellation is recorded, as an account's is.</param>
+/// <param name="accounts">Where the erasure request that began a window is read.</param>
+/// <param name="stepUp">What the gated rows ask of the staff member's session.</param>
+/// <param name="events">Where a cancellation is announced.</param>
+/// <param name="configuration">Where the message languages and the deletion window are read.</param>
 /// <param name="work">The one transaction each change runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -30,6 +37,10 @@ internal sealed class RecordAdministration(
     IRecordDirectory records,
     IReadAdmission admission,
     IRecordAudit recordAudit,
+    IAccountAudit audit,
+    IAccountDirectory accounts,
+    StepUpGuard stepUp,
+    IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time)
@@ -127,6 +138,7 @@ internal sealed class RecordAdministration(
                 subject,
                 admitted,
                 Uncorrectable,
+                challenge: null,
                 async (_, token) =>
                 {
                     await records.RectifyAsync(subject, corrected.Name, corrected.Language, token).ConfigureAwait(false);
@@ -176,6 +188,130 @@ internal sealed class RecordAdministration(
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Lifts a record's restriction, the record returning active and the change
+    /// announced to the subscribers.
+    /// </summary>
+    /// <param name="context">The staff member lifting it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="IPersonRecords.LiftRestrictionAsync"/> names.</returns>
+    public async ValueTask<Result> LiftRestrictionAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        return await (await AdmittedAsync(context, Permissions.RecordManage, subject, cancellationToken).ConfigureAwait(false))
+            .Match(
+                admitted => ChangedAsync(
+                    context,
+                    Permissions.RecordManage,
+                    subject,
+                    admitted,
+                    Unliftable,
+                    (acting, session, StepUpAction.RecordRestrictionLift),
+                    async (_, token) =>
+                    {
+                        DateTimeOffset now = time.GetUtcNow();
+
+                        await records.LiftRestrictionAsync(subject, now, token).ConfigureAwait(false);
+                        await audit
+                            .AdministeredAsync(AuditActions.RestrictionLifted, acting, context.BreakGlassReason, subject, now, token)
+                            .ConfigureAwait(false);
+
+                        return null;
+                    },
+                    cancellationToken),
+                error => ValueTask.FromResult(Result.Failure(error)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Cancels a record's deletion begun by the person or by a request that arrived out
+    /// of band, restoring the record as it stood.
+    /// </summary>
+    /// <param name="context">The staff member cancelling it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="IPersonRecords.CancelDeletionAsync"/> names.</returns>
+    public async ValueTask<Result> CancelDeletionAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        TimeSpan grace = (await configuration
+                .ReadAsync(Settings.RecordDeletionGrace, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        return await (await AdmittedAsync(context, Permissions.RecordManage, subject, cancellationToken).ConfigureAwait(false))
+            .Match(
+                admitted => ChangedAsync(
+                    context,
+                    Permissions.RecordManage,
+                    subject,
+                    admitted,
+                    standing => Uncancellable(standing, time.GetUtcNow() - grace),
+                    (acting, session, StepUpAction.RecordDeletionCancel),
+                    async (standing, token) =>
+                    {
+                        DateTimeOffset now = time.GetUtcNow();
+
+                        // IDN-LIFE-003: the cancellation of a window an out-of-band
+                        // request began is recorded against that request.
+                        PrivacyRequestId? request = standing is
+                        {
+                            DeletingBy: DeletionOrigin.OutOfBandRequest,
+                            DeletingSince: DateTimeOffset since,
+                        }
+                            ? await accounts.ErasureRequestAsync(subject, since, token).ConfigureAwait(false)
+                            : null;
+
+                        await records.CancelDeletionAsync(subject, token).ConfigureAwait(false);
+
+                        if ((await events
+                                .PublishAsync(
+                                    new RecordDeletionCancelled(now, Key(subject, now))
+                                    {
+                                        Subject = subject,
+                                        Actor = acting,
+                                        Effective = context.Effective,
+                                    },
+                                    token)
+                                .ConfigureAwait(false))
+                            .Match(() => (Error?)null, error => error) is Error unpublished)
+                        {
+                            return unpublished;
+                        }
+
+                        await audit
+                            .CancelledOnBehalfAsync(acting, context.BreakGlassReason, subject, request, now, token)
+                            .ConfigureAwait(false);
+
+                        return null;
+                    },
+                    cancellationToken),
+                error => ValueTask.FromResult(Result.Failure(error)))
+            .ConfigureAwait(false);
+    }
+
     // REC-ADM-002: a record attached to an account is the account's, and one in its
     // deletion window, or erased, takes no correction; a restricted one does, being how
     // a rectification request is fulfilled (AUTHZ-GATE-006, D-222).
@@ -184,6 +320,31 @@ internal sealed class RecordAdministration(
         ?? (standing.State is PersonRecordState.Deleting or PersonRecordState.Deleted
             ? StateConflict(standing.State)
             : null);
+
+    // PRIV-RIGHT-004, 09 section 8a: only a restricted record is lifted; one holding a
+    // restriction in its deletion window is not.
+    private static Error? Unliftable(RecordStanding standing) =>
+        Followed(standing)
+        ?? (standing.State is PersonRecordState.Restricted ? null : StateConflict(standing.State));
+
+    // REC-ADM-002: a deletion the person or an out-of-band request began is cancelled
+    // inside its window; a takedown's is reversed, never cancelled.
+    private static Error? Uncancellable(RecordStanding standing, DateTimeOffset closedBefore) =>
+        Followed(standing)
+        ?? standing switch
+        {
+            { State: PersonRecordState.Deleting, DeletingBy: DeletionOrigin.Takedown } =>
+                Error.From(ErrorCodes.TakedownActive),
+            {
+                State: PersonRecordState.Deleting,
+                DeletingBy: DeletionOrigin.Self or DeletionOrigin.OutOfBandRequest,
+                DeletingSince: DateTimeOffset since,
+            } => since <= closedBefore ? Error.From(ErrorCodes.DeletionWindowElapsed) : null,
+            _ => StateConflict(standing.State),
+        };
+
+    private static string Key(SubjectId record, DateTimeOffset at) =>
+        string.Create(CultureInfo.InvariantCulture, $"{record.Value}@{at.UtcTicks}");
 
     // REC-ATT-002: a record attached to an account follows it.
     private static Error? Followed(RecordStanding standing) =>
@@ -262,12 +423,22 @@ internal sealed class RecordAdministration(
         SubjectId subject,
         RecordStanding admitted,
         Func<RecordStanding, Error?> refusal,
+        (SubjectId Acting, SessionId Session, StepUpAction Action)? challenge,
         Func<RecordStanding, CancellationToken, ValueTask<Error?>> change,
         CancellationToken cancellationToken)
     {
         if (refusal(admitted) is Error first)
         {
             return Result.Failure(first);
+        }
+
+        // 09 section 8a: the session's proof is judged after every other refusal, so a
+        // request refused on what it asks never asks the staff member to step up.
+        if (challenge is (SubjectId acting, SessionId session, StepUpAction action)
+            && await stepUp.PassedAsync(acting, session, action, cancellationToken).ConfigureAwait(false)
+                is Error challenged)
+        {
+            return Result.Failure(challenged);
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
