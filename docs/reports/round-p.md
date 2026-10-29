@@ -225,20 +225,33 @@ base". The project is given where two test classes share a name.
     - `RecordFindTests.REC_ADM_001_AValueNoRecordHoldsAnswersAnEmptyListAsync`;
     - `StandingTests.REC_ADM_001_AStandingOfARecordNamesItsKindAsync`;
     - `RecordDirectoryTests.REC_ADM_001_TheOrganizationHoldingARecordIsReadAloneAsync`.
-- REC-ADM-002, every route but the consent and objection rows (Q12):
+- REC-ADM-002:
   - AC1:
     - `PrivacyRequestTests.REC_ADM_002_AC1_AnOutOfBandErasureOfARecordBeginsItsWindowAsync`;
     - `RecordAdministrationTests.REC_ADM_002_AC1_CancellingAnOutOfBandDeletionReturnsTheRecordAsItWasAsync`.
   - AC2: `RecordAdministrationTests.REC_ADM_002_AC2_AContactStaffCorrectIsUnverifiedAndReachesNothingAsync`.
+  - AC3: `RecordAdministrationTests.REC_ADM_002_AC3_AConsentWithdrawnByStaffStampsItsRecordAndIsRecordedAsync`.
   - Also, in `RecordAdministrationTests` unless marked:
     - `REC_ADM_002_ARestrictedRecordAdmitsStaffsCorrectionAsync`;
     - `REC_ADM_002_ACorrectionIsRefusedWithoutReasonInItsWindowOrAttachedAsync`;
     - `REC_ADM_002_ARecordsRestrictionIsLiftedBehindTheStepUpAsync`;
     - `REC_ADM_002_ACancellationIsRefusedForATakedownAClosedWindowOrNoneAsync`;
     - `REC_ADM_002_StaffAssembleARecordsExportForThePersonAsync`;
+    - `REC_ADM_002_StaffRecordAndWithdrawAnObjectionForThePersonAsync`;
+    - `REC_ADM_002_AnEntryIsRefusedWithoutReasonInItsWindowOrAttachedAsync`;
     - `PrivacyRequestTests.REC_ADM_002_OnlyAWindowARecordBeginsRaisesItsEventAsync`;
     - `AccountStatesTests.REC_ADM_002_AnOutOfBandErasureBeginsARecordsWindowAsync`;
     - `RecordDirectoryTests.REC_ADM_002_ALiftedRecordIsActiveAndTheSubscribersAreToldAsync`.
+- REC-ADM-003:
+  - AC1:
+    - `RecordErasureTests.REC_ADM_003_AC1_AJobDeclaringRecordEraseErasesAnActiveRecordAsync`;
+    - `RecordAdministrationTests.REC_ADM_003_AC1_AJobDeclaringRecordEraseErasesAnActiveRecordAsync`;
+    - `RecordAdministrationTests.REC_ADM_003_AC1_AStaffMembersErasureIsRecordedAsAJobsIsAsync`;
+    - `SubjectEraserTests.REC_ADM_003_AC1_ARecordErasedAtOnceCarriesTheRetentionReasonAsync`.
+  - AC2: `RecordAdministrationTests.REC_ADM_003_AC2_AnErasureOfADeletingRecordIsRefusedAndChangesNothingAsync`.
+  - Also, `ErasureReason.Retention` and its spelling:
+    - `VocabularyContractTests.LIB_API_001_AC2_TheErasureStatusAndReasonAreTheContract`;
+    - `ErasureLedgerLineTests.DR_016_ALineIsReadAsTheErasureItWasWrittenFor`.
 - REC-TKD-001:
   - AC1:
     - `RecordTakedownTests.REC_TKD_001_AC1_ATakedownEndsTheRecordsAccessAndNoCodeReachesItAsync`;
@@ -274,7 +287,11 @@ base". The project is given where two test classes share a name.
 - AUTHZ-INHERIT-002, a person record as the subject of a sensitive record:
   `REC_AGE_001_AC1` and `ResourceRegistrationTests.REC_AGE_001_AC3_ASensitiveRecordRegistersUnderAnEntryOnlyWithThePersonsAnswerAsync` above.
 - PRIV-CONS-001, consent at a record's collection: `REC_COL_002_AC1` and
-  `REC_COL_002_APurposeThatDoesNotRestOnConsentIsRefusedAsync` above.
+  `REC_COL_002_APurposeThatDoesNotRestOnConsentIsRefusedAsync` above; a consent or
+  objection staff enter, with the mechanism `administrator` and the reason, `REC_ADM_002_AC3`
+  and `REC_ADM_002_StaffRecordAndWithdrawAnObjectionForThePersonAsync` above; each entry
+  naming the mechanism and kind in their spellings,
+  `ConsentTests.PRIV_CONS_001_AnEntryNamesTheMechanismAndKindInTheirSpellingsAsync`.
 - PRIV-CONS-011, "Your data" for a record: `REC_ACC_002_AC1` above, and through the
   account, `REC_ATT_002_AnAttachedRecordsRightsAreExercisedThroughTheAccountAsync`.
 - PRIV-RIGHT-001, a record's rights in its access session, through its account and out
@@ -305,8 +322,7 @@ base". The project is given where two test classes share a name.
   sample's counter collecting a record with the age answered and the consent recorded,
   with a fitting registered under it.
 - LIB-HOST-001, jobs: `IDN_READ_004_AC3` above.
-- `09` section 7a, and section 8a but the consent and objection rows (Q12) and the erasure
-  (Q13): the tests above, each route declared and in `endpoints.txt`.
+- `09` sections 7a and 8a: the tests above, each route declared and in `endpoints.txt`.
 - `09` section 7, `PUT /account/identifiers/{id}/replace` with 422
   `identity.identifier.invalid` and 409 `identity.identifier.locked`:
   `AccountApplicationTests.REG_IDENT_007_AReplaceOfNoHeldOrALockedIdentifierIsRefusedAsync`.
@@ -334,11 +350,7 @@ base". The project is given where two test classes share a name.
 
 ## 2. Items not implemented
 
-- REC-ADM-002 AC3, with `POST /admin/records/{subject}/consents/{purpose}/grant` and
-  `/withdraw`, and `POST` and `DELETE /admin/records/{subject}/objections/{purpose}`:
-  waits on Q12.
-- REC-ADM-003, with `IPersonRecords.EraseAsync` and `POST /admin/records/{subject}/erase`:
-  waits on Q13.
+None.
 
 ## 3. Resolved by rule
 
@@ -391,6 +403,13 @@ base". The project is given where two test classes share a name.
     AUTHZ-GATE-006, no permission governing a person's own records.
   - Rule: the list names them, and the gate reads each as it reads the account's own
     operations.
+- `privacy.consent.granted`, `privacy.consent.withdrawn`, `privacy.objection.recorded` and
+  `privacy.objection.withdrawn` (f45bcdc6):
+  - What was out of step: `details.mechanism` and `details.kind` were written as the
+    members' numbers.
+  - Governing item: `10` section 5.24 as D-223 amends it, naming `details.mechanism`
+    `administrator` in its section 5.21 spelling, the kind in its section 5.10 one.
+  - Rule: each entry writes the spellings.
 - Suppressions:
   - CA1711 on `IRecordCollection` and `RecordCollection`, each with its justification in
     the attribute: LIB-API-005 and REC-COL-002 name both.
@@ -402,8 +421,8 @@ base". The project is given where two test classes share a name.
 
 ## 4. Open questions
 
-Q1 to Q11 are answered by D-222, and every item they parked is built (section 1). Q12
-and Q13 are open.
+Q1 to Q11 are answered by D-222 and Q12 and Q13 by D-223, and every item they parked is
+built (section 1).
 
 **Q1 (Tier 2).** The document `termsVersion` is checked against (REC-COL-002).
 
@@ -447,7 +466,7 @@ and Q13 are open.
 - Answered by D-222: admission of the `/admin/records` rows, a caller admitted nowhere
   and a subject no record bears answered 404 `identity.record.notfound` alike. Built in
   5ec54f8f, 13ed50a8, 0fecd09e, 496a731f, d6fd7951 and 54ec8f33; REC-ADM-002 AC3 and
-  REC-ADM-003 wait on Q12 and Q13.
+  REC-ADM-003, answered by D-223, in de579f57 and 79c4d9ba.
 
 **Q3 (Tier 2).** `POST /admin/records`: the member named where none of name, email and
 phone is given.
@@ -635,6 +654,10 @@ LIB-TEST-004).
 - For each reading, the place of the `reason` on a grant and on an objection is also
   unnamed.
 - Parks: REC-ADM-002 AC3 and the four rows. Built: nothing of them.
+- Answered by D-223: reading B; a grant or objection staff enter is a record of its own
+  with the mechanism `administrator`, a withdrawal stamps the record it ends, and the
+  audit entry carries `details.mechanism` `administrator` and `details.reason`. Built in
+  f45bcdc6 and de579f57.
 
 **Q13 (Tier 2).** REC-ADM-003: the place of the erasure's required `reason`.
 
@@ -653,7 +676,8 @@ LIB-TEST-004).
   another key. Smallest fix: `10`'s row changed for this action.
 - Parks: REC-ADM-003, `IPersonRecords.EraseAsync`, the route, `ErasureReason.Retention`
   and its migration. Built: nothing of them.
-
+- Answered by D-223: `details.reason` stays `retention`, and the reason given is
+  `details.statedReason`. Built in 79c4d9ba.
 
 ## 5. Gate result
 
@@ -677,7 +701,10 @@ LIB-TEST-004).
     answers none, and the key rotation's reset leaving the rows that name a key:
     63b68b5d, 2c39c09a, c6d3a7a5, 42d19fdf, 68381249, 3305244c, 659af305;
   - the sample's analyser finding (CA1861): df39b986.
-- Checks before the push: green. Every unit test passes (5002 in eleven projects), the
+- The pipeline's runs on 2b8f3f61: the push run green; the pull request's run red in the
+  sample-host job, a guest's code read before its message was delivered. 82da6a8b fixes
+  it.
+- Checks before the push: green. Every unit test passes (5010 in eleven projects), the
   commit-message gate passes over the round's commits, and the full-history secret scan
   finds nothing.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
