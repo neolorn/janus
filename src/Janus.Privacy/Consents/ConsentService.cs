@@ -92,11 +92,50 @@ internal sealed class ConsentService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
 
-        if (context.Effective is not SubjectId subject)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
+        return context.Effective is SubjectId subject
+            ? await GrantedAsync(
+                    subject,
+                    new Entry(context.Acting, context.BreakGlassReason, Reason: null),
+                    purpose,
+                    mechanism,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : Result.Failure(Error.From(ErrorCodes.Denied));
+    }
 
+    /// <summary>
+    /// Grants a consent staff entered for a person record on the person's word: a record
+    /// of its own whose mechanism is administrator, its entry naming the staff member
+    /// acting and the reason they gave (REC-ADM-002, D-223).
+    /// </summary>
+    /// <param name="acting">The staff member entering it.</param>
+    /// <param name="breakGlassReason">The break-glass reason, where the session is one.</param>
+    /// <param name="record">The record's subject, which the records area admitted.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="GrantAsync"/> answers.</returns>
+    internal ValueTask<Result> GrantForRecordAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        GrantedAsync(
+            record,
+            new Entry(acting, breakGlassReason, reason),
+            purpose,
+            ConsentMechanism.Administrator,
+            cancellationToken);
+
+    private async ValueTask<Result> GrantedAsync(
+        SubjectId subject,
+        Entry entry,
+        string purpose,
+        ConsentMechanism mechanism,
+        CancellationToken cancellationToken)
+    {
         // A purpose that rests on another basis is not the subject's to agree to, and
         // recording their agreement would imply it were (PRIV-CONS-008a).
         if (processing.Find(purpose) is not { Consent: ConsentKind kind } declared)
@@ -227,11 +266,11 @@ internal sealed class ConsentService(
         await audit
             .RecordedAsync(
                 Granted,
-                context.Acting,
-                context.BreakGlassReason,
+                entry.Acting,
+                entry.BreakGlassReason,
                 subject,
                 now,
-                Named(purpose, version, mechanism, kind),
+                Entered(entry, Named(purpose, version, mechanism, kind)),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -253,11 +292,47 @@ internal sealed class ConsentService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
 
-        if (context.Effective is not SubjectId subject)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
+        return context.Effective is SubjectId subject
+            ? await WithdrawnAsync(
+                    subject,
+                    new Entry(context.Acting, context.BreakGlassReason, Reason: null),
+                    purpose,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : Result.Failure(Error.From(ErrorCodes.Denied));
+    }
 
+    /// <summary>
+    /// Withdraws a consent of a person record on the person's word to staff: the record it
+    /// ends keeps the mechanism of its making, and its entry names the staff member acting,
+    /// the mechanism administrator and the reason they gave (REC-ADM-002, D-223).
+    /// </summary>
+    /// <param name="acting">The staff member entering it.</param>
+    /// <param name="breakGlassReason">The break-glass reason, where the session is one.</param>
+    /// <param name="record">The record's subject, which the records area admitted.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="WithdrawAsync"/> answers.</returns>
+    internal ValueTask<Result> WithdrawForRecordAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        WithdrawnAsync(
+            record,
+            new Entry(acting, breakGlassReason, reason),
+            purpose,
+            cancellationToken);
+
+    private async ValueTask<Result> WithdrawnAsync(
+        SubjectId subject,
+        Entry entry,
+        string purpose,
+        CancellationToken cancellationToken)
+    {
         // Withdrawal reaches the same purposes a grant does: one that is undeclared or
         // rests on another basis holds no consent to withdraw (PRIV-CONS-008a).
         if (processing.Find(purpose) is not { Consent: not null })
@@ -311,11 +386,11 @@ internal sealed class ConsentService(
         await audit
             .RecordedAsync(
                 Withdrawn,
-                context.Acting,
-                context.BreakGlassReason,
+                entry.Acting,
+                entry.BreakGlassReason,
                 subject,
                 now,
-                Named(purpose, consent.NoticeVersion, consent.Mechanism, consent.Kind),
+                Entered(entry, Named(purpose, consent.NoticeVersion, consent.Mechanism, consent.Kind)),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -388,11 +463,50 @@ internal sealed class ConsentService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
 
-        if (context.Effective is not SubjectId subject)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
+        return context.Effective is SubjectId subject
+            ? await ObjectedAsync(
+                    subject,
+                    new Entry(context.Acting, context.BreakGlassReason, Reason: null),
+                    purpose,
+                    mechanism,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : Result.Failure(Error.From(ErrorCodes.Denied));
+    }
 
+    /// <summary>
+    /// Records an objection staff entered for a person record on the person's word: a
+    /// record of its own whose mechanism is administrator, its entry naming the staff member
+    /// acting and the reason they gave (REC-ADM-002, D-223).
+    /// </summary>
+    /// <param name="acting">The staff member entering it.</param>
+    /// <param name="breakGlassReason">The break-glass reason, where the session is one.</param>
+    /// <param name="record">The record's subject, which the records area admitted.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="ObjectAsync"/> answers.</returns>
+    internal ValueTask<Result> ObjectForRecordAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        ObjectedAsync(
+            record,
+            new Entry(acting, breakGlassReason, reason),
+            purpose,
+            ConsentMechanism.Administrator,
+            cancellationToken);
+
+    private async ValueTask<Result> ObjectedAsync(
+        SubjectId subject,
+        Entry entry,
+        string purpose,
+        ConsentMechanism mechanism,
+        CancellationToken cancellationToken)
+    {
         if (processing.Find(purpose) is not { Basis.IsObjectable: true })
         {
             return Result.Failure(Error.From(
@@ -447,11 +561,11 @@ internal sealed class ConsentService(
         await audit
             .RecordedAsync(
                 Objected,
-                context.Acting,
-                context.BreakGlassReason,
+                entry.Acting,
+                entry.BreakGlassReason,
                 subject,
                 now,
-                Named(purpose, version, mechanism),
+                Entered(entry, Named(purpose, version, mechanism)),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -473,11 +587,47 @@ internal sealed class ConsentService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
 
-        if (context.Effective is not SubjectId subject)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
+        return context.Effective is SubjectId subject
+            ? await ResumedAsync(
+                    subject,
+                    new Entry(context.Acting, context.BreakGlassReason, Reason: null),
+                    purpose,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : Result.Failure(Error.From(ErrorCodes.Denied));
+    }
 
+    /// <summary>
+    /// Withdraws an objection of a person record on the person's word to staff: the record
+    /// it ends keeps the mechanism of its making, and its entry names the staff member
+    /// acting, the mechanism administrator and the reason they gave (REC-ADM-002, D-223).
+    /// </summary>
+    /// <param name="acting">The staff member entering it.</param>
+    /// <param name="breakGlassReason">The break-glass reason, where the session is one.</param>
+    /// <param name="record">The record's subject, which the records area admitted.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="WithdrawObjectionAsync"/> answers.</returns>
+    internal ValueTask<Result> WithdrawObjectionForRecordAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        ResumedAsync(
+            record,
+            new Entry(acting, breakGlassReason, reason),
+            purpose,
+            cancellationToken);
+
+    private async ValueTask<Result> ResumedAsync(
+        SubjectId subject,
+        Entry entry,
+        string purpose,
+        CancellationToken cancellationToken)
+    {
         if (processing.Find(purpose) is not { Basis.IsObjectable: true })
         {
             return Result.Failure(Error.From(
@@ -529,11 +679,11 @@ internal sealed class ConsentService(
         await audit
             .RecordedAsync(
                 Resumed,
-                context.Acting,
-                context.BreakGlassReason,
+                entry.Acting,
+                entry.BreakGlassReason,
                 subject,
                 now,
-                Named(purpose, objection.NoticeVersion, objection.Mechanism),
+                Entered(entry, Named(purpose, objection.NoticeVersion, objection.Mechanism)),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -588,6 +738,22 @@ internal sealed class ConsentService(
         Dictionary<string, JsonElement> details = Named(purpose, version, mechanism);
 
         details["kind"] = JsonSerializer.SerializeToElement(kind, Spelled);
+
+        return details;
+    }
+
+    // REC-ADM-002, D-223: an entry staff made for a person record names the mechanism
+    // administrator and the reason they gave, whatever mechanism the record it ends was
+    // made by; a person's own entry names the record's.
+    private static Dictionary<string, JsonElement> Entered(
+        Entry entry,
+        Dictionary<string, JsonElement> details)
+    {
+        if (entry.Reason is string reason)
+        {
+            details["mechanism"] = JsonSerializer.SerializeToElement(ConsentMechanism.Administrator, Spelled);
+            details["reason"] = JsonSerializer.SerializeToElement(reason);
+        }
 
         return details;
     }
@@ -652,4 +818,8 @@ internal sealed class ConsentService(
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, error => error);
     }
+
+    // Who made a change: the person, or the staff member who entered it for a person
+    // record, with the reason they gave.
+    private sealed record Entry(SubjectId? Acting, string? BreakGlassReason, string? Reason);
 }

@@ -31,6 +31,86 @@ internal interface IRecordPrivacy
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Grants a consent the person gave staff for the record, a record of its own whose
+    /// mechanism is administrator, its entry naming the staff member and the reason.
+    /// </summary>
+    /// <param name="acting">The staff member entering it.</param>
+    /// <param name="breakGlassReason">The break-glass reason, where the session is one.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or <c>privacy.notice.unpublished</c>, <c>privacy.purpose.noconsent</c>.
+    /// </returns>
+    ValueTask<Result> GrantConsentAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Withdraws a consent of the record on the person's word to staff, its entry naming the
+    /// staff member, the mechanism administrator and the reason.
+    /// </summary>
+    /// <param name="acting">The staff member entering it.</param>
+    /// <param name="breakGlassReason">The break-glass reason, where the session is one.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or <c>privacy.purpose.noconsent</c>.</returns>
+    ValueTask<Result> WithdrawConsentAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records an objection the person told staff of for the record, a record of its own whose
+    /// mechanism is administrator, its entry naming the staff member and the reason.
+    /// </summary>
+    /// <param name="acting">The staff member entering it.</param>
+    /// <param name="breakGlassReason">The break-glass reason, where the session is one.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or <c>privacy.notice.unpublished</c>, <c>privacy.purpose.notobjectable</c>.
+    /// </returns>
+    ValueTask<Result> ObjectAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Withdraws an objection of the record on the person's word to staff, its entry naming
+    /// the staff member, the mechanism administrator and the reason.
+    /// </summary>
+    /// <param name="acting">The staff member entering it.</param>
+    /// <param name="breakGlassReason">The break-glass reason, where the session is one.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or <c>privacy.purpose.notobjectable</c>.</returns>
+    ValueTask<Result> WithdrawObjectionAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Assembles the export of a record attached to the asking account, behind the
     /// step-up the account's own export asks, counted against the limit for the record.
     /// </summary>

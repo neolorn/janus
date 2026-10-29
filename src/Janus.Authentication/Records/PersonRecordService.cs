@@ -274,6 +274,42 @@ internal sealed class PersonRecordService(
         administration.RectifyAsync(context, subject, correction, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<Result> GrantConsentAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        administration.GrantConsentAsync(context, subject, purpose, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> WithdrawConsentAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        administration.WithdrawConsentAsync(context, subject, purpose, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> ObjectAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        administration.ObjectAsync(context, subject, purpose, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> WithdrawObjectionAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        administration.WithdrawObjectionAsync(context, subject, purpose, reason, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Result> LiftRestrictionAsync(
         AccessContext context,
         SessionId session,

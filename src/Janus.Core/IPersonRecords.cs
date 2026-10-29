@@ -129,6 +129,116 @@ public interface IPersonRecords
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Grants, under <c>record:manage</c>, admitted as <see cref="ReadAsync"/> is, a consent
+    /// the person gave staff for a person record: a record of its own whose mechanism is
+    /// <c>administrator</c>, recorded <c>privacy.consent.granted</c> with the staff member
+    /// acting, the mechanism <c>administrator</c> and the reason given, and
+    /// <c>ConsentChanged</c> announced. Not gated.
+    /// </summary>
+    /// <param name="context">The staff member entering it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, recorded.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>api.request.malformed</c> naming <c>reason</c> where it is blank or past 1024
+    /// characters after trimming; <c>identity.record.followsaccount</c> naming the account
+    /// a record is attached to; <c>identity.record.stateconflict</c> where it is deleting
+    /// or deleted; <c>privacy.notice.unpublished</c>; <c>privacy.purpose.noconsent</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the purpose is absent.</exception>
+    ValueTask<Result> GrantConsentAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Withdraws, under <c>record:manage</c>, admitted as <see cref="ReadAsync"/> is, a
+    /// consent of a person record on the person's word to staff: its record is stamped
+    /// withdrawn and keeps the mechanism of its making, the withdrawal recorded
+    /// <c>privacy.consent.withdrawn</c> with the staff member acting, the mechanism
+    /// <c>administrator</c> and the reason given, and <c>ConsentChanged</c> announced. Not
+    /// gated.
+    /// </summary>
+    /// <param name="context">The staff member entering it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, recorded.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>api.request.malformed</c> naming <c>reason</c> where it is blank or past 1024
+    /// characters after trimming; <c>identity.record.followsaccount</c> naming the account
+    /// a record is attached to; <c>identity.record.stateconflict</c> where it is deleting
+    /// or deleted; <c>privacy.purpose.noconsent</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the purpose is absent.</exception>
+    ValueTask<Result> WithdrawConsentAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records, under <c>record:manage</c>, admitted as <see cref="ReadAsync"/> is, an
+    /// objection the person told staff of for a person record: a record of its own whose
+    /// mechanism is <c>administrator</c>, recorded <c>privacy.objection.recorded</c> with the
+    /// staff member acting, the mechanism <c>administrator</c> and the reason given, and
+    /// <c>ObjectionChanged</c> announced. Not gated.
+    /// </summary>
+    /// <param name="context">The staff member entering it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, recorded.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>api.request.malformed</c> naming <c>reason</c> where it is blank or past 1024
+    /// characters after trimming; <c>identity.record.followsaccount</c> naming the account
+    /// a record is attached to; <c>identity.record.stateconflict</c> where it is deleting
+    /// or deleted; <c>privacy.notice.unpublished</c>; <c>privacy.purpose.notobjectable</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the purpose is absent.</exception>
+    ValueTask<Result> ObjectAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Withdraws, under <c>record:manage</c>, admitted as <see cref="ReadAsync"/> is, an
+    /// objection of a person record on the person's word to staff: its record is stamped
+    /// withdrawn and keeps the mechanism of its making, the withdrawal recorded
+    /// <c>privacy.objection.withdrawn</c> with the staff member acting, the mechanism
+    /// <c>administrator</c> and the reason given, and <c>ObjectionChanged</c> announced. Not
+    /// gated.
+    /// </summary>
+    /// <param name="context">The staff member entering it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, recorded.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>api.request.malformed</c> naming <c>reason</c> where it is blank or past 1024
+    /// characters after trimming; <c>identity.record.followsaccount</c> naming the account
+    /// a record is attached to; <c>identity.record.stateconflict</c> where it is deleting
+    /// or deleted; <c>privacy.purpose.notobjectable</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the purpose is absent.</exception>
+    ValueTask<Result> WithdrawObjectionAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Lifts a person record's restriction under <c>record:manage</c>, admitted as
     /// <see cref="ReadAsync"/> is, behind the step-up <c>record:restrictionlift</c>: the
     /// record returns active and <c>RestrictionChanged</c> is announced.

@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Records;
 using Janus.Core;
+using Janus.Privacy.Consents;
 using Janus.Privacy.Exports;
 using Janus.Privacy.Takedowns;
 
@@ -12,9 +13,11 @@ namespace Janus.Storage.Authentication.Records;
 /// privacy area's services.
 /// </summary>
 /// <param name="exports">Where a record's export is assembled and counted.</param>
+/// <param name="consents">Where the consents and objections staff enter for a record are recorded.</param>
 /// <param name="takedowns">Where a record's takedown is carried, read and reversed.</param>
 /// <remarks>Implements REC-ADM-002, REC-TKD-001 and CONV-LAYOUT-001.</remarks>
-internal sealed class RecordPrivacy(ExportService exports, TakedownService takedowns) : IRecordPrivacy
+internal sealed class RecordPrivacy(ExportService exports, ConsentService consents, TakedownService takedowns)
+    : IRecordPrivacy
 {
     /// <inheritdoc/>
     public ValueTask<Result<SubjectExport>> ExportAsync(
@@ -23,6 +26,46 @@ internal sealed class RecordPrivacy(ExportService exports, TakedownService taked
         SubjectId record,
         CancellationToken cancellationToken) =>
         exports.AssembleOnBehalfAsync(acting, breakGlassReason, record, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> GrantConsentAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        consents.GrantForRecordAsync(acting, breakGlassReason, record, purpose, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> WithdrawConsentAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        consents.WithdrawForRecordAsync(acting, breakGlassReason, record, purpose, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> ObjectAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        consents.ObjectForRecordAsync(acting, breakGlassReason, record, purpose, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> WithdrawObjectionAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken) =>
+        consents.WithdrawObjectionForRecordAsync(acting, breakGlassReason, record, purpose, reason, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Result<SubjectExport>> ExportAttachedAsync(

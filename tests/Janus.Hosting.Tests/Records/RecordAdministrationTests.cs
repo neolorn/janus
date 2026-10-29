@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Records;
 using Janus.Authentication.Tests.Records;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Documents;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -15,13 +17,18 @@ using Xunit;
 namespace Janus.Hosting.Tests.Records;
 
 /// <summary>
-/// Staff reading, correcting, lifting, cancelling and exporting a person record, and reading the records attached to an account
-/// (REC-ADM-001, REC-ADM-002, REC-ATT-002, chapter 09 section 8a).
+/// Staff reading, correcting, lifting, cancelling and exporting a person record, entering the
+/// consents and objections the person tells them of, and reading the records attached to an
+/// account (REC-ADM-001, REC-ADM-002, REC-ATT-002, chapter 09 section 8a, D-223).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class RecordAdministrationTests : IAsyncDisposable
 {
+    private const string Marketing = "marketing";
+
     private const string Number = "+441632960021";
+
+    private const string Security = "security";
 
     private static readonly RandomNumberGenerator Randomness = RandomNumberGenerator.Create();
 
@@ -383,11 +390,148 @@ public sealed class RecordAdministrationTests : IAsyncDisposable
             (windowed.Status, windowed.Text("code")));
     }
 
+    /// <summary>
+    /// REC-ADM-002 AC3 (D-223): a consent staff withdraw for a record is stamped withdrawn
+    /// and keeps the mechanism of its making, recorded <c>privacy.consent.withdrawn</c> with
+    /// the staff member acting, <c>details.mechanism</c> <c>administrator</c> and
+    /// <c>details.reason</c>, and <c>ConsentChanged</c> <c>withdrawn</c> is raised; a
+    /// consent staff grant is a record of its own whose mechanism is <c>administrator</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_AC3_AConsentWithdrawnByStaffStampsItsRecordAndIsRecordedAsync()
+    {
+        Published();
+        SubjectId record = Holding(_shop);
+        _deployment.Consents.Keep(record, new ConsentRecord(
+            Marketing, "privacy-notice", "1", ConsentMechanism.Dashboard, ConsentKind.Ordinary, Noon, WithdrawnAt: null, SupersededAt: null));
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer withdrawn = await browser.SendAsync(
+            "POST", $"/admin/records/{record.Value}/consents/{Marketing}/withdraw", ("reason", "Asked at the desk."));
+        Answer granted = await browser.SendAsync(
+            "POST", $"/admin/records/{record.Value}/consents/{Marketing}/grant", ("reason", "Agreed by phone."));
+
+        IReadOnlyList<ConsentRecord> held = await _deployment.Consents.ConsentsAsync(record, CancellationToken.None);
+
+        Assert.Equal(
+            (StatusCodes.Status204NoContent, StatusCodes.Status204NoContent),
+            (withdrawn.Status, granted.Status));
+        Assert.Equal(
+            [(ConsentMechanism.Dashboard, true), (ConsentMechanism.Administrator, false)],
+            held.OrderBy(consent => consent.Mechanism).Select(consent => (consent.Mechanism, consent.WithdrawnAt is not null)));
+        Assert.Equal(
+            [
+                ("privacy.consent.withdrawn", (SubjectId?)Staff(), "administrator", "Asked at the desk."),
+                ("privacy.consent.granted", (SubjectId?)Staff(), "administrator", "Agreed by phone."),
+            ],
+            (await TrailAsync(record)).Select(entry => (
+                entry.Action.ToString(),
+                entry.Acting,
+                entry.Details["mechanism"].GetString(),
+                entry.Details["reason"].GetString())));
+        Assert.Equal(
+            [ConsentChange.Withdrawn, ConsentChange.Granted],
+            _deployment.Events.Of<ConsentChanged>().Where(changed => changed.Subject == record).Select(changed => changed.Change));
+    }
+
+    /// <summary>
+    /// REC-ADM-002 (09 section 8a, D-223): an objection staff record for a record is a
+    /// record of its own whose mechanism is <c>administrator</c>, and its withdrawal stamps
+    /// it; each is recorded with the staff member acting, <c>details.mechanism</c>
+    /// <c>administrator</c> and <c>details.reason</c>, and announced.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_StaffRecordAndWithdrawAnObjectionForThePersonAsync()
+    {
+        Published();
+        SubjectId record = Holding(_shop);
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer objected = await browser.SendAsync(
+            "POST", $"/admin/records/{record.Value}/objections/{Security}", ("reason", "Objected in writing."));
+        Answer resumed = await browser.SendAsync(
+            "DELETE", $"/admin/records/{record.Value}/objections/{Security}", ("reason", "Took it back by phone."));
+
+        ObjectionRecord held = Assert.Single(await _deployment.Consents.ObjectionsAsync(record, CancellationToken.None));
+
+        Assert.Equal(
+            (StatusCodes.Status204NoContent, StatusCodes.Status204NoContent),
+            (objected.Status, resumed.Status));
+        Assert.Equal((ConsentMechanism.Administrator, true), (held.Mechanism, held.WithdrawnAt is not null));
+        Assert.Equal(
+            [
+                ("privacy.objection.recorded", (SubjectId?)Staff(), "administrator", "Objected in writing."),
+                ("privacy.objection.withdrawn", (SubjectId?)Staff(), "administrator", "Took it back by phone."),
+            ],
+            (await TrailAsync(record)).Select(entry => (
+                entry.Action.ToString(),
+                entry.Acting,
+                entry.Details["mechanism"].GetString(),
+                entry.Details["reason"].GetString())));
+        Assert.Equal(
+            [true, false],
+            _deployment.Events.Of<ObjectionChanged>().Where(changed => changed.Subject == record).Select(changed => changed.Objecting));
+    }
+
+    /// <summary>
+    /// REC-ADM-002 (09 section 8a, D-223): an entry without a reason is refused
+    /// <c>api.request.malformed</c>, one for a record in its deletion window
+    /// <c>identity.record.stateconflict</c>, one for a record attached to an account
+    /// <c>identity.record.followsaccount</c>, and one for a record another organization
+    /// holds <c>identity.record.notfound</c>; none is recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_AnEntryIsRefusedWithoutReasonInItsWindowOrAttachedAsync()
+    {
+        Published();
+        SubjectId active = Holding(_shop);
+        SubjectId deleting = Deleting(Holding(_shop), DeletionOrigin.Self, _deployment.Clock.GetUtcNow());
+        SubjectId attached = Attached(Holding(_shop), SubjectId.New(Randomness), Noon);
+        SubjectId elsewhere = Holding(_other);
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer unreasoned = await browser.SendAsync("POST", $"/admin/records/{active.Value}/consents/{Marketing}/grant", "{}");
+        Answer windowed = await browser.SendAsync(
+            "POST", $"/admin/records/{deleting.Value}/objections/{Security}", ("reason", "Objected in writing."));
+        Answer followed = await browser.SendAsync(
+            "POST", $"/admin/records/{attached.Value}/consents/{Marketing}/grant", ("reason", "Agreed by phone."));
+        Answer hidden = await browser.SendAsync(
+            "POST", $"/admin/records/{elsewhere.Value}/consents/{Marketing}/grant", ("reason", "Agreed by phone."));
+
+        Assert.Equal(
+            [
+                (StatusCodes.Status400BadRequest, ErrorCodes.RequestMalformed.ToString()),
+                (StatusCodes.Status409Conflict, ErrorCodes.RecordStateConflict.ToString()),
+                (StatusCodes.Status409Conflict, ErrorCodes.RecordFollowsAccount.ToString()),
+                (StatusCodes.Status404NotFound, ErrorCodes.RecordNotFound.ToString()),
+            ],
+            new[] { unreasoned, windowed, followed, hidden }.Select(answer => (answer.Status, answer.Text("code"))));
+        Assert.Empty(_deployment.Events.Of<ConsentChanged>());
+        Assert.Empty(_deployment.Events.Of<ObjectionChanged>());
+    }
+
     private static Guid[] Subjects(Answer answer) =>
         [.. answer.Json().GetProperty("subjects").EnumerateArray().Select(subject => subject.GetGuid())];
 
     private static string Without(Answer answer) =>
         answer.Body.Replace(answer.Text("correlationId"), string.Empty, StringComparison.Ordinal);
+
+    // PRIV-CONS-005: a consent or an objection stands against a published notice.
+    private void Published() =>
+        _deployment.Documents.Hold(new DocumentVersion("privacy-notice", "1", "en", "The notice.", [], Noon));
+
+    // What the privacy area recorded with the record as its subject, in order.
+    private async Task<IReadOnlyList<Janus.Privacy.Tests.PrivacyAuditEntry>> TrailAsync(SubjectId record)
+    {
+        await using AsyncServiceScope scope = _deployment.Scope();
+        var trail = (Janus.Privacy.Tests.PrivacyAuditInMemory)scope.ServiceProvider
+            .GetRequiredService<Janus.Privacy.IPrivacyAudit>();
+
+        return [.. trail.Entries.Where(entry => entry.Subject == record)];
+    }
 
     private SubjectId Staff() => _deployment.Directory.Created[^1].Subject;
 

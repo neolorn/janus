@@ -18,7 +18,7 @@ namespace Janus.Hosting.Records;
 /// someone who holds no account.
 /// </summary>
 /// <remarks>
-/// Implements REC-COL-003, REC-ADM-001, REC-ADM-002, REC-ATT-002, REC-TKD-001 and
+/// Implements REC-COL-003, REC-ADM-001, REC-ADM-002, REC-ATT-002, REC-TKD-001, D-223 and
 /// LIB-API-005. Each maps one operation of <see cref="IPersonRecords"/>.
 /// </remarks>
 internal static class RecordEndpoints
@@ -62,6 +62,26 @@ internal static class RecordEndpoints
                     ErrorCodes.RecordFollowsAccount, ErrorCodes.RecordStateConflict)
                 .Binding<SubjectId>("subject"))
             .Accepts<RecordCorrectionBody>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
+
+        _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/consents/{purpose}/grant", GrantConsentAsync))
+            .Declares(Entering(ErrorCodes.NoticeUnpublished, ErrorCodes.PurposeNoConsent))
+            .Accepts<RecordReasonBody>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
+
+        _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/consents/{purpose}/withdraw", WithdrawConsentAsync))
+            .Declares(Entering(ErrorCodes.PurposeNoConsent))
+            .Accepts<RecordReasonBody>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
+
+        _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/objections/{purpose}", ObjectAsync))
+            .Declares(Entering(ErrorCodes.NoticeUnpublished, ErrorCodes.PurposeNotObjectable))
+            .Accepts<RecordReasonBody>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
+
+        _ = SessionRequired.On(endpoints.MapDelete("/admin/records/{subject}/objections/{purpose}", WithdrawObjectionAsync))
+            .Declares(Entering(ErrorCodes.PurposeNotObjectable))
+            .Accepts<RecordReasonBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/records/{subject}/export", ExportAsync))
@@ -245,6 +265,93 @@ internal static class RecordEndpoints
             Nothing);
     }
 
+    // REC-ADM-002, D-223: what the person told staff, entered with the reason staff give.
+    private static Task<IResult> GrantConsentAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        string purpose,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return EnteredAsync(
+            context,
+            reason => records.GrantConsentAsync(browser.Asking, subject, purpose, reason, cancellationToken),
+            cancellationToken);
+    }
+
+    private static Task<IResult> WithdrawConsentAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        string purpose,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return EnteredAsync(
+            context,
+            reason => records.WithdrawConsentAsync(browser.Asking, subject, purpose, reason, cancellationToken),
+            cancellationToken);
+    }
+
+    private static Task<IResult> ObjectAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        string purpose,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return EnteredAsync(
+            context,
+            reason => records.ObjectAsync(browser.Asking, subject, purpose, reason, cancellationToken),
+            cancellationToken);
+    }
+
+    private static Task<IResult> WithdrawObjectionAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        string purpose,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return EnteredAsync(
+            context,
+            reason => records.WithdrawObjectionAsync(browser.Asking, subject, purpose, reason, cancellationToken),
+            cancellationToken);
+    }
+
+    // REC-ADM-002, D-223: a row entering what the person told staff takes the reason staff
+    // give, and is answered as /privacy/consents and /privacy/objections answer.
+    private static async Task<IResult> EnteredAsync(
+        HttpContext context,
+        Func<string, ValueTask<Result>> entry,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        RecordReasonBody body = await JsonBody
+            .ReadAsync<RecordReasonBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        return body.Reason is string reason
+            ? Answers.Of(await entry(reason).ConfigureAwait(false), Nothing)
+            : Answers.Malformed("reason");
+    }
+
     // REC-ADM-002: the record's export for staff to hand to the person, in either
     // arrangement.
     private static async Task<IResult> ExportAsync(
@@ -410,6 +517,16 @@ internal static class RecordEndpoints
             .AttachedAsync(browser.Asking, subject, named, cancellationToken)
             .ConfigureAwait(false));
     }
+
+    // 09 section 8a: a row entering what the person told staff, not gated.
+    private static EndpointDeclaration Entering(params ErrorCode[] codes) =>
+        EndpointDeclaration
+            .Answering(
+            [
+                ErrorCodes.RecordNotFound, ErrorCodes.RequestMalformed, ErrorCodes.Restricted,
+                ErrorCodes.RecordFollowsAccount, ErrorCodes.RecordStateConflict, .. codes,
+            ])
+            .Binding<SubjectId>("subject");
 
     // 09 section 8a: a row acting on a record's lifecycle, behind a step-up.
     private static EndpointDeclaration Changing(params ErrorCode[] codes) =>

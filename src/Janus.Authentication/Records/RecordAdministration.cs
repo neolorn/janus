@@ -15,8 +15,8 @@ namespace Janus.Authentication.Records;
 
 /// <summary>
 /// What staff do to a person record for the person who reaches it by no code: correct
-/// it on their word, lift its restriction, cancel its deletion, assemble its export, and
-/// take it down.
+/// it on their word, record the consents and objections they tell staff of, lift its
+/// restriction, cancel its deletion, assemble its export, and take it down.
 /// </summary>
 /// <param name="records">The person records.</param>
 /// <param name="admission">Where a path naming a record is admitted.</param>
@@ -25,7 +25,7 @@ namespace Janus.Authentication.Records;
 /// <param name="accounts">Where the erasure request that began a window is read.</param>
 /// <param name="stepUp">What the gated rows ask of the staff member's session.</param>
 /// <param name="events">Where a cancellation is announced.</param>
-/// <param name="privacy">Where the record's export is assembled and its takedown carried.</param>
+/// <param name="privacy">Where the record's consents and objections are entered, its export assembled and its takedown carried.</param>
 /// <param name="configuration">Where the message languages and the deletion window are read.</param>
 /// <param name="work">The one transaction each change runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -199,6 +199,150 @@ internal sealed class RecordAdministration(
     }
 
     /// <summary>
+    /// Grants a consent the person gave staff, a record of its own whose mechanism is
+    /// administrator.
+    /// </summary>
+    /// <param name="context">The staff member entering it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, as staff give it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="IPersonRecords.GrantConsentAsync"/> names.</returns>
+    public async ValueTask<Result> GrantConsentAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        return await (await AdmittedAsync(context, Permissions.RecordManage, subject, cancellationToken).ConfigureAwait(false))
+            .Match(
+                admitted => EnteredAsync(
+                    admitted,
+                    reason,
+                    (written, token) => privacy.GrantConsentAsync(acting, context.BreakGlassReason, subject, purpose, written, token),
+                    cancellationToken),
+                error => ValueTask.FromResult(Result.Failure(error)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Withdraws a consent on the person's word to staff, the record it ends keeping the
+    /// mechanism of its making.
+    /// </summary>
+    /// <param name="context">The staff member entering it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, as staff give it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="IPersonRecords.WithdrawConsentAsync"/> names.</returns>
+    public async ValueTask<Result> WithdrawConsentAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        return await (await AdmittedAsync(context, Permissions.RecordManage, subject, cancellationToken).ConfigureAwait(false))
+            .Match(
+                admitted => EnteredAsync(
+                    admitted,
+                    reason,
+                    (written, token) => privacy.WithdrawConsentAsync(acting, context.BreakGlassReason, subject, purpose, written, token),
+                    cancellationToken),
+                error => ValueTask.FromResult(Result.Failure(error)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Records an objection the person told staff of, a record of its own whose mechanism
+    /// is administrator.
+    /// </summary>
+    /// <param name="context">The staff member entering it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, as staff give it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="IPersonRecords.ObjectAsync"/> names.</returns>
+    public async ValueTask<Result> ObjectAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        return await (await AdmittedAsync(context, Permissions.RecordManage, subject, cancellationToken).ConfigureAwait(false))
+            .Match(
+                admitted => EnteredAsync(
+                    admitted,
+                    reason,
+                    (written, token) => privacy.ObjectAsync(acting, context.BreakGlassReason, subject, purpose, written, token),
+                    cancellationToken),
+                error => ValueTask.FromResult(Result.Failure(error)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Withdraws an objection on the person's word to staff, the record it ends keeping the
+    /// mechanism of its making.
+    /// </summary>
+    /// <param name="context">The staff member entering it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="reason">Why, as staff give it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="IPersonRecords.WithdrawObjectionAsync"/> names.</returns>
+    public async ValueTask<Result> WithdrawObjectionAsync(
+        AccessContext context,
+        SubjectId subject,
+        string purpose,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        return await (await AdmittedAsync(context, Permissions.RecordManage, subject, cancellationToken).ConfigureAwait(false))
+            .Match(
+                admitted => EnteredAsync(
+                    admitted,
+                    reason,
+                    (written, token) => privacy.WithdrawObjectionAsync(acting, context.BreakGlassReason, subject, purpose, written, token),
+                    cancellationToken),
+                error => ValueTask.FromResult(Result.Failure(error)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Lifts a record's restriction, the record returning active and the change
     /// announced to the subscribers.
     /// </summary>
@@ -351,7 +495,7 @@ internal sealed class RecordAdministration(
             .Match<ValueTask<Result<SubjectExport>>>(
                 async admitted =>
                 {
-                    if (Unexportable(admitted) is Error refused)
+                    if (Unexercisable(admitted) is Error refused)
                     {
                         return Result.Failure<SubjectExport>(refused);
                     }
@@ -519,6 +663,25 @@ internal sealed class RecordAdministration(
             .ConfigureAwait(false);
     }
 
+    // REC-ADM-002, D-223: what the person told staff of is entered with the reason staff
+    // give, for a record that admits a right; the privacy area records it as the person's
+    // own change, its entry naming the staff member.
+    private static async ValueTask<Result> EnteredAsync(
+        RecordStanding admitted,
+        string reason,
+        Func<string, CancellationToken, ValueTask<Result>> entry,
+        CancellationToken cancellationToken)
+    {
+        if (Written(reason) is not string written)
+        {
+            return Result.Failure(Malformed("reason"));
+        }
+
+        return Unexercisable(admitted) is Error refused
+            ? Result.Failure(refused)
+            : await entry(written, cancellationToken).ConfigureAwait(false);
+    }
+
     // REC-TKD-001: an erased record takes no takedown, and one already taken down takes
     // no second; one deleting by the person or a request is taken down, its window ending
     // no later than it would have.
@@ -568,7 +731,7 @@ internal sealed class RecordAdministration(
 
     // REC-REC-002: a record in its deletion window, or erased, admits no right but its
     // read and the cancellation.
-    private static Error? Unexportable(RecordStanding standing) =>
+    private static Error? Unexercisable(RecordStanding standing) =>
         Followed(standing)
         ?? (standing.State is PersonRecordState.Active or PersonRecordState.Restricted ? null : StateConflict(standing.State));
 

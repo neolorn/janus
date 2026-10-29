@@ -1525,6 +1525,26 @@ PUT /admin/records/{subject}
   404 identity.record.notfound
   409 identity.record.followsaccount identity.record.stateconflict
   422 api.request.invalid identity.identifier.invalid identity.profile.invalid
+POST /admin/records/{subject}/consents/{purpose}/grant
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict privacy.notice.unpublished
+  422 privacy.purpose.noconsent
+POST /admin/records/{subject}/consents/{purpose}/withdraw
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict
+  422 privacy.purpose.noconsent
 POST /admin/records/{subject}/delete/cancel
   204
   400 api.request.malformed
@@ -1551,6 +1571,26 @@ GET /admin/records/{subject}/export
   409 identity.record.followsaccount identity.record.stateconflict
   429 auth.throttled
   500 system.fault
+DELETE /admin/records/{subject}/objections/{purpose}
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict
+  422 privacy.purpose.notobjectable
+POST /admin/records/{subject}/objections/{purpose}
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict privacy.notice.unpublished
+  422 privacy.purpose.notobjectable
 POST /admin/records/{subject}/restriction/lift
   204
   400 api.request.malformed

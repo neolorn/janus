@@ -1260,7 +1260,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<Supersession>();
         _ = services.AddSingleton<Janus.Privacy.Policies.IReachedSubjects>(Reached);
         _ = services.AddScoped<Janus.Privacy.Policies.SubjectReach>();
-        _ = services.AddScoped<IConsents, ConsentService>();
+        _ = services.AddScoped<ConsentService>();
+        _ = services.AddScoped<IConsents>(provider => provider.GetRequiredService<ConsentService>());
         _ = services.AddSingleton<IPrivacyRequestStore>(Requests);
         _ = services.AddSingleton<IAccountStates>(AccountStates);
         _ = services.AddSingleton<Janus.Privacy.Bases.ILawfulBasisStore>(
