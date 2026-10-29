@@ -8,6 +8,7 @@ using Janus.Identity.Accounts;
 using Janus.Privacy.Consents;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.Consents;
+using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
@@ -22,7 +23,7 @@ namespace Janus.Storage.Tests.Privacy;
 /// PRIV-RIGHT-001a).
 /// </summary>
 [Trait("kind", "integration")]
-public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>
+public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>, IDisposable
 {
     private const string Recommendations = "recommendations";
 
@@ -33,6 +34,11 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
     private const string KeepARecordForEachGrant = "20261004022141_KeepARecordForEachGrant";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
+
+    private readonly Deployment _deployment = new(database);
+
+    /// <inheritdoc/>
+    public void Dispose() => _deployment.Dispose();
 
     /// <summary>
     /// PRIV-CONS-001 AC1: a consent reads back carrying the purpose, the notice
@@ -86,6 +92,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
 
             await new AccountStore(writing)
                 .AddAsync(Account.Create(subject, Noon), TestContext.Current.CancellationToken);
+            await Keys(writing).CreateAsync(subject, TestContext.Current.CancellationToken);
 
             Assert.True(await new ConsentStore(writing, new DataConnections(writing)).AddAsync(
                 subject,
@@ -593,10 +600,14 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
 
         await new AccountStore(writing)
             .AddAsync(Account.Create(subject, Noon), TestContext.Current.CancellationToken);
+        await Keys(writing).CreateAsync(subject, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return subject;
     }
+
+    // The subject key an account is created with, which the consents name.
+    private SubjectKeyStore Keys(StoreContext context) => new(context, _deployment.Ring, _deployment.Randomness);
 
     private async Task GrantedAsync(SubjectId subject, ConsentRecord consent) =>
         Assert.True(await WritingAsync(store => store.AddAsync(

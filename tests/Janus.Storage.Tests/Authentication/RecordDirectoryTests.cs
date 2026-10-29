@@ -118,7 +118,9 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
         await WrittenAsync(Person(attached, organization, created: true));
         await WrittenAsync(Person(restricted, organization, created: true));
         await WrittenAsync(Person(other, elsewhere, created: true));
-        await ChangedAsync(attached, record => record.Attach(Subjects.New(), Noon));
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        await ChangedAsync(attached, record => record.Attach(account, Noon));
         await ChangedAsync(restricted, record => record.Restrict());
 
         await using StoreContext context = database.Context();
@@ -266,7 +268,9 @@ public sealed class RecordDirectoryTests(DatabaseFixture database) : IClassFixtu
             Reference = reference,
         });
         await WrittenAsync(Person(attached, organization, created: true));
-        await ChangedAsync(attached, record => record.Attach(Subjects.New(), Noon));
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        await ChangedAsync(attached, record => record.Attach(account, Noon));
 
         await using (StoreContext writing = database.Context())
         {

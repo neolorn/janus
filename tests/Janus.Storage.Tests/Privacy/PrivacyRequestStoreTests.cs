@@ -9,6 +9,7 @@ using Janus.Privacy.Requests;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Migrations;
 using Janus.Storage.Privacy.Requests;
+using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -23,7 +24,7 @@ namespace Janus.Storage.Tests.Privacy;
 /// (PRIV-RIGHT-001, PRIV-RIGHT-002).
 /// </summary>
 [Trait("kind", "integration")]
-public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>
+public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>, IDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
 
@@ -31,6 +32,11 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         Noon.AddDays(8).AddHours(11).AddMinutes(59),
         Noon.AddDays(4),
         Noon.AddDays(8));
+
+    private readonly Deployment _deployment = new(database);
+
+    /// <inheritdoc/>
+    public void Dispose() => _deployment.Dispose();
 
     /// <summary>
     /// PRIV-RIGHT-002 AC1: a request reads back carrying every field it was written
@@ -366,6 +372,8 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
 
         await new AccountStore(writing)
             .AddAsync(Account.Create(subject, Noon), TestContext.Current.CancellationToken);
+        await new SubjectKeyStore(writing, _deployment.Ring, _deployment.Randomness)
+            .CreateAsync(subject, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return subject;
