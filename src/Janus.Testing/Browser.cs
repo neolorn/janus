@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,7 +20,9 @@ namespace Janus.Testing;
 /// request is made from and the fetch metadata a same-origin request carries; a header
 /// the request already carries is left as it is, so a test can send one of its own. The
 /// library deletes a cookie by writing it empty, so an empty cookie is forgotten. A
-/// request to another origin is passed on untouched, carrying nothing of this one.
+/// request to another origin is passed on untouched, carrying nothing of this one. A
+/// visitor's browser makes its first contact before its first request, keeping what it
+/// is answered with (BFF-CSRF-005a).
 /// </remarks>
 internal sealed class Browser : DelegatingHandler
 {
@@ -44,18 +47,29 @@ internal sealed class Browser : DelegatingHandler
 
     private readonly string _origin;
 
+    private readonly Uri? _contact;
+
+    private readonly SemaphoreSlim _contacting = new(1, 1);
+
+    private bool _contacted;
+
     /// <summary>
     /// Makes a browser that holds nothing yet.
     /// </summary>
     /// <param name="address">Where the application is served; its origin is the one the browser is at.</param>
     /// <param name="channel">What carries a request to the application.</param>
+    /// <param name="contact">
+    /// Where the browser makes its first contact before its first request, or nothing
+    /// where its first request is its first contact.
+    /// </param>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public Browser(Uri address, HttpMessageHandler channel)
+    public Browser(Uri address, HttpMessageHandler channel, Uri? contact = null)
         : base(channel)
     {
         ArgumentNullException.ThrowIfNull(address);
 
         _origin = address.GetLeftPart(UriPartial.Authority);
+        _contact = contact;
     }
 
     /// <inheritdoc/>
@@ -64,6 +78,8 @@ internal sealed class Browser : DelegatingHandler
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        await ContactedAsync(cancellationToken).ConfigureAwait(false);
 
         bool here = request.RequestUri is { IsAbsoluteUri: true } target
             && string.Equals(target.GetLeftPart(UriPartial.Authority), _origin, StringComparison.OrdinalIgnoreCase);
@@ -81,6 +97,59 @@ internal sealed class Browser : DelegatingHandler
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Ends the browser.
+    /// </summary>
+    /// <param name="disposing">Whether it is disposed rather than finalized.</param>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _contacting.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    // BFF-CSRF-005a: the first request a browser makes is answered 401 with the
+    // pre-authentication cookie and the token bound to it, which this one keeps.
+    private async Task ContactedAsync(CancellationToken cancellationToken)
+    {
+        if (_contact is null)
+        {
+            return;
+        }
+
+        await _contacting.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            if (_contacted)
+            {
+                return;
+            }
+
+            using var first = new HttpRequestMessage(HttpMethod.Get, _contact);
+
+            Carry(first);
+
+            using HttpResponseMessage answered = await base.SendAsync(first, cancellationToken).ConfigureAwait(false);
+
+            if (answered.StatusCode is not HttpStatusCode.Unauthorized)
+            {
+                throw new InvalidOperationException(
+                    "GET auth/session answered " + (int)answered.StatusCode + " to a browser that holds nothing.");
+            }
+
+            Keep(answered);
+            _contacted = true;
+        }
+        finally
+        {
+            _ = _contacting.Release();
+        }
     }
 
     private void Carry(HttpRequestMessage request)

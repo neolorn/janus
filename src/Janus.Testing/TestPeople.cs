@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -15,9 +16,9 @@ namespace Janus.Testing;
 /// <summary>
 /// The people a test signs in over a running host, each through the library's own
 /// endpoints: a customer registered with the links the in-memory transports hold, the
-/// first administrator enrolled with a software passkey through the enrolment link, and a
+/// first administrator enrolled with a software passkey through the enrolment link, a
 /// staff member invited by an administrator with the roles the test names and enrolled
-/// through the invitation.
+/// through the invitation, and a visitor, who holds no account.
 /// </summary>
 /// <remarks>
 /// Implements LIB-TEST-003. Each person is a browser of their own, which makes first
@@ -269,6 +270,17 @@ public sealed class TestPeople
         }
     }
 
+    /// <summary>
+    /// A visitor: a browser of its own, signed in as nobody, carrying what a session
+    /// carries save a sign-in session, for what a guest does with no account (D-222).
+    /// </summary>
+    /// <returns>The visitor, which has made no request yet.</returns>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "The visitor is an HttpClient made with disposeHandler: true, so the browser is disposed with it.")]
+    public TestVisitor Visitor() => new(Browser(contact: new Uri(_address, "auth/session")), _address);
+
     // A state-changing request an administrator makes, stepped up once where the gate
     // of its action asks for it, as the frontend does (AUTH-STEP-002).
     private static async Task SteppedAsync(
@@ -471,7 +483,7 @@ public sealed class TestPeople
             password);
     }
 
-    private Browser Browser() => new(_address, _channel());
+    private Browser Browser(Uri? contact = null) => new(_address, _channel(), contact);
 
     private HttpClient Client(Browser browser) => new(browser, disposeHandler: false) { BaseAddress = _address };
 
