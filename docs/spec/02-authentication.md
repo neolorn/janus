@@ -899,7 +899,7 @@ second factor SHALL then be skipped on that browser for `factor.trusteddevice.li
 **Values (D-153).** The trust token lives in `__Host-identity-device`: 32 random bytes,
 base64url, stored server side against the account.
 
-*Source: D-124, D-166, D-186*
+*Source: D-124, D-166, D-186, D-224*
 
 **Mechanics.** A separate, opaque, single-purpose device token in its own `__Host-`
 cookie, stored server-side against the account with created-at, last-used, and a
@@ -942,6 +942,10 @@ so its sign-in is not offered the option and records no trusted device (D-166).
    that this exposure no longer exists.
 8. A `restricted` account's sign-in is not offered the option, and a request to trust
    the browser on it records no trusted device.
+9. A sign-in whose first factor is accepted and whose second step is asked for is told,
+   on that `factorRequired` answer, whether the call that completes it may trust the
+   browser (`trustDeviceOffered`, `09` `POST /auth/factor`), so the choice is offered
+   beside the second step (D-224).
 
 ---
 
@@ -953,18 +957,25 @@ the account has not seen SHALL NOT complete until the person enters a code sent 
 account's **primary email**. The browser SHALL then be remembered for
 `device.verification.lifetime` (default **90 days**). Completing the terms step of
 registration (REG-SESS-007) SHALL record the registering browser as seen for the same
-period, so the sign-in that registration performs and the next one from that browser
-are not held for a code. A passkey sign-in and a
-completed two-step sign-in SHALL never trigger the check. The send SHALL be subject to
-the email destination restriction (AUTH-ABUSE-004). The pending state SHALL be
-reported as the sign-in status `deviceVerificationRequired` of `POST /auth/factor`,
-answered 200 and not a refusal; completion SHALL raise `DeviceVerified`.
+period, so the sign-in that registration performs and the next one from that browser are
+not held for a code. A passkey sign-in and a completed two-step sign-in SHALL never
+trigger the check. Nor SHALL a sign-in whose accepted first factor is an `emailLink` or
+an `emailCode` delivered to the account's primary email, or the code a sign-in link's
+page showed for such a link: that factor proved the mailbox the check's code would go
+to, so the browser SHALL be remembered as a completed check remembers it (D-224). The
+send SHALL be subject to the email destination restriction (AUTH-ABUSE-004); where the
+restriction refuses it, the factor SHALL stay accepted and the sign-in held at the
+check, and a resend (`09` `POST /auth/device/resend`) SHALL send a code once the
+restriction allows it (D-224). The pending state SHALL be reported as the sign-in status
+`deviceVerificationRequired` of `POST /auth/factor`, answered 200 and not a refusal;
+completion SHALL raise `DeviceVerified`, and so SHALL a sign-in the primary email's
+factor exempted.
 
 **Values (D-153).** A browser that passed the check is remembered by a
 `__Host-identity-browser` cookie: 32 random bytes, base64url, stored server side, valid
 for `device.verification.lifetime`.
 
-*Source: D-148; D-146; AUTH-FACT-004, AUTH-ABUSE-004; D-166*
+*Source: D-148; D-146; AUTH-FACT-004, AUTH-ABUSE-004; D-166, D-224*
 
 A single-factor account's only protection against a leaked password is that the
 attacker is usually somewhere else. The check turns that into a rule without making
@@ -987,6 +998,13 @@ and the code is a verification code (AUTH-FACT-004), not a credential.
 7. A password-only account's first sign-in after registration, from the browser that
    completed the terms step, is not held for a code inside
    `device.verification.lifetime`.
+8. A sign-in by an email link or email code sent to the primary email, from an
+   unrecognised browser, completes without the check, remembers the browser and raises
+   `DeviceVerified`; one by a link or code sent to another verified email, or to a
+   phone, is held, and its code goes to the primary email.
+9. Where `email.destination` refuses the check's code, the sign-in stays held with its
+   factor accepted; a resend after `retryAt` sends a code, the one before it no longer
+   verifies, and the new code completes the sign-in.
 
 ---
 
@@ -1327,7 +1345,7 @@ same session record.
 the **OIDC authorization code flow with PKCE**, with each browser application's BFF a
 **confidential client** in the client registry. The BFF SHALL retain no token.
 
-*Source: D-104, D-007, D-033.3, D-147, D-166, D-171, D-192, D-196, D-198*
+*Source: D-104, D-007, D-033.3, D-147, D-166, D-171, D-192, D-196, D-198, D-224*
 
 **The flow.** A BFF holding no session pushes an authorization request with
 `prompt=none` to `POST /oidc/par` over the back channel and redirects the browser to
@@ -1346,6 +1364,18 @@ reason from the record it is bound to (OPS-BOOT-002, D-171). The provider writes
 `sid` of every ID token it issues to a browser application the identifier of the session
 record its code was issued from, so a token that holds up and carries no session
 identifier in `sid` is a fault at the sign-on, never a refusal (BFF-SESS-006, D-196).
+
+**Back to the application (D-224).** A request that is not silent and finds no live
+session is kept, its pushed request spent, as the browser's **pending authorization**:
+its validated parameters, bound to the browser's pre-authentication session, one a
+browser and a later one replacing it, for `oidc.continuation.lifetime` (`10` section
+4.9, default 30 minutes). The browser goes to the sign-in address. The answer that
+completes the sign-in carries `continueTo`, the absolute address of
+`GET /oidc/authorize/continue` under the provider address, which issues the code as the
+authorization would have with the session now live, and spends the pending
+authorization; with none pending it sends the browser to the origin of the registered
+address of `redirect.defaultclient`. No destination crosses in the browser's hands
+(API-REDIR-001), and the pushed request keeps its 60 seconds (AUTH-OIDC-006).
 
 **What this reuses rather than invents:** the client registry (AUTH-OIDC-001,
 API-REDIR-002), exact-match `redirect_uri` (AUTH-OIDC-006, D-198), single-use
@@ -1379,6 +1409,10 @@ endpoint. Every one is a standard requirement restated, not a mechanism designed
    downgrade; establishing it changes no instant of the record.
 9. Every ID token the provider issues to a browser application carries in `sid` the
    identifier of the session record its code was issued from.
+10. A request that is not silent, met with no session, is answered after the sign-in
+    completes: the completing answer carries `continueTo`, and following it issues the
+    code to the client's registered destination with its `state`; a second follow, or
+    one past `oidc.continuation.lifetime`, issues nothing.
 
 ---
 
@@ -1501,7 +1535,7 @@ or application identity.
 | **AAL1** (the system policy — customers) | **90 days** without use; each use refreshes it | **365 days** — a definite overall timeout, as NIST §2.1.3 requires; in practice a once-a-year sign-in |
 | **AAL2** (the administrative organization) | **1 hour** | **24 hours** |
 
-*Source: D-033.1, D-020.2, D-123, D-130, D-197*
+*Source: D-033.1, D-020.2, D-123, D-130, D-197, D-224*
 
 **Why the sign-in method does not set the lifetime.** A customer who signs in with a
 passkey reaches AAL2, but their policy requires only AAL1; giving them the staff
@@ -1536,9 +1570,11 @@ knowledge bound to the session secret, the same class). For a passkey holder tha
 tap. **This single-factor restore applies only where the policy requires AAL2** (D-139):
 the allowance is written for a short gap, and a customer's idle limit is 90 days — a
 customer whose session lapsed after three months of silence signs in normally (their
-trusted device, if any, still applies). The frontend reauthenticates **in place** and
-retries the interrupted request with its data intact (FE-API-004); an expiry never lands
-the person on a sign-in page with their work gone.
+trusted device, if any, still applies). The frontend reauthenticates **in place**, on
+whichever application the expiry met, through `POST /auth/restore/begin` and
+`POST /auth/restore` (`09`, D-224), and retries the interrupted request with its data
+intact (FE-API-004); an expiry the restore admits never lands the person on a sign-in
+page with their work gone.
 
 Runtime-configurable. Ceilings: `session.aal2.absolute` ≤ 24 hours,
 `session.aal2.inactivity` ≤ 12 hours, `session.default.inactivity` ≤ 365 days,
@@ -3376,16 +3412,18 @@ key (AUTH-FACT-006).
 server serves: the versions of the key-encryption key, the versions of the fingerprint
 key, the maintenance credential (OPS-MIG-003a), the mail server's secret where the
 shipped adapter is the mail server in use (CONV-DESIGN-007), and each social provider's
-credential by provider name. No secret is an argument of `AddJanus`. A `Janus.Cli`
-command reads the same values from one JSON document on standard input (OPS-SEC-001),
-save `migrate`, which reads no key (OPS-MIG-001, D-204). A
-secret that cannot be read stops startup with `model.startup.secretunavailable`,
-`details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`,
-`maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`, and `input`
-where a `Janus.Cli` command cannot read its document. A start with no secret source
-declared is not this refusal: it fails with `model.startup.declarationmissing`,
-`details.key` `secretSource` (LIB-HOST-001). Every version of the fingerprint key SHALL
-be at least 32 bytes; a shorter one SHALL be refused, never padded.
+credential by provider name, and the delivery-report key, `smsReportKey`, at least 32
+bytes, read by the server and by no command (INT-SMS-005, D-224). No secret is an
+argument of `AddJanus`. A `Janus.Cli` command reads the same values from one JSON
+document on standard input (OPS-SEC-001), save `migrate`, which reads no key
+(OPS-MIG-001, D-204). A secret that cannot be read stops startup with
+`model.startup.secretunavailable`, `details.key` naming the secret: `keyEncryptionKeys`,
+`fingerprintKeys`, `maintenanceCredential`, `mailServerSecret`, `smsReportKey` or
+`socialProvider.<provider>`, and `input` where a `Janus.Cli` command cannot read its
+document. A start with no secret source declared is not this refusal: it fails with
+`model.startup.declarationmissing`, `details.key` `secretSource` (LIB-HOST-001). Every
+version of the fingerprint key SHALL be at least 32 bytes; a shorter one SHALL be
+refused, never padded.
 
 The key the provider encrypts its authorization codes and refresh tokens under SHALL be
 derived from each held version of the key-encryption key by HKDF-SHA256 with the info

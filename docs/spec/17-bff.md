@@ -583,18 +583,26 @@ serving as the CSRF token's binding target before a real session exists.
 the registration session it carries being bound to it; no separate key. Its cookie ends
 with the browser's session, as the notice lists it (BFF-SESS-002, PRIV-CONS-006a, D-203).
 
-*Source: D-092, D-146, D-166, D-202, D-203*
+*Source: D-092, D-146, D-166, D-202, D-203, D-224*
 
 `/register`, `/auth/begin`, `/auth/link`, `/auth/factor` and `/recovery/begin` are
 state-changing browser endpoints reached before any session exists. Without this, an implementer must
 either invent an anonymous session or quietly exempt them — and exempting is precisely
 what "no endpoint can opt out" prohibits.
 
-**It rotates into the real session on authentication** (AUTH-SESS-006), which also
-gives the fixation defence a defined starting point. It is also the binding target for
-the `state` value of the sign-on redirect (BFF-SESS-006), for the `state` of a provider
-round trip started to sign in or register (IDN-LIFE-012; one started to link is bound
-to the session), and for the registration session (BFF-CSRF-005b).
+**It rotates into the real session on authentication** (AUTH-SESS-006), which also gives
+the fixation defence a defined starting point. It is also the binding target for the
+`state` value of the sign-on redirect (BFF-SESS-006), for the `state` of a provider
+round trip started to sign in or register (IDN-LIFE-012; one started to link is bound to
+the session), for the registration session (BFF-CSRF-005b), and for the browser's
+pending authorization (AUTH-SESS-012, D-224).
+
+**Requests that carry no cookie (D-224).** Two requests that carry no cookie hold
+nothing that ties them to one browser, so each is issued a pre-authentication session
+and a CSRF token of its own, and the later answer's cookies replace the earlier's. A
+frontend holding none of the library's cookies therefore makes its first request alone
+and sends the rest once its answer has set them (`18` FE-API-002). A token accepted from
+any browser within a window would bind nothing.
 
 **Acceptance criteria**
 1. A pre-authentication session is issued on first contact with any pre-session
@@ -1019,7 +1027,7 @@ identifier.
 **BFF-STEP-001** — Where a request requires step-up, the BFF SHALL reject it with the
 step-up code rather than performing it.
 
-*Source: AUTH-STEP-001, D-166, D-191, D-192, D-193*
+*Source: AUTH-STEP-001, D-166, D-191, D-192, D-193, D-224*
 
 The frontend initiates the step-up flow and retries. The BFF does not redirect
 mid-request.
@@ -1030,6 +1038,13 @@ D-123, D-139): the BFF rejects with the code and `details.reauthenticate` —
 policy's `requiredAssurance` is `aal2`, except in a break-glass session, whose account
 holds no factor to restore it with (OPS-BOOT-002); `full` otherwise (always `full` for a
 customer) — and never redirects.
+
+**The restore in place (D-224).** On a `single-factor` expiry the browser profile admits
+the expired session's cookie, and the CSRF token bound to it, on
+`POST /auth/restore/begin` and `POST /auth/restore` alone (`09`), on every application,
+so the frontend restores the session where it met the expiry and retries the interrupted
+request (`18` FE-API-004). Every other request on that cookie is answered as stage 8
+answers it.
 
 The `details` of the identity API's `auth.stepup.required` response — the three gate
 values, the `outcome`, the `options` and `pendingUntil` (`09` `/auth/step-up`, D-141) —
@@ -1045,6 +1060,10 @@ navigation (BFF-ERR-001) the step-up code crosses in `error` with nothing of its
    without re-submitting business data the user would have to re-enter.
 3. An expired-session rejection carries `details.reauthenticate`; retrying after
    reauthentication succeeds with the original data.
+4. A session expired for inactivity under a policy requiring AAL2 is restored on the
+   application where it expired, by `POST /auth/restore/begin` and `POST /auth/restore`
+   carried by its cookie and CSRF token, and no other route accepts that cookie until it
+   is.
 
 ---
 
@@ -1154,7 +1173,7 @@ reads or changes the account's state.
 | 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162). An enrolment session is resolved only on the routes `POST /enrol/begin` lists; elsewhere the request continues as one that carried none, its cookie kept (`09`, D-189). Where the host's routing runs after the profile, no route is known yet, so an enrolment session is resolved on none (D-210) |
 | 6 | CSRF synchronizer token validation | Requires the session; must precede any state change |
 | 7 | Account-based throttling (AUTH-ABUSE-001, AUTH-RECOV-002) | Requires the account the request names, which only the operation reads |
-| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked as answering anyone, whatever routing selected it, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188). Where the host's routing runs after the profile, the endpoint it selects is judged then, before it runs (BFF-HOST-002, D-209) |
+| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked as answering anyone, whatever routing selected it, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188); `POST /auth/restore/begin` and `POST /auth/restore` take a session expired for inactivity instead (BFF-STEP-001, D-224). Where the host's routing runs after the profile, the endpoint it selects is judged then, before it runs (BFF-HOST-002, D-209) |
 | 9 | Host endpoint | |
 | 10 | Capability projection | Requires the result set. A host endpoint places what `CapabilityFields` answers on its records itself (BFF-CAP-002); the stage adds nothing to its answer |
 | 11 | Error translation and concealment | **Last**, so nothing earlier has disclosed existence |

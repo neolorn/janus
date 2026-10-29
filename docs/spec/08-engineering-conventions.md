@@ -1044,7 +1044,7 @@ the main package reference at run time, for no purpose but the package's depende
 | Public surface tracking | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | CONV-SETUP-003 |
 | Analyser authoring (`Janus.Analyzers` and its test project) | `Microsoft.CodeAnalysis.CSharp`, `Microsoft.CodeAnalysis.Analyzers` | The six rules the gates rely on (CONV-CODE-008); the analysers ship as a package of their own that a build loads (`07` LIB-PKG-001), and a compiler older than the one they were built against refuses them, so these two move only by a decision-log entry (CONV-DEP-004); `Microsoft.CodeAnalysis.CSharp` is referenced at 5.0.0, the compiler of SDK 10.0.100, the first .NET 10 SDK, so the analysers load in every .NET 10 SDK, and `Microsoft.CodeAnalysis.Analyzers` at 5.6.0, which checks the analysers' own code in the library's build and is no dependency of the package (D-197) |
 | Versioning | `MinVer` | Version from the git tag, nothing to maintain (CONV-VCS-005) |
-| Tests | `xunit.v3`, `Microsoft.Testing.Platform` (as xunit.v3's runner), `Testcontainers.PostgreSql` | CONV-TEST-002 |
+| Tests | `xunit.v3`, `Microsoft.Testing.Platform` (as xunit.v3's runner), `Testcontainers.PostgreSql`, `Testcontainers` (the container of the mail server's real-server tests, at the version `Testcontainers.PostgreSql` brings, D-224) | CONV-TEST-002 |
 
 `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational`,
 `Microsoft.EntityFrameworkCore.Design` and the `dotnet-ef` tool (CONV-SETUP-002) SHALL
@@ -1364,11 +1364,17 @@ throw.**
 | Fault | Database unreachable, invalid configuration, missing policy registration, a resource type or permission named at a gate request that the model does not declare | Throw |
 | Validation | Bad model declaration, out-of-range configuration | Throw at startup |
 
-*Source: LIB-API-003, and the startup validation requirements throughout; D-166*
+*Source: LIB-API-003, and the startup validation requirements throughout; D-166, D-224*
 
 Failed authentication is routine, not exceptional. Modelling it as an exception is
 slow and — more importantly — easy to swallow accidentally, which defeats the
 fail-closed requirements in documents 02, 03 and 04.
+
+**A startup fault names its check (D-224).** A startup fault is a `StartupException`.
+Where it carries the failure its check produced, its message is the operator's sentence
+followed by the failure's code and each of its details by name and value, so a host that
+logs the exception alone has the check. No detail of a startup failure carries a
+secret's value, so the message is safe to log.
 
 **Acceptance criteria**
 1. No authentication or authorization denial is signalled by an exception: no exception
@@ -1379,6 +1385,8 @@ fail-closed requirements in documents 02, 03 and 04.
    request. A resource type or permission named at a gate request that the model does not
    declare throws at that request, at every gate entry point that takes one, before the
    gate reads or records anything.
+4. The message of a `StartupException` carrying a failure holds the failure's code and
+   every detail's name and value.
 
 ---
 
@@ -1441,7 +1449,7 @@ and `samples/HostSample.Tests` (CONV-LAYOUT-001, D-204).
 | Kind | Runs against | Purpose |
 |---|---|---|
 | Unit | Nothing external | Fast, run constantly |
-| Integration | Real PostgreSQL in containers | Where most value lies — this system is about how data and permissions behave together |
+| Integration | Real PostgreSQL in containers, and a real server of the release each shipped adapter for an external server is written for (the mail server, INT-MAIL-001) | Where most value lies — this system is about how data and permissions behave together, and an adapter is right only where the server agrees |
 | Contract | The public surface | Guards LIB-API-001; fails on unintended change |
 | Conformance | A host's own configuration | Shipped per LIB-TEST-001 |
 
@@ -1449,7 +1457,14 @@ A contract test that reads the library-owned schema from a migrated database (LI
 AC2, LIB-TEST-002 AC2) is of the integration kind; it compares with the committed schema
 file, leaf partitions excluded.
 
-*Source: LIB-TEST-001, LIB-TEST-002, D-166, D-197*
+**An adapter meets its server (D-224).** A shipped adapter for an external server is
+tested against a real server of the release it is written for, its container image
+pinned by digest, in the integration kind; a fake of the server may serve the unit tests
+beside it, and decides none of the adapter's criteria. The test reaches the server as a
+deployment does, over TLS, trusting the container's certificate through the adapter's
+own HTTP client and never by turning validation off.
+
+*Source: LIB-TEST-001, LIB-TEST-002, D-166, D-197, D-224*
 
 **Acceptance criteria**
 1. Unit tests run without containers: no test class of the unit or contract kind takes
@@ -1458,6 +1473,8 @@ file, leaf partitions excluded.
 3. Kinds are independently runnable.
 4. Every test class carries exactly one kind, and one pipeline job runs each kind across
    every test project.
+5. Every acceptance criterion of a shipped adapter that a server decides is decided by a
+   test against a real server of its release, whose image the test names by digest.
 
 ---
 

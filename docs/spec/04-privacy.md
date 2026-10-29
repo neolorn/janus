@@ -430,6 +430,11 @@ version's number is the count of versions of that document published before it p
 one, written in decimal, counted per document; the highest is the current version. It
 crosses the wire as the string `version` (`09` section 7).
 
+**The texts' format (D-224).** A version's governing text and each translation are
+CommonMark 0.31.2. The library stores and serves them as published and renders none of
+them; a frontend renders them as CommonMark with raw HTML disabled, escaping any HTML a
+text holds (`18` FE-COMP-002).
+
 **Acceptance criteria**
 1. Every published document version carries exactly one governing language; a version
    published without naming one takes `legal.governinglanguage`.

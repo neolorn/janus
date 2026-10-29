@@ -77,14 +77,21 @@ travels only in the cookie the BFF sets.
 **FE-API-002** — Every state-changing request SHALL carry the CSRF token and the
 required custom header.
 
-*Source: BFF-CSRF-001, BFF-CSRF-003*
+*Source: BFF-CSRF-001, BFF-CSRF-003, BFF-CSRF-005a, D-224*
 
 Both are applied by a single HTTP interceptor. **No request builds them by hand** —
 one place, so no call site can omit them.
 
+**The first request goes alone (D-224).** A frontend holding none of the library's
+cookies makes its first request alone, and sends the rest once its answer has set them:
+requests that carry no cookie are each issued a pre-authentication session and a CSRF
+token of their own, and the later answer's would replace the token an earlier request
+relies on (`17` BFF-CSRF-005a).
+
 **Acceptance criteria**
 1. A state-changing request issued without going through the interceptor fails.
 2. The token is refreshed when the session rotates.
+3. With no cookie held, no request is sent before the first request's answer arrives.
 
 ---
 
@@ -123,17 +130,18 @@ round trip (FE-ACCT-001, D-193).
 *Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186, D-188, D-189,
 D-192, D-193*
 
-The BFF rejects rather than redirecting mid-request. Recovering is the frontend's
-job. For an expiry, `details.reauthenticate` is `single-factor` or `full`, and the
-frontend acts on the value as sent (AUTH-SESS-005 AC3a, BFF-STEP-001, D-139):
-`single-factor` is returned only for an idle expiry inside the absolute window of a
-principal whose policy requires `aal2` (staff), and one eligible factor (passkey or
-password) restores the session; every other expiry, including an idle expiry under
-the system policy (every customer session), returns `full` and needs full
-authentication. The frontend never infers the value from the kind of expiry. Either
-way the interrupted request completes afterwards with its data intact.
+The BFF rejects rather than redirecting mid-request. Recovering is the frontend's job.
+For an expiry, `details.reauthenticate` is `single-factor` or `full`, and the frontend
+acts on the value as sent (AUTH-SESS-005 AC3a, BFF-STEP-001, D-139): `single-factor` is
+returned only for an idle expiry inside the absolute window of a principal whose policy
+requires `aal2` (staff), and one eligible factor (passkey or password) restores the
+session, through `POST /auth/restore/begin` and `POST /auth/restore` on the application
+where it expired (`09`, D-224); every other expiry, including an idle expiry under the
+system policy (every customer session), returns `full` and needs full authentication.
+The frontend never infers the value from the kind of expiry. Either way the interrupted
+request completes afterwards with its data intact.
 
-*Source: D-148; D-147; AUTH-SESS-005, BFF-STEP-001, D-139*
+*Source: D-148; D-147; AUTH-SESS-005, BFF-STEP-001, D-139, D-224*
 
 **The prompt SHALL offer every combination that reaches the gate**: exactly the
 `details.options` the step-up response lists (`09` `/auth/step-up`): for a customer who
@@ -158,6 +166,12 @@ reports (`assuranceLevel`, `phishingResistant`) meets the gate the 403 named, an
 original request is then retried, whether the answer was `factorRequired` or `complete`;
 a 200 `complete` whose report does not meet that gate ends the prompt, and the original
 request is retried and answered by its own gate (AUTH-STEP-002, D-190, D-191).
+
+**An acknowledged invitation (D-224).** Acknowledging an invitation
+(`POST /account/invitation/acknowledge`) downgrades the session and ends none
+(AUTH-SESS-009): the session keeps reading, and its next request a gate asks a step-up
+for is answered `auth.stepup.required` and handled as this item states, its options
+judged under the organization's policy.
 
 *Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188, D-190,
 D-191, D-197*
@@ -217,10 +231,17 @@ session makes on its routes (FE-API-004, D-188, D-189) is refused 401 with no `d
 (BFF-ORDER-001 stage 8). A route the browser was returned to with `error` (FE-API-003)
 SHALL render the refusal and SHALL NOT navigate to the sign-on by itself.
 
-*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188, D-189, D-198*
+*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188, D-189, D-198,
+D-224*
 
 The sign-on is the library's (BFF-SESS-006); the frontend only starts it, because only
 the frontend knows the route the person meant to reach.
+
+**Back where the sign-on began (D-224).** The authentication application's sign-in page,
+given an answer that completes a sign-in and carries `continueTo`, or finding it at
+`GET /auth/session` after a navigation completed one, SHALL send the browser there,
+where the provider answers the authorization that sent the person to sign in
+(AUTH-SESS-012); without it the page shows its own signed-in state.
 
 **Acceptance criteria**
 1. Opening a route with no per-app session and a live authentication session navigates
@@ -229,6 +250,8 @@ the frontend knows the route the person meant to reach.
 2. A 401 carrying `details.reauthenticate` is handled in place (FE-API-004) and never
    starts the sign-on.
 3. A route returned to with `error` shows the refusal and starts no sign-on of its own.
+4. A sign-on that met no session ends, once the person signs in, on the route of the
+   application it began from, with a session and no further interaction.
 
 ---
 
@@ -388,7 +411,7 @@ through the localization library. The compliance-texts response carries, per ver
 the **governing language** and the languages of the attached translations
 (PRIV-CONS-005), and the frontend SHALL render from those fields.
 
-*Source: PRIV-CONS-006, PRIV-CONS-005, D-031, D-146*
+*Source: PRIV-CONS-006, PRIV-CONS-005, D-031, D-146, D-224*
 
 The requested locale determines which text is shown first, where a translation in it
 exists; it never removes the governing text from reach (FE-COMP-001).
@@ -396,10 +419,15 @@ exists; it never removes the governing text from reach (FE-COMP-001).
 Because this text is API data rather than localization messages, the integrity of a
 consent record does not depend on the localization library at all.
 
+**Rendering (D-224).** A document's text and each translation are CommonMark 0.31.2
+(PRIV-CONS-005). The frontend renders them as CommonMark with raw HTML disabled, so HTML
+a text holds is escaped and shown as text, never parsed into elements.
+
 **Acceptance criteria**
 1. No compliance text exists as a localization message.
 2. The version identifier is submitted with the consent, never the rendered text.
 3. The governing language shown for a version is the one the response carries.
+4. A text holding an HTML element renders that element's markup as text.
 
 ---
 
@@ -557,7 +585,7 @@ a provider round trip started to register and returned with `error`
 `auth.session.expired` means the same (`09`, D-192).
 
 *Source: D-146; REG-SESS-002, REG-SESS-004, REG-SESS-006, REG-SESS-008, REG-IDENT-010,
-API-REDIR-002, D-166, D-186, D-192*
+API-REDIR-002, D-166, D-186, D-192, D-224*
 
 The first six steps run on the authentication application against the registration
 session; the account exists from the end of step 6; steps 7 to 10 run on the account
@@ -565,6 +593,15 @@ application in the new session. A wizard that kept its own copy of the state wou
 disagree with the server the moment a link verified an identifier in another tab, or a
 session expired; the server's state is the only state. The age screen is neutral and
 precedes every identifier field (REG-PROF-002).
+
+**Steps 7 to 10 (D-224).** The server state the wizard reads is the registration
+session's, steps 1 to 6. Steps 7 to 10 are account screens on the account application:
+each writes to the account through its own route, and which of them the person is on is
+the account application's route, so a reload returns to the step its route names and
+moving on replaces the history entry. The membership step reads its invitation from
+`GET /account/invitation`. The done step reads `landing` from `GET /auth/session` on the
+account application, whose session is bound to the record the terms step established
+(REG-SESS-008).
 
 **Acceptance criteria**
 1. The steps appear in the order of REG-SESS-002; no step is reachable before its
@@ -574,8 +611,9 @@ precedes every identifier field (REG-PROF-002).
 3. The confirm screen lists every staged identifier with its state and completes only
    when all are verified; an extra identifier can be added up to the maxima and an
    unverified extra removed.
-4. Reloading the browser at any step restores the same step and state from the server;
-   no registration state survives in browser storage.
+4. Reloading the browser at any of steps 1 to 6 restores the same step and state from
+   the server, and at any of steps 7 to 10 the step its route names; no registration
+   state survives in browser storage (D-224).
 5. The final step shows the summary and lands, with an established session, on the
    `landing` origin `GET /auth/session` answers, the origin of the client's registered
    address; no destination parameter is sent (FE-REG-001).
@@ -666,7 +704,16 @@ hands the token to on a press:
 | `loss-report` | Account | `POST /recovery/report-loss/{id}/cancel` (AUTH-RECOV-007) |
 
 *Source: D-148; D-146; REG-SESS-003, AUTH-FACT-003, API-LAND-001, BFF-CSRF-005b,
-LIB-HOST-001, D-166, D-187, D-190*
+LIB-HOST-001, D-166, D-187, D-190, D-224*
+
+**What a link does not carry (D-224).** A link names no record: where the flow's route
+takes `{id}`, the landing sends the nil UUID, `00000000-0000-0000-0000-000000000000`,
+which a route given a link token does not read, and a sign-in link's press sends no
+`challengeId`, the token naming its challenge (`09`). A sign-in completed by a press in
+another tab of the originating browser reaches the tab that asked through
+`GET /auth/session`, which it polls while it waits, or through a message from the
+landing tab; where the press's answer carries `continueTo`, the landing sends the
+browser there (FE-API-006).
 
 The server decides which case applies: the landing call without `press` returns
 `sameBrowser` and, where false, the code (`09` `POST /register/verify/{id}`). The
@@ -695,6 +742,9 @@ control to end the attempt.
 7. Once the landing has read the fragment, the address bar shows `/link` with no
    fragment; no request the landing makes carries the token in its target; the response
    that serves the page carries `Referrer-Policy: no-referrer`.
+8. A press of a sign-in, registration, identifier, undo or loss-report link from a
+   landing that holds no challenge or record identifier completes as the flow states;
+   the landing sends the nil UUID wherever a route takes `{id}`.
 
 ---
 
@@ -726,11 +776,13 @@ fields that are not the identifier.
 holding the primary identifier. Fields SHALL NEVER be injected into or removed from a
 form dynamically; a field that is not needed is hidden and reused.
 
-*Source: D-146*
+*Source: D-146, D-224*
 
-A manager pairs the new password with an account through the username field; without
-it the saved entry has no identifier. A form whose fields appear after load is one a
-manager fills before they exist.
+A manager pairs the new password with an account through the username field; without it
+the saved entry has no identifier. The primary identifier is the account's primary
+email, read from `GET /account` on a signed-in form, from `POST /recovery/username` on
+the self-service reset form, and from `GET /enrol` on an enrolment session (`09`,
+D-224). A form whose fields appear after load is one a manager fills before they exist.
 
 **Acceptance criteria**
 1. The change and reset forms contain a username field, hidden, populated with the
@@ -824,7 +876,8 @@ for a **label**, defaulting to the client's description of the device (AUTH-FACT
 `phoneCode` enrolment prompts for a label too, with no default (D-197). A second-factor
 security key SHALL offer an **upgrade to a passkey**
 (`POST /account/credentials/{id}/upgrade`). The two-step controls SHALL be **disabled
-until a password exists** on the account. `phoneCode` SHALL be shown with its
+until a password exists** on the account, as `password.set` of `GET /account`, or of
+`GET /enrol` on an enrolment session, says (D-224). `phoneCode` SHALL be shown with its
 **less-secure flag** wherever it is listed. A `phoneCode` enrolment calls
 `POST /account/factors/phonecode/begin` and `/confirm`, shows the limitation before the
 number is confirmed (AUTH-FACT-002b criterion 5), and shows a `begin` answered 422
@@ -833,10 +886,12 @@ SHALL be shown **once** with copy, download and print, and a **confirm-saved** c
 SHALL gate continuation (AUTH-RECOV-006); a copy, download or print SHALL be reported at
 `POST /account/recoverycodes/exported`, which sets `exportedAt` (AUTH-FACT-008), save in
 an enrolment session, where the confirm-saved control alone reports the export, once,
-since that report ends the session (AUTH-RECOV-006, D-189).
+since that report ends the session (AUTH-RECOV-006, D-189), and at registration, where
+the security step shows them before the account exists: their export is reported once,
+on the session the terms step establishes, at once after that step (D-224).
 
 *Source: D-146; AUTH-FACT-002b, AUTH-FACT-001, AUTH-RECOV-006, AUTH-FACT-008, D-162,
-D-166, D-189, D-197*
+D-166, D-189, D-197, D-224*
 
 The two dialogs are the one place the frontend chooses between a credential that signs
 in and one that is a second factor; the server cannot make that choice for it. Where

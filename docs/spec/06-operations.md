@@ -1329,14 +1329,15 @@ possible when the operator is unreachable.
 host's secret source (`ISecretSource`, LIB-EXT-001), asynchronously, in its startup
 hosted service before the server serves: the key-encryption key versions, the
 fingerprint key versions, the maintenance credential (OPS-MIG-003a), the mail server's
-secret where the shipped mail-server adapter is used (INT-MAIL-001), and each declared
-social provider's credential by provider name. No secret is an argument of `AddJanus`.
-A secret the source cannot supply stops startup with `model.startup.secretunavailable`,
-`details.key` naming it (`keyEncryptionKeys`, `fingerprintKeys`,
-`maintenanceCredential`, `mailServerSecret`, `socialProvider.<provider>`, or `input`
-for a command's document). A start with no secret source declared is not this refusal:
-it fails with `model.startup.declarationmissing`, `details.key` `secretSource`
-(LIB-HOST-001).
+secret where the shipped mail-server adapter is used (INT-MAIL-001), each declared
+social provider's credential by provider name, and the delivery reports' key,
+`smsReportKey`, at least 32 bytes, read by the server alone (INT-SMS-005, D-224). No
+secret is an argument of `AddJanus`. A secret the source cannot supply stops startup
+with `model.startup.secretunavailable`, `details.key` naming it (`keyEncryptionKeys`,
+`fingerprintKeys`, `maintenanceCredential`, `mailServerSecret`, `smsReportKey`,
+`socialProvider.<provider>`, or `input` for a command's document). A start with no
+secret source declared is not this refusal: it fails with
+`model.startup.declarationmissing`, `details.key` `secretSource` (LIB-HOST-001).
 
 A `Janus.Cli` command SHALL read its database connection and every key version it needs
 from one JSON document on standard input, the same document the secret source serves,

@@ -966,18 +966,23 @@ done step (`18` FE-REC-003).
 left for later, and SHALL return the person, signed in, to the **origin of the
 registered return address** of the application named by the client identifier captured
 at step 1, never to an address supplied in any request (API-REDIR-001, API-REDIR-002).
-The client captured at step 1 SHALL be kept on the session the terms step establishes,
-and the done step SHALL read its origin from `GET /auth/session` (`landing`); where no
-client was stored, `landing` is absent and the frontend chooses its own (API-REDIR-002,
-D-198). The landing address SHALL receive a signed-in session and nothing else;
-restoring what the person was doing is the application's responsibility.
+The client captured at step 1 SHALL be kept on the session record the terms step
+establishes, so every application session bound to that record answers it, the account
+application's, where the done step runs, among them (D-224), and the done step SHALL
+read its origin from `GET /auth/session` (`landing`); where no client was stored,
+`landing` is absent and the frontend chooses its own (API-REDIR-002, D-198). The landing
+address SHALL receive a signed-in session and nothing else; restoring what the person
+was doing is the application's responsibility.
 
-*Source: D-146, D-162, D-166; D-057, D-198*
+*Source: D-146, D-162, D-166; D-057, D-198, D-224*
 
 **Acceptance criteria**
 1. No registration step accepts or forwards a destination parameter.
 2. The return lands on the origin of the client's registered return address, read from
    `GET /auth/session`, with an established session.
+3. `GET /auth/session` on the account application, after its sign-on from the record
+   the terms step established, answers the same `landing` the authentication
+   application does.
 
 ---
 

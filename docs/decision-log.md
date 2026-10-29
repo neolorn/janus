@@ -18672,6 +18672,267 @@ section 5.24 (`privacy.consent.granted`, `privacy.consent.withdrawn`,
 
 ---
 
+## D-224 — Round H3: what a host's own frontends meet
+
+**Date:** 2026-10-29 · **Status:** accepted · **Follows from:** D-202, D-220
+
+**TL;DR.** The decision round H3 waits for (plan, section 3a). A host building its
+authentication and account applications on the library found four defects, seven gaps in
+the contract and fifteen questions (2026-10-29, checked against 285838ac). Two more gaps
+came from its SMS gateway, which names a text by its own identifier, sends every report
+of the account to one address and reports intermediate states: the library could read
+none of its reports. And the mail-server adapter has never met a real mail server. The
+round builds every item below. Questions 11 and 15 are already answered: round P checks
+the terms and notice versions (D-222) and serves people a host keeps data on without an
+account (D-221).
+
+**Defects.**
+
+1. **A staged registration's arrays (A).** A staged session's optional byte arrays
+   round-trip through the real store as they were written: null stays null and an empty
+   array stays empty, so a staged TOTP credential reads back whole and a verified
+   identifier's link keeps its fingerprint. A registration link row is never written
+   with an empty fingerprint. A test of the real store round-trips a staged session with
+   every optional array null and one with every array set (REG-SESS-001).
+
+2. **A sign-in that proved the mailbox (B).** A sign-in whose accepted first factor is
+   an `emailLink` or an `emailCode` delivered to the account's primary email, or the
+   code a sign-in link's page showed for such a link, has proved that mailbox. The
+   new-device check does not hold it: the browser is remembered for
+   `device.verification.lifetime` and `DeviceVerified` is emitted, as a completed check
+   does (AUTH-FACT-016). A link or code delivered to another email, or to a phone, is
+   held as before, and its check's code goes to the primary email, a destination
+   `email.destination` counts apart. Where the restriction refuses the check's code, the
+   factor stays accepted and the sign-in stays held at the check: the call is answered
+   **429** `auth.restriction.exceeded` with `retryAt`, and the resend of item 18 sends
+   the code after it. *Rejected:* judging the check's send before the link is spent (the
+   hold would remain for a phone link and a second email); exempting every link sign-in
+   (a phone link proves no mailbox).
+
+3. **The registration stream's first bytes (C).** `GET /register/events` sends its
+   headers and a comment line at once, and a comment line every 30 seconds while it
+   sends nothing else, so a client knows it is connected and an idle proxy keeps the
+   stream open (`09`).
+
+4. **Parallel first requests (D): by design.** Two requests that carry no cookie hold
+   nothing that ties them to one browser, so each is issued a pre-authentication session
+   of its own (BFF-CSRF-005a). A frontend that holds none of the library's cookies makes
+   its first request alone and sends the rest once its answer has set them (FE-API-002).
+   *Rejected:* one pair for every request in a short window (a pair issued to one
+   browser would then be accepted from another).
+
+**Gaps in the contract.**
+
+5. **`/recovery/complete` declares the password refusals (E):** **422**
+   `auth.password.tooshort`, `auth.password.toolong` and `auth.password.blocklisted`, as
+   every route that sets a password does.
+
+6. **Whether a password is set (F, question 14).** `GET /account` carries `password`,
+   `{ set, changedAt }`, `changedAt` null where none is set; the enrolment document of
+   item 14 carries the same. The credential list stays the authenticators' list.
+
+7. **When `trustDeviceOffered` holds (G).** Every **200** of a sign-in carries it. On a
+   `factorRequired` answer whose `required` names a second step it is true where the
+   call that completes the sign-in may carry `trustDevice` (AUTH-FACT-015: a policy
+   below AAL2, a password at the single-factor floor, an account not `restricted`), so
+   the screen offers the choice beside the second step; a `complete` answer carries the
+   same value. It is false on every other answer, a single-factor sign-in's and every
+   step-up's among them.
+
+8. **The legal texts are CommonMark (H).** A document version's governing text and each
+   translation are CommonMark 0.31.2. The library stores and serves them as published
+   and renders none of them; a frontend renders them as CommonMark with raw HTML
+   disabled, escaping any HTML a text holds (PRIV-CONS-005, FE-COMP-002).
+
+9. **An acknowledgement downgrades (I).** The **204** of
+   `POST /account/invitation/acknowledge` ends no session and sets no cookie. The
+   session keeps reading, and its next request a gate asks a step-up for is answered
+   **403** `auth.stepup.required`, its options judged under the organization's policy
+   (AUTH-SESS-009, FE-API-004).
+
+10. **A startup failure names itself (J).** A `StartupException` carrying a failure has
+    as its message the operator's sentence, then the failure's code and each of its
+    details by name and value. No detail of a startup failure carries a secret's value
+    (CONV-ERR-001), so the message can be logged as it is.
+
+11. **The provider answers at its own address (K).** The provider's routes (`09` section
+    9) are served only under the provider address the host declares (LIB-HOST-001). Its
+    issuer is that address exactly, each route is that address followed by the route's
+    path, and a request for one of them anywhere else is not the provider's and reaches
+    the host's routing. The sample and conformance hosts are mounted the same way.
+
+**Questions.**
+
+12. **Back to the application after sign-in (1).** An authorization request that finds
+    no live session and is not silent is kept, its pushed request spent as now, as the
+    browser's **pending authorization**, bound to the browser's pre-authentication
+    session (one a browser; a later one replaces it), for `oidc.continuation.lifetime`
+    (default 30 minutes, ceiling 1 hour), and the browser goes to the sign-in address as
+    before. Every answer that completes a sign-in in a body (`POST /auth/factor`,
+    `POST /auth/device/verify`, `POST /auth/break-glass`) carries `continueTo` where one
+    is pending: the absolute address of `GET /oidc/authorize/continue` under the
+    provider address. `GET /auth/session` carries it too, for a sign-in a navigation
+    completed (a social provider's return). The page sends the browser there. The
+    continuation answers the pending authorization as `/oidc/authorize` would have
+    answered it with the session now live: **302** to the client's registered
+    destination with the code and `state`, spending it. Where none is pending, it
+    answers **302** to the origin of the registered address of `redirect.defaultclient`.
+    *Rejected:* a return address on the sign-in address (a destination in the browser's
+    hands, API-REDIR-001); keeping the pushed request past its 60 seconds
+    (AUTH-OIDC-006).
+
+13. **Restoring a session in place (2).** `POST /auth/restore/begin` and
+    `POST /auth/restore` are AUTH-SESS-005's single-factor restore, on every
+    application. Both are carried by the cookie of a session that expired for inactivity
+    and the CSRF token bound to it, which the browser profile admits on these two routes
+    alone. `begin` answers `challengeId`, `factors` (each of `passkey` and `password`
+    the account holds and the policy in force permits) and `webauthn`, the request
+    options naming the account's passkeys. `POST /auth/restore` takes
+    `{ challengeId, factor, value }` and answers **200** in `/auth/factor`'s shape,
+    `complete`: the session record restored and the identifier the cookie carries
+    rotated, every application session bound to the record living again. Where the
+    session may not be restored (none, its absolute window passed, a policy below AAL2,
+    a break-glass session), both answer **401** `auth.session.expired` with
+    `details.reauthenticate` `full`; a refused factor is answered and counted as at
+    `/auth/factor` (**422**), and the source's delay is **429** `auth.throttled`. The
+    frontend then retries the interrupted request.
+
+14. **An enrolment session's password and screen (2, 8, 9).** `POST /account/password`
+    is refused **422** `auth.factor.notpermitted` where the policy in force does not
+    hold `password` in `loginFactors`, on every session, an enrolment session's
+    included. `GET /enrol`, on the enrolment session, answers the screen's document, and
+    `POST /enrol/begin`'s **200** carries the same: `username` (the account's primary
+    email, the value FE-PM-002's hidden field holds); `password` `{ set, changedAt }`;
+    `offers`, each of `password`, `passkey`, `securityKey` and `totp` the policy's
+    `loginFactors` holds; `mailboxLost`; where it is true, `identifiers`, the account's
+    emails as `{ id, value, primary }`, which the replace names; and `expiresAt`.
+
+15. **What the frontend may know of the settings (3).** `GET /settings`, public,
+    answered with `Cache-Control: no-store`: `registration.phone`,
+    `identifiers.email.max`, `identifiers.phone.max`, `identifiers.username.enabled`,
+    `profile.legalname`, `profile.dateofbirth`, `password.floor.singlefactor`,
+    `password.floor.withmfa` and `password.maximum`; the social providers declared; the
+    purposes resting on consent or on an objectable basis, each with its name, whether
+    it takes consent or objection, its consent kind and its governing document; and
+    `policy`, the `requiredAssurance`, `loginFactors` and `photos` of the policy in
+    force for the account whose session the request carries, the system policy's where
+    it carries none. Nothing else: no restriction, rate or secret.
+
+16. **Registration steps 7 to 10 (4): held by the frontend.** FE-REG-005's server state
+    is the registration session's, steps 1 to 6. Steps 7 to 10 are account screens: each
+    writes to the account, and which of them the person is on is the account
+    application's route, so a reload returns to the step its route names; the membership
+    step reads its invitation from `GET /account/invitation`.
+
+17. **A sign-in link pressed in another tab (5).** A press that presents a sign-in
+    link's token needs no `challengeId`: the token names its pending link and the
+    challenge it belongs to, and the press completes the sign-in only where the request
+    carries the pre-authentication cookie that challenge is bound to, and answers the
+    code to type otherwise, as now. A `challengeId` sent beside a token is not read. The
+    tab that asked learns of the sign-in by `GET /auth/session` or by a message from the
+    landing tab (FE-VER-001).
+
+18. **A fresh device code (13).** `POST /auth/device/resend` `{ challengeId }`, with the
+    pre-authentication cookie the challenge is bound to: **202**, a new code sent to the
+    primary email under `email.destination`, the code before it no longer verifying;
+    **422** `auth.code.expired` where the challenge holds no sign-in held at the check,
+    one answer for every cause; **429** `auth.restriction.exceeded` with `retryAt`, or
+    `auth.throttled` with `retryAt` while AUTH-ABUSE-001's delay stands.
+
+19. **A link-borne call's `{id}` (6, 7).** Where a request presents a message's link
+    token, at `POST /register/verify/{id}`, `POST /account/identifiers/{id}/verify`,
+    `/undo` and `/abandon`, and `POST /recovery/report-loss/{id}/cancel`, the route does
+    not read `{id}`: the token names what it acts on, a loss report's cancel finding its
+    report by the token, and a landing page sends the nil UUID.
+
+20. **The username on a reset form (8).** `POST /recovery/username` `{ token }` answers
+    **200** `{ username }`, the primary email of the self-service recovery link's
+    account, and spends nothing. A token that opens nothing is **422**
+    `auth.recovery.tokeninvalid`, and one past its lifetime
+    `auth.recovery.tokenexpired`, each held to AUTH-ABUSE-001's delay and counted
+    against the source, as a link token that opens nothing is. An enrolment session
+    reads it from `GET /enrol`, an ordinary session from `GET /account`.
+
+21. **Recovery codes saved at registration (10).** Their export is reported once, on the
+    session the terms step establishes, at once after that step; the registration
+    session cannot record it, since the codes' account does not exist before then
+    (FE-SEC-001).
+
+22. **`landing` on every session of the record (12).** `landing` is the session
+    record's: every application session bound to the record the terms step established
+    answers it at `GET /auth/session`, the account application's among them, where the
+    done step runs (FE-REG-005, REG-SESS-008). Its absence there was a defect.
+
+**The SMS gateway's reports.**
+
+23. **The gateway's identifier and intermediate states.** `ISmsTransport.SendAsync`
+    answers `SmsAccepted`, carrying the gateway's identifier of the text where the
+    gateway's reports name the text by it, and none where they quote the library's
+    `Reference`. The library holds it as its SHA-256 beside the text, never logs it, and
+    looks a report up by it. `ReadReportAsync` replaces `ReadReport`: the transport is
+    given the whole request (`SmsReportRequest`: the method, the query parameters one
+    value a name, the content type and the body, at most 16 KiB) and answers the report,
+    naming either the library's reference or the gateway's identifier, and its outcome,
+    `Delivered`, `Failed` or `NotFinal`; or that the report does not read. A `NotFinal`
+    report changes nothing and is no rejection; `Delivered` and `Failed` do what
+    INT-SMS-005 states.
+
+24. **A key in the route.** The route becomes `GET` and `POST`
+    `/callbacks/sms/dlr/{key}`. `{key}` is compared in fixed time with the secret
+    `smsReportKey` the host's secret source supplies, read at startup, at least 32 bytes
+    (INT-GEN-002); a deployment that supplies none, or a shorter one, does not start
+    (`model.startup.secretunavailable`, `details.key` `smsReportKey`). A wrong key, and
+    a body over 16 KiB, are rejected as a guessed reference is, after the rate limit and
+    before any lookup. Where the gateway's identifiers can be guessed, the key is what
+    bars a forged report. The deployment gives the gateway the route's address with the
+    key, and keeps the route's path out of its proxy's logs.
+
+25. **A report the host routes.** `ISmsReports.TakeAsync`, in process, takes a report
+    the host read on a route of its own. A gateway that sends every report of an account
+    to one address, where more than one sender shares the account, leaves the routing to
+    the host, which alone knows every sender. It answers whether the report named a text
+    of the library's: where it did, the report is applied as at the route; where not,
+    nothing is changed, counted or recorded, since the host vouched for the request.
+
+**The mail server.**
+
+26. **The adapter meets a real Stalwart.** INT-MAIL-001's adapter is tested in the
+    pipeline against a real Stalwart server of the release it is written for, 1.0 (its
+    newest 1.0 patch when the round begins), its container image pinned by digest and
+    run through `Testcontainers`, which joins the allow-list (CONV-DESIGN-008). The
+    tests decide INT-MAIL-001 criteria 3 to 6 there: create, disable and enable under
+    each permission mode, remove, the listing, the conflict of criterion 4 and a replay
+    converging. App passwords are listed, created and revoked with a person's token
+    (INT-MAIL-010). Stalwart, configured as INT-MAIL-004 states against the provider of
+    a test host listening on a real port, accepts an access token issued to its client
+    and refuses one issued to another, with no introspection (INT-MAIL-004 criteria 1 to
+    3). The adapter's calls go over TLS, the test trusting the container's certificate
+    through the adapter's HTTP client `identity-mailserver` and never by turning
+    validation off. Where the server answers otherwise than the adapter's contract
+    states, the round parks that item and asks (Tier 3), since the contract changes only
+    by a decision. CONV-TEST-002 gains the rule: a shipped adapter for an external
+    server is tested against a real one, never against a fake alone.
+
+**Propagated to:** `02` AUTH-FACT-015, AUTH-FACT-016, AUTH-SESS-005, AUTH-SESS-012,
+AUTH-KEY-002; `04` PRIV-CONS-005; `05` INT-GEN-002, INT-GEN-003, INT-SMS-005,
+INT-SMS-006, INT-MAIL-001, INT-MAIL-004; `06` OPS-SEC-001; `07` LIB-API-001,
+LIB-HOST-001, LIB-EXT-001; `08` CONV-ERR-001, CONV-DESIGN-008, CONV-TEST-002; `09`
+`POST /register/verify/{id}`, `GET /register/events`, `POST /enrol/begin` and
+`GET /enrol`, `POST /auth/link`, `POST /auth/factor`, `POST /auth/device/verify`,
+`POST /auth/device/resend`, `POST /auth/restore/begin` and `POST /auth/restore`,
+`GET /auth/session`, `POST /recovery/username`, `POST /recovery/complete`,
+`POST /recovery/report-loss/{id}/cancel`, `GET /account`,
+`POST /account/identifiers/{id}/verify`, `/undo` and `/abandon`,
+`POST /account/password`, `POST /account/invitation/acknowledge`, `GET /settings`,
+section 9 (the provider's address, the continuation), section 10 (the report route);
+`10` section 4 (`oidc.continuation.lifetime`) and the startup codes, the callback
+refusal, `DeviceVerified`; `17` BFF-CSRF-005a, BFF-STEP-001, BFF-ORDER-001 (stage 8);
+`18` FE-API-002, FE-API-004, FE-API-006, FE-COMP-002, FE-REG-005, FE-VER-001, FE-PM-002,
+FE-SEC-001; `19` INF-TLS-004; `20` REG-SESS-008; `implementation-plan.md` (round H3's
+row).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18905,6 +19166,7 @@ section 5.24 (`privacy.consent.granted`, `privacy.consent.withdrawn`,
 | Round P: people without an account | D-221 |
 | Round P questions 1 to 11: the terms document, staff rows, notices, an attached record's restriction, a guest's browser | D-222 |
 | Round P questions 12 and 13: where staff's mechanism and reasons are recorded | D-223 |
+| Round H3: what a host's own frontends meet | D-224 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

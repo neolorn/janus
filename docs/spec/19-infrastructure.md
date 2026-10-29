@@ -122,18 +122,22 @@ check of INF-OBS-003, which shares no component with the renewer or with the lib
 at startup and at a change (INT-GEN-001, D-198).
 
 **One named exception, recorded rather than discovered:** the SMS gateway's delivery
-report arrives over plain HTTP with parameters in the query string. Confirm whether the
-gateway supports an HTTPS callback URL; **if it does, use it and this exception
-lapses.** This confirmation is the set's one open item (R-A12, §11), closed when the
-gateway integration is built. If it does not, that single path is exempt from
-INF-TLS-001, and the compensating controls are the unguessable reference, rate limiting,
-and the fact that the callback advances no authoritative state save the releases
-INT-SMS-005 allows, each of which can only make a person less restricted (BFF-MACH-003,
-D-197).
+report may arrive over plain HTTP, its parameters in the query string or the body.
+Confirm whether the gateway supports an HTTPS callback URL; **if it does, use it and
+this exception lapses.** This confirmation is the set's one open item (R-A12, §11),
+closed when the gateway integration is built. If it does not, that single path is exempt
+from INF-TLS-001, and the compensating controls are the key in the route's path, the
+unguessable reference where the gateway quotes the library's, rate limiting, and the
+fact that the callback advances no authoritative state save the releases INT-SMS-005
+allows, each of which can only make a person less restricted (BFF-MACH-003, D-197). Over
+plain HTTP the key travels in clear, so one who reads the traffic can forge a report,
+and what a forged report can do is what INT-SMS-005 bounds (D-224).
 
-The report carries a delivery status against an opaque reference and no personal data.
+The report carries a delivery status against the library's opaque reference or the
+gateway's identifier of the text, and no personal data. The route's path carries the
+key, so the reverse proxy's access log SHALL NOT record that path (D-224).
 
-*Source: D-092, D-197*
+*Source: D-092, D-197, D-224*
 
 *Source: INT-GEN-001, D-162, D-166, D-198*
 

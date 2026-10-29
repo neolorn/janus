@@ -55,12 +55,14 @@ production.
 
 **Values (D-166).** The provider credentials the library reads are the mail server's
 management key, where the shipped adapter is used (INT-MAIL-001), and each declared
-social provider's credential, read by the provider's name (IDN-LIFE-012). They are read
-in the startup hosted service, before the server serves; one that cannot be read stops
-startup with `model.startup.secretunavailable`, `details.key` `mailServerSecret` or
+social provider's credential, read by the provider's name (IDN-LIFE-012), and the key in
+the delivery reports' route, `smsReportKey`, at least 32 bytes (INT-SMS-005, D-224).
+They are read in the startup hosted service, before the server serves; one that cannot
+be read, or a report key shorter than 32 bytes, stops startup with
+`model.startup.secretunavailable`, `details.key` `mailServerSecret`, `smsReportKey` or
 `socialProvider.<provider>`. No provider credential is an argument of `AddJanus`.
 
-*Source: D-026.3, D-041, D-166*
+*Source: D-026.3, D-041, D-166, D-224*
 
 **Acceptance criteria**
 1. No provider credential appears in any repository file.
@@ -100,17 +102,20 @@ window, and answer 429 `integration.callback.rejected` with `Retry-After` before
 lookup. Every other refusal of a callback is 422 `integration.callback.rejected`, with
 no `Retry-After`; the route of a provider whose events follow RFC 8935 answers as `09`
 section 10 states. A correlation reference is 128 random bits, base64url, held only as
-its SHA-256 and looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003); a
-send's reference, drawn at its admission, also travels inside its outbox row's encrypted
-content until the row is removed (PRIV-RIGHT-005a). A signing secret rotates with a 24
-hour overlap (BFF-MACH-002). A callback's admission count, a rejected callback's count
-and record (one row, recorded against its source's fingerprint, which the count reads,
-D-207), the `callback-verification-failed` raise past `alerting.callback.threshold` and,
-for a provider's security event, the record of its rejection
-(`auth.providerevent.rejected`, IDN-LIFE-012a) are kept writes, committed with the
-refusal and nothing else (CONV-DESIGN-003); any other failure in handling a callback
-rolls back. Every route logs each rejection, the delivery reports' route included, and
-the log line carries no source (CONV-LOG-004, D-207).
+its SHA-256 and looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003). The
+delivery reports' route carries a key in its path, compared in fixed time with
+`smsReportKey` after the rate limit and before any lookup, a wrong key rejected as a
+guessed reference is (INT-SMS-005, D-224); a send's reference, drawn at its admission,
+also travels inside its outbox row's encrypted content until the row is removed
+(PRIV-RIGHT-005a). A signing secret rotates with a 24 hour overlap (BFF-MACH-002). A
+callback's admission count, a rejected callback's count and record (one row, recorded
+against its source's fingerprint, which the count reads, D-207), the
+`callback-verification-failed` raise past `alerting.callback.threshold` and, for a
+provider's security event, the record of its rejection (`auth.providerevent.rejected`,
+IDN-LIFE-012a) are kept writes, committed with the refusal and nothing else
+(CONV-DESIGN-003); any other failure in handling a callback rolls back. Every route logs
+each rejection, the delivery reports' route included, and the log line carries no source
+(CONV-LOG-004, D-207).
 
 *Source: D-070*
 
@@ -222,7 +227,7 @@ others.
 | App passwords | **Stored by Stalwart**, never by this system; managed for the person through the library's first-party OIDC client (INT-MAIL-010) |
 | Storage | Stalwart's own database, not co-located with business data |
 
-*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187, D-188*
+*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187, D-188, D-224*
 
 **Restated** (D-146): every management operation happens through JMAP objects, so
 "management API" means JMAP and nothing else. The four concerns are unchanged. Should the edition change,
@@ -288,6 +293,9 @@ person's token (INT-MAIL-010) and never with the management key.
    with `authenticate` its only disabled permission; one to an account that merges or
    replaces them adds `authenticate` to its disabled permissions and changes nothing
    else; the listing then answers the account disabled.
+7. Criteria 3 to 6, and INT-MAIL-010's calls, are decided by tests in the pipeline
+   against a real Stalwart server of the release the adapter is written for, 1.0, its
+   container image pinned by digest, and never by a fake alone (CONV-TEST-002, D-224).
 
 ---
 
@@ -329,7 +337,7 @@ Stalwart's use. Token introspection SHALL NOT be provided. The mail server SHALL
 configured to require its own client identifier as the audience of every access token
 it accepts (Stalwart `requireAudience`), reading the issuer and keys from discovery.
 
-*Source: D-005, D-041, D-164, D-166*
+*Source: D-005, D-041, D-164, D-166, D-224*
 
 Stalwart validates offline via JWKS and falls back to userinfo; it does not use
 introspection with client credentials. The `aud` check is the mail server's own: the
@@ -339,6 +347,9 @@ library's adapter presents tokens and verifies none (AUTH-OIDC-006).
 1. Stalwart authenticates successfully with introspection absent.
 2. The discovery document does not advertise an introspection endpoint.
 3. An access token issued to another client is refused by the mail server.
+4. Criteria 1 to 3 are decided against a real server of the release INT-MAIL-001 names,
+   configured as this item states against the provider of a test host listening on a
+   real port (D-224).
 
 ---
 
@@ -828,20 +839,38 @@ that text's count from every bucket it counted against but those of a restrictio
 release that send's one count from each restriction marked `resend` (AUTH-ABUSE-004,
 D-197); a report SHALL do nothing else.
 
-*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183, D-197, D-207*
+*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183, D-197, D-207, D-224*
 
-The gateway calls over plain HTTP with parameters in the query string, unauthenticated.
-The deployment's SMS transport (`ISmsTransport`, INT-SMS-006) reads the report from the
-gateway's own query parameters, each name taken once; a report it cannot read is
-rejected as one carrying a guessed reference is. A report of anything other than a final
-failure, an intermediate state included, is read as not failed and changes nothing, save
-a report that a text of a `secondfactor` send was delivered (D-197). Releasing counts
-and credit on a failure report, and a `secondfactor` send's count from each restriction
-marked `resend` on a delivery report, are the only state changes a report may cause:
-each can only make a person less restricted, never verified, and a forged failure report
-gains an attacker at most one extra send to a number the restriction or the credit
-already allowed, a forged delivery report at most one text to that number sooner than
-`sms.resend` would allow, within what every other restriction allows (D-197).
+A gateway's report arrives with the gateway's own parameters, in the query string or the
+body, and the library verifies no signature on it. The route carries a key in its path
+(`09` section 10): `{key}` is compared in fixed time with the secret `smsReportKey`
+(INT-GEN-002) after the rate limit and before any lookup, and a wrong key, or a body
+over 16 KiB, is rejected as a guessed reference is (D-224). The deployment's SMS
+transport (`ISmsTransport`, INT-SMS-006) reads the whole request and answers the report:
+the library's reference or the gateway's identifier of a text, and the outcome,
+`Delivered`, `Failed` or `NotFinal`. A report it cannot read is rejected as one carrying
+a guessed reference is. A `NotFinal` report, an intermediate state's, changes nothing
+and is no rejection; a `Delivered` one changes nothing, save a report that a text of a
+`secondfactor` send was delivered (D-197). Releasing counts and credit on a failure
+report, and a `secondfactor` send's count from each restriction marked `resend` on a
+delivery report, are the only state changes a report may cause: each can only make a
+person less restricted, never verified, and a forged failure report gains an attacker at
+most one extra send to a number the restriction or the credit already allowed, a forged
+delivery report at most one text to that number sooner than `sms.resend` would allow,
+within what every other restriction allows (D-197).
+
+**Values (D-224).** A report naming the library's reference is looked up by its SHA-256,
+as every correlation reference is; one naming the gateway's identifier is looked up by
+the SHA-256 of that identifier, which the library holds beside the text from the
+transport's `SmsAccepted` and never logs. Where the gateway's identifiers can be
+guessed, the key is what bars a forged report, so the deployment gives the gateway the
+route's address with the key and keeps the route's path out of its proxy's logs. A host
+whose gateway sends every report of the account to one address, and whose account more
+than one sender shares, receives the reports on a route of its own and hands each the
+library's transport reads to `ISmsReports.TakeAsync`, in process (`07` LIB-API-001): it
+answers whether the report named a text of the library's, applies one that did as the
+route would, and changes, counts and records nothing for one that did not, since the
+host vouched for the request.
 
 **Acceptance criteria**
 1. A forged report does not verify a phone.
@@ -854,6 +883,13 @@ already allowed, a forged delivery report at most one text to that number sooner
    held send answers changes nothing and is rejected, recorded against its source's
    fingerprint, logged without its source and counted toward
    `alerting.callback.threshold` (INT-GEN-003 criteria 1 and 3, D-207).
+4. A report whose key does not match `smsReportKey` changes nothing and is rejected and
+   counted as a guessed reference is; one naming a text by the gateway's identifier from
+   `SmsAccepted` is applied to that text; a `NotFinal` report changes nothing and is not
+   counted (D-224).
+5. A report handed to `ISmsReports.TakeAsync` that names a text of the library's is
+   applied and answered true; one that names none changes nothing, is answered false and
+   is neither counted nor recorded (D-224).
 
 ---
 
@@ -879,7 +915,18 @@ deployment SHALL have an SMS transport, since every deployment sends SMS alerts
 `integration.sms.endpoint` (LIB-EXT-001). Startup SHALL refuse a deployment that has
 none, with `model.startup.declarationmissing`, `details.key` `smsTransport`.
 
-*Source: P-003, D-022, D-166*
+**Values (D-224).** `SendAsync(SmsMessage, CancellationToken)` answers
+`Result<SmsAccepted>`: a failure is an attempt to retry, and `SmsAccepted` carries
+`GatewayReference`, the gateway's identifier of the text where the gateway's reports
+name the text by it, and null where they quote the message's `Reference`.
+`ReadReportAsync(SmsReportRequest, CancellationToken)` answers
+`Result<SmsDeliveryReport>`, the request being the report's method, its query parameters
+one value a name, its content type and its body, at most 16 KiB; `SmsDeliveryReport`
+names the text by `Reference` or by `GatewayReference`, exactly one of them, and carries
+its `Outcome` (`SmsReportOutcome`: `Delivered`, `Failed` or `NotFinal`); a failure is a
+report that does not read. Each value a transport reads is untrusted (INT-SMS-005).
+
+*Source: P-003, D-022, D-166, D-224*
 
 **Acceptance criteria**
 1. No provider name appears in a core namespace.

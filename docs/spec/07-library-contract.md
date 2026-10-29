@@ -219,23 +219,27 @@ D-218); and the person records (`21`, D-221): their entry, reads and finding,
 correction, the consents and objections staff record, their export for the person,
 restriction lift, deletion and its cancellation, erasure and takedown, the account's
 operations on a record attached to it, and the offer and the attachment
-(`IPersonRecords`). The endpoints are enumerated in `09-api-contract`; the permissions
-in `10-reference` §2.1.
+(`IPersonRecords`); and the delivery reports a host routes to the library
+(`ISmsReports`, INT-SMS-005, D-224), called in process only. The endpoints are
+enumerated in `09-api-contract`; the permissions in `10-reference` §2.1.
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
 since the session and its cookie are the browser's and not a result a host calls for:
 the social provider round trips (`/auth/providers/{provider}`, their returns and
 `/callbacks/providers/{provider}/return`), `/auth/signon` and its return,
-`POST /auth/break-glass`, `/auth/factor`, `/auth/device/verify`, `/auth/step-up` and
-`/register/terms`; and so do the endpoints of a person record's collection session and
-record access session (`/records/collection` and `/records/access` and every route under
-them, `21` REC-COL-001, REC-ACC-001, D-221), whose sessions are the browser's and whose
-person holds no access context. The callbacks a gateway or provider sends
-(`GET /callbacks/sms/dlr`, `POST /callbacks/providers/{provider}`), the three well-known
-documents and the provider's protocol endpoints are not operations. Beside its contract
-an endpoint MAY take the browser's own records: its pre-authentication binding, the
-rotation of its session, and the registration signal.
+`POST /auth/break-glass`, `/auth/factor`, `/auth/device/verify`, `/auth/device/resend`,
+`/auth/step-up`, `/auth/restore/begin`, `/auth/restore` and `/register/terms` (D-224);
+and so do the endpoints of a person record's collection session and record access
+session (`/records/collection` and `/records/access` and every route under them, `21`
+REC-COL-001, REC-ACC-001, D-221), whose sessions are the browser's and whose person
+holds no access context. The callbacks a gateway or provider sends (`GET` and
+`POST /callbacks/sms/dlr/{key}`, `POST /callbacks/providers/{provider}`), the three
+well-known documents, the provider's protocol endpoints and its continuation
+(`GET /oidc/authorize/continue`), and `GET /settings`, which reads the deployment's
+settings and no record, are not operations (D-224). Beside its contract an endpoint MAY
+take the browser's own records: its pre-authentication binding, the rotation of its
+session, and the registration signal.
 
 **Every operation takes an access context** (AUTHZ-IMP-001) — a person's, which a host's
 endpoint reads from the request with the session it passes beside it (`17` BFF-HOST-001),
@@ -315,7 +319,7 @@ anyone acts, and reads no record of a person (D-218).
 | **Alert destinations** | At least one email and one SMS destination for the operator (OPS-ALERT-004), **and the owner's email and SMS destination** — break-glass alerts reach them always (OPS-BOOT-002, D-129) |
 | **SMS balance floor** | A prepaid amount the library cannot guess (INT-SMS-004) |
 | **Mail and SMS transports** | `IMailTransport` and `ISmsTransport` (LIB-EXT-001), each required unless the library's shipped transport for its channel is in use (`integration.mail.endpoint`, `integration.sms.endpoint`). A channel with neither fails startup with `model.startup.declarationmissing`, `details.key` `mailTransport` or `smsTransport` |
-| **Secret source** | Required, no default: `ISecretSource`, through which the library reads every secret it needs, asynchronously, when the application starts and before it serves a request: the key-encryption key versions and the fingerprint key versions, each fingerprint key version at least 32 bytes (OPS-SEC-001, AUTH-KEY-002); the maintenance credential (OPS-MIG-003a); the mail server's secret where the shipped mail-server adapter is used (INT-MAIL-001); and each declared social provider's credential, by the provider's name (IDN-LIFE-012). No secret is an argument of `AddJanus`. Absent, startup fails with `model.startup.declarationmissing`, `details.key` `secretSource`; a secret it cannot answer, or answers empty or short, stops the start with `model.startup.secretunavailable`, `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`. A `Janus.Cli` command reads the same values from one JSON document on standard input, save `migrate`, which reads no key (OPS-MIG-001, D-204), and one whose standard input is a terminal is refused under `details.key` `input` (OPS-SEC-001, CONV-DESIGN-007) |
+| **Secret source** | Required, no default: `ISecretSource`, through which the library reads every secret it needs, asynchronously, when the application starts and before it serves a request: the key-encryption key versions and the fingerprint key versions, each fingerprint key version at least 32 bytes (OPS-SEC-001, AUTH-KEY-002); the maintenance credential (OPS-MIG-003a); the mail server's secret where the shipped mail-server adapter is used (INT-MAIL-001); each declared social provider's credential, by the provider's name (IDN-LIFE-012); and the delivery reports' key, `smsReportKey`, at least 32 bytes (INT-SMS-005, D-224). No secret is an argument of `AddJanus`. Absent, startup fails with `model.startup.declarationmissing`, `details.key` `secretSource`; a secret it cannot answer, or answers empty or short, stops the start with `model.startup.secretunavailable`, `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret`, `smsReportKey` or `socialProvider.<provider>`. A `Janus.Cli` command reads the same values from one JSON document on standard input, save `migrate`, which reads no key (OPS-MIG-001, D-204), and one whose standard input is a terminal is refused under `details.key` `input` (OPS-SEC-001, CONV-DESIGN-007) |
 | **Subject-event handlers** | Erasure, restriction and takedown (`ErasureRequested`, `RestrictionChanged`, `TakedownExecuted`). Each registered subscriber (`ISubjectEventSubscriber`) names the resource types it covers (`Covers`), and every type declared sensitive SHALL be covered by at least one. **Startup fails otherwise** (PRIV-RIGHT-005b), `details.handler` naming the type. Subscriber names are distinct and `erasure-ledger` is the library's own (`model.startup.subscribername`, IDN-LIFE-003a); a name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`, any other refused with `model.startup.declarationinvalid` (INT-SMS-003) |
 | **Purpose handlers** | For every purpose resting on consent or on an objectable basis, a registered `IPurposeHandler` naming it (`Purposes`), under a name distinct among the purpose handlers and the subject-event subscribers (`Name`, IDN-LIFE-003a), which handles each `ConsentChanged` and `ObjectionChanged` of the purposes it names, delivered through the outbox (PRIV-RIGHT-001a, PRIV-CONS-008, D-203). **Startup fails otherwise** (PRIV-RIGHT-001a AC3), `details.handler` naming the purpose |
 | **Export contributors** | Each registered `IExportContributor` names the types whose records it holds (`Covers`) and answers its sections of a subject's export (PRIV-RIGHT-003); every type that declares an encrypted field or a sensitive category SHALL be covered by at least one. **Startup fails otherwise** with `model.startup.declarationmissing`, `details.handler` naming the type; contributor names are distinct, each under INT-SMS-003's name rule, a name outside it or given twice failing startup with `model.startup.declarationinvalid`, `details.declaration` `contributor.<name>`, `details.field` `name` (D-203, D-206); the names of the sections and values a contributor answers follow that rule without `.`, judged by `Janus.Hosting` before the assembly takes them (PRIV-RIGHT-003, D-206) |
@@ -479,7 +483,7 @@ source.
 | Extension point | Default shipped |
 |---|---|
 | Mail delivery (`IMailTransport`) | A default handler, calling `integration.mail.endpoint` |
-| SMS delivery (`ISmsTransport`) | A default handler, calling `integration.sms.endpoint` |
+| SMS delivery (`ISmsTransport`) | A default handler, calling `integration.sms.endpoint`. A transport answers the gateway's identifier of each text it hands over, and reads a delivery report from the whole request the gateway made (INT-SMS-006, D-224) |
 | Notification handling (`INotificationHandler`) | Email and SMS. A replacement carries a message the library has already admitted under AUTH-ABUSE-004 and written to its outbox; it decides no restriction and counts nothing |
 | Message and content templates | A catalogue in `Janus.Hosting`, in English and Arabic: every message kind on every channel it goes out on, one text per language, each text message within its budget at its widest (AUTH-ABUSE-005, INT-SMS-003), and every link as the place `{link}`, which the library fills with the link's address (LIB-HOST-001, landing origins). A deployment that registers none is answered from it. An email owed in every declared language is composed by the library from each language's text (IDN-ATTR-001); no catalogue holds a text in more than one language |
 | Audit sink | Database |
@@ -494,7 +498,7 @@ A core namespace is `Janus.Core` or an area project's (`Janus.Identity`,
 extension point SHALL be named only in `Janus.Hosting`, where the shipped defaults and
 adapters live.
 
-*Source: D-022, D-012, P-003, D-162, D-166, D-176, D-189, D-197, D-204*
+*Source: D-022, D-012, P-003, D-162, D-166, D-176, D-189, D-197, D-204, D-224*
 
 **Acceptance criteria**
 1. Each is registered through configuration, not inheritance from a library type.
