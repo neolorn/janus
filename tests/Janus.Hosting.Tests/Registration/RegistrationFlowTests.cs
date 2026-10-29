@@ -339,8 +339,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Answer completed = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", "terms-3"),
-            ("noticeVersion", "notice-2"));
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
 
         Assert.Equal(StatusCodes.Status200OK, begun.Status);
         Assert.Equal(Flow.Address, begun.Json().GetProperty("user").GetProperty("name").GetString());
@@ -412,8 +412,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Answer completed = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", "terms-3"),
-            ("noticeVersion", "notice-2"));
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
         Flow.Carried(_deployment);
         Answer account = await browser.SendAsync("GET", "/account");
 
@@ -513,8 +513,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Answer completed = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", "terms-3"),
-            ("noticeVersion", "notice-2"));
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
 
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
         Assert.True(browser.Cookies.ContainsKey("__Host-identity-session"));
@@ -537,8 +537,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Answer refused = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", "terms-3"),
-            ("noticeVersion", "notice-2"),
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment),
             ("consents", new Dictionary<string, bool>(StringComparer.Ordinal) { ["performance"] = true }));
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Organizations;
+using Janus.Authentication.Registration;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -44,8 +45,6 @@ internal sealed class RecordCollectionService(
     RandomNumberGenerator randomness)
 {
     private const int ReferenceMaximum = 64;
-
-    private static readonly DocumentName Notice = DocumentName.Parse("privacy-notice");
 
     /// <summary>
     /// Writes or reuses the record the session's verified contacts reach, and spends
@@ -172,27 +171,18 @@ internal sealed class RecordCollectionService(
         return null;
     }
 
-    // PRIV-CONS-008a: the notice the screen presented is the one in force, or the
-    // person was shown something the deployment no longer stands behind.
-    private async ValueTask<Error?> PresentedAsync(RecordCollection collection, CancellationToken cancellationToken)
-    {
-        Error? failure = null;
-
-        DocumentVersion? current = (await documents
-                .ReadAsync(Notice, version: null, cancellationToken).ConfigureAwait(false))
-            .Match<DocumentVersion?>(value => value, error => Held<DocumentVersion?>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return failure.Code == ErrorCodes.DocumentNotFound
-                ? Error.From(ErrorCodes.NoticeUnpublished)
-                : failure;
-        }
-
-        return string.Equals(current!.Version, collection.NoticeVersion, StringComparison.Ordinal)
-            ? null
-            : Error.From(ErrorCodes.ConsentSuperseded, "member", JsonSerializer.SerializeToElement("noticeVersion"));
-    }
+    // PRIV-CONS-008a: the notice the screen presented, and the terms it asked the person
+    // to accept, are the ones in force, or the person was shown something the deployment
+    // no longer stands behind.
+    private async ValueTask<Error?> PresentedAsync(RecordCollection collection, CancellationToken cancellationToken) =>
+        await PresentedVersions
+            .RefusedAsync(documents, PresentedVersions.Notice, collection.NoticeVersion, "noticeVersion", cancellationToken)
+            .ConfigureAwait(false)
+        ?? (collection.TermsVersion is string terms
+            ? await PresentedVersions
+                .RefusedAsync(documents, PresentedVersions.Terms, terms, "termsVersion", cancellationToken)
+                .ConfigureAwait(false)
+            : null);
 
     // Under the session's lock and every verified value's, from the read to the write.
     private async ValueTask<Result<CollectedRecord>> HeldAsync(

@@ -56,6 +56,7 @@ public sealed class RecordCollectionTests : IAsyncDisposable
         _shop = OrganizationId.New(_deployment.Clock);
         _deployment.Organizations.Seed(_shop);
         _deployment.Documents.Hold(new DocumentVersion("privacy-notice", "1", "en", "The notice.", [], Published));
+        _deployment.Documents.Hold(new DocumentVersion("terms", "7", "en", "The terms.", [], Published));
 
         _collection = Collection();
     }
@@ -290,6 +291,57 @@ public sealed class RecordCollectionTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-COL-002 AC3: a terms version a later publication superseded is refused naming
+    /// <c>termsVersion</c>, and nothing is written; the current one is accepted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_COL_002_AC3_ASupersededTermsVersionIsRefusedAsync()
+    {
+        Browser browser = await VerifiedAsync(IdentifierKind.Phone, Number);
+
+        _deployment.Documents.Hold(new DocumentVersion("terms", "8", "en", "The terms again.", [], Published.AddDays(1)));
+        _collection = Collection() with { TermsVersion = "7" };
+
+        Error refused = await RefusedAsync(browser);
+
+        Assert.Equal(ErrorCodes.ConsentSuperseded, refused.Code);
+        Assert.Equal("termsVersion", refused.Details["member"].GetString());
+        Assert.Empty(_deployment.Records.All);
+
+        _collection = Collection() with { TermsVersion = "8" };
+
+        Assert.True((await CollectedAsync(browser)).Created);
+    }
+
+    /// <summary>
+    /// REC-COL-002: a terms version named where the deployment published no terms is
+    /// refused as unpublished, naming the document; a collection naming none is accepted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_COL_002_ATermsVersionWithNoTermsPublishedIsRefusedAsync()
+    {
+        await using var bare = new Deployment(host: Map);
+        Flow.Prepare(bare);
+        bare.Organizations.Seed(_shop);
+        bare.Documents.Hold(new DocumentVersion("privacy-notice", "1", "en", "The notice.", [], Published));
+
+        Browser browser = await VerifiedAsync(bare, (IdentifierKind.Phone, Number));
+        _collection = Collection() with { TermsVersion = "7" };
+
+        Error refused = await RefusedAsync(browser);
+
+        Assert.Equal(ErrorCodes.NoticeUnpublished, refused.Code);
+        Assert.Equal("terms", refused.Details["document"].GetString());
+        Assert.Empty(bare.Records.All);
+
+        _collection = Collection();
+
+        Assert.True((await CollectedAsync(browser)).Created);
+    }
+
+    /// <summary>
     /// REC-COL-002: before any version of the privacy notice is published, a collection
     /// is refused.
     /// </summary>
@@ -306,6 +358,7 @@ public sealed class RecordCollectionTests : IAsyncDisposable
         Error refused = await RefusedAsync(browser);
 
         Assert.Equal(ErrorCodes.NoticeUnpublished, refused.Code);
+        Assert.Equal("privacy-notice", refused.Details["document"].GetString());
         Assert.Empty(bare.Records.All);
     }
 

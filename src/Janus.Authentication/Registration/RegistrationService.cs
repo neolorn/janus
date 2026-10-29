@@ -48,6 +48,7 @@ namespace Janus.Authentication.Registration;
 /// <param name="restrictions">What an ask that sends nothing draws on.</param>
 /// <param name="defence">What judges the source before a session is created and counts the session.</param>
 /// <param name="capture">Where the consent controls the person ticked are recorded.</param>
+/// <param name="documents">The legal documents whose current versions the terms step is judged against.</param>
 /// <param name="configuration">Where the registration settings are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="events">Where the emitted events go.</param>
@@ -87,6 +88,7 @@ internal sealed class RegistrationService(
     ISendingRestrictions restrictions,
     BotDefence defence,
     IConsents capture,
+    ILegalDocuments documents,
     IConfigurationStore configuration,
     IUnitOfWork work,
     IEvents events,
@@ -1070,6 +1072,18 @@ internal sealed class RegistrationService(
         {
             return Result.Failure<RegistrationOutcome>(
                 Error.From(ErrorCodes.RegistrationIncomplete));
+        }
+
+        // REG-SESS-007: no one is recorded as accepting or being shown a text that is not
+        // the current version of its document, or that was never published.
+        if ((await PresentedVersions
+                    .RefusedAsync(documents, PresentedVersions.Terms, termsVersion, "termsVersion", cancellationToken)
+                    .ConfigureAwait(false)
+                ?? await PresentedVersions
+                    .RefusedAsync(documents, PresentedVersions.Notice, noticeVersion, "noticeVersion", cancellationToken)
+                    .ConfigureAwait(false)) is Error unpresented)
+        {
+            return Result.Failure<RegistrationOutcome>(unpresented);
         }
 
         int emails = (await configuration

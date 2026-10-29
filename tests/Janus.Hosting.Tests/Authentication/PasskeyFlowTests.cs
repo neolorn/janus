@@ -322,8 +322,8 @@ public sealed class PasskeyFlowTests : IAsyncDisposable
         Answer completed = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", "terms-3"),
-            ("noticeVersion", "notice-2"));
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
 
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
 

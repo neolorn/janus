@@ -2558,6 +2558,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
                 verifier: null,
                 _clock),
             new ConsentsInMemory(),
+            new LegalDocumentsInMemory(),
             _configuration,
             _work,
             _events,

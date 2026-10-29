@@ -197,7 +197,7 @@ public sealed class RecordEntryTests : IAsyncDisposable
     [InlineData("a phone that is not well formed", 422, "identity.identifier.invalid", null)]
     [InlineData("a name outside its rule", 422, "identity.profile.invalid", null)]
     [InlineData("a purpose that does not rest on consent", 422, "privacy.purpose.noconsent", null)]
-    [InlineData("a consent before any notice is published", 409, "privacy.notice.unpublished", null)]
+    [InlineData("a consent whose governing document has no published version", 409, "privacy.notice.unpublished", null)]
     [InlineData("a reference outside its bounds", 400, "api.request.malformed", "reference")]
     [InlineData("no organization", 400, "api.request.malformed", "organization")]
     public async Task REC_COL_003_AnEntryOutsideItsRulesIsRefusedAndKeepsNothingAsync(
@@ -238,8 +238,8 @@ public sealed class RecordEntryTests : IAsyncDisposable
             case "a purpose that does not rest on consent":
                 consents = ["performance"];
                 break;
-            case "a consent before any notice is published":
-                consents = [Marketing];
+            case "a consent whose governing document has no published version":
+                consents = ["newsletter"];
                 break;
             case "a reference outside its bounds":
                 reference = new string('r', 65);

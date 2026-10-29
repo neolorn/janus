@@ -42,8 +42,8 @@ public sealed class SessionCookieLifetimeTests : IAsyncDisposable
         Answer completed = await browser.SendAsync(
             "POST",
             "/register/terms",
-            ("termsVersion", "terms-3"),
-            ("noticeVersion", "notice-2"));
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
 
         Session session = _deployment.Sessions.Behind(OpaqueToken.Of(browser.Cookies[BrowserCookies.Session]))!;
         string expires = "expires=" + session.AbsoluteExpiry.ToString("R", CultureInfo.InvariantCulture);
