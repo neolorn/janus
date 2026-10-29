@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A staged registration's absent byte arrays are no longer written as empty ones, so a
+  staged provider or TOTP credential and an identifier with no link outstanding read
+  back as they were staged, and a link row is never written with an empty fingerprint.
 - `GET /settings`, public and answered with `Cache-Control: no-store`, gives a frontend
   what it renders its screens from: `registration.phone`, the identifier limits, the
   profile attributes asked for, the password lengths, the social providers declared,

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -254,8 +256,144 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
         Assert.Equal(["internal", "hybrid"], held.Transports);
     }
 
+    /// <summary>
+    /// REG-SESS-001 (D-224 item 1): a session whose every optional array is null reads
+    /// back with each still null, and stages no link row.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_001_ASessionWithEveryOptionalArrayNullReadsBackWithEachNullAsync()
+    {
+        RegistrationSession opened = Opened();
+        var staged = IdentifierId.New(TimeProvider.System);
+        opened.Stage(StagedIdentity.Of(staged, IdentifierKind.Email, "person@example.test", "person@example.test"));
+        opened.Enrol(new StagedCredential(
+            AuthenticatorId.New(TimeProvider.System),
+            Factor.Google,
+            Label("Google"),
+            Totp: null,
+            WebAuthn: null,
+            ProviderSubject: "provider-subject"));
+
+        await AddAsync(opened);
+
+        await using StoreContext reading = database.Context();
+        RegistrationSession read = Assert.IsType<RegistrationSession>(
+            await Store(reading).FindAsync(opened.Id, TestContext.Current.CancellationToken));
+        StagedCredential credential = Assert.Single(read.Credentials);
+
+        Assert.Null(read.Identity(staged)!.Link);
+        Assert.Null(credential.Totp);
+        Assert.Null(credential.WebAuthn);
+        Assert.Equal("provider-subject", credential.ProviderSubject);
+        Assert.Null(read.RecoveryCodes);
+        Assert.Null(read.Ceremony);
+        Assert.Null(read.Generator);
+        Assert.Equal(0, await LinkRowsAsync(opened.Id));
+    }
+
+    /// <summary>
+    /// REG-SESS-001 (D-224 item 1): a session whose every array is set reads back with
+    /// each as it was written, a staged generator and its TOTP credential whole, and the
+    /// identifier's link found by its fingerprint.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_001_ASessionWithEveryArraySetReadsBackAsItWasWrittenAsync()
+    {
+        RegistrationSession opened = Opened();
+        var staged = IdentifierId.New(TimeProvider.System);
+        byte[] link = SHA256.HashData(Encoding.UTF8.GetBytes("a link token"));
+        var code = PasswordHash.Of(new Argon2StrengthClass(19456, 2), 1, new byte[16], new byte[32]);
+        var identity = StagedIdentity.Of(staged, IdentifierKind.Email, "person@example.test", "person@example.test");
+        identity.Linked(link);
+        opened.Stage(identity);
+        opened.Enrol(new StagedCredential(
+            AuthenticatorId.New(TimeProvider.System),
+            Factor.Totp,
+            Label("Authenticator"),
+            new TotpMaterial(new byte[] { 7, 8, 9, 10 }, ConsumedStep: 41),
+            WebAuthn: null));
+        opened.Enrol(new StagedCredential(
+            AuthenticatorId.New(TimeProvider.System),
+            Factor.SecurityKey,
+            Label("Key"),
+            Totp: null,
+            new WebAuthnMaterial(
+                new byte[] { 1, 2, 3 },
+                new byte[] { 4, 5, 6 },
+                Algorithm: -7,
+                "example.test",
+                Counter: 3,
+                BackupEligible: false,
+                BackupState: false,
+                Transports: ["usb"])));
+        opened.Begin(new StagedGenerator(AuthenticatorId.New(TimeProvider.System), Label("Second"), new byte[] { 11, 12 }));
+        opened.StageRecoveryCodes([code], Noon);
+
+        await AddAsync(opened);
+
+        await using StoreContext reading = database.Context();
+        RegistrationSession read = Assert.IsType<RegistrationSession>(
+            await Store(reading).FindByLinkAsync(link, TestContext.Current.CancellationToken));
+        TotpMaterial totp = read.Credentials.Single(credential => credential.Factor is Factor.Totp).Totp!;
+        WebAuthnMaterial key = read.Credentials.Single(credential => credential.Factor is Factor.SecurityKey).WebAuthn!;
+
+        Assert.Equal(opened.Id, read.Id);
+        Assert.Equal(link, read.Identity(staged)!.Link);
+        Assert.Equal(new byte[] { 7, 8, 9, 10 }, totp.Secret.ToArray());
+        Assert.Equal(41, totp.ConsumedStep);
+        Assert.Equal(new byte[] { 1, 2, 3 }, key.CredentialId.ToArray());
+        Assert.Equal(new byte[] { 4, 5, 6 }, key.PublicKey.ToArray());
+        Assert.Equal(new byte[] { 11, 12 }, read.Generator!.Secret.ToArray());
+        Assert.Equal(code.Encoded, Assert.Single(read.RecoveryCodes!).Encoded);
+        Assert.Equal(1, await LinkRowsAsync(opened.Id));
+    }
+
+    /// <summary>
+    /// REG-SESS-001 (D-224 item 1): an empty array reads back empty, not null, and a
+    /// link with an empty fingerprint is never written as a link row.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_001_AnEmptyArrayReadsBackEmptyAndWritesNoLinkRowAsync()
+    {
+        RegistrationSession opened = Opened();
+        var staged = IdentifierId.New(TimeProvider.System);
+        var identity = StagedIdentity.Of(staged, IdentifierKind.Email, "person@example.test", "person@example.test");
+        identity.Linked([]);
+        opened.Stage(identity);
+        opened.StageRecoveryCodes([], Noon);
+
+        await AddAsync(opened);
+
+        await using StoreContext reading = database.Context();
+        RegistrationSession read = Assert.IsType<RegistrationSession>(
+            await Store(reading).FindAsync(opened.Id, TestContext.Current.CancellationToken));
+
+        Assert.Empty(Assert.IsType<byte[]>(read.Identity(staged)!.Link));
+        Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<PasswordHash>>(read.RecoveryCodes));
+        Assert.Equal(0, await LinkRowsAsync(opened.Id));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    private async Task AddAsync(RegistrationSession session)
+    {
+        await using StoreContext writing = database.Context();
+        await Store(writing).AddAsync(session, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private async Task<int> LinkRowsAsync(RegistrationSessionId session)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM identity.registration_links WHERE session = @session",
+            new { session = session.Value });
+    }
 
     // Each verification is its own request, deciding on the session as the
     // registration service does, and says whether it was the one that verified.
