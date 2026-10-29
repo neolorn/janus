@@ -36,6 +36,8 @@ GET /account
       credentials[].backupState: boolean?
       credentials[].addedAt: DateTimeOffset
       credentials[].lastUsedAt: DateTimeOffset?
+      password.set: boolean
+      password.changedAt: DateTimeOffset?
       secondStep.preferred: string
       recoveryCodes.remaining: number
       recoveryCodes.generatedAt: DateTimeOffset
