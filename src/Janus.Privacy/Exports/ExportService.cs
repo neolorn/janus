@@ -91,6 +91,7 @@ internal sealed class ExportService(
 
         return await CountedAsync(
                 subject,
+                subject,
                 context.BreakGlassReason,
                 source.SectionsAsync,
                 source.RecordsAsync,
@@ -112,6 +113,7 @@ internal sealed class ExportService(
         SubjectId record,
         CancellationToken cancellationToken) =>
         await CountedAsync(
+                record,
                 record,
                 breakGlassReason: null,
                 source.RecordSectionsAsync,
@@ -159,6 +161,7 @@ internal sealed class ExportService(
 
         return await CountedAsync(
                 record,
+                record,
                 context.BreakGlassReason,
                 source.RecordSectionsAsync,
                 attached: null,
@@ -167,10 +170,38 @@ internal sealed class ExportService(
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The export of a person record staff assemble to hand to the person who reaches it
+    /// by no code: the record's own sections, then each contributor's for its subject,
+    /// counted against the limit for the record and recorded with the staff member
+    /// acting (REC-ADM-002). The caller has admitted the staff member and judged the
+    /// step-up.
+    /// </summary>
+    /// <param name="acting">The staff member assembling it.</param>
+    /// <param name="breakGlassReason">The break-glass reason, where the session is one.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The export, or <c>auth.throttled</c>, <c>system.fault</c>.</returns>
+    internal async ValueTask<Result<SubjectExport>> AssembleOnBehalfAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId record,
+        CancellationToken cancellationToken) =>
+        await CountedAsync(
+                record,
+                acting,
+                breakGlassReason,
+                source.RecordSectionsAsync,
+                attached: null,
+                RecordNames,
+                cancellationToken)
+            .ConfigureAwait(false);
+
     // D-086, D-203: the export counted against the subject's limit, its contributors
     // answered before it is, and recorded in the transaction that counts it.
     private async ValueTask<Result<SubjectExport>> CountedAsync(
         SubjectId subject,
+        SubjectId acting,
         string? breakGlassReason,
         Func<SubjectId, CancellationToken, ValueTask<IReadOnlyList<ExportSection>>> own,
         Func<SubjectId, CancellationToken, ValueTask<ExportSection>>? attached,
@@ -218,7 +249,7 @@ internal sealed class ExportService(
         await ledger.RecordAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(Assembled, subject, breakGlassReason, subject, now, Named(export), cancellationToken)
+            .RecordedAsync(Assembled, acting, breakGlassReason, subject, now, Named(export), cancellationToken)
             .ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))

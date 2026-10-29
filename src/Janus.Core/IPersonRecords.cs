@@ -175,6 +175,31 @@ public interface IPersonRecords
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Assembles a person record's export for staff to hand to the person who reaches it
+    /// by no code, under <c>record:manage</c>, admitted as <see cref="ReadAsync"/> is,
+    /// behind the step-up <c>record:export</c>: as the record access session's export
+    /// answers it, counted against <c>privacy.export.ratelimit</c> for the record and
+    /// recorded <c>privacy.export.assembled</c> with the staff member acting.
+    /// </summary>
+    /// <param name="context">The staff member assembling it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The export, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>identity.record.followsaccount</c> naming the account a record is attached to;
+    /// <c>identity.record.stateconflict</c> where it is deleting or deleted; then the
+    /// step-up's; <c>auth.throttled</c> where the limit is spent; <c>system.fault</c>
+    /// naming a contributor that failed.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<SubjectExport>> ExportAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The subjects of the person records attached to an account: a person's own context
     /// reads its own; another's is read under <c>record:read</c> in the organization
     /// named, the administrative organization where none is, with the account reach of

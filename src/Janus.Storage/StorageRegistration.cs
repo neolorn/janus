@@ -228,6 +228,7 @@ internal static class StorageRegistration
         services.AddScoped<IRecordAccessSessionStore, RecordAccessSessionStore>();
         services.AddScoped<IRecordOfferStore, RecordOfferStore>();
         services.AddScoped<IRecordDirectory, RecordDirectory>();
+        services.AddScoped<IRecordPrivacy, RecordPrivacy>();
         services.AddScoped<IRecordAudit, RecordAudit>();
         services.AddScoped<IRegistrationDirectory>(provider => new RegistrationDirectory(
             provider.GetRequiredService<StoreContext>(),

@@ -3544,6 +3544,7 @@ Janus.Core.PersonRecordCorrection.Equals(Janus.Core.PersonRecordCorrection? othe
 Janus.Core.IPersonRecords.RectifyAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.PersonRecordCorrection! correction, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPersonRecords.LiftRestrictionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPersonRecords.CancelDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IPersonRecords.ExportAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectExport!>>
 abstract Janus.Core.Configuration.Setting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
 abstract Janus.Core.DomainEvent.<Clone>$() -> Janus.Core.DomainEvent!
 abstract Janus.Core.SubjectFields.Decrypt(Janus.Core.ResourceType type, string! field, System.ReadOnlyMemory<byte> stored) -> Janus.Core.Result<string!>

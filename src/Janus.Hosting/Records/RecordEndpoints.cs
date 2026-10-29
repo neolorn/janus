@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Privacy;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -62,6 +63,13 @@ internal static class RecordEndpoints
                 .Binding<SubjectId>("subject"))
             .Accepts<RecordCorrectionBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
+
+        _ = SessionRequired.On(endpoints.MapGet("/admin/records/{subject}/export", ExportAsync))
+            .Declares(Changing(
+                ErrorCodes.RecordStateConflict, ErrorCodes.RequestMalformed, ErrorCodes.Throttled,
+                ErrorCodes.SystemFault))
+            .Produces<ExportView>()
+            .Produces<PortableExportView>();
 
         _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/restriction/lift", LiftRestrictionAsync))
             .Declares(Changing(ErrorCodes.RecordStateConflict))
@@ -217,6 +225,30 @@ internal static class RecordEndpoints
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
+    }
+
+    // REC-ADM-002: the record's export for staff to hand to the person, in either
+    // arrangement.
+    private static async Task<IResult> ExportAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        string? format,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        if (PrivacyEndpoints.Arranged(format) is not Func<SubjectExport, IResult> arrangement)
+        {
+            return Answers.Malformed(nameof(format));
+        }
+
+        return Answers.Of(
+            await records
+                .ExportAsync(browser.Asking, browser.Required.Id, subject, cancellationToken)
+                .ConfigureAwait(false),
+            arrangement);
     }
 
     // REC-ADM-002, PRIV-RIGHT-004: the record returns active, the change announced.

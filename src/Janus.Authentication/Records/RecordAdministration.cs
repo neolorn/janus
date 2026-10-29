@@ -15,7 +15,7 @@ namespace Janus.Authentication.Records;
 
 /// <summary>
 /// What staff do to a person record for the person who reaches it by no code: correct
-/// it on their word, lift its restriction and cancel its deletion.
+/// it on their word, lift its restriction, cancel its deletion and assemble its export.
 /// </summary>
 /// <param name="records">The person records.</param>
 /// <param name="admission">Where a path naming a record is admitted.</param>
@@ -24,6 +24,7 @@ namespace Janus.Authentication.Records;
 /// <param name="accounts">Where the erasure request that began a window is read.</param>
 /// <param name="stepUp">What the gated rows ask of the staff member's session.</param>
 /// <param name="events">Where a cancellation is announced.</param>
+/// <param name="privacy">Where the record's export is assembled.</param>
 /// <param name="configuration">Where the message languages and the deletion window are read.</param>
 /// <param name="work">The one transaction each change runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -41,6 +42,7 @@ internal sealed class RecordAdministration(
     IAccountDirectory accounts,
     StepUpGuard stepUp,
     IEvents events,
+    IRecordPrivacy privacy,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time)
@@ -312,6 +314,51 @@ internal sealed class RecordAdministration(
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Assembles a record's export for staff to hand to the person.
+    /// </summary>
+    /// <param name="context">The staff member assembling it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The export, or the refusal <see cref="IPersonRecords.ExportAsync"/> names.</returns>
+    public async ValueTask<Result<SubjectExport>> ExportAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure<SubjectExport>(Error.From(ErrorCodes.Denied));
+        }
+
+        return await (await AdmittedAsync(context, Permissions.RecordManage, subject, cancellationToken).ConfigureAwait(false))
+            .Match<ValueTask<Result<SubjectExport>>>(
+                async admitted =>
+                {
+                    if (Unexportable(admitted) is Error refused)
+                    {
+                        return Result.Failure<SubjectExport>(refused);
+                    }
+
+                    if (await stepUp
+                            .PassedAsync(acting, session, StepUpAction.RecordExport, cancellationToken)
+                            .ConfigureAwait(false) is Error challenged)
+                    {
+                        return Result.Failure<SubjectExport>(challenged);
+                    }
+
+                    return await privacy
+                        .ExportAsync(acting, context.BreakGlassReason, subject, cancellationToken)
+                        .ConfigureAwait(false);
+                },
+                error => ValueTask.FromResult(Result.Failure<SubjectExport>(error)))
+            .ConfigureAwait(false);
+    }
+
     // REC-ADM-002: a record attached to an account is the account's, and one in its
     // deletion window, or erased, takes no correction; a restricted one does, being how
     // a rectification request is fulfilled (AUTHZ-GATE-006, D-222).
@@ -345,6 +392,12 @@ internal sealed class RecordAdministration(
 
     private static string Key(SubjectId record, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{record.Value}@{at.UtcTicks}");
+
+    // REC-REC-002: a record in its deletion window, or erased, admits no right but its
+    // read and the cancellation.
+    private static Error? Unexportable(RecordStanding standing) =>
+        Followed(standing)
+        ?? (standing.State is PersonRecordState.Active or PersonRecordState.Restricted ? null : StateConflict(standing.State));
 
     // REC-ATT-002: a record attached to an account follows it.
     private static Error? Followed(RecordStanding standing) =>

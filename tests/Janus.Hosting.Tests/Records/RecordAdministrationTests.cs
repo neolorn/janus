@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,12 +9,13 @@ using Janus.Authentication.Tests.Records;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Records;
 
 /// <summary>
-/// Staff reading, correcting, lifting and cancelling a person record, and reading the records attached to an account
+/// Staff reading, correcting, lifting, cancelling and exporting a person record, and reading the records attached to an account
 /// (REC-ADM-001, REC-ADM-002, REC-ATT-002, chapter 09 section 8a).
 /// </summary>
 [Trait("kind", "unit")]
@@ -337,6 +339,48 @@ public sealed class RecordAdministrationTests : IAsyncDisposable
             [PersonRecordState.Deleting, PersonRecordState.Deleting],
             new[] { takenDown, closed }.Select(subject => _deployment.Records.Of(subject).State));
         Assert.Empty(_deployment.Events.Of<RecordDeletionCancelled>());
+    }
+
+    /// <summary>
+    /// REC-ADM-002 (09 section 8a): a stepped-up holder of <c>record:manage</c> assembles
+    /// a record's export in either arrangement, counted for the record and recorded
+    /// <c>privacy.export.assembled</c> with the staff member acting; a record in its
+    /// deletion window is refused <c>identity.record.stateconflict</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_002_StaffAssembleARecordsExportForThePersonAsync()
+    {
+        SubjectId record = Holding(_shop);
+        SubjectId deleting = Deleting(Holding(_shop), DeletionOrigin.Self, _deployment.Clock.GetUtcNow());
+        _deployment.ExportSource.Holds(record, new ExportSection(
+            "record",
+            [new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal) { ["subject"] = record.ToString() })]));
+        Browser browser = await ManagingAsync(_shop);
+
+        Answer readable = await browser.SendAsync("GET", $"/admin/records/{record.Value}/export?format=human");
+        Answer portable = await browser.SendAsync("GET", $"/admin/records/{record.Value}/export?format=machine");
+        Answer windowed = await browser.SendAsync("GET", $"/admin/records/{deleting.Value}/export?format=human");
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+        var trail = (Janus.Privacy.Tests.PrivacyAuditInMemory)scope.ServiceProvider
+            .GetRequiredService<Janus.Privacy.IPrivacyAudit>();
+
+        Assert.Equal(
+            (StatusCodes.Status200OK, StatusCodes.Status200OK),
+            (readable.Status, portable.Status));
+        Assert.Equal(
+            "record",
+            readable.Json().GetProperty("sections").EnumerateArray().First().GetProperty("name").GetString());
+        Assert.Equal([record, record], _deployment.ExportLedger.Taken.Select(taken => taken.Subject));
+        Assert.Equal(
+            [(Staff(), record), (Staff(), record)],
+            trail.Entries
+                .Where(entry => entry.Action == AuditActions.ExportAssembled)
+                .Select(entry => (entry.Acting, entry.Subject)));
+        Assert.Equal(
+            (StatusCodes.Status409Conflict, ErrorCodes.RecordStateConflict.ToString()),
+            (windowed.Status, windowed.Text("code")));
     }
 
     private static Guid[] Subjects(Answer answer) =>
