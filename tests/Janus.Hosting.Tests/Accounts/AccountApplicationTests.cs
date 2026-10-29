@@ -227,6 +227,26 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-SEC-001 and D-224: <c>GET /account</c> says whether a password is set and when
+    /// it was last set, and lists no password among the credentials.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_TheAccountSaysWhetherAPasswordIsSetAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        JsonElement read = (await browser.SendAsync("GET", "/account")).Json();
+        JsonElement password = read.GetProperty("password");
+
+        Assert.True(password.GetProperty("set").GetBoolean());
+        Assert.Equal(_deployment.Clock.GetUtcNow(), password.GetProperty("changedAt").GetDateTimeOffset());
+        Assert.DoesNotContain(
+            read.GetProperty("credentials").EnumerateArray(),
+            credential => credential.GetProperty("kind").GetString() == "password");
+    }
+
+    /// <summary>
     /// FE-ACCT-001 AC3: an identifier says whether it is primary, verified and
     /// locked; a removal takes it out of the list at once and the undo the notice
     /// carries puts it back.

@@ -46,13 +46,15 @@ Janus.Core.AccountDeletionRequested.ErasesAt.get -> System.DateTimeOffset
 Janus.Core.AccountDeletionRequested.ErasesAt.init -> void
 Janus.Core.AccountDetail
 Janus.Core.AccountDetail.<Clone>$() -> Janus.Core.AccountDetail!
-Janus.Core.AccountDetail.AccountDetail(Janus.Core.AccountState State, Janus.Core.AccountIdentifiers! Identifiers, System.Collections.Generic.IReadOnlyList<Janus.Core.CredentialSummary!>! Credentials, Janus.Core.RecoveryCodeStatus? RecoveryCodes, Janus.Core.ProfileDetail! Profile, Janus.Core.PreferenceValues! Preferences) -> void
+Janus.Core.AccountDetail.AccountDetail(Janus.Core.AccountState State, Janus.Core.AccountIdentifiers! Identifiers, System.Collections.Generic.IReadOnlyList<Janus.Core.CredentialSummary!>! Credentials, Janus.Core.PasswordStatus! Password, Janus.Core.RecoveryCodeStatus? RecoveryCodes, Janus.Core.ProfileDetail! Profile, Janus.Core.PreferenceValues! Preferences) -> void
 Janus.Core.AccountDetail.Credentials.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.CredentialSummary!>!
 Janus.Core.AccountDetail.Credentials.init -> void
-Janus.Core.AccountDetail.Deconstruct(out Janus.Core.AccountState State, out Janus.Core.AccountIdentifiers! Identifiers, out System.Collections.Generic.IReadOnlyList<Janus.Core.CredentialSummary!>! Credentials, out Janus.Core.RecoveryCodeStatus? RecoveryCodes, out Janus.Core.ProfileDetail! Profile, out Janus.Core.PreferenceValues! Preferences) -> void
+Janus.Core.AccountDetail.Deconstruct(out Janus.Core.AccountState State, out Janus.Core.AccountIdentifiers! Identifiers, out System.Collections.Generic.IReadOnlyList<Janus.Core.CredentialSummary!>! Credentials, out Janus.Core.PasswordStatus! Password, out Janus.Core.RecoveryCodeStatus? RecoveryCodes, out Janus.Core.ProfileDetail! Profile, out Janus.Core.PreferenceValues! Preferences) -> void
 Janus.Core.AccountDetail.Equals(Janus.Core.AccountDetail? other) -> bool
 Janus.Core.AccountDetail.Identifiers.get -> Janus.Core.AccountIdentifiers!
 Janus.Core.AccountDetail.Identifiers.init -> void
+Janus.Core.AccountDetail.Password.get -> Janus.Core.PasswordStatus!
+Janus.Core.AccountDetail.Password.init -> void
 Janus.Core.AccountDetail.Preferences.get -> Janus.Core.PreferenceValues!
 Janus.Core.AccountDetail.Preferences.init -> void
 Janus.Core.AccountDetail.Profile.get -> Janus.Core.ProfileDetail!
@@ -2269,6 +2271,16 @@ Janus.Core.PasskeyAddresses.Equals(Janus.Core.PasskeyAddresses? other) -> bool
 Janus.Core.PasskeyAddresses.Manage.get -> string!
 Janus.Core.PasskeyAddresses.Manage.init -> void
 Janus.Core.PasskeyAddresses.PasskeyAddresses(string! ChangePassword, string! Enrol, string! Manage) -> void
+Janus.Core.PasswordStatus
+Janus.Core.PasswordStatus.<Clone>$() -> Janus.Core.PasswordStatus!
+Janus.Core.PasswordStatus.ChangedAt.get -> System.DateTimeOffset?
+Janus.Core.PasswordStatus.ChangedAt.init -> void
+Janus.Core.PasswordStatus.Deconstruct(out bool Set, out System.DateTimeOffset? ChangedAt) -> void
+Janus.Core.PasswordStatus.Equals(Janus.Core.PasswordStatus? other) -> bool
+Janus.Core.PasswordStatus.PasswordStatus(bool Set, System.DateTimeOffset? ChangedAt) -> void
+Janus.Core.PasswordStatus.Set.get -> bool
+Janus.Core.PasswordStatus.Set.init -> void
+
 Janus.Core.Permission
 Janus.Core.Permission.Action.get -> string!
 Janus.Core.Permission.Equals(Janus.Core.Permission other) -> bool
@@ -4013,6 +4025,9 @@ override Janus.Core.OutboundMessage.ToString() -> string!
 override Janus.Core.PasskeyAddresses.Equals(object? obj) -> bool
 override Janus.Core.PasskeyAddresses.GetHashCode() -> int
 override Janus.Core.PasskeyAddresses.ToString() -> string!
+override Janus.Core.PasswordStatus.Equals(object? obj) -> bool
+override Janus.Core.PasswordStatus.GetHashCode() -> int
+override Janus.Core.PasswordStatus.ToString() -> string!
 override Janus.Core.Permission.GetHashCode() -> int
 override Janus.Core.Permission.ToString() -> string!
 override Janus.Core.PersonRecordEntry.Equals(object? obj) -> bool
@@ -5071,6 +5086,8 @@ static Janus.Core.OutboundMessage.operator !=(Janus.Core.OutboundMessage? left, 
 static Janus.Core.OutboundMessage.operator ==(Janus.Core.OutboundMessage? left, Janus.Core.OutboundMessage? right) -> bool
 static Janus.Core.PasskeyAddresses.operator !=(Janus.Core.PasskeyAddresses? left, Janus.Core.PasskeyAddresses? right) -> bool
 static Janus.Core.PasskeyAddresses.operator ==(Janus.Core.PasskeyAddresses? left, Janus.Core.PasskeyAddresses? right) -> bool
+static Janus.Core.PasswordStatus.operator !=(Janus.Core.PasswordStatus? left, Janus.Core.PasswordStatus? right) -> bool
+static Janus.Core.PasswordStatus.operator ==(Janus.Core.PasswordStatus? left, Janus.Core.PasswordStatus? right) -> bool
 static Janus.Core.Permission.Parse(string! value) -> Janus.Core.Permission
 static Janus.Core.Permission.TryParse(string? value, out Janus.Core.Permission permission) -> bool
 static Janus.Core.Permission.operator !=(Janus.Core.Permission left, Janus.Core.Permission right) -> bool

@@ -12,6 +12,7 @@ namespace Janus.Hosting.Accounts;
 /// <param name="State">Where the account stands.</param>
 /// <param name="Identifiers">What it is known by.</param>
 /// <param name="Credentials">What it signs in with.</param>
+/// <param name="Password">Whether a password is set, and when it was last set.</param>
 /// <param name="SecondStep">Which second step is offered first.</param>
 /// <param name="RecoveryCodes">How the recovery codes stand.</param>
 /// <param name="Profile">The profile fields the host collects.</param>
@@ -21,6 +22,7 @@ internal sealed record AccountView(
     AccountState State,
     AccountIdentifiersView Identifiers,
     IReadOnlyList<CredentialView> Credentials,
+    PasswordView Password,
     SecondStepView SecondStep,
     RecoveryCodeView? RecoveryCodes,
     ProfileView Profile,
@@ -40,6 +42,7 @@ internal sealed record AccountView(
             account.State,
             AccountIdentifiersView.Of(account.Identifiers),
             [.. account.Credentials.Select(CredentialView.Of)],
+            PasswordView.Of(account.Password),
             new SecondStepView(Preferred(account.Credentials)),
             RecoveryCodeView.Of(account.RecoveryCodes),
             ProfileView.Of(account.Profile),

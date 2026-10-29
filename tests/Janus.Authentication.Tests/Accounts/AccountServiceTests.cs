@@ -100,6 +100,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
             _identifiers,
             _authenticators,
             _recoveryCodes,
+            _passwords,
             _audit,
             Gate,
             ReservedUsernames.Default,
@@ -163,6 +164,27 @@ public sealed class AccountServiceTests : IAsyncDisposable
         Assert.Null(detail.Profile.LegalName);
         Assert.Null(detail.Profile.DateOfBirth);
         Assert.Null(detail.Identifiers.Username);
+    }
+
+    /// <summary>
+    /// REG-ACCT-001 and D-224: the read says whether a password is set and when it was
+    /// last set, and an account that holds none reads as unset with no instant.
+    /// </summary>
+    [Fact]
+    public async Task REG_ACCT_001_TheReadSaysWhetherAPasswordIsSetAndWhenAsync()
+    {
+        var passwordless = SubjectId.New(_randomness);
+
+        _directory.Stands(passwordless, AccountState.Active);
+
+        AccountDetail held = Read(await Service.ReadAsync(Acting, TestContext.Current.CancellationToken));
+        AccountDetail none = Read(await Service.ReadAsync(
+            AccessContext.Of(passwordless),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(new PasswordStatus(true, Noon), held.Password);
+        Assert.Equal(new PasswordStatus(false, null), none.Password);
+        Assert.DoesNotContain(held.Credentials, credential => credential.Kind == Factor.Password);
     }
 
     /// <summary>

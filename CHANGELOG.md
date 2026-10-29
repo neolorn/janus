@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /account` carries `password`, `{ set, changedAt }`, saying whether a password is
+  set and when it was last set (`changedAt` null where none is); `IAccount.ReadAsync`
+  answers it as `AccountDetail.Password`, a `PasswordStatus`. The credential list stays
+  the authenticators'.
 - `GET /register/events` sends its headers and a comment line at once, and a comment
   line every 30 seconds while it sends nothing else, so a client knows it is connected
   and an idle proxy keeps the stream open.
