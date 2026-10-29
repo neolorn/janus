@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Storage.Authentication.Oidc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
@@ -80,14 +82,6 @@ internal static class OidcRegistration
             })
             .AddServer(options =>
             {
-                _ = options
-                    .SetAuthorizationEndpointUris(Authorization)
-                    .SetPushedAuthorizationEndpointUris(PushedAuthorization)
-                    .SetTokenEndpointUris(Token)
-                    .SetUserInfoEndpointUris(UserInfo)
-                    .SetJsonWebKeySetEndpointUris(KeySet)
-                    .SetConfigurationEndpointUris(Configuration);
-
                 // AUTH-OIDC-001: the code flow with proof key and the refresh flow, and
                 // nothing else. No implicit flow, no password grant, no device flow.
                 _ = options.AllowAuthorizationCodeFlow().AllowRefreshTokenFlow();
@@ -180,6 +174,22 @@ internal static class OidcRegistration
                 _ = options.UseAspNetCore();
             });
 
+        // Chapter 09 section 9 (D-224): the provider answers at the address the host
+        // declares and nowhere else. Its issuer is that address exactly and each route is
+        // that address followed by the route's path, so a request for one of them at any
+        // other address is not the provider's and goes on to the host's routing.
+        _ = services.AddOptions<OpenIddictServerOptions>()
+            .Configure<AuthenticationAddresses>((options, addresses) =>
+            {
+                options.Issuer = new Uri(addresses.Provider, UriKind.Absolute);
+                ProvidedAt(options.AuthorizationEndpointUris, addresses, Authorization);
+                ProvidedAt(options.PushedAuthorizationEndpointUris, addresses, PushedAuthorization);
+                ProvidedAt(options.TokenEndpointUris, addresses, Token);
+                ProvidedAt(options.UserInfoEndpointUris, addresses, UserInfo);
+                ProvidedAt(options.JsonWebKeySetEndpointUris, addresses, KeySet);
+                ProvidedAt(options.ConfigurationEndpointUris, addresses, Configuration);
+            });
+
         // AUTH-KEY-001, CONV-CODE-007, CONV-DESIGN-007: the server requires one
         // asymmetric signing credential to start, and holds the current key's as the
         // start read it, the same object the source holds. The options are built once,
@@ -208,6 +218,38 @@ internal static class OidcRegistration
             });
 
         return services;
+    }
+
+    /// <summary>
+    /// Whether a request arrived at the provider address the host declares, which is
+    /// where the provider's routes are served and nowhere else (09 section 9, D-224).
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <param name="addresses">The addresses the host declares.</param>
+    /// <returns>Whether its origin and its mount are the provider address's.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public static bool Serves(HttpRequest request, AuthenticationAddresses addresses)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(addresses);
+
+        var provider = new Uri(addresses.Provider, UriKind.Absolute);
+
+        return string.Equals(provider.Scheme, request.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(provider.Authority, request.Host.Value, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                provider.AbsolutePath.TrimEnd('/'),
+                request.PathBase.Value?.TrimEnd('/') ?? string.Empty,
+                StringComparison.Ordinal);
+    }
+
+    // The server starts each list with a default of its own for the discovery
+    // document and the key set, which would answer at any address, so each list holds
+    // the provider's address alone.
+    private static void ProvidedAt(List<Uri> routes, AuthenticationAddresses addresses, string route)
+    {
+        routes.Clear();
+        routes.Add(new Uri(addresses.Provider.TrimEnd('/') + "/" + route, UriKind.Absolute));
     }
 
     private static void CookieRefused<TContext>(OpenIddictServerBuilder options)

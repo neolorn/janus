@@ -1,6 +1,8 @@
 using System;
 using System.Security.Cryptography;
+using Janus.Core;
 using Janus.Hosting.Callbacks;
+using Janus.Hosting.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,7 +95,9 @@ public static class PipelineProfiles
         // still hold a stale session for the domain, so there the cookie is ignored
         // rather than refused. A callback carrying the cookie is refused by the profile
         // as a rejected callback is; a protocol endpoint of the provider carrying it is
-        // refused by the provider, in its protocol's shape.
+        // refused by the provider, in its protocol's shape. A protocol endpoint's path
+        // at any address but the provider's is not the provider's (09 section 9, D-224),
+        // so neither branch takes it and it goes on as any other request does.
         return application
             .UseWhen(
                 context => MachineRoutes.Governs(context.Request.Path)
@@ -101,7 +105,7 @@ public static class PipelineProfiles
                     && !MachineRoutes.AnswersByProtocol(context.Request.Path),
                 Machine)
             .UseWhen(
-                context => MachineRoutes.AnswersByProtocol(context.Request.Path),
+                context => MachineRoutes.AnswersByProtocol(context.Request.Path) && AtProvider(context),
                 branch =>
                 {
                     Marked(branch);
@@ -252,6 +256,12 @@ public static class PipelineProfiles
             return next(context);
         });
     }
+
+    // 09 section 9 (D-224): whether the request arrived at the provider address the
+    // host declares, the one address the provider's routes are served at.
+    private static bool AtProvider(HttpContext context) =>
+        context.RequestServices.GetService<AuthenticationAddresses>() is AuthenticationAddresses addresses
+        && OidcRegistration.Serves(context.Request, addresses);
 
     // The stages every callback on the machine profile passes.
     private static void Machine(IApplicationBuilder branch)

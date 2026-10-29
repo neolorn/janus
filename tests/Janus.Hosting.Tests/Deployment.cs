@@ -135,7 +135,10 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="addresses">The frontend addresses the host declared.</param>
     /// <param name="prefix">The path the host mounts the library under.</param>
     /// <param name="preferences">The preference keys the host declared.</param>
-    /// <param name="signIn">Where the host's own sign-in screen is.</param>
+    /// <param name="signIn">
+    /// Where the host's own sign-in screen is, and the provider address, which is the
+    /// address the library is mounted at, its prefix included (LIB-HOST-003).
+    /// </param>
     /// <param name="client">Which client of the provider this application is.</param>
     /// <param name="providers">
     /// The social providers whose security events the host takes; both, unless it says
@@ -267,7 +270,7 @@ internal sealed class Deployment : IAsyncDisposable
             builder.Services,
             application,
             addresses ?? Pages,
-            signIn ?? Screen,
+            signIn ?? (prefix.Length is 0 ? Screen : Screen with { Provider = Screen.Provider + prefix }),
             client ?? Registered,
             providers ?? [SocialProviders.Google, SocialProviders.Apple],
             codec,

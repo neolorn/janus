@@ -71,6 +71,60 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
+    /// 09 section 9 (D-224 item 11): the issuer is the provider address the host
+    /// declares exactly, and each route the document names is that address followed by
+    /// the route's path.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_TheIssuerIsTheProviderAddressAndEachRouteIsUnderItAsync()
+    {
+        await using var deployment = new Deployment(prefix: Prefix);
+        const string provider = "https://identity.example.test" + Prefix;
+
+        JsonElement document = (await new Machine(deployment)
+                .GetAsync(Prefix + "/.well-known/openid-configuration", bearer: string.Empty))
+            .Json();
+
+        Assert.Equal(provider, document.GetProperty("issuer").GetString());
+        Assert.Equal(provider + "/oidc/authorize", document.GetProperty("authorization_endpoint").GetString());
+        Assert.Equal(
+            provider + "/oidc/par",
+            document.GetProperty("pushed_authorization_request_endpoint").GetString());
+        Assert.Equal(provider + "/oidc/token", document.GetProperty("token_endpoint").GetString());
+        Assert.Equal(provider + "/oidc/userinfo", document.GetProperty("userinfo_endpoint").GetString());
+        Assert.Equal(provider + "/oidc/jwks", document.GetProperty("jwks_uri").GetString());
+    }
+
+    /// <summary>
+    /// 09 section 9 (D-224 item 11): a request for one of the provider's routes at any
+    /// other address is not the provider's: it is answered as a route the host never
+    /// mapped is answered there, and not by the provider.
+    /// </summary>
+    /// <param name="path">The route asked for.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/.well-known/openid-configuration")]
+    [InlineData("/oidc/jwks")]
+    [InlineData("/oidc/userinfo")]
+    public async Task AUTH_OIDC_001_AProviderRouteAtAnotherAddressIsNotTheProvidersAsync(string path)
+    {
+        await using var deployment = new Deployment();
+        var elsewhere = new Machine(deployment) { Host = "accounts.example.test" };
+
+        Answer read = await elsewhere.GetAsync(path, bearer: string.Empty);
+        Answer unmapped = await elsewhere.GetAsync("/no-such-route", bearer: string.Empty);
+        Answer token = await elsewhere.PostAsync("/oidc/token", ("grant_type", "authorization_code"));
+        Answer posted = await elsewhere.PostAsync("/no-such-route", ("grant_type", "authorization_code"));
+        Answer provider = await new Machine(deployment).GetAsync(path, bearer: string.Empty);
+
+        Assert.NotEqual(provider.Status, read.Status);
+        Assert.Equal(unmapped.Status, read.Status);
+        Assert.Equal(posted.Status, token.Status);
+        Assert.DoesNotContain("invalid_", token.Body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// INT-MAIL-004 AC2: the discovery document advertises no introspection endpoint;
     /// a relying party validates a token against the key set and userinfo, which it
     /// does advertise.

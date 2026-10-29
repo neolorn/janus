@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The provider answers only at the provider address the host declares: its issuer is
+  that address exactly, each of its routes is that address followed by the route's path,
+  and a request for one of them at any other address is no longer the provider's and
+  goes on to the host's routing.
 - A sign-in whose first factor is an `emailLink` or `emailCode` delivered to the
   account's primary email, or the code a sign-in link's page showed for such a link, is
   no longer held by the new-device check: the browser is remembered for
