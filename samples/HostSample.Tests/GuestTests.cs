@@ -56,8 +56,9 @@ public sealed partial class GuestTests(WorkshopHost host) : IClassFixture<Worksh
 
         using TestVisitor guest = host.Guest();
 
+        int held = host.Mail.SentTo(email).Count;
         Answered asked = await Exchanges.SendAsync(guest, HttpMethod.Post, "records/access", new { kind = "email", value = email.Value }, Cancellation);
-        Answered opened = await Exchanges.SendAsync(guest, HttpMethod.Post, "records/access/verify", new { code = Code(email) }, Cancellation);
+        Answered opened = await Exchanges.SendAsync(guest, HttpMethod.Post, "records/access/verify", new { code = await CodeAfterAsync(email, held) }, Cancellation);
         Answered read = await Exchanges.SendAsync(guest, HttpMethod.Get, record, null, Cancellation);
         Answered exported = await Exchanges.SendAsync(guest, HttpMethod.Get, record + "/export?format=human", null, Cancellation);
         Answered deleting = await Exchanges.SendAsync(guest, HttpMethod.Post, record + "/delete", null, Cancellation);
@@ -127,11 +128,17 @@ public sealed partial class GuestTests(WorkshopHost host) : IClassFixture<Worksh
     [GeneratedRegex("[0-9]{6}")]
     private static partial Regex SixDigits();
 
-    // The code the latest message to the address carries.
-    private string Code(EmailAddress email) =>
-        SixDigits().Match(host.Mail.SentTo(email)[^1].Body) is { Success: true } code
+    // The code the latest message to the address carries, once a message beyond those
+    // held before it was asked is delivered: a code goes out on its own, after the request
+    // that asked it is answered.
+    private async Task<string> CodeAfterAsync(EmailAddress email, int held)
+    {
+        await Exchanges.UntilAsync(() => host.Mail.SentTo(email).Count > held, Cancellation);
+
+        return SixDigits().Match(host.Mail.SentTo(email)[^1].Body) is { Success: true } code
             ? code.Value
             : throw new InvalidOperationException("The latest message to " + email + " carries no code.");
+    }
 
     // The guest's screen at the counter: the collection session, the age answered, the
     // address verified by the code sent to it, then the workshop's walk-in, presenting
@@ -147,12 +154,13 @@ public sealed partial class GuestTests(WorkshopHost host) : IClassFixture<Worksh
         Answered terms = await Exchanges.SendAsync(counter, HttpMethod.Get, "privacy/documents/" + WorkshopHost.Terms, null, Cancellation);
         Answered begun = await Exchanges.SendAsync(counter, HttpMethod.Post, "records/collection", new { age = true }, Cancellation);
         Answered aged = await Exchanges.SendAsync(counter, HttpMethod.Put, "records/collection/age", new { dateOfBirth = "1990-01-01" }, Cancellation);
+        int held = host.Mail.SentTo(email).Count;
         Answered staged = await Exchanges.SendAsync(counter, HttpMethod.Put, "records/collection/email", new { value = email.Value }, Cancellation);
         Answered verified = await Exchanges.SendAsync(
             counter,
             HttpMethod.Post,
             "records/collection/verify",
-            new { kind = "email", code = Code(email) },
+            new { kind = "email", code = await CodeAfterAsync(email, held) },
             Cancellation);
         Answered walkedIn = await Exchanges.SendAsync(
             counter,

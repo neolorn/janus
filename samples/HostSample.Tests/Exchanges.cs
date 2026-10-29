@@ -103,4 +103,22 @@ internal static class Exchanges
 
         return answered;
     }
+
+    /// <summary>
+    /// Waits until what background work makes true is shown, or the patience runs out.
+    /// </summary>
+    /// <param name="shown">Whether it is shown.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of the wait.</returns>
+    public static async Task UntilAsync(Func<bool> shown, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(shown);
+
+        DateTimeOffset until = TimeProvider.System.GetUtcNow() + Patience;
+
+        while (!shown() && TimeProvider.System.GetUtcNow() < until)
+        {
+            await Task.Delay(Interval, cancellationToken);
+        }
+    }
 }
