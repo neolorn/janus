@@ -8,7 +8,7 @@ namespace Janus.Hosting.Records;
 /// write.
 /// </summary>
 /// <remarks>
-/// Implements CONV-DESIGN-006, REC-COL-001, REC-COL-003, REC-ACC-001, REC-ACC-002, REC-ATT-001, REC-ADM-001 and REC-ADM-002.
+/// Implements CONV-DESIGN-006, REC-COL-001, REC-COL-003, REC-ACC-001, REC-ACC-002, REC-ATT-001 and REC-ADM-001 to REC-ADM-003.
 /// Generated at build time, so the shapes are fixed by something a reader can see.
 /// </remarks>
 [JsonSourceGenerationOptions(

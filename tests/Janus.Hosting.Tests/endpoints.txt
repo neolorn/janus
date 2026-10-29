@@ -1553,6 +1553,15 @@ POST /admin/records/{subject}/delete/cancel
   404 identity.record.notfound
   409 identity.record.followsaccount identity.record.stateconflict identity.takedown.active
   422 identity.deletion.windowelapsed
+POST /admin/records/{subject}/erase
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  404 identity.record.notfound
+  409 identity.record.followsaccount identity.record.stateconflict
 GET /admin/records/{subject}/export
   200
     application/json

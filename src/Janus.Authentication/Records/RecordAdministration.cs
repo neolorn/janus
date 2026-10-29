@@ -16,7 +16,8 @@ namespace Janus.Authentication.Records;
 /// <summary>
 /// What staff do to a person record for the person who reaches it by no code: correct
 /// it on their word, record the consents and objections they tell staff of, lift its
-/// restriction, cancel its deletion, assemble its export, and take it down.
+/// restriction, cancel its deletion, assemble its export, take it down, and erase it once
+/// the host keeps nothing about the person.
 /// </summary>
 /// <param name="records">The person records.</param>
 /// <param name="admission">Where a path naming a record is admitted.</param>
@@ -25,12 +26,12 @@ namespace Janus.Authentication.Records;
 /// <param name="accounts">Where the erasure request that began a window is read.</param>
 /// <param name="stepUp">What the gated rows ask of the staff member's session.</param>
 /// <param name="events">Where a cancellation is announced.</param>
-/// <param name="privacy">Where the record's consents and objections are entered, its export assembled and its takedown carried.</param>
+/// <param name="privacy">Where the record's consents and objections are entered, its export assembled, its takedown carried and its erasure made.</param>
 /// <param name="configuration">Where the message languages and the deletion window are read.</param>
 /// <param name="work">The one transaction each change runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements REC-ADM-001, REC-ADM-002, REC-TKD-001 and chapter 09 section 8a. Each row
+/// Implements REC-ADM-001, REC-ADM-002, REC-ADM-003, REC-TKD-001 and chapter 09 section 8a. Each row
 /// is admitted in the organization that holds the record, judged first on where the
 /// record stands, then, inside the unit of work, admitted again and judged again on the
 /// record's row under its lock (AUTHZ-GATE-006, D-183), so a refusal writes nothing.
@@ -659,6 +660,45 @@ internal sealed class RecordAdministration(
                             cancellationToken)
                         .ConfigureAwait(false);
                 },
+                error => ValueTask.FromResult(Result.Failure(error)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Erases a record the host keeps nothing about any longer (REC-ADM-003): at once,
+    /// with the reason <c>retention</c>, on the word of a staff member or of a host's job.
+    /// </summary>
+    /// <param name="context">The staff member or the job erasing it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="reason">Why, as the caller gives it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="IPersonRecords.EraseAsync"/> names.</returns>
+    public async ValueTask<Result> EraseAsync(
+        AccessContext context,
+        SubjectId subject,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return await (await AdmittedAsync(context, Permissions.RecordErase, subject, cancellationToken).ConfigureAwait(false))
+            .Match(
+                admitted => Written(reason) is string written
+                    ? ChangedAsync(
+                        context,
+                        Permissions.RecordErase,
+                        subject,
+                        admitted,
+                        Unexercisable,
+                        challenge: null,
+                        async (_, token) =>
+                        {
+                            await privacy.EraseAsync(context, subject, written, token).ConfigureAwait(false);
+
+                            return null;
+                        },
+                        cancellationToken)
+                    : ValueTask.FromResult(Result.Failure(Malformed("reason"))),
                 error => ValueTask.FromResult(Result.Failure(error)))
             .ConfigureAwait(false);
     }

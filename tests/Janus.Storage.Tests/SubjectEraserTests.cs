@@ -129,6 +129,29 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
+    /// REC-ADM-003 AC1 (D-223): a record a host erases at once, active and in no window,
+    /// reaches <c>deleted</c> beside an erasures row whose reason is <c>retention</c>, as
+    /// the column is written.
+    /// </summary>
+    [Fact]
+    public async Task REC_ADM_003_AC1_ARecordErasedAtOnceCarriesTheRetentionReasonAsync()
+    {
+        (SubjectId subject, _, _) = await ActiveRecordAsync();
+
+        await EraseAsync(subject, ErasureReason.Retention);
+
+        await using StoreContext reading = database.Context();
+        PersonRecordRow row = await reading.PersonRecords
+            .SingleAsync(record => record.Subject == subject, TestContext.Current.CancellationToken);
+        await using NpgsqlConnection connection = await database.OpenAsync();
+        string written = await connection.QuerySingleAsync<string>(
+            "SELECT reason FROM identity.erasures WHERE subject = @subject",
+            new { subject = subject.Value });
+
+        Assert.Equal((PersonRecordState.Deleted, "retention"), (row.State, written));
+    }
+
+    /// <summary>
     /// REC-REC-003 AC2, IDN-LIFE-003b AC4: a person record's erasure that does not commit
     /// leaves no erasures row and erases nothing: the record is still in its window, its
     /// key stands and its contact still matches.
@@ -1433,6 +1456,24 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     // reference, in its own deletion window.
     private async ValueTask<(SubjectId Subject, string Number, string Reference)> DeletingRecordAsync()
     {
+        (SubjectId subject, string number, string reference) = await ActiveRecordAsync();
+
+        await using StoreContext changing = database.Context();
+        var records = new PersonRecordStore(changing, _deployment.Ring, _deployment.Randomness);
+        PersonRecord record = (await records.FindBySubjectAsync(subject, TestContext.Current.CancellationToken))!;
+
+        record.RequestDeletion(DeletionOrigin.Self, Noon);
+
+        await records.RecordAsync(record, TestContext.Current.CancellationToken);
+        await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return (subject, number, reference);
+    }
+
+    // A person record a collection wrote, with a name, a verified phone and a
+    // reference, active and in no window.
+    private async ValueTask<(SubjectId Subject, string Number, string Reference)> ActiveRecordAsync()
+    {
         OrganizationId organization = await _deployment.OrganizationAsync(Noon);
         SubjectId subject = Subjects.New();
         string suffix = subject.Value.ToString("N");
@@ -1467,15 +1508,6 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     TestContext.Current.CancellationToken);
             await work.CommitAsync(TestContext.Current.CancellationToken);
         }
-
-        await using StoreContext changing = database.Context();
-        var records = new PersonRecordStore(changing, _deployment.Ring, _deployment.Randomness);
-        PersonRecord record = (await records.FindBySubjectAsync(subject, TestContext.Current.CancellationToken))!;
-
-        record.RequestDeletion(DeletionOrigin.Self, Noon);
-
-        await records.RecordAsync(record, TestContext.Current.CancellationToken);
-        await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return (subject, number, reference);
     }

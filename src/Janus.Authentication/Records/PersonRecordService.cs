@@ -334,6 +334,14 @@ internal sealed class PersonRecordService(
         administration.ExportAsync(context, session, subject, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<Result> EraseAsync(
+        AccessContext context,
+        SubjectId subject,
+        string reason,
+        CancellationToken cancellationToken) =>
+        administration.EraseAsync(context, subject, reason, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Result<ExecutedTakedown>> TakeDownAsync(
         AccessContext context,
         SessionId session,

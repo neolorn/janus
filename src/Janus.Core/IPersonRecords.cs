@@ -310,6 +310,33 @@ public interface IPersonRecords
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Erases a person record the host keeps nothing about any longer, under
+    /// <c>record:erase</c>, admitted as <see cref="ReadAsync"/> is: an active or a
+    /// restricted record is erased at once with the reason <c>retention</c>,
+    /// <c>ErasureRequested</c> delivered, and the erasure recorded
+    /// <c>privacy.erasure.executed</c> with the caller its principal, <c>details.reason</c>
+    /// <c>retention</c> and the reason given in <c>details.statedReason</c>. Not gated; a
+    /// host's declared job declaring <c>record:erase</c> may call it outside a request.
+    /// </summary>
+    /// <param name="context">The staff member or the job erasing it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="reason">Why, recorded.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>api.request.malformed</c> naming <c>reason</c> where it is blank or past 1024
+    /// characters after trimming; <c>identity.record.followsaccount</c> naming the account
+    /// a record is attached to; <c>identity.record.stateconflict</c> where it is deleting
+    /// or deleted.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result> EraseAsync(
+        AccessContext context,
+        SubjectId subject,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes a person record down under <c>takedown:execute</c>, admitted as
     /// <see cref="ReadAsync"/> is, behind the step-up <c>record:takedown</c>: into its
     /// deletion window by <c>takedown</c>, holding what it held, every record access

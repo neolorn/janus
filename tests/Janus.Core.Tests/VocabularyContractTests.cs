@@ -249,7 +249,7 @@ public sealed class VocabularyContractTests
             ["awaiting-subscribers", "complete", "failed"],
             WireNames<ErasureStatus>());
         Assert.Equal(
-            ["erasure-request", "minor-takedown"],
+            ["erasure-request", "minor-takedown", "retention"],
             WireNames<ErasureReason>());
     }
 

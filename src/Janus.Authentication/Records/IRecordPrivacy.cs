@@ -5,11 +5,11 @@ using Janus.Core;
 namespace Janus.Authentication.Records;
 
 /// <summary>
-/// What the privacy area does to a person record on staff's word, once the records area
-/// has admitted the staff member and judged the record.
+/// What the privacy area does to a person record on the word of staff or of a host's job,
+/// once the records area has admitted the caller and judged the record.
 /// </summary>
 /// <remarks>
-/// Implements REC-ADM-002, REC-TKD-001 and CONV-LAYOUT-001. The rows are the records area's and the
+/// Implements REC-ADM-002, REC-ADM-003, REC-TKD-001 and CONV-LAYOUT-001. The rows are the records area's and the
 /// work is the privacy area's, so the rows ask through this contract and never name
 /// what answers it.
 /// </remarks>
@@ -126,6 +126,22 @@ internal interface IRecordPrivacy
         AccessContext context,
         SessionId session,
         SubjectId record,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Erases the record at once inside the unit of work the caller opened, the record
+    /// held under its lock, with the reason <c>retention</c>: the erasure is announced and
+    /// recorded with the principal that asked and the reason it gave.
+    /// </summary>
+    /// <param name="context">The staff member or the job erasing it.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of erasing it.</returns>
+    ValueTask EraseAsync(
+        AccessContext context,
+        SubjectId record,
+        string reason,
         CancellationToken cancellationToken);
 
     /// <summary>

@@ -18,7 +18,7 @@ namespace Janus.Hosting.Records;
 /// someone who holds no account.
 /// </summary>
 /// <remarks>
-/// Implements REC-COL-003, REC-ADM-001, REC-ADM-002, REC-ATT-002, REC-TKD-001, D-223 and
+/// Implements REC-COL-003, REC-ADM-001 to REC-ADM-003, REC-ATT-002, REC-TKD-001, D-223 and
 /// LIB-API-005. Each maps one operation of <see cref="IPersonRecords"/>.
 /// </remarks>
 internal static class RecordEndpoints
@@ -98,6 +98,11 @@ internal static class RecordEndpoints
         _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/delete/cancel", CancelDeletionAsync))
             .Declares(Changing(
                 ErrorCodes.RecordStateConflict, ErrorCodes.TakedownActive, ErrorCodes.DeletionWindowElapsed))
+            .Produces(StatusCodes.Status204NoContent);
+
+        _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/erase", EraseAsync))
+            .Declares(Entering())
+            .Accepts<RecordReasonBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/takedown", TakeDownAsync))
@@ -410,6 +415,32 @@ internal static class RecordEndpoints
             Nothing);
     }
 
+    // REC-ADM-003, D-223: a record the host keeps nothing about any longer, erased at once.
+    private static async Task<IResult> EraseAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        RecordReasonBody body = await JsonBody
+            .ReadAsync<RecordReasonBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (body.Reason is not string reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await records.EraseAsync(browser.Asking, subject, reason, cancellationToken).ConfigureAwait(false),
+            Nothing);
+    }
+
     // REC-TKD-001: the record into its window by takedown, its access sessions ended.
     private static async Task<IResult> TakeDownAsync(
         IPersonRecords records,
@@ -518,7 +549,8 @@ internal static class RecordEndpoints
             .ConfigureAwait(false));
     }
 
-    // 09 section 8a: a row entering what the person told staff, not gated.
+    // 09 section 8a: a row entering what the person told staff, or erasing a record, not
+    // gated.
     private static EndpointDeclaration Entering(params ErrorCode[] codes) =>
         EndpointDeclaration
             .Answering(

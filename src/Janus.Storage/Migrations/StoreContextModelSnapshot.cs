@@ -4283,7 +4283,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown')");
+                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown', 'retention')");
 
                         t.HasCheckConstraint("ck_erasures_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
 
@@ -4414,7 +4414,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_outbox_purpose", "(kind IN ('consent-changed', 'objection-changed') AND purpose IS NOT NULL AND length(trim(purpose)) > 0 AND change IS NOT NULL) OR (kind NOT IN ('consent-changed', 'objection-changed') AND purpose IS NULL AND change IS NULL)");
 
-                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
+                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown', 'retention')");
 
                         t.HasCheckConstraint("ck_outbox_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
 

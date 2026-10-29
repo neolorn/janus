@@ -301,7 +301,7 @@ table erasures
   column status text not null
   column attempts integer not null
   constraint ck_erasures_attempts CHECK ((attempts >= 0))
-  constraint ck_erasures_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text])))
+  constraint ck_erasures_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'retention'::text])))
   constraint ck_erasures_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
   constraint ck_erasures_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_erasures_subject FOREIGN KEY (subject) REFERENCES identity.subject_keys(subject) ON DELETE RESTRICT
@@ -795,7 +795,7 @@ table outbox
   constraint ck_outbox_change CHECK ((change = ANY (ARRAY['granted'::text, 'lifted'::text, 'recorded'::text, 'set'::text, 'superseded'::text, 'withdrawn'::text])))
   constraint ck_outbox_kind CHECK ((kind = ANY (ARRAY['consent-changed'::text, 'erasure-requested'::text, 'objection-changed'::text, 'restriction-changed'::text, 'takedown-executed'::text])))
   constraint ck_outbox_purpose CHECK ((((kind = ANY (ARRAY['consent-changed'::text, 'objection-changed'::text])) AND (purpose IS NOT NULL) AND (length(TRIM(BOTH FROM purpose)) > 0) AND (change IS NOT NULL)) OR ((kind <> ALL (ARRAY['consent-changed'::text, 'objection-changed'::text])) AND (purpose IS NULL) AND (change IS NULL))))
-  constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text])))
+  constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'retention'::text])))
   constraint ck_outbox_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
   constraint ck_outbox_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_outbox_subject FOREIGN KEY (subject) REFERENCES identity.subject_keys(subject) ON DELETE RESTRICT

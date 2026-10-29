@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Records;
 using Janus.Core;
 using Janus.Privacy.Consents;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Exports;
 using Janus.Privacy.Takedowns;
 
@@ -14,10 +15,14 @@ namespace Janus.Storage.Authentication.Records;
 /// </summary>
 /// <param name="exports">Where a record's export is assembled and counted.</param>
 /// <param name="consents">Where the consents and objections staff enter for a record are recorded.</param>
+/// <param name="erasure">Where a record a host keeps nothing about any longer is erased.</param>
 /// <param name="takedowns">Where a record's takedown is carried, read and reversed.</param>
-/// <remarks>Implements REC-ADM-002, REC-TKD-001 and CONV-LAYOUT-001.</remarks>
-internal sealed class RecordPrivacy(ExportService exports, ConsentService consents, TakedownService takedowns)
-    : IRecordPrivacy
+/// <remarks>Implements REC-ADM-002, REC-ADM-003, REC-TKD-001 and CONV-LAYOUT-001.</remarks>
+internal sealed class RecordPrivacy(
+    ExportService exports,
+    ConsentService consents,
+    RecordErasure erasure,
+    TakedownService takedowns) : IRecordPrivacy
 {
     /// <inheritdoc/>
     public ValueTask<Result<SubjectExport>> ExportAsync(
@@ -74,6 +79,14 @@ internal sealed class RecordPrivacy(ExportService exports, ConsentService consen
         SubjectId record,
         CancellationToken cancellationToken) =>
         exports.AssembleAttachedAsync(context, session, record, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask EraseAsync(
+        AccessContext context,
+        SubjectId record,
+        string reason,
+        CancellationToken cancellationToken) =>
+        erasure.EraseAsync(context, record, reason, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<ExecutedTakedown?> TakeDownAsync(

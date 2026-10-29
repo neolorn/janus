@@ -72,6 +72,7 @@ internal static class PrivacyRegistration
             provider.GetRequiredService<TimeProvider>()));
 
         services.AddScoped<DeletionSweep>();
+        services.AddScoped<RecordErasure>();
         services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<ExportService>();
         services.AddScoped<IExports>(provider => provider.GetRequiredService<ExportService>());

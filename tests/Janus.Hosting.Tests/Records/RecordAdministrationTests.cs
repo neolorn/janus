@@ -18,8 +18,9 @@ namespace Janus.Hosting.Tests.Records;
 
 /// <summary>
 /// Staff reading, correcting, lifting, cancelling and exporting a person record, entering the
-/// consents and objections the person tells them of, and reading the records attached to an
-/// account (REC-ADM-001, REC-ADM-002, REC-ATT-002, chapter 09 section 8a, D-223).
+/// consents and objections the person tells them of, erasing it, and reading the records
+/// attached to an account (REC-ADM-001 to REC-ADM-003, REC-ATT-002, chapter 09 section 8a,
+/// D-223).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class RecordAdministrationTests : IAsyncDisposable
@@ -511,6 +512,122 @@ public sealed class RecordAdministrationTests : IAsyncDisposable
             new[] { unreasoned, windowed, followed, hidden }.Select(answer => (answer.Status, answer.Text("code"))));
         Assert.Empty(_deployment.Events.Of<ConsentChanged>());
         Assert.Empty(_deployment.Events.Of<ObjectionChanged>());
+    }
+
+    /// <summary>
+    /// REC-ADM-003 AC1 (D-223): a job declaring <c>record:erase</c> erases an active record
+    /// outside a request, with the reason <c>retention</c>: the erasure is announced, and
+    /// recorded <c>privacy.erasure.executed</c> with the job its principal,
+    /// <c>details.reason</c> <c>retention</c> and the reason it gave in
+    /// <c>details.statedReason</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_003_AC1_AJobDeclaringRecordEraseErasesAnActiveRecordAsync()
+    {
+        SubjectId record = Holding(_shop);
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization("retention", "Clearing the guests kept for nothing.", _shop));
+
+        Result erased;
+
+        await using (AsyncServiceScope scope = _deployment.Scope())
+        {
+            erased = await scope.ServiceProvider.GetRequiredService<IPersonRecords>()
+                .EraseAsync(job, record, "The last booking under it has gone.", CancellationToken.None);
+        }
+
+        Janus.Privacy.Tests.PrivacyAuditEntry entry = Assert.Single(await TrailAsync(record));
+
+        Assert.True(erased.Match(() => true, _ => false));
+        Assert.Equal(
+            [(record, ErasureReason.Retention)],
+            _deployment.Eraser.Erased.Select(erasure => (erasure.Subject, erasure.Reason)));
+        Assert.Equal(
+            [(record, ErasureReason.Retention)],
+            _deployment.Outbox.Deliveries
+                .Where(delivery => delivery.Kind is Janus.Privacy.Outbox.SubjectEventKind.ErasureRequested)
+                .Select(delivery => (delivery.Subject, delivery.Reason)));
+        Assert.Equal(
+            ("privacy.erasure.executed", job.Principal, "retention", "The last booking under it has gone."),
+            (entry.Action.ToString(), entry.Principal, entry.Details["reason"].GetString(), entry.Details["statedReason"].GetString()));
+    }
+
+    /// <summary>
+    /// REC-ADM-003 AC1 (09 section 8a, D-223): a staff member holding <c>record:erase</c>
+    /// erases an active or a restricted record at once, each erasure recorded as a job's
+    /// is, the staff member its principal.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_003_AC1_AStaffMembersErasureIsRecordedAsAJobsIsAsync()
+    {
+        SubjectId active = Holding(_shop);
+        SubjectId restricted = Holding(_shop);
+        _deployment.Records.Of(restricted).State = PersonRecordState.Restricted;
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        _deployment.Gate.Grant(Staff(), _shop, Permissions.RecordErase);
+
+        Answer first = await browser.SendAsync("POST", $"/admin/records/{active.Value}/erase", ("reason", "Nothing kept any longer."));
+        Answer second = await browser.SendAsync("POST", $"/admin/records/{restricted.Value}/erase", ("reason", "Nothing kept any longer."));
+
+        Assert.Equal(
+            (StatusCodes.Status204NoContent, StatusCodes.Status204NoContent),
+            (first.Status, second.Status));
+        Assert.Equal(
+            [(active, ErasureReason.Retention), (restricted, ErasureReason.Retention)],
+            _deployment.Eraser.Erased.Select(erasure => (erasure.Subject, erasure.Reason)));
+        Assert.Equal(
+            [
+                ("privacy.erasure.executed", (SubjectId?)Staff(), "retention", "Nothing kept any longer."),
+                ("privacy.erasure.executed", (SubjectId?)Staff(), "retention", "Nothing kept any longer."),
+            ],
+            (await TrailAsync(active)).Concat(await TrailAsync(restricted)).Select(entry => (
+                entry.Action.ToString(),
+                entry.Acting,
+                entry.Details["reason"].GetString(),
+                entry.Details["statedReason"].GetString())));
+    }
+
+    /// <summary>
+    /// REC-ADM-003 AC2 (09 section 8a): an erasure of a record that is deleting, or erased,
+    /// is refused <c>identity.record.stateconflict</c>, of one attached to an account
+    /// <c>identity.record.followsaccount</c>, one without a reason
+    /// <c>api.request.malformed</c>, and one without <c>record:erase</c> is answered as a
+    /// record none bears; none changes anything.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ADM_003_AC2_AnErasureOfADeletingRecordIsRefusedAndChangesNothingAsync()
+    {
+        SubjectId deleting = Deleting(Holding(_shop), DeletionOrigin.Self, _deployment.Clock.GetUtcNow());
+        SubjectId deleted = Holding(_shop);
+        _deployment.Records.Of(deleted).State = PersonRecordState.Deleted;
+        SubjectId attached = Attached(Holding(_shop), SubjectId.New(Randomness), Noon);
+        SubjectId active = Holding(_shop);
+        SubjectId unheld = Holding(_other);
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        _deployment.Gate.Grant(Staff(), _shop, Permissions.RecordErase);
+
+        Answer windowed = await browser.SendAsync("POST", $"/admin/records/{deleting.Value}/erase", ("reason", "Nothing kept."));
+        Answer gone = await browser.SendAsync("POST", $"/admin/records/{deleted.Value}/erase", ("reason", "Nothing kept."));
+        Answer followed = await browser.SendAsync("POST", $"/admin/records/{attached.Value}/erase", ("reason", "Nothing kept."));
+        Answer unreasoned = await browser.SendAsync("POST", $"/admin/records/{active.Value}/erase", "{}");
+        Answer hidden = await browser.SendAsync("POST", $"/admin/records/{unheld.Value}/erase", ("reason", "Nothing kept."));
+
+        Assert.Equal(
+            [
+                (StatusCodes.Status409Conflict, ErrorCodes.RecordStateConflict.ToString()),
+                (StatusCodes.Status409Conflict, ErrorCodes.RecordStateConflict.ToString()),
+                (StatusCodes.Status409Conflict, ErrorCodes.RecordFollowsAccount.ToString()),
+                (StatusCodes.Status400BadRequest, ErrorCodes.RequestMalformed.ToString()),
+                (StatusCodes.Status404NotFound, ErrorCodes.RecordNotFound.ToString()),
+            ],
+            new[] { windowed, gone, followed, unreasoned, hidden }.Select(answer => (answer.Status, answer.Text("code"))));
+        Assert.Equal(PersonRecordState.Deleting, _deployment.Records.Of(deleting).State);
+        Assert.Empty(_deployment.Eraser.Erased);
+        Assert.DoesNotContain(
+            _deployment.Outbox.Deliveries,
+            delivery => delivery.Kind is Janus.Privacy.Outbox.SubjectEventKind.ErasureRequested);
     }
 
     private static Guid[] Subjects(Answer answer) =>

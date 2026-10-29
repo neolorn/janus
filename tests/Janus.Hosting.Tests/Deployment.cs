@@ -577,6 +577,12 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Privacy.Tests.Erasures.ErasureLedgerInMemory Ledger { get; } = new();
 
     /// <summary>
+    /// The erasure itself, recorded rather than carried, so a test can read whom it erased
+    /// and why.
+    /// </summary>
+    public Janus.Privacy.Tests.Erasures.SubjectEraserInMemory Eraser { get; } = new();
+
+    /// <summary>
     /// What the other areas hold of an export, so a test can arrange it.
     /// </summary>
     public ExportSourceInMemory ExportSource { get; } = new();
@@ -1287,6 +1293,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
         _ = services.AddSingleton<IErasureLedger>(Ledger);
         _ = services.AddScoped<IErasures, Janus.Privacy.Erasures.ErasureService>();
+        _ = services.AddSingleton<Janus.Privacy.Erasures.ISubjectEraser>(Eraser);
+        _ = services.AddScoped<Janus.Privacy.Erasures.RecordErasure>();
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
         _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);
