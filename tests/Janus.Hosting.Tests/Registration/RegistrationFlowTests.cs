@@ -429,6 +429,47 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-SEC-001 (D-224 item 21): the export of the set a registration's security step
+    /// showed is not reported on the registration session, whose account does not yet
+    /// exist, and is reported on the session the terms step establishes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_TheExportOfARegistrationsSetIsReportedOnTheSessionTheTermsStepEstablishesAsync()
+    {
+        _deployment.Configuration.Set(Settings.ServiceName, "Example");
+        Browser browser = await Flow.ConfirmedAsync(_deployment);
+        _ = await browser.SendAsync("PUT", "/register/security", ("password", "tenletters12"));
+        Answer begun = await browser.SendAsync("POST", "/account/factors/totp/begin", ("label", "Authenticator"));
+        _ = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/confirm",
+            ("credentialId", begun.Text("id")),
+            ("code", Generated(begun.Text("secret"))));
+
+        Answer early = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+
+        _ = await browser.SendAsync(
+            "POST",
+            "/register/terms",
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
+        Flow.Carried(_deployment);
+        _deployment.Clock.Advance(TimeSpan.FromSeconds(5));
+        DateTimeOffset reported = _deployment.Clock.GetUtcNow();
+
+        Answer exported = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+        Answer account = await browser.SendAsync("GET", "/account");
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, early.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), early.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, exported.Status);
+        Assert.Equal(
+            reported,
+            account.Json().GetProperty("recoveryCodes").GetProperty("exportedAt").GetDateTimeOffset());
+    }
+
+    /// <summary>
     /// REG-SESS-006: the registration session is accepted in place of an account's
     /// session for the security step alone, so before it the enrolment endpoints
     /// answer a registering browser as they answer one that holds nothing.
