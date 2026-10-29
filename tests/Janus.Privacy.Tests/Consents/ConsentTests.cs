@@ -601,6 +601,27 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-001, chapter 10 section 5.24 (D-223): an entry names the mechanism and
+    /// the kind of the record it concerns in their spellings of sections 5.21 and 5.10, as it names
+    /// them for an objection.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AnEntryNamesTheMechanismAndKindInTheirSpellingsAsync()
+    {
+        await GrantAsync(Recommendations);
+        await WithdrawAsync(Recommendations);
+        await ObjectAsync(Security);
+
+        Assert.Equal(
+            ["dashboard", "dashboard", "dashboard"],
+            _audit.Entries.Select(entry => entry.Details["mechanism"].GetString()));
+        Assert.Equal(
+            ["written", "written"],
+            _audit.Entries.Take(2).Select(entry => entry.Details["kind"].GetString()));
+    }
+
+    /// <summary>
     /// PRIV-CONS-008a AC3: a purpose that is undeclared, or that rests on a basis
     /// other than consent, is refused by the code that says which of the two it is,
     /// on the withdrawal as on the grant, rather than by a refusal that reads as a

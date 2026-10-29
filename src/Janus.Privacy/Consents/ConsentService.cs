@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -61,6 +62,11 @@ internal sealed class ConsentService(
     private static readonly AuditAction Objected = AuditActions.ObjectionRecorded;
 
     private static readonly AuditAction Resumed = AuditActions.ObjectionWithdrawn;
+
+    // Chapter 10 section 5.24 (D-223): an entry names the mechanism and the kind in their
+    // spellings of sections 5.21 and 5.10.
+    private static readonly JsonSerializerOptions Spelled =
+        new() { Converters = { new JsonStringEnumConverter() } };
 
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<ConsentRecord>>> ReadAsync(
@@ -570,7 +576,7 @@ internal sealed class ConsentService(
         {
             ["purpose"] = JsonSerializer.SerializeToElement(purpose),
             ["noticeVersion"] = JsonSerializer.SerializeToElement(version),
-            ["mechanism"] = JsonSerializer.SerializeToElement(mechanism),
+            ["mechanism"] = JsonSerializer.SerializeToElement(mechanism, Spelled),
         };
 
     private static Dictionary<string, JsonElement> Named(
@@ -581,7 +587,7 @@ internal sealed class ConsentService(
     {
         Dictionary<string, JsonElement> details = Named(purpose, version, mechanism);
 
-        details["kind"] = JsonSerializer.SerializeToElement(kind);
+        details["kind"] = JsonSerializer.SerializeToElement(kind, Spelled);
 
         return details;
     }
