@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /auth/session` answers `landing` on every session standing on the record the
+  registration's terms step established, the session another application signs on from
+  it included, not on the authentication application's session alone.
 - `GET /account` carries `password`, `{ set, changedAt }`, saying whether a password is
   set and when it was last set (`changedAt` null where none is); `IAccount.ReadAsync`
   answers it as `AccountDetail.Password`, a `PasswordStatus`. The credential list stays

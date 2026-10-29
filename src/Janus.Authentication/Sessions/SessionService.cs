@@ -613,9 +613,14 @@ internal sealed class SessionService(
             return Result.Failure<SessionDetail>(Error.From(ErrorCodes.SessionExpired));
         }
 
-        // REG-SESS-008, API-REDIR-002: the return is read from the client the session
-        // kept, never from a request.
-        OidcClient? captured = live.Client is string named
+        // REG-SESS-008, API-REDIR-002: the return is read from the client the record
+        // kept, never from a request, so every session standing on the record answers
+        // it (D-224).
+        Session? record = live.Spine == live.Id
+            ? live
+            : await sessions.FindAsync(live.Spine, cancellationToken).ConfigureAwait(false);
+
+        OidcClient? captured = record?.Client is string named
             ? await clients.FindAsync(named, cancellationToken).ConfigureAwait(false)
             : null;
 
