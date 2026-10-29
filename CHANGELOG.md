@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A `StartupException` carrying a failure names its check: its message is the operator's
+  sentence followed by the failure's code and each of its details by name and value, so
+  a host that logs the exception alone has the check.
 - `POST /recovery/complete` declares the refusals of the password it sets, 422
   `auth.password.tooshort`, `auth.password.toolong` and `auth.password.blocklisted`, as
   every route that sets a password does.
