@@ -154,6 +154,20 @@ runs first in the pipeline.
     value asserted by
     `FrontendSettingsTests.PRIV_BASIS_003_ThePurposesAPersonDecidesAreAnsweredWithWhatEachTakesAsync`,
     and its branching check is unchanged.
+- `IdentityEndpointsTests.LIB_API_005_AC3_EveryEndpointResolvesExactlyOneServiceOfTheContractAsync`
+  (a gate):
+  - What was out of step: its list of the routes no operation maps lacked `GET /settings`.
+  - Governing item: `07`, `GET /settings` reads the deployment's settings and no record and
+    is not an operation (D-224).
+  - Rule: the gate lists the route beside the other routes that are not operations.
+- `tests/Janus.Hosting.Tests/Authorization/ServedRequests.cs` (test infrastructure):
+  - What was out of step: the harness starts the provider without the startup check and
+    declared no provider address, which the provider's routes are built from since
+    4a388b52.
+  - Governing item: LIB-HOST-001 and LIB-HOST-003, the host declares where its provider
+    answers.
+  - Rule: the harness declares its addresses as `tests/Janus.Hosting.Tests/Deployment.cs`
+    does.
 
 ## 4. Open questions
 
@@ -291,5 +305,14 @@ that reports its expiry (item 13).
   commit-message gate passes over the round's commits, and the full-history secret scan
   finds nothing. The first run of the unit tests failed
   `PRIV_BASIS_001_AC4_NoLibrarySourceNamesABasis` on 2ce87a6a; e6f1b72d fixes it (section 3).
+- Pipeline on 6f21aa88: red in the contract, truth-table and integration jobs.
+  - Contract: `GET /settings` was missing from the gate's list; 060a18a4 (section 3).
+  - Truth-table and integration: 4a388b52 required the provider address to build the
+    provider's options, so a deployment declaring none failed before the startup check
+    could refuse it, and `AUTH_SESS_012_AC3_ADeploymentThatDeclaredNoSignInScreenIsRefusedAsync`
+    failed with every test on the shared host. 5b97685a leaves that deployment to the
+    startup refusal; 1343bb5d declares the address in the harness that starts the
+    provider alone (section 3).
+  - The tests these jobs named pass on this machine on 1343bb5d.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
