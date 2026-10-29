@@ -17,14 +17,18 @@ namespace HostSample;
 
 /// <summary>
 /// The workshop's own endpoints, mapped after the browser profile beside the library's.
-/// Each needs a signed-in person save the catalogue, which answers anyone, and each that
-/// touches a record asks the gate for the permission it acts under (BFF-HOST-001 to
+/// Each needs a signed-in person save the catalogue and a guest's walk-in, which answer
+/// anyone, and each that touches a record for a signed-in person asks the gate for the
+/// permission it acts under (BFF-HOST-001 to
 /// BFF-HOST-003).
 /// </summary>
 internal static class WorkshopEndpoints
 {
     // The workshop's own refusal of a booking past a workshop's capacity.
     private const string Full = "workshop.capacity.reached";
+
+    // The language the workshop writes to its guests in, one of notification.languages.
+    private const string Language = "en";
 
     // What a workshop's list asks the gate it may do to each repair.
     private static readonly Permission[] Listed =
@@ -45,6 +49,7 @@ internal static class WorkshopEndpoints
         _ = endpoints.MapGet("/workshops/{workshop}/repairs", ListAsync);
         _ = endpoints.MapGet("/workshops/{workshop}/staff", StaffAsync);
         _ = endpoints.MapPost("/workshops/{workshop}/repairs", BookAsync);
+        _ = endpoints.MapPost("/workshops/{workshop}/walk-ins", WalkInAsync).AllowNoSession();
         _ = endpoints.MapGet("/repairs/{ticket}", ReadAsync);
         _ = endpoints.MapDelete("/repairs/{ticket}", CancelAsync);
         _ = endpoints.MapPost("/repairs/{ticket}/release", ReleaseAsync);
@@ -229,6 +234,136 @@ internal static class WorkshopEndpoints
                     Results.Created(new Uri("/repairs/" + booking.Ticket, UriKind.Relative), null));
             },
             Refused);
+
+    // A kite a guest leaves at the counter with no account: the guest's details
+    // collected under a person record from the collection session the guest's browser
+    // holds, the repair and the grip fitting the guest consented to, each held under the
+    // record's key, written, collected and registered in one transaction, which a
+    // refusal rolls back whole (REC-COL-002, AUTHZ-INHERIT-002).
+    private static async Task<IResult> WalkInAsync(
+        string workshop,
+        WalkIn walkIn,
+        IRecordCollection collection,
+        IPersonalFields fields,
+        IUnitOfWork work,
+        IResources resources,
+        WorkshopContext context,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(walkIn.Ticket))
+        {
+            return Results.BadRequest();
+        }
+
+        Workshop? taking = await context.Workshops
+            .SingleOrDefaultAsync(row => row.Id == workshop, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (taking is null)
+        {
+            return Results.NotFound();
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false)).Refusal() is Error notBegun)
+        {
+            return Answers.Refused(notBegun);
+        }
+
+        await context.Database.UseUnitOfWorkAsync(work, cancellationToken).ConfigureAwait(false);
+
+        Result<CollectedRecord> collected = await collection
+            .CollectAsync(
+                new RecordCollection(
+                    new OrganizationId(taking.Organization),
+                    Language,
+                    walkIn.ContactName,
+                    walkIn.NoticeVersion,
+                    walkIn.TermsVersion,
+                    walkIn.Consents,
+                    Contacts: null,
+                    walkIn.Ticket),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (collected.Refusal() is Error uncollected)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Answers.Refused(uncollected);
+        }
+
+        SubjectId guest = collected.Value().Subject;
+
+        Result<ReadOnlyMemory<byte>> sealedName = await fields
+            .WithSubjectAsync(
+                guest,
+                subject => subject.Encrypt(WorkshopModel.RepairType, WorkshopModel.ContactName, walkIn.ContactName),
+                cancellationToken)
+            .ConfigureAwait(false);
+        Result<ReadOnlyMemory<byte>> sealedNeed = await fields
+            .WithSubjectAsync(
+                guest,
+                subject => subject.Encrypt(WorkshopModel.FittingType, WorkshopModel.GripNeed, walkIn.Need),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((sealedName.Refusal() ?? sealedNeed.Refusal()) is Error unsealed)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Answers.Refused(unsealed);
+        }
+
+        var fitting = new Fitting
+        {
+            Id = Guid.NewGuid().ToString("n"),
+            RepairId = walkIn.Ticket,
+            Customer = guest,
+            Need = sealedNeed.Value().ToArray(),
+        };
+
+        _ = context.Repairs.Add(new Repair
+        {
+            Id = walkIn.Ticket,
+            WorkshopId = taking.Id,
+            Customer = guest,
+            Kite = walkIn.Kite,
+            ContactName = sealedName.Value().ToArray(),
+            FollowUp = false,
+        });
+        _ = context.Fittings.Add(fitting);
+        _ = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-INHERIT-002: the fitting, of a sensitive type, names the guest's record as
+        // its data subject, which the record admits once its age is answered.
+        if ((await resources
+                .RegisterManyAsync(
+                    [
+                        new ResourceRegistration(
+                            Of(WorkshopModel.RepairType, walkIn.Ticket),
+                            new OrganizationId(taking.Organization),
+                            Of(WorkshopModel.WorkshopType, taking.Id),
+                            guest),
+                        new ResourceRegistration(
+                            Of(WorkshopModel.FittingType, fitting.Id),
+                            new OrganizationId(taking.Organization),
+                            Of(WorkshopModel.RepairType, walkIn.Ticket),
+                            guest),
+                    ],
+                    cancellationToken)
+                .ConfigureAwait(false)).Refusal() is Error unregistered)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Answers.Refused(unregistered);
+        }
+
+        return Answers.Of(
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false),
+            Results.Created(
+                new Uri("/repairs/" + walkIn.Ticket, UriKind.Relative),
+                new WalkedIn(guest.Value, collected.Value().Created)));
+    }
 
     // A workshop's repairs, filtered by the gate in the workshop's own query, each with
     // the capabilities its reader holds on it, computed for the whole list at once.
