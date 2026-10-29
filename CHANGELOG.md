@@ -10,6 +10,7 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+The step-up actions `record:export`, `record:restrictionlift`, `record:deletioncancel`, `record:takedown` and `record:takedownreverse` gate the staff routes on a person record, each costing what a policy sets for it.
 `POST /admin/records/find` asked in the administrative organization answers the records every organization holds, and an organization the deployment does not hold, or erased, is answered `404 identity.organization.notfound`.
 An attachment of person records is admitted only while the account is active, read under its lock: a restricted account is refused with `authz.restricted`, and an account in any other state with `409 identity.account.stateconflict` naming the state.
 A restriction decided while an account is suspended or deleting restricts each person record attached to it at once, with its own `RestrictionChanged`; the account's later return to restricted changes no record, and the lift lifts each.
