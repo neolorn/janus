@@ -98,9 +98,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// REC-REC-003 AC1: after a person record's erasure no personal field under its key
-    /// decrypts, no fingerprint of its contacts or references matches, and its row
-    /// remains, <c>deleted</c>, beside its erasures row.
+    /// REC-REC-003 AC1: after a person record's erasure its key no longer unwraps, so no
+    /// personal field under it decrypts and none is answered, no fingerprint of its
+    /// contacts or references matches, and its row remains, <c>deleted</c>, beside its
+    /// erasures row.
     /// </summary>
     [Fact]
     public async Task REC_REC_003_AC1_AnErasedRecordHoldsNothingThatIdentifiesThePersonAsync()
@@ -113,13 +114,16 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         var records = new PersonRecordStore(reading, _deployment.Ring, _deployment.Randomness);
         PersonRecordRow row = await reading.PersonRecords
             .SingleAsync(record => record.Subject == subject, TestContext.Current.CancellationToken);
+        SubjectKeyRecord key = (await reading.SubjectKeys
+            .FindAsync([SubjectKeyId.Of(subject)], TestContext.Current.CancellationToken))!;
 
         Assert.Equal(PersonRecordState.Deleted, row.State);
         Assert.Equal(
             ErasureReason.ErasureRequest,
             Assert.IsType<Erasure>(await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken)).Reason);
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await records.ContactsAsync(subject, TestContext.Current.CancellationToken));
+        Assert.Throws<CryptographicException>(() =>
+            PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, _deployment.Ring));
+        Assert.Empty(await records.ContactsAsync(subject, TestContext.Current.CancellationToken));
         Assert.Empty(await records.HoldingContactAsync(IdentifierKind.Phone, number, TestContext.Current.CancellationToken));
         Assert.Empty(await records.HoldingReferenceAsync(reference, TestContext.Current.CancellationToken));
     }
