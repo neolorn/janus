@@ -68,7 +68,7 @@ public sealed class StalwartServer : IAsyncLifetime
         TimeSpan.FromSeconds(5));
 
     private readonly IVolume _data = new VolumeBuilder()
-        .WithName("janus-mailserver-" + Guid.NewGuid().ToString("N"))
+        .WithName("mailserver-" + Guid.NewGuid().ToString("N"))
         .Build();
 
     private IContainer? _server;
