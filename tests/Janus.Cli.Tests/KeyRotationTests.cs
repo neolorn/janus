@@ -914,7 +914,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         await connection.ExecuteAsync(
             """
             TRUNCATE identity.key_rotations, identity.subject_keys, identity.signing_keys, identity.send_outbox,
-                identity.provider_attempts, identity.preauthentication_sessions;
+                identity.provider_attempts, identity.preauthentication_sessions CASCADE;
             DELETE FROM identity.audit_records WHERE action LIKE 'ops.keyrotation.%';
             """);
 
