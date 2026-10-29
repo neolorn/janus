@@ -59,10 +59,11 @@ internal static class MessageChannels
     ];
 
     /// <summary>
-    /// The messages that tell an account holder something happened to their account.
-    /// A send of one of these to an address the account already holds is outside the
-    /// destination restrictions, so an attacker who drains a bucket cannot silence
-    /// the notice that says so.
+    /// The messages that tell an account holder something happened to their account,
+    /// and a person record's existing holder, its notice contacts, that its deletion
+    /// began (REC-ACC-002). A send of one of these to an address the account or the
+    /// record already holds is outside the destination restrictions, so an attacker who
+    /// drains a bucket cannot silence the notice that says so.
     /// </summary>
     public static FrozenSet<MessageKind> Notices { get; } = FrozenSet.ToFrozenSet(
     [
@@ -79,6 +80,7 @@ internal static class MessageChannels
         MessageKind.CredentialSuspended,
         MessageKind.OobDeletionNotice,
         MessageKind.CredentialUnbound,
+        MessageKind.RecordDeletionNotice,
     ]);
 
     /// <summary>

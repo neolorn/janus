@@ -10,6 +10,7 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+`record-deletion-notice` is a security notice: sent to a person record's notice contacts, it is outside the destination restrictions of the sending limits, as `oob-deletion-notice` to them already was.
 `POST /admin/records` refuses an entry giving none of `name`, `email` and `phone` with `422 api.request.invalid` naming `name`, and, where `registration.adultaffirmation` is `required`, a `dateOfBirth` under eighteen with `422 identity.profile.underage`, writing nothing.
 The registration's terms step refuses a `termsVersion` or `noticeVersion` that is not the current version of the terms or the privacy notice with `privacy.consent.superseded` naming the member, and a version of a document with no version published with `privacy.notice.unpublished` naming the document; a collection's `termsVersion` is checked against the terms in the same way.
 A person record attached to an account follows it: the account's restriction and its lift, its deletion window and its cancellation, a takedown and its reversal, and its erasure each apply to every record attached to it in the same transaction, each record holding what it held, with its own `RestrictionChanged`, `TakedownExecuted` and `ErasureRequested` outbox records, its own `RecordDeletionRequested` (with the account's origin and window), `RecordDeletionCancelled` and `TakedownReversed` events, and its own erasures row. An attached record is erased with its account and never by a window of its own.

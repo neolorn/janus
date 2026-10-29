@@ -222,6 +222,25 @@ public sealed class RecordRightsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-ACC-002 AC4, AUTH-ABUSE-004: a deletion asked within a minute of the access
+    /// code still sends <c>record-deletion-notice</c>, a security notice to the record's
+    /// existing holder, which the shipped one-a-minute restriction of any purpose does
+    /// not count.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ACC_002_AC4_ADeletionWithinAMinuteOfTheCodeStillSendsItsNoticeAsync()
+    {
+        Browser asking = await OpenedAsync();
+
+        Assert.Equal(StatusCodes.Status204NoContent, (await asking.SendAsync("POST", Rights("/delete"))).Status);
+
+        _ = await _deployment.CarrySendsAsync();
+
+        _ = Assert.Single(_deployment.Mail.Taken, mail => mail.Body == DeletionNotice);
+    }
+
+    /// <summary>
     /// REC-ACC-002 AC2: a cancellation once the window has closed is refused.
     /// </summary>
     /// <returns>The work of the test.</returns>
