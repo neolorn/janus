@@ -204,6 +204,97 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-PM-002 (D-224): the reset form reads its username, the account's primary
+    /// email, from the self-service link's token, and the read spends nothing, so the
+    /// token still sets the password.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_PM_002_TheResetFormReadsItsUsernameFromTheTokenAndSpendsNothingAsync()
+    {
+        _ = await RegisteredAsync();
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address));
+
+        string token = Token();
+
+        Answer read = await browser.SendAsync("POST", "/recovery/username", ("token", token));
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal(Flow.Address, read.Text("username"));
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync(
+                "POST",
+                "/recovery/complete",
+                ("token", token),
+                ("password", NewPassword))).Status);
+    }
+
+    /// <summary>
+    /// FE-PM-002 (D-224): a token past its lifetime is refused
+    /// <c>auth.recovery.tokenexpired</c>, and one spent is refused
+    /// <c>auth.recovery.tokeninvalid</c>, as the completion refuses them.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_PM_002_AUsernameReadOfATokenPastItsLifetimeOrSpentIsRefusedAsync()
+    {
+        _ = await RegisteredAsync();
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address));
+
+        string spent = Token();
+
+        _ = await browser.SendAsync("POST", "/recovery/complete", ("token", spent), ("password", NewPassword));
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(5));
+        _ = await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address));
+
+        string lapsed = Token();
+
+        _deployment.Clock.Advance(Settings.RecoveryLinkLifetime.Default + TimeSpan.FromSeconds(1));
+
+        Answer invalid = await browser.SendAsync("POST", "/recovery/username", ("token", spent));
+        Answer expired = await browser.SendAsync("POST", "/recovery/username", ("token", lapsed));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, invalid.Status);
+        Assert.Equal(ErrorCodes.RecoveryTokenInvalid.ToString(), invalid.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, expired.Status);
+        Assert.Equal(ErrorCodes.RecoveryTokenExpired.ToString(), expired.Text("code"));
+    }
+
+    /// <summary>
+    /// FE-PM-002, AUTH-ABUSE-001 (D-224): a token that opens nothing is counted against
+    /// the source that presents it, and while that source's delay stands the read
+    /// answers 429 <c>auth.throttled</c> with <c>retryAt</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_PM_002_AUsernameReadOfATokenThatOpensNothingIsCountedThenThrottledAsync()
+    {
+        Browser browser = await ArrivedAsync();
+
+        for (int read = 0; read < Settings.AbuseThrottleThreshold.Default; read++)
+        {
+            Answer gone = await browser.SendAsync("POST", "/recovery/username", ("token", "a-token-nothing-issued"));
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, gone.Status);
+            Assert.Equal(ErrorCodes.RecoveryTokenInvalid.ToString(), gone.Text("code"));
+        }
+
+        Answer held = await browser.SendAsync("POST", "/recovery/username", ("token", "a-token-nothing-issued"));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, held.Status);
+        Assert.Equal(ErrorCodes.Throttled.ToString(), held.Text("code"));
+        Assert.True(held.Json().GetProperty("details").TryGetProperty("retryAt", out _));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002 and D-147: the two links are separate tokens with one endpoint
     /// each, so the self-service link opens no enrolment session.
     /// </summary>

@@ -53,6 +53,24 @@ public interface IRecovery
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads the username a password manager pairs the reset form's new password with:
+    /// the primary email of the account a self-service recovery link was issued for. It
+    /// spends nothing (FE-PM-002, D-224).
+    /// </summary>
+    /// <param name="token">The token the message carried.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The username, or <c>auth.recovery.tokeninvalid</c> or
+    /// <c>auth.recovery.tokenexpired</c>, each counted against the source, or the delay
+    /// the source has earned.
+    /// </returns>
+    ValueTask<Result<string>> UsernameAsync(
+        [NeverLogged] string token,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Approves a re-enrolment for another account after confirming the person on a
     /// channel the account already holds, and sends the enrolment link to that
     /// channel.

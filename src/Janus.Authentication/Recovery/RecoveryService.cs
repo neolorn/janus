@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -254,6 +255,54 @@ internal sealed class RecoveryService(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Result<string>> UsernameAsync(
+        [NeverLogged] string token,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        ArgumentNullException.ThrowIfNull(source);
+
+        // FE-PM-002, AUTH-ABUSE-001 (D-224): a token names no identifier until it opens
+        // something, so every read is first held to the delay of the source that
+        // presents it, and one that opens nothing is counted against that source.
+        var reading = new ThrottleAttempt(source, Identifier: null);
+        Error? failure = null;
+
+        TimeSpan delay = (await throttle.DelayAsync(reading, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<string>(failure);
+        }
+
+        if (delay > TimeSpan.Zero)
+        {
+            return Result.Failure<string>(Error.Throttled(time.GetUtcNow() + delay));
+        }
+
+        RecoveryLink? link = token.Length > 0
+            ? await links.FindAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken).ConfigureAwait(false)
+            : null;
+
+        if (Unopened(link, RecoveryPurpose.SelfService, ErrorCodes.RecoveryTokenInvalid, time.GetUtcNow())
+            is Error refused)
+        {
+            return await UnreadAsync(reading, refused, cancellationToken).ConfigureAwait(false);
+        }
+
+        // REG-IDENT-001: an account always holds a verified email, its primary among
+        // them, so a link whose account holds none is a fault.
+        HeldIdentifier primary = (await identifiers.HeldAsync(link!.Subject, cancellationToken).ConfigureAwait(false))
+            .OfKind(IdentifierKind.Email)
+            .FirstOrDefault(email => email.IsPrimary)
+            ?? throw new InvalidOperationException("The account holds no primary email.");
+
+        return Result.Success(primary.Entered);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result<ApprovedRecovery>> ApproveAsync(
         AccessContext context,
         SessionId session,
@@ -484,6 +533,32 @@ internal sealed class RecoveryService(
                 .FindForUpdateAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken)
                 .ConfigureAwait(false)
             : null;
+
+    // AUTH-ABUSE-001, CONV-DESIGN-003: the count of a token that opens nothing stands,
+    // and the refusal writes nothing else; it is counted in an outermost unit of work
+    // the throttle's count joins.
+    private async ValueTask<Result<string>> UnreadAsync(
+        ThrottleAttempt reading,
+        Error refused,
+        CancellationToken cancellationToken)
+    {
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<string>(notBegun);
+        }
+
+        if ((await throttle.FailedAsync(reading, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error uncounted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<string>(uncounted);
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Failure<string>(refused), Result.Failure<string>);
+    }
 
     // What a link that does not open the endpoint consuming it is refused with: one
     // spent, of the other purpose or none at all is invalid, and one past its lifetime

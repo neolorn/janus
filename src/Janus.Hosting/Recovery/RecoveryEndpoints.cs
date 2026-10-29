@@ -52,6 +52,11 @@ internal static class RecoveryEndpoints
                     ErrorCodes.PasswordTooLong, ErrorCodes.PasswordBlocklisted))
             .Accepts<CompleteRecoveryRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
+        _ = group.MapPost("/username", UsernameAsync)
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired, ErrorCodes.Throttled))
+            .Accepts<UsernameRequest>(MediaTypeNames.Application.Json)
+            .Produces<UsernameView>();
         _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -148,6 +153,33 @@ internal static class RecoveryEndpoints
                         cancellationToken)
                     .ConfigureAwait(false),
                 Nothing);
+    }
+
+    // FE-PM-002 (D-224): the reset form's username is read from the link's token and
+    // the read spends nothing, so the token stays for the completion.
+    private static async Task<IResult> UsernameAsync(
+        IRecovery recovery,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(recovery);
+        ArgumentNullException.ThrowIfNull(context);
+
+        UsernameRequest request = await JsonBody
+            .ReadAsync<UsernameRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        return request.Token is not { Length: > 0 } token
+            ? Answers.Malformed("token")
+            : Answers.Of(
+                await recovery
+                    .UsernameAsync(token, RequestOrigin.Source(context.Request), cancellationToken)
+                    .ConfigureAwait(false),
+                username => TypedResults.Json(
+                    new UsernameView(username),
+                    RecoveryJson.Default.UsernameView,
+                    contentType: null,
+                    StatusCodes.Status200OK));
     }
 
     // AUTH-RECOV-007: a session that has presented one usable factor is enough and no

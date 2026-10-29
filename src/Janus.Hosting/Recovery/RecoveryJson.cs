@@ -13,10 +13,12 @@ namespace Janus.Hosting.Recovery;
 [JsonSerializable(typeof(RecoveryRequest))]
 [JsonSerializable(typeof(CompleteRecoveryRequest))]
 [JsonSerializable(typeof(EnrolmentRequest))]
+[JsonSerializable(typeof(UsernameRequest))]
 [JsonSerializable(typeof(ReportLossRequest))]
 [JsonSerializable(typeof(CancelLossRequest))]
 [JsonSerializable(typeof(ApproveRecoveryRequest))]
 [JsonSerializable(typeof(EnrolmentSessionView))]
 [JsonSerializable(typeof(LossReportedView))]
 [JsonSerializable(typeof(ApprovedRecoveryView))]
+[JsonSerializable(typeof(UsernameView))]
 internal sealed partial class RecoveryJson : JsonSerializerContext;

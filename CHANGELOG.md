@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /recovery/username` `{ token }` answers **200** `{ username }`, the primary
+  email of the account a self-service recovery link was issued for, and spends nothing,
+  so a reset form can carry the username a password manager pairs with the new password;
+  `IRecovery.UsernameAsync` answers it. A token that opens nothing is **422**
+  `auth.recovery.tokeninvalid` and one past its lifetime `auth.recovery.tokenexpired`,
+  each counted against the source and held to its delay.
 - `GET /auth/session` answers `landing` on every session standing on the record the
   registration's terms step established, the session another application signs on from
   it included, not on the authentication application's session alone.
