@@ -370,7 +370,9 @@ public sealed class PersonRecordStoreTests(DatabaseFixture database) : IClassFix
     }
 
     // Every column of the schema that could hold text, read as text, searched for each
-    // value in the form it was given and in its UTF-8 bytes.
+    // value in the form it was given and in its UTF-8 bytes. Each is read under
+    // the C collation, which a pattern takes whatever the column's, and searched in
+    // any case.
     private async Task<List<string>> HoldingAsync(params string[] values)
     {
         await using NpgsqlConnection connection = await database.OpenAsync();
@@ -391,10 +393,10 @@ public sealed class PersonRecordStoreTests(DatabaseFixture database) : IClassFix
         {
             string read = type is "bytea"
                 ? "encode(\"" + column + "\", 'escape')"
-                : "\"" + column + "\"::text";
+                : "\"" + column + "\"::text COLLATE \"C\"";
 
             long found = await connection.ExecuteScalarAsync<long>(
-                "SELECT count(*) FROM identity.\"" + table + "\" WHERE " + read + " LIKE ANY(@sought)",
+                "SELECT count(*) FROM identity.\"" + table + "\" WHERE " + read + " ILIKE ANY(@sought)",
                 new { sought });
 
             if (found > 0)
