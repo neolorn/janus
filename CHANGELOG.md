@@ -10,6 +10,8 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The configuration catalogue holds `oidc.continuation.lifetime` (default 30 minutes,
+  ceiling 1 hour), read and written through `/admin/config` as every runtime key is.
 - The provider answers only at the provider address the host declares: its issuer is
   that address exactly, each of its routes is that address followed by the route's path,
   and a request for one of them at any other address is no longer the provider's and

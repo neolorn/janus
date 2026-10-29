@@ -949,6 +949,12 @@ public static class Settings
         new("oidc.code.lifetime", SettingScope.Runtime, "PT60S", ceiling: "PT10M");
 
     /// <summary>
+    /// How long a browser's pending authorization waits for the sign-in that completes it.
+    /// </summary>
+    public static DurationSetting OidcContinuationLifetime { get; } =
+        new("oidc.continuation.lifetime", SettingScope.Runtime, "PT30M", ceiling: "PT1H");
+
+    /// <summary>
     /// The registered client a browser falls back to where the one a request named is
     /// not one the registry holds. Empty while the deployment names none, and refused
     /// at startup where it names a client the registry does not hold (API-REDIR-001).
@@ -1154,6 +1160,7 @@ public static class Settings
         LegalGoverningLanguage,
         OidcAccessTokenLifetime,
         OidcCodeLifetime,
+        OidcContinuationLifetime,
         RedirectDefaultClient,
         TokenSigningAlgorithm,
         TokenSigningRotation,

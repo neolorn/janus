@@ -4623,6 +4623,7 @@ static Janus.Core.Configuration.Settings.NotificationEmailSendingDomain.get -> J
 static Janus.Core.Configuration.Settings.NotificationLanguages.get -> Janus.Core.Configuration.TextListSetting!
 static Janus.Core.Configuration.Settings.OidcAccessTokenLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OidcCodeLifetime.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.OidcContinuationLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OrganizationDeletionGrace.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OrganizationMultipleMemberships.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.OrganizationPolicy.get -> Janus.Core.Configuration.SettingFamily<Janus.Core.PolicyOverride!>!
