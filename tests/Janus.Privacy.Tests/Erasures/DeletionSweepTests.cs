@@ -233,6 +233,28 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REC-TKD-001 AC2: a record taken down and not reversed is erased when
+    /// <c>takedown.grace</c> elapses, as a takedown, its own deletion window not
+    /// measuring it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_TKD_001_AC2_ARecordNotReversedIsErasedWhenTheWindowClosesAsync()
+    {
+        _configuration.Set(Settings.RecordDeletionGrace, TimeSpan.FromDays(30));
+        _accounts.Deletes(Ahmed, DeletionOrigin.Takedown, Noon, personRecord: true);
+
+        _clock.Advance(Settings.TakedownGrace.Default - TimeSpan.FromMinutes(1));
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+        Assert.Equal((Ahmed, ErasureReason.MinorTakedown), (Assert.Single(_eraser.Erased).Subject, _eraser.Erased[0].Reason));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003 (D-166): a takedown of an account already in its own deletion is
     /// erased at the earlier of that window's end and the takedown's, so it never erases
     /// later than the subject's own request would have, and it erases as a takedown.

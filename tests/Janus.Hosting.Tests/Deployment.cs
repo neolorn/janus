@@ -225,6 +225,31 @@ internal sealed class Deployment : IAsyncDisposable
             await Sessions.EndAccountAsync(subject, at, CancellationToken.None);
         };
         Directory.Creating = account => Accounts.Stands(account.Subject, AccountState.Active);
+
+        // A person record's takedown is carried the same way to the records area, which
+        // holds the record's own row, with the record access sessions it ends; the
+        // reversal returns the row to what it held at the trigger.
+        Dictionary<SubjectId, (PersonRecordState, DeletionOrigin?, DateTimeOffset?, bool)> heldAtTakedown = [];
+        AccountStates.RecordTakenDown = (record, at) =>
+        {
+            Janus.Authentication.Tests.Records.HeldRecord held = Records.Of(record);
+
+            heldAtTakedown[record] = (held.State, held.DeletingBy, held.DeletingSince, held.RestrictionHeld);
+            held.RestrictionHeld = held.RestrictionHeld || held.State is PersonRecordState.Restricted;
+            held.State = PersonRecordState.Deleting;
+            held.DeletingBy = DeletionOrigin.Takedown;
+            held.DeletingSince = at;
+            _ = RecordAccess.EndReachingAsync(record, CancellationToken.None).AsTask().GetAwaiter().GetResult();
+        };
+        AccountStates.RecordTakedownReversed = (record, _) =>
+        {
+            Janus.Authentication.Tests.Records.HeldRecord held = Records.Of(record);
+
+            if (heldAtTakedown.Remove(record, out (PersonRecordState, DeletionOrigin?, DateTimeOffset?, bool) before))
+            {
+                (held.State, held.DeletingBy, held.DeletingSince, held.RestrictionHeld) = before;
+            }
+        };
         SocialProviders = new SocialProvidersInMemory(Clock);
         Secrets = new SecretSourceInMemory(SocialProviders.Credentials);
 
@@ -1255,7 +1280,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IFaultEntry, FaultEntry>();
         _ = services.AddScoped<ExportService>();
         _ = services.AddScoped<IExports>(provider => provider.GetRequiredService<ExportService>());
-        _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
+        _ = services.AddScoped<Janus.Privacy.Takedowns.TakedownService>();
+        _ = services.AddScoped<ITakedowns>(provider => provider.GetRequiredService<Janus.Privacy.Takedowns.TakedownService>());
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
         _ = services.AddSingleton<IErasureLedger>(Ledger);
         _ = services.AddScoped<IErasures, Janus.Privacy.Erasures.ErasureService>();

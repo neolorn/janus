@@ -15,7 +15,8 @@ namespace Janus.Authentication.Records;
 
 /// <summary>
 /// What staff do to a person record for the person who reaches it by no code: correct
-/// it on their word, lift its restriction, cancel its deletion and assemble its export.
+/// it on their word, lift its restriction, cancel its deletion, assemble its export, and
+/// take it down.
 /// </summary>
 /// <param name="records">The person records.</param>
 /// <param name="admission">Where a path naming a record is admitted.</param>
@@ -24,15 +25,15 @@ namespace Janus.Authentication.Records;
 /// <param name="accounts">Where the erasure request that began a window is read.</param>
 /// <param name="stepUp">What the gated rows ask of the staff member's session.</param>
 /// <param name="events">Where a cancellation is announced.</param>
-/// <param name="privacy">Where the record's export is assembled.</param>
+/// <param name="privacy">Where the record's export is assembled and its takedown carried.</param>
 /// <param name="configuration">Where the message languages and the deletion window are read.</param>
 /// <param name="work">The one transaction each change runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements REC-ADM-001, REC-ADM-002 and chapter 09 section 8a. Each row is admitted
-/// in the organization that holds the record, judged first on where the record stands,
-/// then, inside the unit of work, admitted again and judged again on the record's row
-/// under its lock (AUTHZ-GATE-006, D-183), so a refusal writes nothing.
+/// Implements REC-ADM-001, REC-ADM-002, REC-TKD-001 and chapter 09 section 8a. Each row
+/// is admitted in the organization that holds the record, judged first on where the
+/// record stands, then, inside the unit of work, admitted again and judged again on the
+/// record's row under its lock (AUTHZ-GATE-006, D-183), so a refusal writes nothing.
 /// </remarks>
 internal sealed class RecordAdministration(
     IRecordDirectory records,
@@ -358,6 +359,167 @@ internal sealed class RecordAdministration(
                 error => ValueTask.FromResult(Result.Failure<SubjectExport>(error)))
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Takes a record down (REC-TKD-001): into its deletion window by takedown, holding
+    /// what it held, every record access session reaching it ended.
+    /// </summary>
+    /// <param name="context">The staff member taking it down.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="trigger">What raised the report.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The takedown, or the refusal <see cref="IPersonRecords.TakeDownAsync"/> names.</returns>
+    public async ValueTask<Result<ExecutedTakedown>> TakeDownAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        TakedownTrigger trigger,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.Denied));
+        }
+
+        return await (await AdmittedAsync(context, Permissions.TakedownExecute, subject, cancellationToken).ConfigureAwait(false))
+            .Match<ValueTask<Result<ExecutedTakedown>>>(
+                async admitted =>
+                {
+                    if (Written(reason) is not string written)
+                    {
+                        return Result.Failure<ExecutedTakedown>(Malformed("reason"));
+                    }
+
+                    ExecutedTakedown? executed = null;
+
+                    return (await ChangedAsync(
+                            context,
+                            Permissions.TakedownExecute,
+                            subject,
+                            admitted,
+                            Untakeable,
+                            (acting, session, StepUpAction.RecordTakedown),
+                            async (standing, token) =>
+                            {
+                                executed = await privacy
+                                    .TakeDownAsync(context, subject, trigger, written, token)
+                                    .ConfigureAwait(false);
+
+                                return executed is null ? StateConflict(standing.State) : null;
+                            },
+                            cancellationToken)
+                        .ConfigureAwait(false))
+                        .Match(
+                            () => executed is ExecutedTakedown taken
+                                ? Result.Success(taken)
+                                : Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.RecordNotFound)),
+                            Result.Failure<ExecutedTakedown>);
+                },
+                error => ValueTask.FromResult(Result.Failure<ExecutedTakedown>(error)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A record's latest takedown and how far each subscriber has got with it.
+    /// </summary>
+    /// <param name="context">The staff member reading it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The progress, or the refusal <see cref="IPersonRecords.ReadTakedownAsync"/> names.</returns>
+    public async ValueTask<Result<TakedownProgress>> ReadTakedownAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is null)
+        {
+            return Result.Failure<TakedownProgress>(Error.From(ErrorCodes.Denied));
+        }
+
+        return await (await AdmittedAsync(context, Permissions.TakedownExecute, subject, cancellationToken).ConfigureAwait(false))
+            .Match<ValueTask<Result<TakedownProgress>>>(
+                async _ => await privacy.TakedownAsync(subject, cancellationToken).ConfigureAwait(false)
+                    is TakedownProgress progress
+                    ? Result.Success(progress)
+                    : Result.Failure<TakedownProgress>(Error.From(ErrorCodes.TakedownNotFound)),
+                error => ValueTask.FromResult(Result.Failure<TakedownProgress>(error)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reverses a record's takedown inside its window, restoring what it held at the
+    /// trigger.
+    /// </summary>
+    /// <param name="context">The staff member reversing it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="IPersonRecords.ReverseTakedownAsync"/> names.</returns>
+    public async ValueTask<Result> ReverseTakedownAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        return await (await AdmittedAsync(context, Permissions.TakedownExecute, subject, cancellationToken).ConfigureAwait(false))
+            .Match<ValueTask<Result>>(
+                async admitted =>
+                {
+                    if (Written(reason) is not string written)
+                    {
+                        return Result.Failure(Malformed("reason"));
+                    }
+
+                    if ((Followed(admitted)
+                            ?? await privacy.ReversalRefusedAsync(subject, cancellationToken).ConfigureAwait(false))
+                        is Error refused)
+                    {
+                        return Result.Failure(refused);
+                    }
+
+                    return await ChangedAsync(
+                            context,
+                            Permissions.TakedownExecute,
+                            subject,
+                            admitted,
+                            Followed,
+                            (acting, session, StepUpAction.RecordTakedownReverse),
+                            (_, token) => privacy.ReverseTakedownAsync(context, subject, written, token),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                },
+                error => ValueTask.FromResult(Result.Failure(error)))
+            .ConfigureAwait(false);
+    }
+
+    // REC-TKD-001: an erased record takes no takedown, and one already taken down takes
+    // no second; one deleting by the person or a request is taken down, its window ending
+    // no later than it would have.
+    private static Error? Untakeable(RecordStanding standing) =>
+        Followed(standing)
+        ?? standing switch
+        {
+            { State: PersonRecordState.Deleted } => StateConflict(standing.State),
+            { State: PersonRecordState.Deleting, DeletingBy: DeletionOrigin.Takedown } =>
+                Error.From(ErrorCodes.TakedownActive),
+            _ => null,
+        };
 
     // REC-ADM-002: a record attached to an account is the account's, and one in its
     // deletion window, or erased, takes no correction; a restricted one does, being how

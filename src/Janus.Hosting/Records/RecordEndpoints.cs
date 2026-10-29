@@ -18,8 +18,8 @@ namespace Janus.Hosting.Records;
 /// someone who holds no account.
 /// </summary>
 /// <remarks>
-/// Implements REC-COL-003, REC-ADM-001, REC-ADM-002, REC-ATT-002 and LIB-API-005. Each maps one operation of
-/// <see cref="IPersonRecords"/>.
+/// Implements REC-COL-003, REC-ADM-001, REC-ADM-002, REC-ATT-002, REC-TKD-001 and
+/// LIB-API-005. Each maps one operation of <see cref="IPersonRecords"/>.
 /// </remarks>
 internal static class RecordEndpoints
 {
@@ -78,6 +78,24 @@ internal static class RecordEndpoints
         _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/delete/cancel", CancelDeletionAsync))
             .Declares(Changing(
                 ErrorCodes.RecordStateConflict, ErrorCodes.TakedownActive, ErrorCodes.DeletionWindowElapsed))
+            .Produces(StatusCodes.Status204NoContent);
+
+        _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/takedown", TakeDownAsync))
+            .Declares(Changing(
+                ErrorCodes.RequestMalformed, ErrorCodes.RecordStateConflict, ErrorCodes.TakedownActive))
+            .Accepts<TakedownBody>(MediaTypeNames.Application.Json)
+            .Produces<ExecutedTakedownView>(StatusCodes.Status202Accepted);
+
+        _ = SessionRequired.On(endpoints.MapGet("/admin/records/{subject}/takedown", ReadTakedownAsync))
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.RecordNotFound, ErrorCodes.Denied, ErrorCodes.TakedownNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces<TakedownProgressView>();
+
+        _ = SessionRequired.On(endpoints.MapPost("/admin/records/{subject}/takedown/reverse", ReverseTakedownAsync))
+            .Declares(Changing(
+                ErrorCodes.RequestMalformed, ErrorCodes.TakedownNotFound, ErrorCodes.TakedownWindowElapsed))
+            .Accepts<TakedownReversalBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/accounts/{subject}/records", AttachedAsync))
@@ -281,6 +299,92 @@ internal static class RecordEndpoints
         return Answers.Of(
             await records
                 .CancelDeletionAsync(browser.Asking, browser.Required.Id, subject, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    // REC-TKD-001: the record into its window by takedown, its access sessions ended.
+    private static async Task<IResult> TakeDownAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        TakedownBody body = await JsonBody
+            .ReadAsync<TakedownBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (body.Trigger is not TakedownTrigger trigger)
+        {
+            return Answers.Malformed("trigger");
+        }
+
+        if (body.Reason is not string reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await records
+                .TakeDownAsync(browser.Asking, browser.Required.Id, subject, trigger, reason, cancellationToken)
+                .ConfigureAwait(false),
+            executed => TypedResults.Json(
+                ExecutedTakedownView.Of(executed),
+                PrivacyJson.Default.ExecutedTakedownView,
+                contentType: null,
+                StatusCodes.Status202Accepted));
+    }
+
+    // REC-TKD-001: the record's latest takedown, as an account's is read.
+    private static async Task<IResult> ReadTakedownAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await records
+                .ReadTakedownAsync(browser.Asking, subject, cancellationToken)
+                .ConfigureAwait(false),
+            progress => TypedResults.Json(
+                TakedownProgressView.Of(progress),
+                PrivacyJson.Default.TakedownProgressView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    // REC-TKD-001 AC2: the record returns to what it held at the trigger.
+    private static async Task<IResult> ReverseTakedownAsync(
+        IPersonRecords records,
+        RequestSession browser,
+        SubjectId subject,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        TakedownReversalBody body = await JsonBody
+            .ReadAsync<TakedownReversalBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (body.Reason is not string reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await records
+                .ReverseTakedownAsync(browser.Asking, browser.Required.Id, subject, reason, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }

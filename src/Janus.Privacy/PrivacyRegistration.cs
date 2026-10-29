@@ -52,7 +52,8 @@ internal static class PrivacyRegistration
         services.AddScoped<DeadlineSweep>();
         services.AddScoped<HolidayListWatch>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
-        services.AddScoped<ITakedowns, TakedownService>();
+        services.AddScoped<TakedownService>();
+        services.AddScoped<ITakedowns>(provider => provider.GetRequiredService<TakedownService>());
 
         // DR-016: the off-host ledger is the deployment's to register; one it does not
         // register leaves its erasures completing without a line, the residual R-A13

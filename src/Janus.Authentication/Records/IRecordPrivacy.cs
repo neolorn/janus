@@ -9,7 +9,7 @@ namespace Janus.Authentication.Records;
 /// has admitted the staff member and judged the record.
 /// </summary>
 /// <remarks>
-/// Implements REC-ADM-002 and CONV-LAYOUT-001. The rows are the records area's and the
+/// Implements REC-ADM-002, REC-TKD-001 and CONV-LAYOUT-001. The rows are the records area's and the
 /// work is the privacy area's, so the rows ask through this contract and never name
 /// what answers it.
 /// </remarks>
@@ -28,5 +28,56 @@ internal interface IRecordPrivacy
         SubjectId acting,
         string? breakGlassReason,
         SubjectId record,
+        CancellationToken cancellationToken);
+    /// <summary>
+    /// Takes the record down inside the unit of work the caller opened, the record held
+    /// under its lock: the takedown's window begins, every record access session reaching
+    /// it ends, and <c>TakedownExecuted</c> is written, with no suspension announced.
+    /// </summary>
+    /// <param name="context">The staff member taking it down.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="trigger">What raised the report.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The takedown, or nothing where the record is not taken down.</returns>
+    ValueTask<ExecutedTakedown?> TakeDownAsync(
+        AccessContext context,
+        SubjectId record,
+        TakedownTrigger trigger,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The record's latest takedown and how far each subscriber has got with it.
+    /// </summary>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The progress, or nothing where the record holds no takedown.</returns>
+    ValueTask<TakedownProgress?> TakedownAsync(SubjectId record, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether the record's takedown may be reversed now.
+    /// </summary>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing where it may, or <c>identity.takedown.notfound</c>,
+    /// <c>identity.takedown.windowelapsed</c>.
+    /// </returns>
+    ValueTask<Error?> ReversalRefusedAsync(SubjectId record, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reverses the record's takedown inside the unit of work the caller opened,
+    /// restoring what it held at the trigger.
+    /// </summary>
+    /// <param name="context">The staff member reversing it.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing where it was reversed, or the refusal.</returns>
+    ValueTask<Error?> ReverseTakedownAsync(
+        AccessContext context,
+        SubjectId record,
+        string reason,
         CancellationToken cancellationToken);
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Records;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
@@ -22,18 +23,20 @@ namespace Janus.Storage.Privacy.Requests;
 /// <param name="sessions">What a restriction or a takedown ends in the transaction that makes it.</param>
 /// <param name="events">Where each session a restriction or a takedown ends is announced.</param>
 /// <param name="attached">Where each transition is carried to the records attached to the account.</param>
+/// <param name="recordSessions">What a record's takedown ends in the transaction that makes it.</param>
 /// <remarks>
 /// Implements PRIV-RIGHT-004, IDN-LIFE-003, AUTH-SESS-010, REC-ACC-002, REC-REC-003,
-/// REC-ATT-002 and CONV-DESIGN-003. The transitions are the account aggregate's and the
-/// person record's, so a state this adapter cannot reach from is refused there and
-/// answered here as no change.
+/// REC-ATT-002, REC-TKD-001 and CONV-DESIGN-003. The transitions are the account
+/// aggregate's and the person record's, so a state this adapter cannot reach from is
+/// refused there and answered here as no change.
 /// </remarks>
 internal sealed class AccountStates(
     IAccountStore accounts,
     IPersonRecordStore records,
     ISessionStore sessions,
     IEvents events,
-    AttachedRecords attached)
+    AttachedRecords attached,
+    IRecordAccessSessionStore recordSessions)
     : IAccountStates
 {
     /// <inheritdoc/>
@@ -287,6 +290,61 @@ internal sealed class AccountStates(
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
         await attached.ReverseTakedownAsync(subject, now, cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> TakeDownRecordAsync(
+        SubjectId record,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        // REC-TKD-001: a takedown finds a record in any state but a takedown of its own
+        // and an erasure, holds the one it found, and a record attached to an account is
+        // taken down with it, never alone.
+        if (await records.HoldAsync(record, cancellationToken).ConfigureAwait(false)
+            is not { AttachedTo: null } held
+            || held is { State: PersonRecordState.Deleted }
+            or { State: PersonRecordState.Deleting, DeletingBy: DeletionOrigin.Takedown })
+        {
+            return false;
+        }
+
+        held.Takedown(at);
+
+        await records.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+        _ = await recordSessions.EndReachingAsync(record, cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ReverseRecordTakedownAsync(
+        SubjectId record,
+        DateTimeOffset now,
+        DeletionWindows windows,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+
+        // REC-TKD-001: as an account's, the window is judged again under the lock on the
+        // row, so of a reversal and the erasure at the window's end only one commits.
+        if (await records.HoldAsync(record, cancellationToken).ConfigureAwait(false)
+                is not
+                {
+                    State: PersonRecordState.Deleting,
+                    DeletingBy: DeletionOrigin.Takedown,
+                    DeletingSince: DateTimeOffset since,
+                } held
+            || now >= windows.ErasureDue(DeletionOrigin.Takedown, since, held.DeletionHeldSince))
+        {
+            return false;
+        }
+
+        held.ReverseTakedown();
+
+        await records.RecordAsync(held, cancellationToken).ConfigureAwait(false);
 
         return true;
     }

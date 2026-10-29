@@ -258,6 +258,60 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// REC-TKD-001 AC1, AC2: a restricted record is taken down into its window by
+    /// takedown, holding the restriction, once, and the reversal returns it restricted;
+    /// a record attached to an account is not taken down.
+    /// </summary>
+    [Fact]
+    public async Task REC_TKD_001_ARecordIsTakenDownOnceAndReversedToWhatItHeldAsync()
+    {
+        SubjectId record = await RecordAsync();
+        SubjectId attached = await RecordAsync();
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext changing = database.Context())
+        {
+            var records = new PersonRecordStore(changing, _deployment.Ring, _deployment.Randomness);
+            PersonRecord held = (await records.FindBySubjectAsync(record, TestContext.Current.CancellationToken))!;
+            PersonRecord following = (await records.FindBySubjectAsync(attached, TestContext.Current.CancellationToken))!;
+
+            held.Restrict();
+            following.Attach(account, Noon);
+
+            await records.RecordAsync(held, TestContext.Current.CancellationToken);
+            await records.RecordAsync(following, TestContext.Current.CancellationToken);
+            await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            (true, false, false),
+            (await RecordTakenDownAsync(record), await RecordTakenDownAsync(record), await RecordTakenDownAsync(attached)));
+
+        AccountStanding taken = await StandingAsync(record);
+
+        Assert.Equal(
+            (AccountState.Deleting, (DeletionOrigin?)DeletionOrigin.Takedown, (DateTimeOffset?)Noon),
+            (taken.State, taken.DeletingBy, taken.DeletingSince));
+
+        await using (StoreContext reversing = database.Context())
+        {
+            await using var work = new UnitOfWork(reversing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            Assert.True(await States(reversing, work).ReverseRecordTakedownAsync(
+                record,
+                Noon + TimeSpan.FromHours(1),
+                Windows,
+                TestContext.Current.CancellationToken));
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            (AccountState.Restricted, AccountState.Active),
+            ((await StandingAsync(record)).State, (await StandingAsync(attached)).State));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003 AC4: at the trigger no personal field is destroyed and no erasures
     /// row is written, so the subject's key is as it was.
     /// </summary>
@@ -728,7 +782,8 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             new PersonRecordStore(context, _deployment.Ring, _deployment.Randomness),
             Sessions(context),
             new EventOutbox(new PendingEvents(context), work),
-            _deployment.Attached(context, new EventOutbox(new PendingEvents(context), work), new FixedTime(Noon)));
+            _deployment.Attached(context, new EventOutbox(new PendingEvents(context), work), new FixedTime(Noon)),
+            new RecordAccessSessionStore(context));
 
     private SubjectEraser Eraser(StoreContext context, UnitOfWork work) =>
         new(
@@ -773,6 +828,23 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         await work.CommitAsync(TestContext.Current.CancellationToken);
 
         return reversed;
+    }
+
+    private async Task<bool> RecordTakenDownAsync(SubjectId record)
+    {
+        await using StoreContext taking = database.Context();
+        await using var work = new UnitOfWork(taking);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        bool taken = await States(taking, work).TakeDownRecordAsync(
+            record,
+            Noon,
+            TestContext.Current.CancellationToken);
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return taken;
     }
 
     private SessionStore Sessions(StoreContext context) =>

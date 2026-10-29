@@ -296,6 +296,32 @@ internal sealed class PersonRecordService(
         administration.ExportAsync(context, session, subject, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<Result<ExecutedTakedown>> TakeDownAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        TakedownTrigger trigger,
+        string reason,
+        CancellationToken cancellationToken) =>
+        administration.TakeDownAsync(context, session, subject, trigger, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<TakedownProgress>> ReadTakedownAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        administration.ReadTakedownAsync(context, subject, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> ReverseTakedownAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        string reason,
+        CancellationToken cancellationToken) =>
+        administration.ReverseTakedownAsync(context, session, subject, reason, cancellationToken);
+
+    /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<SubjectId>>> AttachedAsync(
         AccessContext context,
         SubjectId account,

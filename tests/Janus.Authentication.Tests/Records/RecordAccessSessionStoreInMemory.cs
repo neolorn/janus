@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Records;
+using Janus.Core;
 
 namespace Janus.Authentication.Tests.Records;
 
@@ -54,6 +55,21 @@ internal sealed class RecordAccessSessionStoreInMemory : IRecordAccessSessionSto
         _ = _sessions.Remove(id);
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<int> EndReachingAsync(SubjectId record, CancellationToken cancellationToken)
+    {
+        List<RecordAccessSessionId> gone = [.. _sessions
+            .Where(session => session.Value.Reached.Contains(record))
+            .Select(session => session.Key)];
+
+        foreach (RecordAccessSessionId id in gone)
+        {
+            _ = _sessions.Remove(id);
+        }
+
+        return ValueTask.FromResult(gone.Count);
     }
 
     /// <inheritdoc/>

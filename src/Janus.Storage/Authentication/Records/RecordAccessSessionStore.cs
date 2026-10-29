@@ -103,6 +103,13 @@ internal sealed class RecordAccessSessionStore(StoreContext context) : IRecordAc
     }
 
     /// <inheritdoc/>
+    public async ValueTask<int> EndReachingAsync(SubjectId record, CancellationToken cancellationToken) =>
+        await context.RecordAccessSessions
+            .Where(session => session.Reached.Contains(record.Value))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
         await context.RecordAccessSessions
             .Where(session => session.ExpiresAt <= now)

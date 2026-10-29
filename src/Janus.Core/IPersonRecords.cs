@@ -200,6 +200,77 @@ public interface IPersonRecords
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Takes a person record down under <c>takedown:execute</c>, admitted as
+    /// <see cref="ReadAsync"/> is, behind the step-up <c>record:takedown</c>: into its
+    /// deletion window by <c>takedown</c>, holding what it held, every record access
+    /// session reaching it ended, <c>TakedownExecuted</c> written and no suspension.
+    /// </summary>
+    /// <param name="context">The staff member taking it down.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="trigger">What raised the report.</param>
+    /// <param name="reason">Why, recorded.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The takedown, or the refusal: <c>identity.record.notfound</c> as the read answers
+    /// it; <c>api.request.malformed</c> naming <c>reason</c>;
+    /// <c>identity.record.followsaccount</c> naming the account a record is attached to;
+    /// <c>identity.record.stateconflict</c> where it is deleted;
+    /// <c>identity.takedown.active</c> for a second takedown; then the step-up's.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<ExecutedTakedown>> TakeDownAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        TakedownTrigger trigger,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A person record's latest takedown and how far each subscriber has got with it,
+    /// under <c>takedown:execute</c>, admitted as <see cref="ReadAsync"/> is.
+    /// </summary>
+    /// <param name="context">The staff member reading it.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The progress, or the refusal: <c>identity.record.notfound</c> as the read answers
+    /// it; <c>identity.takedown.notfound</c> where the record holds none.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result<TakedownProgress>> ReadTakedownAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reverses a person record's takedown inside its window under
+    /// <c>takedown:execute</c>, admitted as <see cref="ReadAsync"/> is, behind the step-up
+    /// <c>record:takedownreverse</c>, restoring what the record held at the trigger.
+    /// </summary>
+    /// <param name="context">The staff member reversing it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="subject">The record's subject.</param>
+    /// <param name="reason">Why, recorded.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.record.notfound</c> as the read answers it;
+    /// <c>api.request.malformed</c> naming <c>reason</c>;
+    /// <c>identity.record.followsaccount</c> naming the account a record is attached to;
+    /// <c>identity.takedown.notfound</c> where it holds none;
+    /// <c>identity.takedown.windowelapsed</c> where its window has closed; then the
+    /// step-up's.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    ValueTask<Result> ReverseTakedownAsync(
+        AccessContext context,
+        SessionId session,
+        SubjectId subject,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The subjects of the person records attached to an account: a person's own context
     /// reads its own; another's is read under <c>record:read</c> in the organization
     /// named, the administrative organization where none is, with the account reach of

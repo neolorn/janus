@@ -118,6 +118,42 @@ public sealed class RecordAccessSessionStoreTests(DatabaseFixture database) : IC
     }
 
     /// <summary>
+    /// REC-TKD-001 AC1: a record's takedown ends every session reaching it and leaves a
+    /// session reaching only another record as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REC_TKD_001_AC1_EverySessionReachingTheRecordEndsAsync()
+    {
+        SubjectId taken = Subjects.New();
+        SubjectId other = Subjects.New();
+        RecordAccessSession both = Reaching(taken, other);
+        RecordAccessSession apart = Reaching(other);
+
+        await using (StoreContext writing = database.Context())
+        {
+            var store = new RecordAccessSessionStore(writing);
+
+            await store.AddAsync(both, TestContext.Current.CancellationToken);
+            await store.AddAsync(apart, TestContext.Current.CancellationToken);
+            _ = await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext ending = database.Context())
+        {
+            Assert.Equal(
+                1,
+                await new RecordAccessSessionStore(ending).EndReachingAsync(taken, TestContext.Current.CancellationToken));
+        }
+
+        await using StoreContext reading = database.Context();
+        var read = new RecordAccessSessionStore(reading);
+
+        Assert.Null(await read.FindAsync(both.Id, TestContext.Current.CancellationToken));
+        Assert.NotNull(await read.FindAsync(apart.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003: a session's row is held only inside the operation's transaction.
     /// </summary>
     /// <returns>The work of running it.</returns>
@@ -145,4 +181,14 @@ public sealed class RecordAccessSessionStoreTests(DatabaseFixture database) : IC
             RandomNumberGenerator.GetBytes(32),
             at,
             TimeSpan.FromMinutes(10));
+    private static RecordAccessSession Reaching(params SubjectId[] records) =>
+        RecordAccessSession.Existing(
+            RecordAccessSessionId.New(TimeProvider.System),
+            IdentifierKind.Email,
+            [RandomNumberGenerator.GetBytes(32)],
+            RandomNumberGenerator.GetBytes(32),
+            Noon,
+            Noon,
+            Noon + TimeSpan.FromMinutes(15),
+            records);
 }

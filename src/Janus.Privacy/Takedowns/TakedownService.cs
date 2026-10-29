@@ -16,7 +16,7 @@ using Janus.Privacy.Requests;
 namespace Janus.Privacy.Takedowns;
 
 /// <summary>
-/// The minor takedown.
+/// The minor takedown, of an account and of a person record.
 /// </summary>
 /// <param name="scope">Whether the caller may take an account down.</param>
 /// <param name="stepUp">What the trigger and the reversal ask of the caller's session.</param>
@@ -29,8 +29,8 @@ namespace Janus.Privacy.Takedowns;
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, IDN-LIFE-003, IDN-LIFE-003a, PRIV-MINOR-002 and
-/// AUTH-SESS-010. The trigger is the library's half in one transaction and the hosts'
+/// Implements LIB-API-005, IDN-LIFE-003, IDN-LIFE-003a, PRIV-MINOR-002, AUTH-SESS-010
+/// and REC-TKD-001. The trigger is the library's half in one transaction and the hosts'
 /// half as a delivery written in it, so access has stopped by the time anyone is told,
 /// and what the hosts have confirmed is readable from that moment. The erasure is phase
 /// two and is the deletion sweep's, at the end of <c>takedown.grace</c>.
@@ -200,28 +200,198 @@ internal sealed class TakedownService(
             return Result.Failure<TakedownProgress>(Error.From(ErrorCodes.AccountNotFound));
         }
 
+        return await ProgressAsync(subject, standing, cancellationToken).ConfigureAwait(false) is TakedownProgress progress
+            ? Result.Success(progress)
+            : Result.Failure<TakedownProgress>(Error.From(ErrorCodes.TakedownNotFound));
+    }
+
+    /// <summary>
+    /// Takes a person record down inside the unit of work the records area opened, once
+    /// it has admitted the staff member, judged the record and the step-up, and held the
+    /// record: the record's half in the transaction, the hosts' as a delivery written in
+    /// it, and no suspension announced, a record having no access to suspend
+    /// (REC-TKD-001).
+    /// </summary>
+    /// <param name="context">The staff member taking it down.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="trigger">What raised the report.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The takedown, or nothing where the record, read under its lock, is not taken down.</returns>
+    /// <exception cref="ArgumentNullException">The context or the reason is absent.</exception>
+    internal async ValueTask<ExecutedTakedown?> TakeDownRecordAsync(
+        AccessContext context,
+        SubjectId record,
+        TakedownTrigger trigger,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(reason);
+
+        DateTimeOffset now = time.GetUtcNow();
+        AccountStanding? standing = await accounts.StandingAsync(record, cancellationToken).ConfigureAwait(false);
+        DeletionWindows windows = (await DeletionWindows.ReadAsync(configuration, cancellationToken)
+            .ConfigureAwait(false)).ForRecords;
+        var delivery = Delivery.Of(record, SubjectEventKind.TakedownExecuted, now);
+        var takedown = new ExecutedTakedown(
+            new TakedownId(delivery.Id.Value),
+            windows.ErasureDue(
+                DeletionOrigin.Takedown,
+                now,
+                standing is { State: AccountState.Deleting } ? standing.DeletingSince : null));
+
+        if (!await accounts.TakeDownRecordAsync(record, now, cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        await outbox.AddAsync(delivery, cancellationToken).ConfigureAwait(false);
+        await audit
+            .RecordedAsync(
+                Executed,
+                context.Acting,
+                context.BreakGlassReason,
+                record,
+                now,
+                Named(takedown, trigger, reason),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return takedown;
+    }
+
+    /// <summary>
+    /// A person record's latest takedown, as an account's is read (REC-TKD-001).
+    /// </summary>
+    /// <param name="record">The record's subject, which the records area admitted.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The progress, or nothing where the record holds no takedown.</returns>
+    internal async ValueTask<TakedownProgress?> RecordProgressAsync(
+        SubjectId record,
+        CancellationToken cancellationToken) =>
+        await accounts.StandingAsync(record, cancellationToken).ConfigureAwait(false) is AccountStanding standing
+            ? await ProgressAsync(record, standing, cancellationToken).ConfigureAwait(false)
+            : null;
+
+    /// <summary>
+    /// Whether a person record's takedown may be reversed now, judged before the step-up
+    /// is asked (REC-TKD-001).
+    /// </summary>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing where it may, or <c>identity.takedown.notfound</c>,
+    /// <c>identity.takedown.windowelapsed</c>.
+    /// </returns>
+    internal async ValueTask<Error?> RecordReversalRefusedAsync(
+        SubjectId record,
+        CancellationToken cancellationToken)
+    {
+        if (await accounts.StandingAsync(record, cancellationToken).ConfigureAwait(false)
+            is not
+            {
+                State: AccountState.Deleting or AccountState.Deleted,
+                DeletingBy: DeletionOrigin.Takedown,
+                DeletingSince: DateTimeOffset since,
+            } standing)
+        {
+            return Error.From(ErrorCodes.TakedownNotFound);
+        }
+
+        DeletionWindows windows = (await DeletionWindows.ReadAsync(configuration, cancellationToken)
+            .ConfigureAwait(false)).ForRecords;
+
+        return standing.State is AccountState.Deleted
+            || time.GetUtcNow() >= windows.ErasureDue(DeletionOrigin.Takedown, since, standing.DeletionHeldSince)
+            ? Error.From(ErrorCodes.TakedownWindowElapsed)
+            : null;
+    }
+
+    /// <summary>
+    /// Reverses a person record's takedown inside the unit of work the records area
+    /// opened, restoring what the record held at the trigger (REC-TKD-001).
+    /// </summary>
+    /// <param name="context">The staff member reversing it.</param>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="reason">Why, trimmed and in its bounds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing where it was reversed, or <c>identity.takedown.windowelapsed</c>,
+    /// <c>identity.takedown.notfound</c> as the record stands under its lock, or the
+    /// announcement's refusal.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context or the reason is absent.</exception>
+    internal async ValueTask<Error?> ReverseRecordTakedownAsync(
+        AccessContext context,
+        SubjectId record,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(reason);
+
+        DateTimeOffset now = time.GetUtcNow();
+        DeletionWindows windows = (await DeletionWindows.ReadAsync(configuration, cancellationToken)
+            .ConfigureAwait(false)).ForRecords;
+
+        // IDN-LIFE-003: the window is judged again under the lock, and an erasure that
+        // committed first leaves the window closed.
+        if (!await accounts.ReverseRecordTakedownAsync(record, now, windows, cancellationToken).ConfigureAwait(false))
+        {
+            return Error.From(
+                await accounts.StandingAsync(record, cancellationToken).ConfigureAwait(false)
+                    is { DeletingBy: DeletionOrigin.Takedown }
+                    ? ErrorCodes.TakedownWindowElapsed
+                    : ErrorCodes.TakedownNotFound);
+        }
+
+        await audit
+            .RecordedAsync(Reversed, context.Acting, context.BreakGlassReason, record, now, Named(reason), cancellationToken)
+            .ConfigureAwait(false);
+
+        return (await events
+                .PublishAsync(
+                    new TakedownReversed(now, Key(record, now))
+                    {
+                        Subject = record,
+                        Actor = context.Acting,
+                        Effective = context.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
+    }
+
+    // IDN-LIFE-003 AC2: the takedown stands while the subject is in the window it began,
+    // or erased from it; otherwise it was reversed and no erasure is due. A person
+    // record's window is measured by its own lengths (REC-REC-002).
+    private async ValueTask<TakedownProgress?> ProgressAsync(
+        SubjectId subject,
+        AccountStanding standing,
+        CancellationToken cancellationToken)
+    {
         if (await outbox
                 .LatestAsync(subject, SubjectEventKind.TakedownExecuted, cancellationToken)
                 .ConfigureAwait(false)
             is not DeliveryProgress progress)
         {
-            return Result.Failure<TakedownProgress>(Error.From(ErrorCodes.TakedownNotFound));
+            return null;
         }
 
         Delivery delivery = progress.Delivery;
         DateTimeOffset? due = null;
 
-        // IDN-LIFE-003 AC2: the takedown stands while the account is in the window it
-        // began, or erased from it; otherwise it was reversed and no erasure is due.
         if (Standing(standing, delivery.RaisedAt) is DateTimeOffset since)
         {
             DeletionWindows windows = await DeletionWindows.ReadAsync(configuration, cancellationToken)
                 .ConfigureAwait(false);
 
-            due = windows.ErasureDue(DeletionOrigin.Takedown, since, standing.DeletionHeldSince);
+            due = (standing.IsPersonRecord ? windows.ForRecords : windows)
+                .ErasureDue(DeletionOrigin.Takedown, since, standing.DeletionHeldSince);
         }
 
-        return Result.Success(new TakedownProgress(
+        return new TakedownProgress(
             new TakedownId(delivery.Id.Value),
             subject,
             delivery.RaisedAt,
@@ -236,7 +406,7 @@ internal sealed class TakedownService(
                     progress.ConfirmedAt.TryGetValue(subscriber.Name, out DateTimeOffset at)
                         ? at
                         : null)),
-            ]));
+            ]);
     }
 
     /// <inheritdoc/>

@@ -298,6 +298,82 @@ internal sealed class AccountStatesInMemory : IAccountStates
     }
 
     /// <summary>
+    /// What a test runs when a person record is taken down, given its subject and the
+    /// instant, as where another table holds the record's state.
+    /// </summary>
+    public Action<SubjectId, DateTimeOffset>? RecordTakenDown { get; set; }
+
+    /// <summary>
+    /// What a test runs when a person record's takedown is reversed, given its subject
+    /// and the state it returns to.
+    /// </summary>
+    public Action<SubjectId, AccountState>? RecordTakedownReversed { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> TakeDownRecordAsync(
+        SubjectId record,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        PendingDeletion? running = _deletions.GetValueOrDefault(record);
+
+        if (!_personRecords.Contains(record)
+            || _attached.ContainsKey(record)
+            || Of(record) is not AccountState found
+            || found is AccountState.Deleted
+            || (found is AccountState.Deleting && running?.By is DeletionOrigin.Takedown))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        PendingDeletion? held = found is AccountState.Deleting ? running : null;
+
+        _found[record] = (found, held);
+        _states[record] = AccountState.Deleting;
+        _deletions[record] = new PendingDeletion(record, DeletionOrigin.Takedown, at, held?.Since) { IsPersonRecord = true };
+        _sessionsEnded[record] = at;
+        RecordTakenDown?.Invoke(record, at);
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> ReverseRecordTakedownAsync(
+        SubjectId record,
+        DateTimeOffset now,
+        DeletionWindows windows,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+
+        if (!_personRecords.Contains(record)
+            || Of(record) is not AccountState.Deleting
+            || _deletions.GetValueOrDefault(record) is not { By: DeletionOrigin.Takedown } taken
+            || now >= windows.ErasureDue(taken.By, taken.Since, taken.HeldSince))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        (AccountState found, PendingDeletion? held) = _found[record];
+
+        _ = _found.Remove(record);
+        _states[record] = found;
+
+        if (held is null)
+        {
+            _ = _deletions.Remove(record);
+        }
+        else
+        {
+            _deletions[record] = held;
+        }
+
+        RecordTakedownReversed?.Invoke(record, found);
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <summary>
     /// What started the deletion, where one was started.
     /// </summary>
     public DeletionOrigin? Deleting { get; private set; }

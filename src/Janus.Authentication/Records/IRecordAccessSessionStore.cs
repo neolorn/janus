@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Core;
 
 namespace Janus.Authentication.Records;
 
@@ -55,6 +56,15 @@ internal interface IRecordAccessSessionStore
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of removing it.</returns>
     ValueTask RemoveAsync(RecordAccessSessionId id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ends every session reaching a record, in the operation's transaction
+    /// (REC-TKD-001).
+    /// </summary>
+    /// <param name="record">The record's subject.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many it ended.</returns>
+    ValueTask<int> EndReachingAsync(SubjectId record, CancellationToken cancellationToken);
 
     /// <summary>
     /// Removes every session that has lapsed.

@@ -299,7 +299,8 @@ public sealed class AttachedRecordsTests(DatabaseFixture database)
             Records(context),
             new SessionStore(context, _deployment.Ring, _deployment.Randomness),
             new EventOutbox(new PendingEvents(context), work),
-            Attached(context, work));
+            Attached(context, work),
+            new RecordAccessSessionStore(context));
 
     private AccountDirectory Directory(StoreContext context, UnitOfWork work) => new(
         context,
