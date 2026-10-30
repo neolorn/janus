@@ -25,20 +25,20 @@ anyone who wants it.
 | **02-authentication** | Factors, flows, sessions, recovery, abuse controls |
 | **03-authorization** | Grants, roles, the model builder, permission filtering |
 | **04-privacy** | Consent, data subject rights, RoPA, retention, sensitivity |
-| **05-integrations** | Stalwart, SMS gateway, generic outbound and callback rules: contracts and field mappings |
+| **05-integrations** | Stalwart, the host's message and alert handlers, generic outbound and callback rules: contracts and field mappings |
 | **06-operations** | Migrations, CI, secrets, bootstrap, configuration |
 | **07-library-contract** | Public API surface, packaging, versioning |
 | **08-engineering-conventions** | Naming, layout, error handling, testing, review |
 | **09-api-contract** | Endpoints, request and response shapes, status codes |
 | **10-reference** | Error codes, permissions, configuration keys, enumerations |
-| **11-runbook** | Operational procedures — deployment, break-glass, incidents |
-| **12-disaster-recovery** | Recovery objectives, backup mechanism, restore procedure |
+| **11-runbook** | The library's operational procedures: break-glass, admin-assisted recovery, outside dependencies, incidents, configuration changes |
+| **12-disaster-recovery** | Erasure across backups: key destruction, the off-host erasure ledger, the key-encryption key's cryptoperiod |
 | **13-risk-register** | Risks identified, accepted, and mitigated |
-| **14-takedown-procedure** | What happens when a customer turns out to be a minor |
+| **14-takedown-procedure** | *Retired by D-225: the procedure is the host's; the takedown is `01` IDN-LIFE-003* |
 | **15-threat-model** | Actors, assets, attack surfaces, and coverage gaps |
-| **16-offboarding-procedure** | What happens when someone with access leaves |
+| **16-offboarding-procedure** | *Retired by D-225: the procedure is the host's; a membership's end is `01` IDN-MEM-001* |
 | **17-bff** | Browser-facing security boundary — sessions, CSRF, capabilities |
-| **18-frontend-integration** | Angular wiring and constraints — not UI |
+| **18-frontend-integration** | How a frontend uses the library: wiring and constraints, not UI |
 | **19-infrastructure** | Requirements the environment must satisfy — not how |
 | **20-registration-and-account** | What an account holds, the registration session and steps, identifier management, invitations, domain lock, corporate mailbox |
 | **21-people-without-an-account** | The person record: collection in a host's own screens, the person's access by a code, attaching to an account, the age question and the takedown for records, what staff do with them |
@@ -101,9 +101,8 @@ Latest production-safe versions — verify current releases rather than assuming
 | Database | PostgreSQL |
 | Cache | None in version 1: every record is read from PostgreSQL (D-197) |
 | Data access | EF Core for everything normal; Dapper for hand-written SQL |
-| Frontend (host apps) | Angular |
-| Mail | Stalwart (pluggable — not a library dependency) |
-| Infrastructure | Linux VPS, Docker, Traefik |
+| Mail server | Stalwart, for staff mailboxes (pluggable, not a library dependency) |
+| Messages | Sent by the host; the library hands each one over (`05` INT-SMS-006, D-225) |
 
 *Source: D-017, D-197*
 
@@ -215,14 +214,13 @@ These are review criteria, not aspirations. Each carries a test.
 
 *Source: P-003*
 
-**Two accepted maintenance exceptions**, both named rather than hidden: annual
-resealing of the break-glass credential (D-010), and licence and permit renewal
-(D-041 / R-18).
+**One accepted maintenance exception**, named rather than hidden: the annual rotation of
+the key-encryption key (`12` DR-009a, D-225).
 
 **Two resolved tensions:** configurability against security, resolved by direction:
 every runtime change carries a reason and an audit entry, a loosening also requires
 step-up, and the most dangerous settings are unreachable from the application entirely
-(D-010, D-071, D-166). Zero-maintenance against break-glass, resolved by the exception
+(D-010, D-071, D-166). Zero-maintenance against key rotation, resolved by the exception
 above.
 
 ---
@@ -249,27 +247,14 @@ governing text and any translation without changing the interface language.
 
 ## 6. Regulatory context
 
-The company operates in Egypt under Law 151/2020 (PDPL) and its Executive
-Regulations (Decree 816/2025). **Compliance deadline: 31 October 2026** — the
-conservative reading of the one-year transition; see R-O03.
+The privacy features (`04`) take Egypt's Law 151/2020 and its Executive Regulations as
+their default values: the lawful bases, the rights and the deadlines for deciding a
+request, each a key or a declaration a host changes for another law (D-166). A deploying
+company's own obligations are its own documents' (D-225).
 
-| Obligation | Applies |
-|---|---|
-| Controller licence | Yes, filed regardless; fee tier to be confirmed against the Centre's schedule (sources differ — R-O03) |
-| Cross-border permit | Yes, while hosting outside Egypt |
-| DPO | Yes — the company is a juridical person; appointment is the company's action. D-023 decides on an external contractor; the translated Article 8 wording reads "employee", and whether the Executive Regulations permit an external appointee is to be checked with counsel (D-147) |
-| Breach notification | 72 hours to the PDPC, 3 days to data subjects |
-| Records of processing | Generated by the system, per the regulator's template |
-| Data subject rights | Law 151/2020 Article 2 lists six; the regulator's checklist and this design recognise nine (portability, being informed and rectification handled distinctly). A request is **decided** within six working days — lapse is a deemed rejection |
+*Source: D-023, D-029, D-036, D-037, D-147, D-225*
 
-**GDPR does not bind the company.** EU hosting makes IONOS a processor subject to
-GDPR; it does not make an EU processor an establishment of a non-EU controller.
-
-*Source: D-023, D-029, D-036, D-037, D-147*
-
-**This specification is not legal advice.** Findings derive from the regulator's own
-published guidance, supplied as source material, and are to be confirmed with
-counsel.
+**This specification is not legal advice.**
 
 ---
 
@@ -292,12 +277,11 @@ requirement.
 
 | Area | Owner | Contract with this system |
 |---|---|---|
-| Mail delivery and storage | Stalwart | OIDC authentication; JMAP provisioning; its own database. Never its internals |
+| Mailboxes | Stalwart | OIDC authentication; JMAP provisioning; its own database. Never its internals |
+| Delivering messages (email, SMS, push) | The host | The library hands each message it owes to the host's notification handler and each alert to its alert handler (`05` INT-SMS-006, `06` OPS-ALERT-003, D-225) |
+| Deploying, hosting, backups and watching the server | The host | The environment the library needs is `19`; a backup's erasure is `12` (D-225) |
 | Payment, shipping and any other business processor | The host | Declared by the host in its processor register and integrated through the generic outbound and callback rules (`05` INT-GEN); the library names none |
-| SMS delivery | Gateway | Send, delivery report, balance |
-| Hosting | IONOS | Processor under contract |
 | DPIA / LIA / TIA production | Company + counsel | System stores references and flags absence |
-| PDPC licensing and DPO appointment | Company | System produces the records the application needs |
 | Electronic direct marketing sending | Separate system | Requires its own licence; consent is captured here |
 
 ### 7.3 Deferred with triggers
@@ -310,7 +294,6 @@ Nothing is deferred silently.
 | Impersonation feature | When support staff exist who need customer views |
 | Third-party app platform | First external client that is not first-party |
 | Multiple organization memberships enabled by default | First person needing access across organizations |
-| Approval gate on destructive DDL | First additional person with deploy access |
 | Two-approver recovery | First additional person with recovery approval rights |
 | Self-hosted password breach corpus | If counsel objects to the range API |
 | Read/write separation for reporting | When reporting queries outgrow tuning |
@@ -318,12 +301,9 @@ Nothing is deferred silently.
 | Multi-market legal document sets (several governing languages on one deployment, D-146) | Serving a second market whose law names another language |
 | Hash-chained tamper-evident audit records (D-071); the recorded answer to the separation-of-duties observation in `15` section 3.6 | When a second person shares administrative duties, or audit integrity is challenged |
 | Automated erasure routine for the management schemas (D-101); internal-side erasure is manual until then | The user's decision, not an automatic trigger |
-| Scripted one-command restore the owner can run (D-085) | Once the system is released and stable |
 | External key service with per-subject keys (D-082, superseded by D-097) | If protecting pre-erasure backups against a compromised secrets manager ever justifies a second stateful store |
-| Message templates editable outside the repository (D-059) | When a non-engineer needs to change a message |
 | Profile photos enabled for customers (D-060) | When a feature makes a customer photo meaningful |
 | Object storage for uploads (D-060) | Customer photos, or any genuinely large artifact |
-| Separate hosts per application (D-063) | When host compromise becomes a threat worth defending against |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
 
 This table carries every row of the decision log's "Deferred, with reactivation
@@ -341,8 +321,8 @@ triggers" table (D-147); a deferral recorded in the log and absent here is a def
 | **Assurance provider** | Component supplying the assurance level of a session. Required if authorization is used without authentication |
 | **Auth session** | Session held by the authentication app that makes silent SSO between apps possible |
 | **BFF** | Backend for Frontend. Holds the session; the browser holds only an opaque cookie |
-| **Break-glass** | Single-use sealed credential granting a time-boxed system-admin session. Held by the company owner |
-| **Controller / Processor** | PDPL roles. The deploying company is controller. The library ships four register rows (`05` section 6): the mail server (where one is integrated or the shipped mail transport is in use), the SMS gateway and the hosting provider as processors, and password screening as a recipient. Every other processor is one the host declares, a developer who administers the deployment for the company among them (D-029, D-165, D-166) |
+| **Break-glass** | Single-use sealed credential granting a time-boxed system-admin session. Where it is kept is the host's (D-225) |
+| **Controller / Processor** | PDPL roles. The deploying company is controller. The library ships three register rows (`05` section 6): the mail server (where one is integrated) and the hosting provider as processors, and password screening as a recipient; the providers that deliver the host's messages are rows the host declares (D-225). Every other processor is one the host declares, a developer who administers the deployment for the company among them (D-029, D-165, D-166) |
 | **Data user** | PDPL term covering both controllers and processors |
 | **Governing language** | The one language in which a version of a legal document is authoritative, defaulted from `legal.governinglanguage`; translations attach to the version and never govern (`04-privacy`, D-146) |
 | **Grant** | One row expressing "[somebody] has [a role] on [something]" |

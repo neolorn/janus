@@ -2,7 +2,7 @@
 
 A plain-language description of the whole system as it will behave once the decisions taken up to 10 September 2026 are written into the specifications. The specifications remain the source of truth; this document never states a rule they do not. It is kept in step with them: when a decision changes behaviour, this document changes with it.
 
-Throughout, the person is **Hossam**. He appears as a customer of an online store, as a staff member invited to join the company that runs it, and once as the owner who keeps the emergency envelope. The store is an example host; Janus itself knows nothing about stores.
+Throughout, the person is **Hossam**. He appears as a customer of an online store, as a staff member invited to join the company that runs it, and once as the owner who holds the emergency code. The store is an example host; Janus itself knows nothing about stores.
 
 **How to read it.** Sections 1 to 3 are the account and how one is created. Sections 4 to 6 are daily use: signing in, staying safe, managing your own account. Section 7 is the organisation side (staff, roles, permissions). Section 8 is what the business can configure. Section 9 is a short look behind the curtain. Section 10 is what happens when things go wrong. Every unavoidable technical term is explained in the sentence where it first appears; the appendix collects them.
 
@@ -14,14 +14,14 @@ Janus is a software library. A company's own application (the "host") imports it
 
 It is written to be **generic**. It has no idea what a store, an order or a medical product is. The host tells it, at start-up, what kinds of things exist ("orders", "branches"), what the processing purposes are ("fulfilment", "marketing"), and which policies apply. Two entirely different businesses run the same Janus without a line changed.
 
-What it deliberately does not do: merge two accounts into one, let one person act as another, host third-party apps, or hold any of the host's business records. Each of those is either out of scope or handled by someone else (the host's business by the host and the processors it declares; mail by the mail server, which Janus does integrate).
+What it deliberately does not do: merge two accounts into one, let one person act as another, host third-party apps, hold any of the host's business records, send any message itself, or run the server it is deployed on. Each of those is out of scope or handled by someone else: the host's business by the host and the processors it declares; email, texts and push by the host's own messaging, to which Janus hands every message and alert it owes; deploying, hosting, backups and watching the server by whoever runs the deployment. Staff mailboxes are the one outside service Janus manages itself, on the mail server it integrates.
 
 Three principles shape everything below:
 
 | Principle | What it means for the business |
 |---|---|
 | Secure by default | A deployment that forgets to configure something ends up stricter, never looser. Tightening a setting is free; loosening one needs a strong re-authentication, a written reason and an audit entry. A few settings cannot be changed from the application at all. |
-| Zero maintenance | Nothing needs a recurring calendar entry, with two named exceptions: resealing the emergency envelope once a year, and renewing the regulatory licence and permits. Everything else is automated or alerts when it needs a human. |
+| Zero maintenance | Nothing needs a recurring calendar entry, with one named exception: rotating the master key once a year, which the system warns of in advance. Everything else is automated or alerts when it needs a human. |
 | Never punish the well-behaved person | Every rule is written so the honest person gets through with the least friction the rule allows. Where a rule is strict, it is strict on the attacker's side of the door. |
 
 Language: English first, Arabic native and first-class. Every legal document (terms, privacy notice, consent texts) exists in one **governing language** the host declares (Arabic for this deployment), which prevails if versions differ; translations are optional and can be read from within any document without switching the app's language.
@@ -279,11 +279,11 @@ Some settings are **per organisation** (inheriting the system's where not set); 
 
 ### 8.2 Limits on texts and emails
 
-Texts cost money from a prepaid balance, so sending is governed by **restrictions**: named rules, each counted against something (a phone number, an account, a source address, everything, or any key the host supplies), each with one or more "at most N in M hours" buckets, all checked on every send. The defaults: 3 texts per number, each regaining a day later (so a number gets one text back per day), 10 per source address per hour; 5 emails per address per hour; and a second text to a number waits 3 minutes, or less once the first one fails to go out (the gateway reports it failed, say), or once the gateway reports it delivered where it was a second-step code, or once its code is typed right or its link pressed (a sign-in or second-step code frees it even when the sign-in or step-up is then refused; another code or link frees it only when it goes through). Each restriction applies to texts, to email, or to both, and every message on its channel draws from it, save that the 3-minute rule counts a message sent in several languages once. SMS sign-in and the SMS second step are off by default for two reasons: the standard classes phone-based sign-in as restricted (numbers can be hijacked), and with the default pool a person could spend three texts on three sign-ins. A business that turns them on raises the pool. Restrictions are edited at runtime; support can grant one extra send to a specific number, audited with a reason. Security notices to an existing account holder answer only to their own notice limit, and alerts to the operator answer to none, so nobody can silence the owner by draining the pool.
+Texts cost the host money, so sending is governed by **restrictions**: named rules, each counted against something (a phone number, an account, a source address, everything, or any key the host supplies), each with one or more "at most N in M hours" buckets, all checked on every send. The defaults: 3 texts per number, each regaining a day later (so a number gets one text back per day), 10 per source address per hour; 5 emails per address per hour; and a second text to a number waits 3 minutes, or less once the first one fails to go out (the host reports it failed, say), or once the host reports it delivered where it was a second-step code, or once its code is typed right or its link pressed (a sign-in or second-step code frees it even when the sign-in or step-up is then refused; another code or link frees it only when it goes through). Each restriction applies to texts, to email, or to both, and every message on its channel draws from it, save that the 3-minute rule counts a message sent in several languages once. SMS sign-in and the SMS second step are off by default for two reasons: the standard classes phone-based sign-in as restricted (numbers can be hijacked), and with the default pool a person could spend three texts on three sign-ins. A business that turns them on raises the pool. Restrictions are edited at runtime; support can grant one extra send to a specific number, audited with a reason. Security notices to an existing account holder answer only to their own notice limit, and alerts to the operator answer to none, so nobody can silence the owner by draining the pool.
 
 ### 8.3 Alerts
 
-Every condition that needs a human is on a list with a severity. **High** goes by email and text: emergency credential used or a new one generated, a protected setting changed, alert destinations changed, sustained sign-in failures, a cluster of recovery requests, a privacy deadline reached, a failed restore test, no emergency credential in existence. **Normal** goes by email: text balance draining, a background job failing, the holiday list running out, a licence approaching expiry, and the like. Changing where alerts go tells the previous destinations, and the last destination of a channel can never be removed.
+Every condition that needs a human is on a list with a severity. **High**: emergency credential used or a new one generated, a protected setting changed, sustained sign-in failures, a cluster of recovery requests, a privacy deadline reached, no emergency credential in existence. **Normal**: a background job failing, the holiday list running out, the master key's yearly rotation approaching, and the like. Janus raises each alert once per window and hands it to the host, which delivers it by the channels it chooses: a High one by a channel that does not depend on email, and the emergency ones to the owner as well as the operator.
 
 ---
 
@@ -295,9 +295,9 @@ Every condition that needs a human is on a list with a severity. **High** goes b
 
 **Everything is audited.** Every sign-in, change, grant, approval and administrative action is recorded, append-only, with who acted and why, holding codes rather than personal details, kept 7 years for security and financial events and 90 days for routine access.
 
-**Outside services, and what each is trusted with.** The mail server (Stalwart) hosts staff mailboxes and sends every message; it trusts Janus for sign-in and is pushed every account change, with a daily comparison that reports drift. The SMS gateway receives numbers and codes. The host declares its own processors (a payment provider, a courier) and, for each, which categories of personal data it may receive; Janus records them and enforces that nothing beyond those categories goes out. Every message these services send back is treated as a hint to go and check, never as the truth, save that a text's delivery report can shorten the wait before the next text to that number (8.2), which only ever makes things easier for the person.
+**Outside services, and what each is trusted with.** The mail server (Stalwart) hosts staff mailboxes; it trusts Janus for sign-in and is pushed every account change, with a daily comparison that reports drift. Every message Janus owes (a code, a link, a notice) is handed to the host, which composes it and sends it by email, text or push, and can tell Janus later whether it arrived. The host declares its own processors (a payment provider, a courier) and, for each, which categories of personal data it may receive; Janus records them and enforces that nothing beyond those categories goes out. Every message these services send back is treated as a hint to go and check, never as the truth, save that a text the host reports delivered can shorten the wait before the next text to that number (8.2), which only ever makes things easier for the person.
 
-**Deployments.** A push to the main branch builds, tests, migrates the database and deploys, with no manual step. Configuration lives in the database and is changed from the management app; only the database connection and the vault credential are set at deployment.
+**Deployments.** How the system is deployed, hosted and backed up is the host's; Janus ships the command that prepares the database before a new version starts. Configuration lives in the database and is changed from the management app; only the database connection and the vault credential are set at deployment.
 
 ---
 
@@ -307,9 +307,9 @@ Every condition that needs a human is on a list with a severity. **High** goes b
 
 Only on a credible indication (they say so, a guardian writes in, something specific in support), never a guess from a name or from anything in the host's records. One operation does phase one at once: the account is suspended, every session ends, the host is told to stop whatever it holds for him (the store cancels his undispatched orders), and the reason is recorded. Seven days later, automatically, the account is erased. Inside those seven days, the person holding the takedown permission can reverse it from the account's admin page (the account returns; what the host does about what it stopped is the host's rule; the store does not restore the orders). Nobody asks for ID documents. The breach clock (10.3) starts at the moment of the credible indication.
 
-### 10.2 The emergency envelope
+### 10.2 The emergency code
 
-Hossam, as owner, keeps a sealed, tamper-evident envelope with five printed items: a single-use emergency sign-in code, the three keys needed to read a restored database, and the credentials needed to redeploy the system on a new server. The code is for the day no administrator can reach the system (including the sole administrator locking themselves out): open the envelope, go to the printed address, enter the code, and for four hours act with full administration rights while every alert channel tells everyone. Before finishing, generate and seal a replacement. Once a year the envelope is opened, everything in it rotated, a restore from the envelope's contents alone is rehearsed by hand (that is what keeping copies of keys in a sealed envelope, called escrow, is for), and it is resealed. Until an emergency code exists, every administrator sees a non-dismissable warning.
+A single-use emergency sign-in code exists for the day no administrator can reach the system (including the sole administrator locking themselves out). Whoever holds it opens the emergency page, enters the code with a reason, and for four hours acts with full administration rights; using it raises an alert that reaches the owner as well as the operator. Before finishing, they generate a replacement. Until an emergency code exists, every administrator sees a non-dismissable warning. Where the code is kept is the host's.
 
 ### 10.3 A data breach
 
@@ -317,13 +317,11 @@ Detection starts two clocks: 72 hours to notify the regulator and 3 days to noti
 
 ### 10.4 Losing the server
 
-The database continuously ships its change log, so at most seconds of data are lost and a restore can land on any moment. Getting back online takes 4 to 8 hours (the business asked for 2 to 3; that would need a second server, declined on cost). A restore is followed by reconciliation with the mail server and with every processor the host declares, because the outside world did not roll back with the database, and a restore that loses personal data starts the breach clocks. A restore is rehearsed automatically every quarter into a throwaway database, with a canary account that must decrypt and sign in, alerting on any failure.
-
-The accepted gap, stated plainly: until the hosting tier is upgraded, backups sit on the same server as the database. Losing the server means losing everything, including whatever the host has declared sensitive (for the store, purchase history that can reveal health information). This is recorded as accepted under time pressure, with no date, and is the biggest single risk on the register.
+Backing up and restoring are the host's. Janus's part is that an erasure stays an erasure: a person's data is unreadable in every backup once their key is destroyed, and a ledger kept away from the server re-applies every erasure after a restore to an earlier point.
 
 ### 10.5 Other accepted risks, in one line each
 
-Mail app passwords bypass passkeys (mail programs offer nothing better; they work only for mail, are revocable, and never sign in to anything else). One person approves recoveries (written reason, separate-channel notice, anomaly alerts). One person holds all technical knowledge (the envelope is with the owner, not the developer). Age is self-declared (the alternative is holding identity documents). A stolen trusted device skips the second step for up to 30 days. Google or Apple sign-in skips the customer's own second step (bounded by the gates on sensitive actions). Risks that belong to the host's own processors (what a courier can infer from being used, say) live in the host's register.
+Mail app passwords bypass passkeys (mail programs offer nothing better; they work only for mail, are revocable, and never sign in to anything else). One person approves recoveries (written reason, separate-channel notice, anomaly alerts). Age is self-declared (the alternative is holding identity documents). A stolen trusted device skips the second step for up to 30 days. Google or Apple sign-in skips the customer's own second step (bounded by the gates on sensitive actions). Risks that belong to the host's own processors (what a courier can infer from being used, say) live in the host's register.
 
 ---
 
@@ -348,10 +346,10 @@ Four behaviours the earlier decisions had left open. They were settled as writte
 | 4 Signing in | 02 Authentication, 17 BFF |
 | 5 Staying safe | 02 Authentication |
 | 6 Own controls and privacy | 01 Identity, 04 Privacy, 09 API contract |
-| 7 Organisation side | 01 Identity, 03 Authorization, 16 Offboarding |
+| 7 Organisation side | 01 Identity, 03 Authorization, 20 Registration and account |
 | 8 Configuration | 10 Reference, 06 Operations |
 | 9 Behind the curtain | 17 BFF, 19 Infrastructure, 05 Integrations, 06 Operations |
-| 10 When things go wrong | 14 Takedown, 11 Runbook, 12 Disaster recovery, 13 Risk register, 15 Threat model |
+| 10 When things go wrong | 01 Identity, 11 Runbook, 12 Erasure across backups, 13 Risk register, 15 Threat model |
 
 ## Appendix B. Terms
 
@@ -370,5 +368,5 @@ Four behaviours the earlier decisions had left open. They were settled as writte
 | Governing language | The language of a legal document that prevails when translations differ |
 | Domain lock | An organisation's rule that members sign in only with addresses in its verified domains |
 | App password | A separate password for mail programs that cannot use passkeys; mail-only, revocable |
-| Emergency envelope | The owner's sealed envelope with the break-glass code and the recovery keys |
+| Emergency code | The single-use break-glass code for the day no administrator can reach the system |
 | BFF | The thin server layer behind each app that holds the session so the browser holds only a cookie |

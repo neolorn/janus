@@ -64,8 +64,8 @@ disabled. These rules apply to **human accounts**: the `emergency` account (D-13
 OPS-BOOT-002) and the non-human principals of IDN-PRIN-001 SHALL hold no identifier of
 any kind, SHALL never sign in interactively (`emergency` acts only through `/auth/break-glass`;
 IDN-PRIN-001 principals are constructed in code and have no sign-in) and SHALL have no
-security-notice set (REG-IDENT-002); every use of `emergency` alerts the owner
-destinations (D-129), which are its only channel.
+security-notice set (REG-IDENT-002); every use of `emergency` raises an alert the host
+delivers (D-129, D-225).
 
 *Source: D-146, D-147; supersedes IDN-LIFE-001 (phone verification) and the phone part of D-013*
 
@@ -99,8 +99,7 @@ channel.
    procedure of OPS-CFG-002.
 5. No request adds an identifier to `emergency` or to a non-human principal; neither
    appears at any identifier sign-in path; a security notice is never addressed to
-   either, and every use of `emergency` reaches the owner destinations regardless of
-   `alerting.owner.enabled` (OPS-ALERT-004).
+   either, and every use of `emergency` raises its alert (OPS-BOOT-002).
 
 ---
 
@@ -561,7 +560,7 @@ PRIV-MINOR-001's "date of birth SHALL NOT be collected"*
 
 The screen is neutral so that it does not announce what answer passes. The affirmation
 verifies nothing; what makes self-declaration proportionate is that a wrong answer has a
-defined outcome (`14-takedown-procedure`).
+defined outcome: the takedown (`01` IDN-LIFE-003).
 
 **Acceptance criteria**
 1. No identifier field is shown or accepted before the age screen is answered.
@@ -1191,7 +1190,7 @@ generic, and DNS verification is what every comparable product requires.
 
 **REG-MAIL-001** — Where the organization is the administrative organization and the
 deployment has a mail server registered (the shipped adapter or the host's own; `05`
-INT-MAIL-006, INT-MAIL-009), the invitation SHALL name a **personal email**, to which
+INT-MAIL-001, INT-MAIL-006), the invitation SHALL name a **personal email**, to which
 the invitation link is sent, and the account SHALL NOT be created until that address is
 verified: the press on the invitation link in the registering browser (REG-SESS-003) is
 the verification, and the person does nothing further for it. The personal email SHALL

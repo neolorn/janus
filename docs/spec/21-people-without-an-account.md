@@ -363,7 +363,7 @@ access session**, without an account and without contacting anyone.
 
 **Values (D-221).**
 - **The ask.** `POST /records/access` takes `kind` and `value` and is answered 202 in
-  the same bytes, on the same path and with no wait for a transport, whatever is held
+  the same bytes, on the same path and with no wait for the handler, whatever is held
   (AUTH-ABUSE-003, API-CONV-005); every ask is first held to the delay of AUTH-ABUSE-001
   for the source and the value. Where a **reachable** record holds the value as a
   contact verified at a collection, a code is sent to it (`record-access-code`, an
@@ -717,8 +717,7 @@ window closes, the reversal at `POST /admin/records/{subject}/takedown/reverse` 
 account's codes (`identity.takedown.active`, `identity.takedown.windowelapsed`,
 `identity.takedown.notfound`) and `identity.record.stateconflict` for a `deleted`
 record. A record attached to an account is taken down with it, and a takedown naming it
-is refused with `identity.record.followsaccount`. `14-takedown-procedure` applies to
-records as to accounts.
+is refused with `identity.record.followsaccount`.
 
 *Source: D-221*
 

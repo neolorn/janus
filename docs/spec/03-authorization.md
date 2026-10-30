@@ -1196,13 +1196,11 @@ is still asked again inside the unit of work before that first write, and a refu
 there leaves the outside effect as follows: the app password the mail server created is
 revoked at the server and its secret never returned, and where the revocation fails the
 password, whose secret nobody holds, stays listed for its holder to revoke
-(INT-MAIL-010); the notice to the alert destinations being replaced stands as the notice
-of a change requested and not made, as for a superseded change (OPS-ALERT-004a); and a
-line the erasure ledger already holds stands, since it names an erasure committed before
-and is no effect of the completion (DR-016). Every other operation that sends undertakes
-the send in the unit of work that writes what the send carries, so the second ask covers
-both: an approved recovery's link is undertaken in the approval's unit of work
-(AUTH-RECOV-002).
+(INT-MAIL-010); and a line the erasure ledger already holds stands, since it names an
+erasure committed before and is no effect of the completion (DR-016). Every other
+operation that sends undertakes the send in the unit of work that writes what the send
+carries, so the second ask covers both: an approved recovery's link is undertaken in the
+approval's unit of work (AUTH-RECOV-002).
 
 *Source: D-037, D-166, D-183, D-186, D-207, D-208, D-209, D-210*
 

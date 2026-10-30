@@ -103,7 +103,7 @@ pedantry.
 | Method | Covered? |
 |---|---|
 | Bulk fake accounts | Covered: mandatory phone verification |
-| SMS pumping to drain prepaid balance | Covered: named restrictions per destination and per source (AUTH-ABUSE-004), an IPv6 source counted by its /64 so that rotating addresses gains nothing (AUTH-ABUSE-001, D-166), failed deliveries not counted, balance floor |
+| SMS pumping to drain prepaid balance | Covered: named restrictions per destination and per source (AUTH-ABUSE-004), an IPv6 source counted by its /64 so that rotating addresses gains nothing (AUTH-ABUSE-001, D-166), failed deliveries not counted; the gateway's balance is the host's (D-225) |
 | Abuse of the host's own commercial flow by a legitimately verified account | Out of scope: owned by the host (D-049); the library contributes the stable subject identifier |
 | Account takeover of a real customer | Covered: the authentication controls |
 
@@ -117,13 +117,12 @@ pedantry.
 |---|---|
 | Credential stuffing | Covered — blocklist screening, progressive throttling, and the new-device check on single-factor accounts: a leaked password from an unrecognised browser gets no session until a code sent to the primary email is entered (AUTH-FACT-016) |
 | Automated vulnerability scanning | Partial — depends on patching discipline, not design |
-| Ransomware on the host | **Not covered in Phase 1** — backups are on the same host (R-A01) |
+| Ransomware on the host | The deployment's: where its backups are kept (D-225) |
 | Exposed secrets in the repository | Covered — pipeline secret scanning |
 | Compromised dependency | Partial — D-046 |
 
-**Ransomware deserves emphasis.** It specifically targets attached backups. During
-Phase 1 the backups are on the same host as the database, so a single compromise
-takes both.
+**Ransomware** specifically targets attached backups, so where a deployment keeps its
+backups decides whether one compromise takes both; that is the deployment's (D-225).
 
 ---
 
@@ -140,7 +139,7 @@ turnover**. This is a materially higher insider risk than a stable, known team.
 | Exporting the customer list before leaving | Covered — exports gated and audited (D-045) |
 | Approving their own recovery | Covered — self-approval blocked; but see R-A03 |
 | **Handing oneself or another a role beyond one's reach** | Covered: a role is handed out only by a role that lists it, by holding all it grants where the deployment allows that, or by a system administrator, on every route; nobody gives themselves access (AUTHZ-GRANT-005, D-212) |
-| **Access surviving departure** | Covered: offboarding procedure (D-050); ending a membership, now or at an end set in advance for the last day, revokes the person's grants in the organization, and for the administrative organization in every organization they are not a member of; a grant in the administrative organization confers only while its holder holds a current membership there (IDN-MEM-001, D-166, D-213) |
+| **Access surviving departure** | Covered: ending a membership, now or at an end set in advance for the last day, revokes the person's grants in the organization, and for the administrative organization in every organization they are not a member of; a grant in the administrative organization confers only while its holder holds a current membership there (IDN-MEM-001, D-166, D-213); the offboarding procedure is the host's (D-050, D-225) |
 | **Shared logins destroying attribution** | Covered — prohibited and detected (D-051) |
 
 ---
@@ -215,7 +214,7 @@ let a compromised mailbox veto its own removal.
 | Auth endpoints | Public | Throttling, uniform responses, CSRF |
 | Registration session and link landings | Public | Registration session bound to the pre-authentication cookie; verification and sign-in links complete only in the originating browser (REG-SESS-003), and a link of every kind acts only on a press, never on load, so a mail scanner's prefetch changes nothing (FE-VER-001, D-166); server-sent events on the session cookie with no token in any URL (`17`); a link carries its token in the address fragment, which never reaches a server, and the landing page sends no referrer (FE-VER-001, D-166) |
 | Send paths (SMS, email) | Public, prepaid | Named restrictions per destination, source and account, each on its channel; security notices answer only to `notification` restrictions and alerts to none (AUTH-ABUSE-004, D-166) |
-| Provider callbacks | Public, weakly authenticated | Unguessable references, rate limits; an unsigned callback never advances an authoritative state by itself, save the releases INT-SMS-005 allows, each of which can only make a person less restricted (D-197), and a verified, signed provider security event acts only as IDN-LIFE-012a states (INT-GEN-003, D-166) |
+| Provider callbacks | Public, weakly authenticated | Unguessable references, rate limits; an unsigned callback never advances an authoritative state by itself, and a verified, signed provider security event acts only as IDN-LIFE-012a states (INT-GEN-003, D-166) |
 | Mail (IMAP/SMTP) | Public | App passwords — **weakest credential** (R-A02) |
 | Database | Private network | Application credential cannot alter schema |
 | CI/CD pipeline | GitHub | One person's account |
@@ -233,9 +232,10 @@ Stated so effort is not spent re-solving these.
   revocation
 - **Credential strength** — passkeys, blocklist screening, no composition rules, no
   forced rotation
-- **Data minimisation to processors**: the SMS gateway and the mail server receive
-  the minimum, and the host declares the categories each of its own processors may
-  receive (INT-GEN rules)
+- **Data minimisation to processors**: the mail server receives the minimum, each
+  message handed to the host carries only the values its kind needs (INT-SMS-006), and
+  the host declares the categories each of its own processors may receive (INT-GEN
+  rules)
 - **Fail-closed discipline** — enforced by analyzer rather than by vigilance
 - **Audit integrity** — append-only at the database level, queryable by subject
 - **Identifier lifecycle** (D-146): verification links bound to the originating
@@ -301,8 +301,7 @@ there.
 
 ### 6.4 The operator's machine is an unaddressed attack surface
 
-It holds production credentials, deployment access, and, if the personal-machine
-backup copy is ever used, customer data of every declared category.
+It holds production credentials and deployment access.
 
 Compromising it compromises everything. Nothing in the specification addresses it.
 
@@ -321,15 +320,13 @@ Individual events are logged. Nothing watches for patterns — a spike in failed
 sign-ins, recovery attempts clustering on one account, sign-ins from unusual
 locations.
 
-**Resolved — D-048, D-071, D-121.** The alert conditions are the table in
-OPS-ALERT-001 (`06-operations`), which is the single authoritative list — every
-requirement elsewhere that says "alert" has a row there. Email for all, SMS
-additionally for high severity, both with delivery confirmation. Alerts are
-deduplicated per condition per window so alert flooding cannot be used to drain the
-prepaid SMS balance; **all alert-class sends** are exempt from the send hard-stop
-(OPS-ALERT-003) and are outside every sending restriction (AUTH-ABUSE-004), so an
-attacker cannot silence an alert by exhausting a limit (D-166); mail-system alerts are
-SMS-first.
+**Resolved — D-048, D-071, D-121, D-225.** The alert conditions are the table in
+OPS-ALERT-001 (`06-operations`), the single authoritative list: every requirement
+elsewhere that says "alert" has a row there. Each raised alert is handed to the host's
+alert handler, whose delivery keeps what OPS-ALERT-003 lists. Alerts are deduplicated
+per condition per window, so flooding them cannot be turned against their delivery, and
+they are outside every sending restriction (AUTH-ABUSE-004), so an attacker cannot
+silence an alert by exhausting a limit (D-166).
 
 ---
 
@@ -359,14 +356,14 @@ laptop in one office. The passkey requirement is what makes that hard.
 | 2 | The host's customer list is the most commercially sensitive asset | **Answered: unknown.** Same. Ranked first on reasoning about the business, not on confirmation |
 | ✓ 3 | **Confirmed**: the host has a commercial flow a verified account can abuse | D-049 applies; the host owns the control |
 | ✓ 4 | **Confirmed differently**: few staff, not all known, periodic turnover | §3.5 reworked; D-050 added |
-| ✓ 5 | **Confirmed, with nuance**: channels outside the system still carry part of the host's business, which the system is intended to replace | R-A04 gains a second trigger |
+| ✓ 5 | **Confirmed, with nuance**: channels outside the system still carry part of the host's business, which the system is intended to replace | Recorded; recovery time is the deployment's (D-225) |
 
 ---
 
 ## 8. Review
 
 **THREAT-001** — This model SHALL be revisited when the business gains staff with
-system access, when a new external integration is added, or at each licence renewal.
+system access, or when a new external integration is added (D-225).
 
 **All gaps in §6 are closed**: 6.1 (D-045), 6.2 (D-049, out of scope, host-owned), 6.3 (D-046),
 6.4 (D-047), 6.5 (D-048), 6.6 (D-051, D-147 corrected the count).

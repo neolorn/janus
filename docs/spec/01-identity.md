@@ -573,7 +573,7 @@ right (keys, consent and rights for people who never touched the system) is reje
 3. A subject with sensitive data held about them has an account or a person record, a
    history, and a way to their rights: the privacy dashboard, a code (`21` REC-ACC-001),
    or out of band.
-4. The takedown procedure always has an account or a person record to act on.
+4. The takedown always has an account or a person record to act on.
 
 **Consequence for a host.** A host whose records about a subject are sensitive
 (PRIV-SENS-001) keeps them under an account, or under a person record that answered the
@@ -584,11 +584,12 @@ other place the adult affirmation is collected (D-221).
 
 ---
 
-**IDN-LIFE-003** A documented takedown procedure SHALL exist and be followed on
-any credible indication that a customer is under 18: account suspended, host-side
-processing for the subject stopped, personal data removed, event recorded.
+**IDN-LIFE-003** — The library SHALL provide the takedown, for any credible indication
+that a customer is under 18: account suspended, host-side processing for the subject
+stopped, personal data removed, event recorded. The procedure staff follow is the host's
+own document (D-225).
 
-*Source: D-148; D-039, D-127, D-147, D-166, D-183*
+*Source: D-148; D-039, D-127, D-147, D-166, D-183, D-225*
 
 **Two phases, one operation.** Triggering the takedown does, in one transaction:
 suspend the account, terminate its sessions (AUTH-SESS-010), record the event with
@@ -667,11 +668,10 @@ the account held: `AccountSuspended` announces that access stopped (D-166). No
 The reversal writes `TakedownReversed` in its own transaction the same way. Neither is
 delivered before its transaction commits (CONV-DESIGN-002).
 
-**Why a window.** Immediate key destruction would make a mistaken takedown
-unfixable and would leave nothing for the host's follow-up and reporting steps in
-`14-takedown-procedure` to contact. Nothing is processed during the window: the
-account cannot sign in, staff cannot act on it, and the host has already stopped its
-own processing for the subject.
+**Why a window.** Immediate key destruction would make a mistaken takedown unfixable and
+would leave nothing for the host's follow-up and reporting steps to contact. Nothing is
+processed during the window: the account cannot sign in, staff cannot act on it, and the
+host has already stopped its own processing for the subject.
 
 The affirmation verifies nothing. What makes self-declaration proportionate for
 sensitive data is that the situation has a defined outcome rather than being decided
@@ -683,7 +683,7 @@ into `deleting` by `takedown`, every session that reaches it by a code ends, and
 window, the erasure and the reversal are an account's.
 
 **Acceptance criteria**
-1. The procedure exists as `14-takedown-procedure.md`.
+1. *Retired by D-225: the procedure staff follow is the host's document.*
 2. The system provides an operation performing all four steps **reliably, with
    per-subscriber completion visible**, not atomically (IDN-LIFE-003a): the
    host-side work's completion is read from its outbox record from the moment of
@@ -963,8 +963,8 @@ it is not deleted, since membership may end.
 
 **Acceptance criteria**
 1. Staff membership originates from an invitation, never from a bare grant. The one
-   exception is the three memberships bootstrap attaches (the first administrator,
-   `emergency` and the restore-test canary, OPS-BOOT-001).
+   exception is the two memberships bootstrap attaches (the first administrator and
+   `emergency`, OPS-BOOT-001).
 2. The enrolment link is time-boxed and single-use: the press that opens it (a
    registration begun with its token, or a signed-in `POST /register` carrying it)
    spends it, and a registration abandoned or expired does not give it back.
@@ -1263,12 +1263,10 @@ A preference, or the request's `Accept-Language` priority list, SHALL be matched
 `notification.languages` by the lookup of RFC 4647 section 3.4, each range in priority
 order, a range with `q=0` left out; what is found is always a declared tag.
 
-**Every declared language (D-166).** An email resolved to every declared language SHALL
-be one message carrying them all, composed by the library from each language's rendered
-template in `notification.languages` order, the subject lines joined in that order with
-a space, `|` and a space between each two, and the texts with one blank line between
-each two (D-186); no rule for composing several languages enters the message catalogue.
-An SMS resolved to every declared language SHALL be one message per declared language.
+**Every declared language (D-166, D-225).** A message resolved to every declared
+language SHALL be one message carrying them all, in `notification.languages` order,
+handed to the host once; how it is composed, one email carrying every language or one
+SMS for each, is the host's (`05` INT-SMS-006).
 How each is judged and counted against the sending restrictions is AUTH-ABUSE-004.
 
 **Registration SHALL set the preference to the declared language the request locale
@@ -1278,10 +1276,8 @@ language in use and case 3 becomes nearly unreachable.
 **Acceptance criteria**
 1. The preference is editable by the person and appears in the subject access export.
 2. A background-triggered notification resolves language without a request.
-3. An account with no preference and no request receives every declared language: one
-   email carrying them all, its subject the declared languages' subject lines in
-   `notification.languages` order with a space, `|` and a space between each two, and
-   its texts with one blank line between each two; or one SMS for each.
+3. An account with no preference and no request is handed every declared language, in
+   `notification.languages` order, in one message to the host.
 4. A request whose `Accept-Language` is `fr-CH, en;q=0.8`, on a deployment declaring
    `ar` and `en`, resolves to `en`; an administrator's request never decides the
    language of a message to someone else.

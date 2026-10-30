@@ -1704,8 +1704,8 @@ the same operation.
 
 Previously unstated. Suspension, deactivation and the transition to `deleting` said
 nothing about sessions, so a suspended account retained a live session for up to its
-absolute lifetime — up to a year for a customer (AUTH-SESS-005). The takedown procedure's claim that "access
-stops immediately" was false.
+absolute lifetime — up to a year for a customer (AUTH-SESS-005). The takedown's claim
+that "access stops immediately" was false.
 
 **Acceptance criteria**
 1. Suspending an account ends its sessions within one request cycle: the first request
@@ -2101,9 +2101,9 @@ with `authz.denied`, whatever the reserved account's policy lists.
 
 A printed single-use secret is not phishing-resistant, so under the ordinary rule a
 break-glass session could perform none of the actions it exists for — approving a
-recovery, granting system administration, changing alert destinations, loosening a
-setting. This is a deliberate exception to the strongest control in the design, which
-is what an emergency credential is.
+recovery, granting system administration, loosening a setting. This is a deliberate
+exception to the strongest control in the design, which is what an emergency credential
+is.
 
 **The compensating control is the alerting**, not a weaker exception. Use raises
 maximum-noise alerts immediately (OPS-BOOT-002), and every action in the session is
@@ -2111,7 +2111,7 @@ audited.
 
 **Acceptance criteria**
 1. A break-glass session can approve a recovery, grant `system:administer`, and
-   change alert destinations.
+   loosen a setting.
 2. Every action in the session, or in a session another application opened from it
    (BFF-SESS-006), is audited as break-glass-originated, carrying the reason given with
    the credential at its use (OPS-BOOT-002, D-171).
@@ -2219,10 +2219,10 @@ SMS does not make the link an authentication factor (AUTH-FACT-002): the control
 approver's confirmation on a recorded channel, and the link is the same time-boxed,
 single-use artefact in every case. The approval, its audit record and the link's send
 are written in one unit of work, the send undertaken in it (AUTH-ABUSE-004): a send a
-sending restriction or the gateway floor refuses leaves no approval and is answered 429
-`auth.restriction.exceeded` with `retryAt`, or 422 `integration.sms.balancefloor`, and a
-processing restriction of the approver's account committed before the approval's first
-write refuses the approval whole with `authz.restricted` (AUTHZ-GATE-006, D-186).
+sending restriction refuses leaves no approval and is answered 429
+`auth.restriction.exceeded` with `retryAt`, and a processing restriction of the
+approver's account committed before the approval's first write refuses the approval
+whole with `authz.restricted` (AUTHZ-GATE-006, D-186).
 
 **What the link permits.** A re-enrolment session in which the person sets a password
 or passkey and, where the old mailbox is unreachable, **sets a new email address
@@ -2241,9 +2241,7 @@ old one. The remaining security-notice set is still notified and receives the un
    to a new address through this path, with the old address notified.
 6. The link is never sent to a channel supplied in the request.
 7. An approval whose link's send a sending restriction refuses is answered 429
-   `auth.restriction.exceeded`, and one whose SMS link the gateway floor refuses is
-   answered 422 `integration.sms.balancefloor`, each leaving no approval, no record of
-   it and no send.
+   `auth.restriction.exceeded`, leaving no approval, no record of it and no send.
 
 ---
 
@@ -2696,8 +2694,8 @@ non-existence email is judged under the purpose of the message that was asked fo
 refusal of it by a restriction is the answer to the ask. The mark that spends a
 destination's window, for this message and for REG-SESS-005's notice alike, is written
 only where the send is admitted, so a refused notice spends no window (D-188). An ask of
-recovery, a sign-in link or an email code SHALL be answered before any transport is
-called, whether its message is sent or not (AUTH-ABUSE-004).
+recovery, a sign-in link or an email code SHALL be answered before the host's
+notification handler is called, whether its message is sent or not (AUTH-ABUSE-004).
 
 *Source: D-148; D-079b; D-166, D-188*
 
@@ -2720,34 +2718,33 @@ identifier, neither of which constrains this.
 6. The "someone tried to register or change to this address — nothing has changed"
    notification points the recipient to sign-in and to recovery, so a forgetful
    returning customer is not left at a dead end (D-140).
-7. With the mail transport blocked, an ask for an existing address and one for a
-   non-existent address are both answered 202 without waiting for it; with a transport
-   that refuses everything, both answer the same bytes.
+7. With the notification handler blocked, an ask for an existing address and one for a
+   non-existent address are both answered 202 without waiting for it; with a handler
+   that takes nothing, both answer the same bytes.
 
 ---
 
 **AUTH-ABUSE-004** — Every send of every kind (verification code, sign-in link,
-second-step code, notice) SHALL be governed by **named restrictions**, except an alert
-(OPS-ALERT-001), which is outside every restriction and governed by the deduplication of
-OPS-ALERT-002 alone. A restriction SHALL have a **key** (`destination`: an HMAC of the
-canonical address; `account`; `source`: the source of AUTH-ABUSE-001 of the request that
-asked for the send; `global`; or `host:<name>` supplied by the host), an optional
-**purpose** filter (`verification` · `signin` · `secondfactor` · `notification` ·
-`any`), an optional **channel** filter (`sms` · `email` · `any`, default `any`), and one
-or more **buckets** of (max, interval, `sliding` | `fixed`); its name follows the rule
-of INT-SMS-003. A send no request asked for (a background job's) carries no source, and
-no `source` restriction counts it. Every send SHALL evaluate every applicable
+second-step code, notice) SHALL be governed by **named restrictions**; an alert is no
+send (OPS-ALERT-003, D-225). A restriction SHALL have a **key** (`destination`: an HMAC
+of the canonical address; `account`; `source`: the source of AUTH-ABUSE-001 of the
+request that asked for the send; `global`; or `host:<name>` supplied by the host), an
+optional **purpose** filter (`verification` · `signin` · `secondfactor` · `notification`
+· `any`), an optional **channel** filter (`sms` · `email` · `any`, default `any`), and
+one or more **buckets** of (max, interval, `sliding` | `fixed`); its name follows the
+rule of INT-SMS-003. A send no request asked for (a background job's) carries no source,
+and no `source` restriction counts it. Every send SHALL evaluate every applicable
 restriction; any exceeded bucket SHALL refuse with `auth.restriction.exceeded` carrying
 `retryAt`, the earliest instant at which every bucket the send exceeds has room for it.
 A **failed delivery SHALL NOT count**. A restriction MAY be marked `resend`; it then
 judges and counts a send once, whatever its languages, and its one count is released
-when every text of the send fails for good (below), for a `secondfactor` send also when
-any text of it is reported delivered, and for any send when its code is presented right
-or its link pressed; where the code is an authentication code, the release stands
-whatever refusal follows, kept with the code's spend, and a verification code or a link
-releases it only on its success, a refusal of one releasing nothing (CONV-DESIGN-003,
-D-198). A failure report of one text releases that text's count from every restriction
-not marked `resend`; a delivered report releases nothing else, since an ask that sends
+when the send fails for good (below), for a `secondfactor` SMS also when the host
+reports it delivered (INT-SMS-005), and for any send when its code is presented right or
+its link pressed; where the code is an authentication code, the release stands whatever
+refusal follows, kept with the code's spend, and a verification code or a link releases
+it only on its success, a refusal of one releasing nothing (CONV-DESIGN-003, D-198). A
+report that a message failed releases its count from every restriction not marked
+`resend`; a report that it was delivered releases nothing else, since an ask that sends
 nothing counts too (below) and an early release would tell its asker that a message went
 out (AUTH-ABUSE-003, D-197). Restrictions SHALL be **runtime configuration** edited
 through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up action `restriction:edit`,
@@ -2775,19 +2772,17 @@ whose newest timestamp is older than the longest interval the current destinatio
 restrictions declare SHALL be deleted.
 
 **Sending order.** Every area undertakes a send through the governed send
-(`IGovernedSend`, CONV-LAYOUT-002), never through `INotificationHandler` or a transport
-itself. The restrictions and the gateway floor (AUTH-ABUSE-006) SHALL be judged inside
-the transaction of the operation that undertakes the send, and a refusal SHALL return
-before its count or its outbox row is written. The judgement SHALL be made with the
-counter of every key the send's restrictions apply to held (`SELECT ... FOR UPDATE`, the
-counter created first where none stands), the counters taken in one fixed order, after
-the operation's own row locks and value locks, and held to the end of that transaction,
-so that two sends judged at once are judged one after the other (CONV-DESIGN-003). The
-gateway floor is judged on the latest balance the poll recorded (AUTH-ABUSE-006), never
-by asking the gateway inside the transaction. An admitted send SHALL count from its
-admission: its count, any credit it spends and its row in the library's own outbox,
-carrying the `SendReference` drawn for it, SHALL be written in that transaction, and the
-governed send answers its caller with that reference or with the refusal, never with the
+(`IGovernedSend`, CONV-LAYOUT-002), never through `INotificationHandler` itself. The
+restrictions SHALL be judged inside the transaction of the operation that undertakes the
+send, and a refusal SHALL return before its count or its outbox row is written. The
+judgement SHALL be made with the counter of every key the send's restrictions apply to
+held (`SELECT ... FOR UPDATE`, the counter created first where none stands), the
+counters taken in one fixed order, after the operation's own row locks and value locks,
+and held to the end of that transaction, so that two sends judged at once are judged one
+after the other (CONV-DESIGN-003). An admitted send SHALL count from its admission: its
+count, any credit it spends and its row in the library's own outbox, carrying the
+`SendReference` drawn for it, SHALL be written in that transaction, and the governed
+send answers its caller with that reference or with the refusal, never with the
 delivery. A refused send fails the operation that undertook it only where a chapter or
 the operation's `09` row answers that refusal; elsewhere the operation goes on without
 the send and commits what else it wrote, or rolls back where it wrote nothing else
@@ -2795,42 +2790,36 @@ the send and commits what else it wrote, or rolls back where it wrote nothing el
 outermost transaction commits, and SHALL be discarded if it rolls back; a row that has
 an immediate attempt is written due `outbox.retry.initial` after its admission and the
 immediate attempt claims it whatever its due instant, so that no pass takes it first,
-and a row that has none (a message whose ask is answered before any transport is called,
+and a row that has none (a message whose ask is answered before the handler is called,
 AUTH-ABUSE-003) is due at its admission (CONV-DESIGN-003, D-188, D-189); whatever that
 attempt does not carry is the outbox publisher's, under `outbox.retry.*` (D-022,
 INF-BG-001). A caller that acts on whether its sends were carried (the loss report's
-notifications, AUTH-RECOV-007; an alert's channels, OPS-ALERT-003) undertakes them in
-the unit of work it begins as the outermost and commits, and once their immediate
-attempts have run asks, through an internal port of `Janus.Authentication`, whether each
-was taken by its attempt, a send owing several languages (one row for each language of a
-text message, one composed row for a mail, IDN-ATTR-001) being taken only where its
-attempt took every row; a row gone is not by itself a send taken, since a row is also
-removed at exhaustion, after erasure and at a refused retry. No transport SHALL be
-called inside an open transaction, and an operation that rolls back SHALL send nothing.
-A retried send SHALL be judged by the restrictions and the gateway floor as they stand
-when it is retried, with its own count set aside: admitted, it counts at the retry's
-instant in place of its earlier count; refused, it fails for good, holding no count, and
-its row is removed uncarried, raising nothing. A message's count and any credit it spent
-SHALL be released, from every restriction not marked `resend`, where it fails for good:
-its attempts are spent, its row is removed uncarried after erasure (PRIV-RIGHT-005a), a
-delivery report says it failed (INT-SMS-005), or the restrictions or the floor refuse
-its retry; a restriction marked `resend` releases its one count of a send when every
-text of the send fails for good, and as stated above (INT-SMS-005, D-197). A row SHALL
-be removed once its delivery is taken (IDN-PRIN-003); a send whose attempts are
-exhausted raises the `degradation` condition in the transaction that removes its row.
-This holds on every send path: invitations, recovery, sign-in and notices.
+notifications, AUTH-RECOV-007) undertakes them in the unit of work it begins as the
+outermost and commits, and once their immediate attempts have run asks, through an
+internal port of `Janus.Authentication`, whether each was taken by its attempt, a send
+owing several languages being one row (IDN-ATTR-001); a row gone is not by itself a send
+taken, since a row is also removed at exhaustion, after erasure and at a refused retry.
+The handler SHALL NOT be called inside an open transaction, and an operation that rolls
+back SHALL send nothing. A retried send SHALL be judged by the restrictions as they
+stand when it is retried, with its own count set aside: admitted, it counts at the
+retry's instant in place of its earlier count; refused, it fails for good, holding no
+count, and its row is removed uncarried, raising nothing. A message's count and any
+credit it spent SHALL be released, from every restriction not marked `resend`, where it
+fails for good: its attempts are spent, its row is removed uncarried after erasure
+(PRIV-RIGHT-005a), the host reports it failed (INT-SMS-005), or the restrictions refuse
+its retry; a restriction marked `resend` releases its one count of a send when the send
+fails for good, and as stated above (INT-SMS-005, D-197). A row SHALL be removed once
+its delivery is taken (IDN-PRIN-003); a send whose attempts are exhausted raises the
+`degradation` condition in the transaction that removes its row. This holds on every
+send path: invitations, recovery, sign-in and notices.
 
 **Every declared language.** A send resolved to every declared language (IDN-ATTR-001
-step 3) SHALL be judged exactly, with no bucket overrun. By email it SHALL be one
-message carrying every declared language, which the library composes from each
-language's rendered template in the order of `notification.languages`, their subject
-lines joined in the same order, a space, `|` and a space between each two, and their
-texts with one blank line between each two (IDN-ATTR-001); it is judged and counted
-once. By SMS it SHALL be one message per declared language, admitted only where every
-applicable bucket has room for all of them (judged once, with the weight of their
-number), and each SHALL count; this weighting holds for every restriction not marked
-`resend` (D-197). No multilingual rule enters the catalogue: it holds one text per
-language.
+step 3) SHALL be judged exactly, with no bucket overrun. It is one message carrying
+every declared language in the order of `notification.languages`, handed to the host
+once, which composes it (INT-SMS-006, D-225). By email it is judged and counted once. By
+SMS it is admitted only where every applicable bucket has room for as many texts as it
+carries languages (judged once, with the weight of their number), and counts that many;
+this weighting holds for every restriction not marked `resend` (D-197).
 
 **An ask that sends nothing.** An ask of a sign-in link, an email code or a recovery
 that sends nothing, for any reason, and an ask or resend of a verification code for a
@@ -2838,14 +2827,13 @@ value REG-SESS-005 answers as held or reserved, at registration or at an identif
 add or replace (AUTH-FACT-004), SHALL be judged and counted against the restrictions as
 its message would be, in the message's destination, kind, purpose and language, and
 SHALL be refused by them alike. An ask or resend of a verification code for a held or
-reserved value SHALL also be judged against the gateway floor as its message would be,
-and refused by it alike (AUTH-ABUSE-006, D-186). For an address no account holds, the
-`account` key does not apply. The ask is answered before any transport is called
+reserved value is judged as a sent one is (D-186). For an address no account holds, the
+`account` key does not apply. The ask is answered before the handler is called
 (AUTH-ABUSE-003).
 
 *Source: D-146; replaces the fixed window of D-013, INT-SMS-002 and IDN-LIFE-011;
 OPS-CFG-002; D-142 for the editing model; D-166, D-183, D-186, D-187, D-188, D-189,
-D-197, D-198*
+D-197, D-198, D-225*
 
 Shipped defaults:
 
@@ -2857,14 +2845,14 @@ Shipped defaults:
 | `email.destination` | `destination` | `any` | `email` | 5 per 1 h, sliding; 1 per 60 s, fixed |
 | `notification.destination` | `destination` | `notification` | `any` | 5 per 24 h, sliding |
 
-The gateway account is prepaid, so looped sends drain money directly without any
+A host's gateway account is prepaid, so looped sends drain money directly without any
 registration completing; a fixed one-per-window rule stranded a person whose carrier
-dropped the message and could not express a per-account or budget-shaped limit without
-a redeploy. Restrictions are edited like the holiday list (D-142): the change applies
-at once, is audited, and a loosening alerts. Security notices answer only to
-restrictions whose purpose is `notification`, and alerts to none, because an attacker
-who could exhaust an address's bucket, or any limit, would otherwise silence the notice
-or the alert that tells someone something is wrong.
+dropped the message and could not express a per-account or budget-shaped limit without a
+redeploy. Restrictions are edited like the holiday list (D-142): the change applies at
+once, is audited, and a loosening alerts. Security notices answer only to restrictions
+whose purpose is `notification`, and an alert is no send, because an attacker who could
+exhaust an address's bucket, or any limit, would otherwise silence the notice or the
+alert that tells someone something is wrong.
 
 **Acceptance criteria**
 1. A fourth SMS to one number inside 24 hours is refused with
@@ -2875,9 +2863,8 @@ or the alert that tells someone something is wrong.
    of `sms.destination`'s three sends spent inside 24 hours, it is refused whole, and
    otherwise each language counts against `sms.destination` and the send once against
    `sms.resend`.
-2. A text whose delivery report indicates failure does not count against any bucket of a
-   restriction not marked `resend`, nor its send against a restriction marked `resend`
-   once every text of the send has failed for good.
+2. A message the host reports failed counts against no restriction, marked `resend` or
+   not.
 3. `PUT /admin/restrictions/{name}` without `restriction:edit` step-up returns the
    step-up code; an edit without a reason is refused with
    `config.change.reasonrequired`, and a loosening by a caller without
@@ -2900,10 +2887,10 @@ or the alert that tells someone something is wrong.
    shortened interval reaches sends already counted and no record outlives that
    interval without a further send.
 7. A host-supplied `host:<name>` key is evaluated like the built-in keys.
-8. A send undertaken inside an operation that then rolls back reaches no transport and
+8. A send undertaken inside an operation that then rolls back reaches no handler and
    leaves no row; one undertaken inside an operation that commits is carried after the
-   commit, and no transport is called while its transaction is open.
-9. A retried send is judged by the restrictions and the floor as they stand when it is
+   commit, and the handler is not called while its transaction is open.
+9. A retried send is judged by the restrictions as they stand when it is
    retried; refused, its row is removed uncarried, its count released, and nothing is
    raised.
 10. A fourth mail to one address inside 24 hours is sent where only `sms.destination`
@@ -2911,8 +2898,7 @@ or the alert that tells someone something is wrong.
 11. A security notice to an existing holder is neither counted nor refused by
     `sms.source`.
 12. A send no request asked for is counted under no `source` key.
-13. An alert is sent whatever the buckets of every restriction hold; only the
-    deduplication of OPS-ALERT-002 limits it.
+13. *Retired by D-225: an alert is no send.*
 14. An ask of a sign-in link, an email code or a recovery that sends nothing, and an ask
     or resend of a verification code for a held or reserved value, is counted against
     the restrictions as its message would be, and is refused by them alike.
@@ -2923,23 +2909,20 @@ or the alert that tells someone something is wrong.
     the others are refused with `retryAt`, and one credit is spent once; a send counts
     from its admission, a retried send is judged with its own count set aside, and a
     message that fails for good releases its count and its credit from every restriction
-    not marked `resend`, and a send all of whose texts fail for good releases its one
+    not marked `resend`, and a send that fails for good releases its one
     count from each restriction marked `resend`.
-17. With no balance yet recorded, an SMS send is not refused by the floor; with a
-    recorded balance below it, an SMS send other than an alert is refused and an alert
-    is not (OPS-ALERT-003), and no gateway is asked while the send's transaction is
-    open.
+17. *Retired by D-225: the library keeps no gateway floor.*
 18. A notice a restriction refuses inside an operation where neither a chapter nor its
     `09` row answers that refusal leaves the operation's other writes committed and its
     answer as it would have been; an operation where a chapter or its row answers the
     refusal commits nothing it wrote but the kept writes it made (CONV-DESIGN-003).
-19. A loss report's notification or an alert whose immediate attempt is not taken counts
+19. A loss report's notification whose immediate attempt is not taken counts
     as not carried for its caller, whatever later becomes of its row; no pass claims a
     new row that has an immediate attempt before `outbox.retry.initial` has passed since
     its admission, and a row that has none is claimed by the next pass.
 20. A second SMS to one number inside 3 minutes is refused by `sms.resend` with a
-    `retryAt` 3 minutes after the first send's admission; a failure report of the first
-    admits it at once; a delivery report of the first admits it at once where the first
+    `retryAt` 3 minutes after the first send's admission; a report that the first failed
+    admits it at once; a report that the first was delivered admits it at once where it
     was a `secondfactor` send and changes nothing otherwise; the first's code presented
     right, or its link pressed, admits it at once, an authentication code also where a
     refusal follows it, and a verification code or a link whose presentation is refused,
@@ -2948,90 +2931,18 @@ or the alert that tells someone something is wrong.
 
 ---
 
-**AUTH-ABUSE-005** — SMS message templates SHALL carry a per-language length budget,
-tested, with Arabic binding.
-
-**Values (D-153).** "Every configured language" is the set `notification.languages`.
-
-**Values (D-166).** A text message that carries a link is budgeted at two segments of
-its alphabet: 306 characters of the GSM 7-bit default alphabet, or 134 otherwise. Every
-other text message is budgeted at one: 160 or 70. Each place the library fills is
-measured at its defined width, and `{link}` at its composed width: the landing origin
-declared for the link's application, `/link#`, the link's kind, `.` and a drawn token,
-of the one token size every channel uses (INT-SMS-003). A text-message template naming a place with no defined
-width is refused at startup with `model.startup.declarationinvalid`.
-
-*Source: D-013, D-031, D-166*
-
-Unicode messages are 70 characters for a single SMS and 67 per part concatenated;
-Latin gets 160 and 153. An Arabic message one character over 70 costs double.
-
-**The recipient's language is unknown until the recipient is resolved** (D-055), so
-budgets **cannot** be validated per template in isolation. Every template is validated
-in **every configured language** at startup — any of them might be the one sent.
-
-**Acceptance criteria**
-1. A test fails if any rendered template exceeds its budget: one segment of its
-   alphabet, or two where it carries a link.
-2. The test covers every template in every supported language.
-3. Validation runs at startup, not at send, over the catalogue in force: the
-   deployment's where it registered one, the shipped one otherwise. Startup refuses
-   only a message with no text in a declared language, a text message over budget, or
-   a text message naming a place with no defined width; declaring no catalogue is not a
-   refusal.
+**AUTH-ABUSE-005** — *Retired by D-225. A message's text and its length are the host's
+(`05` INT-SMS-006).*
 
 ---
 
-**AUTH-ABUSE-006** — Gateway balance SHALL be polled, drain rate monitored with
-alerting, and sends hard-stopped below a configured floor.
-
-**Values (D-186).** A send other than an alert (OPS-ALERT-003) is judged against the
-floor on the latest balance the poll recorded (INT-SMS-004), inside the transaction that
-undertakes it and never by a read of the gateway there (CONV-DESIGN-002); until a first
-balance is recorded the floor refuses nothing. Where a chapter or an operation's `09`
-row answers a restriction's refusal of a send, it answers the floor's refusal of that
-send too, failing the operation alike, with 422 `integration.sms.balancefloor`; an ask
-of AUTH-ABUSE-003 is answered as it would have been, and an ask or resend of a
-verification code for a value REG-SESS-005 answers as held or reserved is refused as the
-send of a code for a value no account holds would be (AUTH-ABUSE-004), so that the floor
-tells nothing of an account.
-
-*Source: D-013, D-186*
-
-**Acceptance criteria**
-1. The balance is read every `abuse.sms.pollinterval`; spend in the last hour above
-   `abuse.sms.drainfactor` times the trailing seven-day hourly mean, or a balance that
-   would reach the floor within 24 hours at the current rate, raises the `sms-balance`
-   alert without human monitoring (D-153).
-2. Below the floor, sends other than alerts are refused and the condition surfaced
-   (OPS-ALERT-003).
-3. A send other than an alert is judged on the latest recorded balance, and one judged
-   before any balance is recorded is not refused by the floor.
-4. Below the floor, an SMS send whose refusal by a restriction its operation answers is
-   answered 422 `integration.sms.balancefloor`, the operation committing only its kept
-   writes; an ask of AUTH-ABUSE-003 is answered as it would have been; and an ask or
-   resend of a verification code for a held or reserved value is refused exactly as one
-   for a value no account holds.
+**AUTH-ABUSE-006** — *Retired by D-225. A gateway's balance and its floor are the host's
+messaging's (`05` INT-SMS-006).*
 
 ---
 
-**AUTH-ABUSE-007** — The SMS delivery-report callback SHALL be treated as hostile
-input: correlation references unguessable, endpoint rate-limited, and a callback
-SHALL NEVER by itself advance a verification state.
-
-**Values (D-153, D-166).** The callback endpoints accept `integration.callback.ratelimit`
-requests per source (AUTH-ABUSE-001) per minute; a correlation reference is 128 random
-bits, base64url, held only as its SHA-256 and looked up by it (INT-GEN-003,
-BFF-MACH-003).
-
-*Source: D-013, D-166*
-
-The gateway calls over plain HTTP with parameters in the query string,
-unauthenticated.
-
-**Acceptance criteria**
-1. A forged callback with a guessed reference is rejected.
-2. A callback marking delivery does not itself mark a phone verified.
+**AUTH-ABUSE-007** — *Retired by D-225. The library takes no delivery report from a
+gateway; a message's outcome reaches it from the host (`05` INT-SMS-005).*
 
 ---
 
@@ -3412,18 +3323,16 @@ key (AUTH-FACT-006).
 server serves: the versions of the key-encryption key, the versions of the fingerprint
 key, the maintenance credential (OPS-MIG-003a), the mail server's secret where the
 shipped adapter is the mail server in use (CONV-DESIGN-007), and each social provider's
-credential by provider name, and the delivery-report key, `smsReportKey`, at least 32
-bytes, read by the server and by no command (INT-SMS-005, D-224). No secret is an
-argument of `AddJanus`. A `Janus.Cli` command reads the same values from one JSON
-document on standard input (OPS-SEC-001), save `migrate`, which reads no key
-(OPS-MIG-001, D-204). A secret that cannot be read stops startup with
-`model.startup.secretunavailable`, `details.key` naming the secret: `keyEncryptionKeys`,
-`fingerprintKeys`, `maintenanceCredential`, `mailServerSecret`, `smsReportKey` or
-`socialProvider.<provider>`, and `input` where a `Janus.Cli` command cannot read its
-document. A start with no secret source declared is not this refusal: it fails with
-`model.startup.declarationmissing`, `details.key` `secretSource` (LIB-HOST-001). Every
-version of the fingerprint key SHALL be at least 32 bytes; a shorter one SHALL be
-refused, never padded.
+credential by provider name. No secret is an argument of `AddJanus`. A `Janus.Cli`
+command reads the same values from one JSON document on standard input (OPS-SEC-001),
+save `migrate`, which reads no key (OPS-MIG-001, D-204). A
+secret that cannot be read stops startup with `model.startup.secretunavailable`,
+`details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`,
+`maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`, and `input`
+where a `Janus.Cli` command cannot read its document. A start with no secret source
+declared is not this refusal: it fails with `model.startup.declarationmissing`,
+`details.key` `secretSource` (LIB-HOST-001). Every version of the fingerprint key SHALL
+be at least 32 bytes; a shorter one SHALL be refused, never padded.
 
 The key the provider encrypts its authorization codes and refresh tokens under SHALL be
 derived from each held version of the key-encryption key by HKDF-SHA256 with the info
@@ -3468,7 +3377,7 @@ code SHALL be swept once it is past its own expiry.
 ## 10. Open items
 
 None. Cross-references: identity lifecycle in `01-identity`; permission semantics in
-`03-authorization`; consent capture in `04-privacy`; SMS gateway and Stalwart
-contracts in `05-integrations`; key storage and configuration taxonomy in
+`03-authorization`; consent capture in `04-privacy`; Stalwart and the host's handlers
+in `05-integrations`; key storage and configuration taxonomy in
 `06-operations`; the account's shape, registration and identifier verification in
 `20-registration-and-account`.

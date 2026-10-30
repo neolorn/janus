@@ -694,12 +694,11 @@ carrying no session and no CSRF protection.
 *Source: D-070, D-166, D-188, D-189*
 
 A protocol client calling the token endpoint, the BFFs pushing their sign-on requests
-and exchanging the codes (BFF-SESS-006), the SMS gateway calling its delivery-report
-callback, the social providers posting their security events (`09` section 10), and any
-callback a host mounts on this profile for its own processors, send no cookie, no
-synchronizer token, no custom header and no Fetch Metadata. Under the browser profile
-every one of them is rejected: mail authentication, sign-on and all callbacks fail on
-day one.
+and exchanging the codes (BFF-SESS-006), the social providers posting their security
+events (`09` section 10), and any callback a host mounts on this profile for its own
+processors, send no cookie, no synchronizer token, no custom header and no Fetch
+Metadata. Under the browser profile every one of them is rejected: mail authentication,
+sign-on and all callbacks fail on day one.
 
 **The no-opt-out property is preserved.** An endpoint's protection derives from **where
 it is mounted**, not from a flag or attribute. A developer cannot accidentally place a
@@ -786,9 +785,7 @@ does not match the signed bytes.
 ---
 
 **BFF-MACH-003** — Where signing is **not available**, the callback SHALL be treated as
-a **hint that triggers verification against the provider's API** — never as a fact. The
-SMS delivery report is the exception: the releases INT-SMS-005 allows are made
-unconfirmed, since each can only make a person less restricted (INT-SMS-005, D-197).
+a **hint that triggers verification against the provider's API** — never as a fact.
 
 **Values (D-153).** The endpoints accept `integration.callback.ratelimit` requests per
 source per minute; `alerting.callback.threshold` rejected callbacks from one source in
@@ -798,22 +795,19 @@ it; the host's route is reached only once the host's confirmation succeeds.
 `ICallbackReferences` is a seam, not an operation of LIB-API-005: it joins the host's
 transaction, so it has no endpoint and takes no access context.
 
-*Source: D-070, INT-GEN-003, D-166, D-197, D-207*
+*Source: D-070, INT-GEN-003, D-166, D-197, D-207, D-225*
 
-Of the library's own callbacks, the SMS gateway calls over plain HTTP with parameters in
-the query string, which cannot carry a signature meaningfully (R-A12). A host records
-for each of its own processors whether it signs.
+The library's own callbacks are signed (`09` section 10); a host records for each of its
+own processors whether it signs (D-225).
 
 **This is the primary control for unsigned callbacks**, not a secondary one. A record is
-not advanced because something said so; the provider is asked, save the releases
-INT-SMS-005 allows.
+not advanced because something said so; the provider is asked.
 
 Supporting controls: unguessable correlation references, rate limiting, and source
 restriction where the provider publishes ranges.
 
 **Acceptance criteria**
-1. No unsigned callback advances authoritative state without independent confirmation,
-   save the releases of INT-SMS-005.
+1. No unsigned callback advances authoritative state without independent confirmation.
 2. A forged callback with a guessed reference is rejected, recorded against its source's
    fingerprint and logged, the log line naming no source (INT-GEN-003, D-207).
 3. Repeated verification failures raise an alert.

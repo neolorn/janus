@@ -1,6 +1,6 @@
 # 18 — Frontend Integration
 
-How the Angular applications connect to the BFF, and the constraints they must
+How a host's frontend applications connect to the BFF, and the constraints they must
 satisfy.
 
 **Prerequisite:** `17-bff.md`, `09-api-contract.md`.
@@ -17,46 +17,18 @@ design, not here.
 
 ## 1. Platform
 
-**FE-PLAT-001** — Angular 22 or later, **zoneless**, standalone components,
-signals for state.
-
-*Source: D-062*
-
-Zoneless change detection reached **stability in v20.2** and became the **default for
-new projects in v21** — Zone.js is no longer included by default. Verified 2026-08-29. Signals own component and
-application state; RxJS remains for time-based async orchestration. The working
-division: **RxJS to fetch and transform, signals to store and display.**
-
-**Acceptance criteria**
-1. No `NgModule` in application code.
-2. Zone.js is absent from polyfills and no zone-based change-detection provider is
-   registered — zoneless is the v21+ default and is not re-declared (D-135).
-3. `inject()` is used rather than constructor injection in new code.
+**FE-PLAT-001** — *Retired by D-225. A frontend's framework, state, tests, localization
+and accessibility are the host's.*
 
 ---
 
-**FE-PLAT-002** — Session and capability state SHALL live in **signals in a
-root-provided service**. No global store library.
-
-*Source: D-062*
-
-That state is read-mostly and small — who the person is, what assurance they reached,
-what they may do here. A store adds ceremony without solving anything present.
-
-**Acceptance criteria**
-1. Session state is reachable without prop-drilling and without a store dependency.
+**FE-PLAT-002** — *Retired by D-225. A frontend's framework, state, tests, localization
+and accessibility are the host's.*
 
 ---
 
-**FE-PLAT-003** — Testing is **Vitest** for unit and **Playwright** for end-to-end.
-
-End-to-end coverage is required for the flows that cannot be verified any other way:
-registration through account creation, step-up, recovery, consent capture, and
-locale switching.
-
-**Acceptance criteria**
-1. Each listed flow has an end-to-end test.
-2. Unit tests run without a browser.
+**FE-PLAT-003** — *Retired by D-225. A frontend's framework, state, tests, localization
+and accessibility are the host's.*
 
 ---
 
@@ -300,80 +272,28 @@ Stated so nobody later reasons that a hidden button makes an endpoint safe.
 
 ## 4. Localization
 
-**FE-LOC-001** — All user-facing text SHALL render through the localization library.
-No string SHALL be hardcoded in a template or component.
-
-*Source: D-031, D-054*
-
-**Acceptance criteria**
-1. The pseudo-locale's markers reveal no untransformed strings.
-2. Build-time completeness checking passes for every configured locale.
+**FE-LOC-001** — *Retired by D-225. A frontend's framework, state, tests, localization
+and accessibility are the host's.*
 
 ---
 
-**FE-LOC-002** — Layout SHALL use **CSS logical properties** throughout. Physical
-properties SHALL NOT be used for anything direction-dependent.
-
-`margin-inline-start`, not `margin-left`. `padding-inline`, not `padding-left` and
-`padding-right`. `text-align: start`, not `left`.
-
-*Source: D-031*
-
-The localization library supplies `dir` and correct bidi; **it does not mirror
-layout.** Physical properties are what silently break RTL, and they are invisible
-until someone switches locale.
-
-**Acceptance criteria**
-1. A lint rule bans physical direction-dependent properties and **runs from the first
-   commit**.
-2. The rule cannot be suppressed without an explicit annotation.
+**FE-LOC-002** — *Retired by D-225. A frontend's framework, state, tests, localization
+and accessibility are the host's.*
 
 ---
 
-**FE-LOC-003** — Localization readiness SHALL be verified with the **pseudo-locales**,
-testing both **contraction and expansion**.
-
-*Source: D-031*
-
-Expansion finds fixed-width containers, truncation and overflow. **Contraction finds
-the opposite failures** — text no longer filling its container, alignment that looked
-deliberate at English length and looks broken shorter, buttons sized to copy that is
-no longer there. Arabic against English typically contracts, so the contracted
-pseudo-locale is the one that matters here.
-
-The lint rule detects physical properties; the pseudo-locale **exposes** layouts that
-follow `dir` correctly and still look wrong. They are complementary, not alternatives.
-
-**Acceptance criteria**
-1. Both pseudo-locales are exercised before a screen is considered complete.
-2. Neither is reachable in a production build.
+**FE-LOC-003** — *Retired by D-225. A frontend's framework, state, tests, localization
+and accessibility are the host's.*
 
 ---
 
-**FE-LOC-004** — Values arriving canonicalised from the localization library SHALL
-NOT be re-parsed by validators.
-
-*Source: D-031*
-
-An Arabic-Indic numeral already converted to a canonical value must not then be
-examined by a validator expecting Latin digits.
-
-**Acceptance criteria**
-1. A form field accepting Arabic-Indic numerals validates and submits successfully.
+**FE-LOC-004** — *Retired by D-225. A frontend's framework, state, tests, localization
+and accessibility are the host's.*
 
 ---
 
-**FE-LOC-005** — Locale switching SHALL preserve application state and history.
-
-*Source: D-031*
-
-The localization library switches in place without a reload, rewrites URLs including
-translated path segments, and preserves history state. The application must not
-defeat that by re-initialising on locale change.
-
-**Acceptance criteria**
-1. Switching locale mid-form preserves entered data.
-2. Browser back after a switch restores the previous position.
+**FE-LOC-005** — *Retired by D-225. A frontend's framework, state, tests, localization
+and accessibility are the host's.*
 
 ---
 
@@ -485,8 +405,7 @@ portability, rectification, objection, and consent management.
 3. The readable export is **rendered by the frontend from structured data** — the
    server produces no document (D-058); a host's sections render as the library's, their
    labels read from the message catalogue under the keys `export/<section>` and
-   `export/<section>/<value>`, which the host adds (`09` `GET /privacy/export`, FE-LOC-001,
-   D-203).
+   `export/<section>/<value>`, which the host adds (`09` `GET /privacy/export`, D-203).
 
 ---
 
@@ -628,9 +547,9 @@ other controls. The reason is required and is sent with the credential
 (`POST /auth/break-glass`); the session keeps it, the session the management application opens from it takes
 it from the record it is bound to (BFF-SESS-006), and every audit record either writes
 carries it (OPS-BOOT-002, D-171). On success it SHALL land the person on the management
-application. Its address is what the sealed envelope names.
+application.
 
-*Source: OPS-BOOT-002, D-129, D-138, D-166, D-171*
+*Source: OPS-BOOT-002, D-129, D-138, D-166, D-171, D-225*
 
 The owner is not technical. The endpoint behind this page (`POST /auth/break-glass`)
 is not a procedure a non-technical person can follow; this page is.
@@ -1053,17 +972,8 @@ during registration or on page load of any library screen.
 
 ## 8. Accessibility
 
-**FE-A11Y-001** — Compliance screens SHALL meet WCAG 2.2 AA.
-
-*Source: D-062*
-
-Consent that a person cannot perceive or operate is not informed consent. The rest of
-the application should meet the same bar; on these screens it is a requirement.
-
-**Acceptance criteria**
-1. Consent and notice screens pass automated accessibility checks.
-2. Every consent control is keyboard-reachable and correctly labelled.
-3. Contrast holds in both languages and both directions.
+**FE-A11Y-001** — *Retired by D-225. A frontend's framework, state, tests, localization
+and accessibility are the host's.*
 
 ---
 

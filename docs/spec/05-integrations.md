@@ -20,18 +20,17 @@ schema does not.
 **INT-GEN-001** — Every outbound integration SHALL use TLS. A configuration
 specifying a plaintext endpoint SHALL be rejected at startup.
 
-The endpoints the library itself calls are `10` keys: `integration.mail.endpoint` and
-`integration.sms.endpoint` (the shipped transports), `integration.mailserver.endpoint`
+The endpoints the library itself calls are `10` keys: `integration.mailserver.endpoint`
 (the shipped mail-server adapter, INT-MAIL-001) and
-`password.blocklist.selfhosted.address` (the self-hosted corpus, INT-PWD-003). Each is
-an absolute `https` address; startup refuses any other value with
-`integration.endpoint.insecure`, and a change of a protected one from the server is
-refused alike (OPS-CFG-004), as is a change of `password.blocklist.selfhosted.address`,
-the one of them changed at runtime, through `PUT /admin/config/{key}`, answered 422 and
-changing nothing (D-198). A host's own integrations are the host's, and the library
-holds no register of them (D-162).
+`password.blocklist.selfhosted.address` (the self-hosted corpus, INT-PWD-003); it sends
+no message itself (INT-SMS-006, D-225). Each is an absolute `https` address; startup
+refuses any other value with `integration.endpoint.insecure`, and a change of a
+protected one from the server is refused alike (OPS-CFG-004), as is a change of
+`password.blocklist.selfhosted.address`, the one of them changed at runtime, through
+`PUT /admin/config/{key}`, answered 422 and changing nothing (D-198). A host's own
+integrations are the host's, and the library holds no register of them (D-162).
 
-*Source: P-003, D-162, D-166, D-198*
+*Source: P-003, D-162, D-166, D-198, D-225*
 
 This is not theoretical. Providers publish sample configuration that specifies a plain
 `http://` base URL, which would send names, addresses and phone numbers unencrypted.
@@ -55,14 +54,12 @@ production.
 
 **Values (D-166).** The provider credentials the library reads are the mail server's
 management key, where the shipped adapter is used (INT-MAIL-001), and each declared
-social provider's credential, read by the provider's name (IDN-LIFE-012), and the key in
-the delivery reports' route, `smsReportKey`, at least 32 bytes (INT-SMS-005, D-224).
-They are read in the startup hosted service, before the server serves; one that cannot
-be read, or a report key shorter than 32 bytes, stops startup with
-`model.startup.secretunavailable`, `details.key` `mailServerSecret`, `smsReportKey` or
+social provider's credential, read by the provider's name (IDN-LIFE-012). They are read
+in the startup hosted service, before the server serves; one that cannot be read stops
+startup with `model.startup.secretunavailable`, `details.key` `mailServerSecret` or
 `socialProvider.<provider>`. No provider credential is an argument of `AddJanus`.
 
-*Source: D-026.3, D-041, D-166, D-224*
+*Source: D-026.3, D-041, D-166*
 
 **Acceptance criteria**
 1. No provider credential appears in any repository file.
@@ -83,18 +80,16 @@ window, raw bytes, idempotency on the event identifier.
 provider's API**, never a fact — supported by unguessable references, rate limiting,
 and source restriction where ranges are published.
 
-An unsigned callback SHALL NEVER by itself advance an authoritative state, save the
-releases INT-SMS-005 allows (BFF-MACH-003, D-197); a verified, signed provider security
-event acts as IDN-LIFE-012a states.
+An unsigned callback SHALL NEVER by itself advance an authoritative state; a verified,
+signed provider security event acts as IDN-LIFE-012a states.
 
 **The pipeline is the library's; the callbacks are mostly the host's.** The library
 ships these controls as a host-mountable machine-profile pipeline (BFF-MACH-002,
-BFF-MACH-003): signature verification, correlation references, the rate limit and
-source restriction. The callback endpoints the library defines itself are the SMS
-delivery report (INT-SMS-005) and the social providers' security events
-(IDN-LIFE-012a), both in `09` section 10. A host mounts each of its own
-providers' callbacks on the same pipeline and owns what state, if any, they may
-influence.
+BFF-MACH-003): signature verification, correlation references, the rate limit and source
+restriction. The callback endpoint the library defines itself is the social providers'
+security events (IDN-LIFE-012a, `09` section 10); it takes no gateway's delivery report
+(INT-SMS-005, D-225). A host mounts each of its own providers' callbacks on the same
+pipeline and owns what state, if any, they may influence.
 
 **Values (D-153, D-166).** The callback endpoints accept
 `integration.callback.ratelimit` requests per source (AUTH-ABUSE-001) per minute, fixed
@@ -102,24 +97,21 @@ window, and answer 429 `integration.callback.rejected` with `Retry-After` before
 lookup. Every other refusal of a callback is 422 `integration.callback.rejected`, with
 no `Retry-After`; the route of a provider whose events follow RFC 8935 answers as `09`
 section 10 states. A correlation reference is 128 random bits, base64url, held only as
-its SHA-256 and looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003). The
-delivery reports' route carries a key in its path, compared in fixed time with
-`smsReportKey` after the rate limit and before any lookup, a wrong key rejected as a
-guessed reference is (INT-SMS-005, D-224); a send's reference, drawn at its admission,
-also travels inside its outbox row's encrypted content until the row is removed
-(PRIV-RIGHT-005a). A signing secret rotates with a 24 hour overlap (BFF-MACH-002). A
-callback's admission count, a rejected callback's count and record (one row, recorded
-against its source's fingerprint, which the count reads, D-207), the
-`callback-verification-failed` raise past `alerting.callback.threshold` and, for a
-provider's security event, the record of its rejection (`auth.providerevent.rejected`,
-IDN-LIFE-012a) are kept writes, committed with the refusal and nothing else
-(CONV-DESIGN-003); any other failure in handling a callback rolls back. Every route logs
-each rejection, the delivery reports' route included, and the log line carries no source
+its SHA-256 and looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003); a
+send's reference, drawn at its admission, also travels inside its outbox row's encrypted
+content until the row is removed (PRIV-RIGHT-005a). A signing secret rotates with a 24
+hour overlap (BFF-MACH-002). A callback's admission count, a rejected callback's count
+and record (one row, recorded against its source's fingerprint, which the count reads,
+D-207), the `callback-verification-failed` raise past `alerting.callback.threshold` and,
+for a provider's security event, the record of its rejection
+(`auth.providerevent.rejected`, IDN-LIFE-012a) are kept writes, committed with the
+refusal and nothing else (CONV-DESIGN-003); any other failure in handling a callback
+rolls back. Every route logs each rejection, and the log line carries no source
 (CONV-LOG-004, D-207).
 
 *Source: D-070*
 
-*Source: D-013, D-030, D-164, D-166, D-183, D-186, D-197, D-207*
+*Source: D-013, D-030, D-164, D-166, D-183, D-186, D-197, D-207, D-225*
 
 Callbacks arrive unauthenticated or weakly authenticated. A forged one must be
 unable to mark a phone verified, or to advance any state the host hangs on a callback.
@@ -127,10 +119,9 @@ unable to mark a phone verified, or to advance any state the host hangs on a cal
 **Acceptance criteria**
 1. A callback with a guessed reference is rejected.
 2. An unsigned callback advances state only after the system confirms independently, or
-   is treated as a hint requiring corroboration, save the releases INT-SMS-005 allows
-   (BFF-MACH-003).
+   is treated as a hint requiring corroboration.
 3. Rejected callbacks are recorded against their source's fingerprint and logged, on
-   every route, the delivery reports' included; the log line carries no source (D-207).
+   every route; the log line carries no source (D-207).
 4. A callback past `integration.callback.ratelimit` is answered 429 with `Retry-After`
    before any lookup; a callback refused for any other cause is answered 422 with no
    `Retry-After`, except where `09` section 10 gives a provider's route an answer of its
@@ -299,15 +290,12 @@ person's token (INT-MAIL-010) and never with the management key.
 
 ---
 
-**INT-MAIL-002** — Stalwart's storage SHALL NOT be co-located with business data, and
-**SHALL be backed up** (DR-013).
+**INT-MAIL-002** — Stalwart's storage SHALL NOT be co-located with business data.
 
-*Source: D-006, D-085*
+*Source: D-006, D-085, D-225*
 
 Separation avoids coupling to a pre-1.0 schema and keeps mail out of the database
-holding the subjects' personal data. It also means the application's continuous archiving
-does **not** cover it — unnoticed until the second review, and it would have lost all
-staff mail history on host loss.
+holding the subjects' personal data. Backing it up is the deployment's (D-225).
 
 Its data store is a key-value namespace of opaque byte-keyed rows even on
 PostgreSQL, so co-location yields nothing — it is not joinable or queryable. Mail is
@@ -411,11 +399,11 @@ SHALL be refused with `api.request.invalid`, `details.member` `formerMailbox`.
 
 **A mailbox is for a person.** The reserved `emergency` account (OPS-BOOT-002) is a
 member of the administrative organization but is not a person (it is a role a human
-steps into with the sealed credential) and it holds **no email address and no
-mailbox**. Nothing is ever addressed to it; every message about a break-glass session
-goes to the owner's and operator's recorded destinations (D-129). This is a
-definition, not an exemption: an unread mailbox on the most privileged account would
-be a phishing target and a place for a warning to be missed.
+steps into with the sealed credential) and it holds **no email address and no mailbox**.
+Nothing is ever addressed to it; every alert about a break-glass session is handed to
+the host, whose delivery reaches the owner and the operator (OPS-ALERT-003, D-129,
+D-225). This is a definition, not an exemption: an unread mailbox on the most privileged
+account would be a phishing target and a place for a warning to be missed.
 
 **The first administrator is a person, created before the mail server may exist.**
 Bootstrap (OPS-BOOT-001) runs against the database on a fresh host, and the membership
@@ -482,13 +470,14 @@ suspension or deactivation, and app-password authentication SHALL NOT survive it
 *Source: D-093*
 
 Previously unstated, and two documents disagreed by implication: lifecycle events
-including suspension are pushed to the mail server, while the offboarding procedure
-asserts that deactivating the account does not revoke the app password. Both cannot hold.
+including suspension are pushed to the mail server, while the offboarding procedure then
+asserted that deactivating the account does not revoke the app password. Both cannot
+hold.
 
-**Resolved: the push disables the account, and app passwords stop working with it.** The
-offboarding step to revoke the app password is therefore belt-and-braces — retained,
-because a failed push would otherwise leave a former employee reading mail, and
-reconciliation compares **enabled state**, not merely existence.
+**Resolved: the push disables the account, and app passwords stop working with it.**
+Revoking the app password as well, where a host's own offboarding does it, is
+belt-and-braces: a failed push would otherwise leave a former employee reading mail,
+which is why reconciliation compares **enabled state**, not merely existence (D-225).
 
 **Acceptance criteria**
 1. Suspending an account disables its mailbox within one propagation cycle: the
@@ -588,38 +577,20 @@ auto-correction conceals a broken pipeline.
 
 ---
 
-**INT-MAIL-008** — The mail transport SHALL be replaceable. No library dependency
-SHALL be on a specific mail server. A deployment SHALL have a mail transport: its own
-(`IMailTransport`) or the shipped default at `integration.mail.endpoint` (LIB-EXT-001).
-Startup SHALL refuse a deployment that has none, with
-`model.startup.declarationmissing`, `details.key` `mailTransport`.
+**INT-MAIL-008** — The library SHALL hold no mail transport: every mail it owes
+leaves through the host's notification handler (INT-SMS-006). No library
+dependency SHALL be on a specific mail server.
 
-*Source: D-022, P-003, D-166*
+*Source: D-022, P-003, D-166, D-225*
 
 **Acceptance criteria**
 1. No provider name appears in a core namespace.
-2. A different mail server can be configured without code change.
-3. A deployment with no mail transport does not start, and the refusal carries
-   `details.key` `mailTransport`.
+2. The library sends no mail itself.
 
 ---
 
-**INT-MAIL-009** — **Mailbox hosting and outbound delivery SHALL be treated as
-separate concerns.**
-
-*Source: D-074*
-
-| Concern | Scope | Failure means |
-|---|---|---|
-| **Mailbox hosting** | Administrative-organization members only | Staff cannot read company mail |
-| **Outbound delivery** | Every account, staff and customer | Verification, recovery, sign-in links, notifications all stop |
-
-The specification previously placed both under "the mail server" as though one thing.
-They fail independently and affect different populations.
-
-**Acceptance criteria**
-1. Outbound delivery is configurable independently of mailbox hosting.
-2. Replacing either does not require replacing the other.
+**INT-MAIL-009** — *Retired by D-225. Delivering messages is the host's (INT-SMS-006);
+hosting mailboxes is INT-MAIL-001's.*
 
 ---
 
@@ -669,60 +640,25 @@ listed for its holder to revoke. `09` section 6 gives every answer.
 
 ---
 
-**INT-MAIL-011** — Outbound mail to an **Apple private relay address** SHALL be
-delivered only where the **sending domain is registered** with Apple's private email
-relay service; the host SHALL declare its registered sending domains, and
-configuration validation SHALL surface, at startup and when the setting changes, a
-sending domain that is not declared as registered while Continue with Apple is
-enabled.
-
-**Values (D-153, D-166).** The sending domain is `notification.email.sendingdomain` (required);
-the domains registered with the relay are `notification.email.relayregistered`. When
-`apple` is in any effective `loginFactors` and the sending domain is not in that set,
-startup raises the Normal condition `relay-domain-unregistered` with `details.domain`.
-The condition is judged at startup and on every change of
-`notification.email.sendingdomain`, `notification.email.relayregistered` or
-`policy.default`; `apple` is in an effective `loginFactors` exactly when it is in the
-system policy's, which every organization's narrows (AUTH-STEP-002a). A domain matches
-without regard to ASCII case. The condition stops neither a start nor a change; a start
-or change whose condition cannot be raised is refused.
-
-*Source: D-146, D-166; REG-IDENT-008*
-
-A relay address counts as verified by the sign-in (REG-IDENT-008), so it can become
-the primary email of an account. Every verification code, sign-in link and security
-notice to that account then depends on the relay accepting mail from the sending
-domain; an unregistered domain fails silently at the relay, and the person is
-unreachable without knowing it.
-
-**Acceptance criteria**
-1. With Continue with Apple enabled and the sending domain not declared as registered,
-   startup produces a named warning identifying the domain.
-2. Changing the sending domain to an undeclared one produces the same warning at the
-   point of change.
-3. The declaration is configuration and requires no code change.
-4. Withdrawing the sending domain from `notification.email.relayregistered`, or adding
-   `apple` to `policy.default`, while the sending domain is undeclared produces the same
-   warning at the point of change.
+**INT-MAIL-011** — *Retired by D-225. Delivering mail, to a relay address or any other,
+is the host's (INT-SMS-006).*
 
 ---
 
-## 3. SMS
+## 3. Messages
 
 **INT-SMS-001** — SMS SHALL be used for **verification codes**, for **sign-in links**
 (`phoneLink`), for **second-step codes** (`phoneCode`), for **security notices** and
-**recovery links** to a phone in the security-notice set (REG-IDENT-002,
-AUTH-RECOV-005), for **delivering an admin-assisted enrolment link** (AUTH-RECOV-002)
-and for **high-severity alerts** to the alert destinations (OPS-ALERT-003). The two
-authentication uses SHALL exist only where the applicable policy's `loginFactors`
-enables them; both are off by default and are **restricted factors** (AUTH-FACT-002,
-AUTH-FACT-002b). Where the phone signal answers `risk` for a number, no SMS factor and
-no recovery link is sent to it (AUTH-FACT-002b). Every send other than an alert SHALL
-be governed by the named restrictions whose channel is `sms` or `any`
-(AUTH-ABUSE-004); an alert answers to the deduplication of OPS-ALERT-002 alone, so
-that no limit an attacker can exhaust silences one.
+**recovery links** to a phone in the security-notice set (REG-IDENT-002, AUTH-RECOV-005)
+and for **delivering an admin-assisted enrolment link** (AUTH-RECOV-002), each handed to
+the host to send (INT-SMS-006, D-225). The two authentication uses SHALL exist only
+where the applicable policy's `loginFactors` enables them; both are off by default and
+are **restricted factors** (AUTH-FACT-002, AUTH-FACT-002b). Where the phone signal
+answers `risk` for a number, no SMS factor and no recovery link is sent to it
+(AUTH-FACT-002b). Every send SHALL be governed by the named restrictions whose channel
+is `sms` or `any` (AUTH-ABUSE-004).
 
-*Source: D-013, D-111, D-146, D-166; AUTH-FACT-002*
+*Source: D-013, D-111, D-146, D-166, D-225; AUTH-FACT-002*
 
 A verification code proves control of a number and is never a credential
 (AUTH-FACT-004). The enrolment link is authorised by a human approver's out-of-band
@@ -741,7 +677,6 @@ AAL2, never phishing-resistant, and is flagged less secure wherever it is listed
 4. A security notice by SMS reaches every phone in the security-notice set and is
    counted and refused only by restrictions whose purpose is `notification`
    (AUTH-ABUSE-004).
-5. An alert by SMS is counted and refused by no restriction.
 
 ---
 
@@ -749,26 +684,16 @@ AAL2, never phishing-resistant, and is flagged less secure wherever it is listed
 
 ---
 
-**INT-SMS-003** — Message templates SHALL carry a per-language length budget, tested,
-with Arabic binding.
+**INT-SMS-003** — A name a deployment or host chooses for a restriction, a governing
+document, a subscriber, a purpose handler, a job or an export contributor SHALL follow
+one rule, held where the name is written or declared.
 
-**Values (D-162, D-166).** At startup every template in every language of
-`notification.languages` SHALL be rendered with each place the library fills at its
-defined width (the message places of `10`), and a text message whose rendering exceeds
-its budget SHALL stop startup. A text message that carries a link is budgeted at two
-segments of its alphabet: 306 characters of the GSM 7-bit default alphabet, 134
-otherwise. Every other text message is budgeted at one: 160 and 70. `{link}` is measured
-at the width of the address it becomes, `<origin>/link#<kind>.<token>` with the origin
-the host declares for the link's application (`LandingOrigins`, `Authentication` or
-`Account`, LIB-HOST-001) and a drawn token; one token size serves every channel. Nothing
-is measured at a send. A text-message template that names a place `10` gives no width
-SHALL be refused at startup with `model.startup.declarationinvalid`. A value a
-deployment or host chooses for a place (a restriction's name, a governing document's
-name, a subject-event subscriber's name) SHALL be 1 to 64 characters of lower-case
-letters and digits separated by single `.`, `-` or `_`: a restriction's name outside the
-rule is refused with `config.value.notallowed` where the `restrictions` value is
-written, and with 400 `api.request.malformed` naming `name` where a route names it; a
-document or subscriber declared under a name outside it is refused at startup with
+**Values (D-162, D-166, D-225).** A name a deployment or host chooses (a restriction's,
+a governing document's, a subject-event subscriber's) SHALL be 1 to 64 characters of
+lower-case letters and digits separated by single `.`, `-` or `_`: a restriction's name
+outside the rule is refused with `config.value.notallowed` where the `restrictions`
+value is written, and with 400 `api.request.malformed` naming `name` where a route names
+it; a document or subscriber declared under a name outside it is refused at startup with
 `model.startup.declarationinvalid`, `details.declaration` and `details.field` naming it,
 as is a host's job, purpose handler or export contributor declared under one
 (LIB-HOST-001, D-202, D-203), a contributor's under `details.declaration`
@@ -782,156 +707,89 @@ which bind a route's value through `IParsable` and which the operation contracts
 name one take (`IRestrictionSet`, `ILegalDocuments`), so a route answers the name before
 any body is read and an in-process caller cannot name a restriction or a document
 outside the rule either; a declaration names a document as text, judged at startup as
-above (D-187). Bounding these values where they are written keeps every rendered
-template within the width it was measured at.
+above (D-187). The length budgets of the message texts this item also held left with the
+texts (INT-SMS-006, D-225).
 
-*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166, D-183, D-187, D-202, D-203, D-206*
-
-Unicode messages are 70 characters for a single message and 67 per part when
-concatenated; Latin gets 160 and 153. An Arabic message one character over 70 costs
-double.
+*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166, D-183, D-187, D-202, D-203, D-206,
+D-225*
 
 **Acceptance criteria**
-1. A test fails if any rendered template exceeds its language's budget.
-2. Coverage spans every template in every supported language.
-3. A restriction, governing document, subscriber, purpose handler, job or export
+1. A restriction, governing document, subscriber, purpose handler, job or export
    contributor whose name breaks the rule is refused where it is written or declared, a
-   document's at the publish route before its body is read, so no alert carries it, and
-   a contributor's section or value name outside the rule, or holding a `.`, fails the
-   export; the `key` place is measured at the widest key including each family's widest
-   parameter, and `outstanding` at the joined width of the registered required
-   subscribers' names or of the registered purpose handlers' names, whichever is wider.
-4. A text message carrying `{link}` that fits two segments of its alphabet at the
-   width of its link is accepted, one that does not stops startup, and a text-message
-   template naming a place with no defined width stops startup with
-   `model.startup.declarationinvalid`.
+   document's at the publish route before its body is read, and a contributor's section
+   or value name outside the rule, or holding a `.`, fails the export.
 
 ---
 
-**INT-SMS-004** — Balance SHALL be polled, drain rate alerted on, and sends
-hard-stopped below a configured floor.
+**INT-SMS-004** — *Retired by D-225. A gateway's balance is the host's messaging's.*
 
-**Values (D-153, D-166).** `abuse.sms.balancefloor` is a decimal in the currency the
-gateway reports. The balance is read every `abuse.sms.pollinterval`; the `sms-balance`
-alert fires when the last hour's spend exceeds `abuse.sms.drainfactor` times the
-trailing seven-day hourly mean, or when the balance would reach the floor within 24
-hours at the current rate. A poll that cannot read the balance, no SMS transport being
-registered included, fails, and its lapse raises `background-job-failed` (INF-BG-001);
-no poll succeeds without a balance read. A send other than an alert (OPS-ALERT-003) is
-judged against the floor on the latest balance a poll recorded, never by a read of the
-gateway inside the send's transaction, and until a first balance is recorded the floor
-refuses nothing (AUTH-ABUSE-006, D-186).
+---
 
-*Source: D-013, AUTH-ABUSE-006, D-166, D-186*
+**INT-SMS-005** — A message's outcome SHALL reach the library only from the host, in
+process, and SHALL by itself mark nothing verified. A message the host reports failed
+for good SHALL release its count from every bucket it counted against but those of a
+restriction marked `resend`, any credit it spent, and its one count from each
+restriction marked `resend`; a `secondfactor` SMS the host reports delivered SHALL
+release its one count from each restriction marked `resend` (AUTH-ABUSE-004, D-197); a
+report SHALL do nothing else.
+
+**Values (D-225).** The host reports through
+`ISendOutcomes.ReportAsync(reference, delivered)`, the reference being the one the
+`SendRequest` carried (INT-SMS-006). It answers true where the reference names a message
+the library handed over, and applies the report once, a repeated report changing
+nothing; it answers false and changes nothing for any other reference. It takes no
+access context and meets no gate: a report can only make a person less restricted, and a
+false one gains at most one message to an address the restrictions already allowed
+(D-197). The library serves no route for a gateway's report.
+
+*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183, D-197, D-207, D-225*
+
+A host learns a message's outcome from its own messaging, which reads the gateway; the
+library knows no gateway.
 
 **Acceptance criteria**
-1. Abnormal drain raises an alert without human monitoring.
-2. Below the floor, sends other than alerts are refused and surfaced (OPS-ALERT-003).
+1. A report marks no phone or address verified.
+2. A report that a message failed releases its counts from every restriction not marked
+   `resend` and its one count from each marked `resend`; a report that a `secondfactor`
+   SMS was delivered releases its count from each restriction marked `resend` and
+   changes nothing else.
+3. A report naming no message of the library's, and a repeated report, change nothing.
+4. No route of the library takes a gateway's report.
 
 ---
 
-**INT-SMS-005** — The delivery-report callback SHALL follow INT-GEN-003 and SHALL NOT by
-itself mark a phone verified. A report that a text **failed delivery** SHALL release
-that text's count from every bucket it counted against but those of a restriction marked
-`resend`, and any credit it spent; once every text of its send has failed for good
-(AUTH-ABUSE-004), it SHALL release the send's one count from each restriction marked
-`resend`; a report that a text of a send of purpose `secondfactor` was delivered SHALL
-release that send's one count from each restriction marked `resend` (AUTH-ABUSE-004,
-D-197); a report SHALL do nothing else.
+**INT-SMS-005a** — *Retired by D-225. The library holds no message text: a message's
+kind and values are `10` sections 5.25 and 5.26, and its wording is the host's
+(INT-SMS-006).*
 
-*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183, D-197, D-207, D-224*
+---
 
-A gateway's report arrives with the gateway's own parameters, in the query string or the
-body, and the library verifies no signature on it. The route carries a key in its path
-(`09` section 10): `{key}` is compared in fixed time with the secret `smsReportKey`
-(INT-GEN-002) after the rate limit and before any lookup, and a wrong key, or a body
-over 16 KiB, is rejected as a guessed reference is (D-224). The deployment's SMS
-transport (`ISmsTransport`, INT-SMS-006) reads the whole request and answers the report:
-the library's reference or the gateway's identifier of a text, and the outcome,
-`Delivered`, `Failed` or `NotFinal`. A report it cannot read is rejected as one carrying
-a guessed reference is. A `NotFinal` report, an intermediate state's, changes nothing
-and is no rejection; a `Delivered` one changes nothing, save a report that a text of a
-`secondfactor` send was delivered (D-197). Releasing counts and credit on a failure
-report, and a `secondfactor` send's count from each restriction marked `resend` on a
-delivery report, are the only state changes a report may cause: each can only make a
-person less restricted, never verified, and a forged failure report gains an attacker at
-most one extra send to a number the restriction or the credit already allowed, a forged
-delivery report at most one text to that number sooner than `sms.resend` would allow,
-within what every other restriction allows (D-197).
+**INT-SMS-006** — Every message the library owes SHALL leave it through the host's
+notification handler (`INotificationHandler`), and the library SHALL call no mail
+server, gateway or provider to send one. Every deployment SHALL register a handler;
+startup SHALL refuse one that has none, with `model.startup.declarationmissing`,
+`details.key` `notificationHandler`.
 
-**Values (D-224).** A report naming the library's reference is looked up by its SHA-256,
-as every correlation reference is; one naming the gateway's identifier is looked up by
-the SHA-256 of that identifier, which the library holds beside the text from the
-transport's `SmsAccepted` and never logs. Where the gateway's identifiers can be
-guessed, the key is what bars a forged report, so the deployment gives the gateway the
-route's address with the key and keeps the route's path out of its proxy's logs. A host
-whose gateway sends every report of the account to one address, and whose account more
-than one sender shares, receives the reports on a route of its own and hands each the
-library's transport reads to `ISmsReports.TakeAsync`, in process (`07` LIB-API-001): it
-answers whether the report named a text of the library's, applies one that did as the
-route would, and changes, counts and records nothing for one that did not, since the
-host vouched for the request.
+**Values (D-225).** `SendAsync(SendRequest, CancellationToken)` answers `Result`:
+success where the host has taken the message, that is recorded it to be sent, and a
+failure where it has not, which the library retries under `outbox.retry.*`
+(AUTH-ABUSE-004). A `SendRequest` carries `Reference` (the send's reference, the same at
+every attempt, so the host's idempotency key), `Kind` (`10` section 5.25), `Channel`
+(`email` · `sms`), `Subject` (where the message is about one), `Destination` (the
+canonical address or number), `Languages` (one BCP 47 tag, or every declared language in
+`notification.languages` order, IDN-ATTR-001) and `Values` (the kind's places, `10`
+section 5.26, each by name). The host renders and sends it: its text, its length and its
+channel's provider are the host's, and a message carrying several languages is composed
+by the host. The library holds no message text, no transport and no gateway setting.
+
+*Source: P-003, D-022, D-166, D-225*
 
 **Acceptance criteria**
-1. A forged report does not verify a phone.
-2. Correlation references are unguessable.
-3. A text whose report indicates failure does not count against any bucket of a
-   restriction not marked `resend`, nor its send against one marked `resend` once every
-   text of the send has failed for good, and a credit it spent is spent no longer. A
-   report of delivery releases a `secondfactor` send's count from each restriction
-   marked `resend` and changes nothing else. A report of either kind whose reference no
-   held send answers changes nothing and is rejected, recorded against its source's
-   fingerprint, logged without its source and counted toward
-   `alerting.callback.threshold` (INT-GEN-003 criteria 1 and 3, D-207).
-4. A report whose key does not match `smsReportKey` changes nothing and is rejected and
-   counted as a guessed reference is; one naming a text by the gateway's identifier from
-   `SmsAccepted` is applied to that text; a `NotFinal` report changes nothing and is not
-   counted (D-224).
-5. A report handed to `ISmsReports.TakeAsync` that names a text of the library's is
-   applied and answered true; one that names none changes nothing, is answered false and
-   is neither counted nor recorded (D-224).
-
----
-
-**INT-SMS-005a** — Where message content lives is **not specified**. The
-specification states invariants only: every message exists in every configured
-locale, SMS stays within its language's encoded length budget, and failures surface at
-startup rather than at send. The library ships a default catalogue in `Janus.Hosting`
-(LIB-EXT-001), in English and Arabic, which a host may replace; its texts carry every
-link as `{link}` (INT-SMS-003).
-
-*Source: D-059, D-162, D-166*
-
-The repository is the expected answer at current scale. Moving content elsewhere
-solves for non-engineer editors, of whom there are none.
-
-**Trigger to revisit:** when someone who is not an engineer needs to change a message.
-
----
-
-**INT-SMS-006** — The SMS provider SHALL be replaceable behind an abstraction. Every
-deployment SHALL have an SMS transport, since every deployment sends SMS alerts
-(OPS-ALERT-003, LIB-HOST-001): its own (`ISmsTransport`) or the shipped default at
-`integration.sms.endpoint` (LIB-EXT-001). Startup SHALL refuse a deployment that has
-none, with `model.startup.declarationmissing`, `details.key` `smsTransport`.
-
-**Values (D-224).** `SendAsync(SmsMessage, CancellationToken)` answers
-`Result<SmsAccepted>`: a failure is an attempt to retry, and `SmsAccepted` carries
-`GatewayReference`, the gateway's identifier of the text where the gateway's reports
-name the text by it, and null where they quote the message's `Reference`.
-`ReadReportAsync(SmsReportRequest, CancellationToken)` answers
-`Result<SmsDeliveryReport>`, the request being the report's method, its query parameters
-one value a name, its content type and its body, at most 16 KiB; `SmsDeliveryReport`
-names the text by `Reference` or by `GatewayReference`, exactly one of them, and carries
-its `Outcome` (`SmsReportOutcome`: `Delivered`, `Failed` or `NotFinal`); a failure is a
-report that does not read. Each value a transport reads is untrusted (INT-SMS-005).
-
-*Source: P-003, D-022, D-166, D-224*
-
-**Acceptance criteria**
-1. No provider name appears in a core namespace.
-2. A deployment with no SMS transport does not start, and the refusal carries
-   `details.key` `smsTransport`.
+1. No mail server, gateway or provider is called by the library to send a message.
+2. A deployment with no notification handler does not start, and the refusal carries
+   `details.key` `notificationHandler`.
+3. A message the handler does not take is handed to it again, with the same reference,
+   until it is taken or its attempts are spent.
 
 ---
 
@@ -1055,24 +913,22 @@ A consent withdrawal would otherwise leave data that cannot lawfully be hosted.
 
 | Provider | Role | Data received | Location field | Callback |
 |---|---|---|---|---|
-| Mail server | Processor | Email address and text of each message it delivers; mailbox contents and account identifiers where it hosts mailboxes | Follows hosting | No |
-| SMS gateway | Processor | Phone number, message text | Configured | Yes |
+| Mail server | Processor | Mailbox contents, and the address and account identifier of each mailbox it hosts | Follows hosting | No |
 | Hosting provider | Processor | All stored data | Configured | No |
 | Password screening | Recipient | Hash prefix only | Outside Egypt | No |
 
-*Source: D-036, D-029, D-041, D-162 C.103, D-165, D-166, D-176*
+*Source: D-036, D-029, D-041, D-162 C.103, D-165, D-166, D-176, D-225*
 
 Each requires an agreement reference in generated records. The register is a rendering
-of configuration, not a separately maintained list. These four rows are the processors
+of configuration, not a separately maintained list. These three rows are the processors
 the library itself makes true and are shipped as defaults (D-162 C.103, D-165). The
-hosting provider and SMS gateway rows are applied to every deployment: every deployment
-holds data, and every deployment declares SMS alert destinations (LIB-HOST-001,
-OPS-ALERT-004). The mail server row is applied where a mail server is integrated (the
-host's `IMailServer`, or the shipped adapter with `integration.mailserver.endpoint` set
-when the application starts; LIB-HOST-001) or the shipped mail transport is in use
-(`integration.mail.endpoint` set); the password-screening row while online screening is
-configured. Every other processor or recipient is a row the host declares through
-`recipients` (PRIV-ROPA-002); the library ships no such row.
+hosting provider row is applied to every deployment, since every deployment holds data.
+The mail server row is applied where a mail server is integrated (the host's
+`IMailServer`, or the shipped adapter with `integration.mailserver.endpoint` set when
+the application starts; LIB-HOST-001); the password-screening row while online screening
+is configured. Every other processor or recipient is a row the host declares through
+`recipients` (PRIV-ROPA-002), the providers that deliver its messages among them; the
+library ships no such row (D-225).
 
 A person or firm that administers the deployment for the controller (D-029) is one such
 row. It stays here as an example of a row a host declares, not as a shipped default:

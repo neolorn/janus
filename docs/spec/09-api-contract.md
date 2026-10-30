@@ -15,22 +15,20 @@ committed contract file generated from the endpoint data source, which a contrac
 checks and the release gate judges (REF-001 AC2, D-166). Under each endpoint the file
 lists every status it answers and the codes each carries: the codes its row below gives
 and those the text of its section or subsection gives the routes that text governs,
-before or after a table, which the endpoint declares (`08` CONV-DESIGN-006, D-187), and
-422 `integration.sms.balancefloor`, which an endpoint declares where its row answers
-`auth.restriction.exceeded` for a send that may go by SMS, an ask of AUTH-ABUSE-003
-excepted (AUTH-ABUSE-006, D-186), each under the status `10` gives it (a code a
-navigation route carries in the query member `error` is listed under its redirect
-instead, CONV-DESIGN-006, D-192); and the answers its mounting gives it, where its row
-does not give them, which the file derives and nothing declares: 401
-`auth.session.expired` where it requires a session, 403 `auth.session.csrfinvalid` where
-the request-forgery layers of `17` section 4 apply to it, and 400
-`api.request.malformed` where it reads a body or binds a typed route or query value (a
-navigation route binds none: it takes each value as text, judges it itself, and declares
-the `api.request.malformed` it carries in `error`, the sign-on `auth.session.expired`
-instead, CONV-DESIGN-006, D-193). What the pipeline answers whatever the endpoint (429
-`auth.throttled` from the browser profile's source-based rate limiting, 404
-`authz.resource.notfound` for a path or method no endpoint serves, 500 `system.fault`)
-is listed once, beside the stage order, and not under each endpoint (D-183).
+before or after a table, which the endpoint declares (`08` CONV-DESIGN-006, D-187), each
+under the status `10` gives it (a code a navigation route carries in the query member
+`error` is listed under its redirect instead, CONV-DESIGN-006, D-192); and the answers
+its mounting gives it, where its row does not give them, which the file derives and
+nothing declares: 401 `auth.session.expired` where it requires a session, 403
+`auth.session.csrfinvalid` where the request-forgery layers of `17` section 4 apply to
+it, and 400 `api.request.malformed` where it reads a body or binds a typed route or
+query value (a navigation route binds none: it takes each value as text, judges it
+itself, and declares the `api.request.malformed` it carries in `error`, the sign-on
+`auth.session.expired` instead, CONV-DESIGN-006, D-193). What the pipeline answers
+whatever the endpoint (429 `auth.throttled` from the browser profile's source-based rate
+limiting, 404 `authz.resource.notfound` for a path or method no endpoint serves, 500
+`system.fault`) is listed once, beside the stage order, and not under each endpoint
+(D-183).
 
 ---
 
@@ -1284,8 +1282,7 @@ step-up (`recovery:approve`).
 the gate step or at the second ask inside the unit of work, nothing approved and nothing
 sent (AUTHZ-GATE-006)
 **422** — `auth.recovery.reasonrequired`, `auth.recovery.channelnotonaccount`,
-`auth.recovery.selfapproval` (AUTH-RECOV-002a); `integration.sms.balancefloor` where the
-gateway floor refuses the link's SMS, and nothing is approved (AUTH-ABUSE-006)
+`auth.recovery.selfapproval` (AUTH-RECOV-002a)
 **429**: `auth.throttled` with `retryAt` past a rate limit of AUTH-RECOV-002;
 `auth.restriction.exceeded` with `retryAt` where a restriction refuses the link's send,
 and nothing is approved (AUTH-ABUSE-004)
@@ -2344,7 +2341,7 @@ library's are: in `machine` under the keys `<section>.<index>.<value>`, the inde
 counting the section's records from 0 (D-206); in `human` grouped under the section in
 the same order, its labels read from the deployment's frontend message catalogue under
 the key `export/<section>` for a section and `export/<section>/<value>` for a value,
-which the host adds for its own (`18` FE-LOC-001); `/` and `.` are outside the names'
+which the host adds for its own; `/` and `.` are outside the names'
 rule and in no library name, so no two keys coincide. A contributor that fails or faults
 fails the export: **500** `system.fault`, nothing returned (D-203). **Neither is a
 rendered document.** The frontend renders the readable view and localizes it through the
@@ -2399,7 +2396,7 @@ and answers **201** with its state; `age` is required. `GET /records/collection`
 
 | Endpoint | Does |
 |---|---|
-| `POST /records/access` | `{ "kind": "email", "value": "..." }`: sends `record-access-code` where a reachable record holds the value as a contact verified at a collection, `record-access-none` otherwise, once per `abuse.nonexistent.window` (REC-ACC-001). **202** in identical bytes whatever is held, answered before any transport is called (AUTH-ABUSE-003, API-CONV-005). **422** `identity.identifier.invalid` for a value that is not a well-formed email or phone. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands; `auth.restriction.exceeded` with `retryAt` where a restriction refuses the send, the same whether or not a record holds the value (AUTH-ABUSE-002) |
+| `POST /records/access` | `{ "kind": "email", "value": "..." }`: sends `record-access-code` where a reachable record holds the value as a contact verified at a collection, `record-access-none` otherwise, once per `abuse.nonexistent.window` (REC-ACC-001). **202** in identical bytes whatever is held, answered before the notification handler is called (AUTH-ABUSE-003, API-CONV-005). **422** `identity.identifier.invalid` for a value that is not a well-formed email or phone. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands; `auth.restriction.exceeded` with `retryAt` where a restriction refuses the send, the same whether or not a record holds the value (AUTH-ABUSE-002) |
 | `POST /records/access/verify` | `{ "code": "..." }`: opens the record access session (REC-ACC-001). **200** with the state below. **422** `auth.code.invalid` for each of the first `code.signin.attempts` wrong codes, then `auth.code.expired`, as for a code past its lifetime or where no code was asked for in the browser. **429** `auth.throttled` with `retryAt` |
 | `GET /records/access` | **200** the state: `{ "expiresAt": "...", "records": [ { "subject": "...", "organization": "...", "organizationName": "...", "createdAt": "...", "state": "active" } ] }`, the records the session reaches |
 | `POST /records/access/reference` | `{ "reference": "..." }`, 1 to 64 characters after trimming: adds every reachable record holding the session's value and that reference (REC-ACC-001). **200** the state, whether or not one was added. **400** `api.request.malformed` naming `reference` outside its bounds. **429** `auth.throttled` with `retryAt` |
@@ -2629,9 +2626,9 @@ D-171).
 
 **200** — a time-boxed **auth session** (`breakglass.session.lifetime`) whose subject
 is the reserved `emergency` account (D-138), which holds the `system-administrator`
-role; the audit trail shows `emergency` as the actor, and every use alerts the owner
-destinations (D-129, D-147). The applications open from it as from any sign-in
-(BFF-SESS-006)
+role; the audit trail shows `emergency` as the actor, and every use raises an alert
+the host delivers to the owner (D-129, D-147, D-225). The applications open from it as
+from any sign-in (BFF-SESS-006)
 **400**: `api.request.malformed` naming `reason`
 **422**: `auth.breakglass.invalid`, for a code that is not 36 symbols of the alphabet
 once hyphens and spaces are set aside, whose groups do not all hold their check symbol,
@@ -2646,8 +2643,8 @@ refused attempt (OPS-BOOT-004, D-147)
 
 *Source: D-065, D-129, D-138, D-147; OPS-BOOT-004, D-166*
 
-Called by the frontend route `/break-glass` (FE-BG-001), which is what the envelope
-names; the owner never calls this endpoint directly.
+Called by the frontend route `/break-glass` (FE-BG-001); the holder of the credential
+never calls this endpoint directly.
 
 *Source: D-065, OPS-BOOT-002, D-129*
 
@@ -2677,8 +2674,7 @@ It is composed from the declaration and never from the request.
 Without this, one emergency exhausts the mechanism until the operator returns — which
 is the scenario it exists for.
 
-Every generation is audited and raises `breakglass-generated`, to the owner whatever
-`alerting.owner.enabled` holds (OPS-BOOT-004 AC2).
+Every generation is audited and raises `breakglass-generated` (OPS-BOOT-004 AC2).
 
 ---
 
@@ -2708,9 +2704,8 @@ Terminates every session and derived token for **one account**. Under
 
 *Source: D-077, D-166*
 
-Required by offboarding (`16-offboarding-procedure` step 1), which previously had only
-the system-wide operation available — so signing out one departing clerk would have
-signed out every customer.
+Previously only the system-wide operation existed, so signing out one departing clerk
+would have signed out every customer (D-077).
 
 ---
 
@@ -2759,15 +2754,11 @@ read with `protected: true` and refused on `PUT`. A `policy.default` whose `phot
 **200** / **204**
 **400**: `api.request.malformed` naming `key` where `{key}` is none of the keys the route
 serves; naming `reason` where it is longer than 1024 characters after trimming
-**403**: `auth.stepup.required`, for a **loosening** change (`config:loosen`) and for
-any change of an `alerting.*.destinations` key (`alerting:destinations`); `authz.denied`
-for a loosening by a caller without `system:administer` in the administrative
-organization
-**409**: `config.change.superseded`, for a change of an `alerting.*.destinations` key
-whose value in force changed after its previous destinations were notified
-(OPS-ALERT-004a)
+**403**: `auth.stepup.required`, for a **loosening** change (`config:loosen`);
+`authz.denied` for a loosening by a caller without `system:administer` in the
+administrative organization
 **422**: `config.value.belowfloor`, `config.value.aboveceiling`,
-`config.value.notallowed`, `config.key.protected`, `config.value.lastdestination`;
+`config.value.notallowed`, `config.key.protected`;
 `integration.endpoint.insecure`, `details.key` naming the key, for a value of
 `password.blocklist.selfhosted.address` that is not an absolute `https` address
 (INT-GEN-001, D-198); `config.change.reasonrequired`, `details.key` naming the key,
@@ -3019,9 +3010,6 @@ Self-service explanation for **non-concealed** types is `GET /account/explanatio
 
 | Endpoint | Does |
 |---|---|
-| `GET /admin/compliance/licences` | The licence and permit records as stored (OPS-MAINT-001) |
-| `PUT /admin/compliance/licences` | Replaces the licence and permit records the system warns on (OPS-MAINT-001); the body is the list of records, each keyed by the caller's `id`; two records under one `id` are refused **422** `api.request.invalid` (`details.member` `id`) |
-| `GET` · `POST /admin/compliance/maintenance` | Reads and appends the maintenance log (OPS-MAINT-001); the entry's actor is the signed-in subject; an entry dated after now is refused **422** `api.request.invalid` (`details.member` `performedAt`); no route changes or removes an entry |
 | `PUT /admin/compliance/assessments` | The three human-input fields of the records of processing (PRIV-ROPA-001): the data owner, the implemented organizational security measures, and the links to LIA, DPIA and TIA. A statement replaces the three whole: a field it omits, or sends as `null`, is cleared, and the links are the list it carries. `dataOwner` and `organizationalSecurityMeasures` are free text (API-CONV-002): trimmed, and refused **400** `api.request.malformed` naming the member where blank or longer than 1024 characters (D-183). The deployment holds one statement. **204** |
 
 ### Reads of organizations, members and people — D-218
@@ -3118,29 +3106,16 @@ Refresh tokens rotate on use; reuse of a consumed token revokes the session fami
 ## 10. Callbacks
 
 Inbound from providers. Each follows INT-GEN-003: hostile input, unguessable references,
-rate-limited; an unsigned callback never advances an authoritative state by itself, save
-the releases INT-SMS-005 allows (BFF-MACH-003), and a verified, signed provider security
-event acts as IDN-LIFE-012a states. The library defines two callback endpoints of its
-own; a host mounts its own providers' callbacks on the same machine-profile pipeline
-(BFF-MACH-002, INT-GEN-003) under paths of its choosing, and those paths are not part of
-this contract.
+rate-limited; an unsigned callback never advances an authoritative state by itself, and
+a verified, signed provider security event acts as IDN-LIFE-012a states. The library
+defines one callback endpoint of its own, and takes no gateway's delivery report
+(INT-SMS-005, D-225); a host mounts its own providers' callbacks on the same
+machine-profile pipeline (BFF-MACH-002, INT-GEN-003) under paths of its choosing, and
+those paths are not part of this contract.
 
 | Endpoint | Source | Never does |
 |---|---|---|
-| `GET` · `POST /callbacks/sms/dlr/{key}` | SMS gateway | Mark a phone verified |
 | `POST /callbacks/providers/{provider}` | Google (Cross-Account Protection) and Apple (server-to-server notifications); `{provider}` is `google` or `apple` | Act on an event its provider's published keys do not verify |
-
-A delivery report taken is answered **200** with no body: the acknowledgement a gateway
-expects, rather than API-CONV-003's success with a body. `{key}` is compared in fixed
-time with the secret `smsReportKey` (INT-GEN-002) after the rate limit and before any
-lookup, and a wrong key, or a body over 16 KiB, is rejected as a guessed reference is
-(D-224). The transport reads the whole request (INT-SMS-005, INT-SMS-006): a report
-naming the library's reference or the gateway's identifier of a text, and its outcome. A
-`NotFinal` report changes nothing and is no rejection; a `Failed` one releases what
-INT-SMS-005 states; a `Delivered` one releases a `secondfactor` send's one count from
-each restriction marked `resend` and nothing else, as AUTH-ABUSE-004 and INT-SMS-005
-state (D-197). A host that receives the gateway's reports on a route of its own hands
-each to `ISmsReports.TakeAsync` instead (INT-SMS-005, D-224).
 
 Google delivers the Security Event Token as the request body and follows RFC 8935: a
 carried or repeated event is answered **202** with no body; a token that fails
@@ -3173,16 +3148,14 @@ the provider delivers it again; one meeting an older unsettled claim takes it ov
 is carried (BFF-MACH-002).
 
 *Source: AUTH-ABUSE-007, INT-GEN-003, IDN-LIFE-012a, BFF-MACH-002, D-164, D-166, D-183,
-D-187, D-188, D-197, D-207, D-224*
+D-187, D-188, D-197, D-207, D-225*
 
 **Acceptance criteria**
-1. A forged callback (a wrong key or a guessed reference on the delivery reports' route,
-   a token that does not verify on a provider's) is rejected, recorded against its
-   source's fingerprint and logged, the log line carrying no source (INT-GEN-003,
-   D-207).
-2. An unsigned callback advances state only after independent confirmation, save the
-   releases of INT-SMS-005; a provider event advances it only once its provider's
-   published keys verify it.
+1. A forged callback (a token that does not verify on a provider's route) is rejected,
+   recorded against its source's fingerprint and logged, the log line carrying no
+   source (INT-GEN-003, D-207).
+2. An unsigned callback advances state only after independent confirmation; a provider
+   event advances it only once its provider's published keys verify it.
 
 ---
 

@@ -73,13 +73,16 @@ bolt-on to the other.
 
 ---
 
-**LIB-PKG-003** — Distribution SHALL be via a private package feed on the company's
-own infrastructure.
+**LIB-PKG-003** — The packages of a release SHALL be attached to its tagged release in
+the library's repository (CONV-VCS-005); a package feed a host installs from is the
+host's (D-220, D-225).
 
-*Source: D-005*
+*Source: D-005, D-220, D-225*
 
 **Acceptance criteria**
-1. No package of the library (LIB-PKG-001) is published to a public registry.
+1. A tagged release carries every package of LIB-PKG-001 at its version.
+2. No package of the library is published to a public registry by the library's
+   workflows.
 
 ---
 
@@ -93,7 +96,7 @@ breaking.
 | **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, the encrypted fields and the capabilities of a type, roles, the roles a deployment starts with, the step-up gate and the purpose bound to an action, **derivations**, the host's jobs and cookies (`Capabilities`, `Role`, `Job`, `Cookie`, D-202, D-203, D-204); and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
 | **Permission filter shape** | The expression form and the SQL fragment form |
 | **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` and `AppPasswordId` among them, and the value types they take (CONV-DESIGN-004), `RestrictionName` and `DocumentName` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the unit of work every area writes through (`IUnitOfWork`, whose `BeginAsync` answers whether it opened the outermost level, with `AfterCommit`, the registration of work to run after the outermost commit; CONV-DESIGN-003) and event publication (`IEvents`, CONV-DESIGN-002), which no host implements, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements; the request's access a host endpoint reads (`IRequestAccess`, `RequestAccess`, `17` BFF-HOST-001), and the seams a host's own work joins, `IResources`, `ICallbackReferences`, the field cipher of a host's own fields (`IPersonalFields`, `SubjectFields`, PRIV-RIGHT-005a) and the collection of a person record (`IRecordCollection`, `RecordCollection`, `CollectedRecord`, `21` REC-COL-002) (D-202, D-203, D-221) |
-| **Extension contracts** | The interfaces a host implements or replaces for the library to call: the export contributors (`IExportContributor`, PRIV-RIGHT-003, D-203); the mail and SMS transports, `INotificationHandler`, whose `SendAsync` answers `Result`, with `SendRequest` (the admitted message: its kind, destination, subject, language, values and the `SendReference` it is carried under, and none of the restrictions' inputs), `SendDestination` and `SendReference` (with `TryParse`, since the store reads a reference back from its row), and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
+| **Extension contracts** | The interfaces a host implements or replaces for the library to call: the export contributors (`IExportContributor`, PRIV-RIGHT-003, D-203); `INotificationHandler`, whose `SendAsync` answers `Result`, with `SendRequest` (the admitted message: its kind, channel, destination, subject, languages, values and the `SendReference` it is carried under, and none of the restrictions' inputs, INT-SMS-006), `IAlertHandler`, which takes each raised alert (OPS-ALERT-003), `SendDestination` and `SendReference` (with `TryParse`, since the store reads a reference back from its row), and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
 | **Emitted events** | Lifecycle event contracts, including the identifier, restriction and device events of D-146 (`IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`, `SendingRestrictionChanged`, `SendingRestrictionGranted`, `DeviceVerified`; `10` section 5b), each delivered to every registered `IEventConsumer<TEvent>` from a row written in the emitting transaction, retried under `outbox.retry.*`, and on exhaustion failed with `degradation`; publication is not replaceable (CONV-DESIGN-002). And the host registrations that answer for them: `ISubjectEventSubscriber`, naming the resource types it covers (`Covers`), and `IPurposeHandler`, named (`Name`) and naming the purposes it handles (`Purposes`), to which each `ConsentChanged` and `ObjectionChanged` of those purposes is delivered through the outbox (`ConsentChangedAsync`, `ObjectionChangedAsync`), confirmed by its success and on exhaustion failed with `erasure-delivery-exhausted` as a subject event's delivery is (PRIV-RIGHT-001a, D-203) |
 | **Database schema** | All library-owned tables |
 | **Ancestry closure table** | Structure and semantics of `identity.ancestry`, `identity.effective_grants` and `identity.consented_resources` |
@@ -151,9 +154,9 @@ An earlier draft carved out endpoints the library served directly to a browser. 
 carve-out is removed: **the library never returns user-facing text over HTTP.**
 Anything a person reads in a browser is rendered by the frontend and localized there.
 
-Message content sent by other means — email and SMS — is the worker's concern
-(INT-SMS-005a), and is text a person reads. The rule is about the HTTP boundary, not
-about all output.
+Message content sent by other means (email, SMS and push) is composed and sent by the
+host from what the library hands it (`05` INT-SMS-006, D-225). The rule is about the
+HTTP boundary, not about all output.
 
 Correct API design regardless of localization, and precisely what makes a future
 localization library's job possible rather than impossible.
@@ -207,8 +210,8 @@ operations. An endpoint is a mapping, never a second implementation.
 and policy; memberships and invitations; groups; account suspension, reactivation,
 restriction lift and deletion cancel; the takedown; the data-subject request queue;
 consent and objection records; erasure progress and manual completion; audit query by
-subject; explanation resolution; compliance-text publishing; licence, permit and
-assessment records; credential and factor management; profile photo and language
+subject; explanation resolution; compliance-text publishing; the assessment
+records; credential and factor management; profile photo and language
 preference; the registration session; identifier, preference and session management; the
 restriction set and grants; mail app passwords; domain lock (D-146); the generation of
 the break-glass credential and whether one stands (OPS-BOOT-004, OPS-BOOT-001 AC3); the
@@ -219,9 +222,9 @@ D-218); and the person records (`21`, D-221): their entry, reads and finding,
 correction, the consents and objections staff record, their export for the person,
 restriction lift, deletion and its cancellation, erasure and takedown, the account's
 operations on a record attached to it, and the offer and the attachment
-(`IPersonRecords`); and the delivery reports a host routes to the library
-(`ISmsReports`, INT-SMS-005, D-224), called in process only. The endpoints are
-enumerated in `09-api-contract`; the permissions in `10-reference` §2.1.
+(`IPersonRecords`); and the outcome of a message the host reports (`ISendOutcomes`,
+INT-SMS-005, D-225), called in process only. The endpoints are enumerated in
+`09-api-contract`; the permissions in `10-reference` §2.1.
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
@@ -233,13 +236,12 @@ the social provider round trips (`/auth/providers/{provider}`, their returns and
 and so do the endpoints of a person record's collection session and record access
 session (`/records/collection` and `/records/access` and every route under them, `21`
 REC-COL-001, REC-ACC-001, D-221), whose sessions are the browser's and whose person
-holds no access context. The callbacks a gateway or provider sends (`GET` and
-`POST /callbacks/sms/dlr/{key}`, `POST /callbacks/providers/{provider}`), the three
-well-known documents, the provider's protocol endpoints and its continuation
-(`GET /oidc/authorize/continue`), and `GET /settings`, which reads the deployment's
-settings and no record, are not operations (D-224). Beside its contract an endpoint MAY
-take the browser's own records: its pre-authentication binding, the rotation of its
-session, and the registration signal.
+holds no access context. The callbacks a provider sends
+(`POST /callbacks/providers/{provider}`), the three well-known documents, the provider's
+protocol endpoints and its continuation (`GET /oidc/authorize/continue`), and
+`GET /settings`, which reads the deployment's settings and no record, are not operations
+(D-224). Beside its contract an endpoint MAY take the browser's own records: its
+pre-authentication binding, the rotation of its session, and the registration signal.
 
 **Every operation takes an access context** (AUTHZ-IMP-001) — a person's, which a host's
 endpoint reads from the request with the session it passes beside it (`17` BFF-HOST-001),
@@ -316,10 +318,9 @@ anyone acts, and reads no record of a person (D-218).
 | **Authentication addresses** | Required, no default: `AuthenticationAddresses` (`signIn`, `provider`): where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3), and the address the library is mounted at on the authentication application, prefix included, where another application finds `/oidc/par`, `/oidc/authorize` and `/oidc/token` (BFF-SESS-006, LIB-HOST-003). Absent, empty or blank, startup fails with `model.startup.declarationmissing` naming `authenticationAddresses.signIn` or `authenticationAddresses.provider` (D-162) |
 | **Passkey pages** | Required, no default: `PasskeyAddresses` (`changePassword`, `enrol`, `manage`), the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). Absent, or with a field empty or blank, startup fails with `model.startup.declarationmissing` naming `passkeyAddresses` or the field (D-162) |
 | **Sign-on client** | Required, no default: `SignOnClient` (`clientId`), what this application calls itself at the provider when it establishes its own session; the client registry holds the one destination a code returns to under it (BFF-SESS-006). Absent, startup fails with `model.startup.declarationmissing` naming `signOnClient.clientId`. It carries no secret: the library generates the client's secret, holds it in the registry and rotates it (OPS-SEC-002) (D-162) |
-| **Alert destinations** | At least one email and one SMS destination for the operator (OPS-ALERT-004), **and the owner's email and SMS destination** — break-glass alerts reach them always (OPS-BOOT-002, D-129) |
-| **SMS balance floor** | A prepaid amount the library cannot guess (INT-SMS-004) |
-| **Mail and SMS transports** | `IMailTransport` and `ISmsTransport` (LIB-EXT-001), each required unless the library's shipped transport for its channel is in use (`integration.mail.endpoint`, `integration.sms.endpoint`). A channel with neither fails startup with `model.startup.declarationmissing`, `details.key` `mailTransport` or `smsTransport` |
-| **Secret source** | Required, no default: `ISecretSource`, through which the library reads every secret it needs, asynchronously, when the application starts and before it serves a request: the key-encryption key versions and the fingerprint key versions, each fingerprint key version at least 32 bytes (OPS-SEC-001, AUTH-KEY-002); the maintenance credential (OPS-MIG-003a); the mail server's secret where the shipped mail-server adapter is used (INT-MAIL-001); each declared social provider's credential, by the provider's name (IDN-LIFE-012); and the delivery reports' key, `smsReportKey`, at least 32 bytes (INT-SMS-005, D-224). No secret is an argument of `AddJanus`. Absent, startup fails with `model.startup.declarationmissing`, `details.key` `secretSource`; a secret it cannot answer, or answers empty or short, stops the start with `model.startup.secretunavailable`, `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret`, `smsReportKey` or `socialProvider.<provider>`. A `Janus.Cli` command reads the same values from one JSON document on standard input, save `migrate`, which reads no key (OPS-MIG-001, D-204), and one whose standard input is a terminal is refused under `details.key` `input` (OPS-SEC-001, CONV-DESIGN-007) |
+| **Alert handler** | Required, no default: `IAlertHandler`, which takes each raised alert and delivers it as the host chooses (OPS-ALERT-003). Absent, startup fails with `model.startup.declarationmissing`, `details.key` `alertHandler` (D-225) |
+| **Notification handler** | Required, no default: `INotificationHandler`, through which every message the library owes leaves it (INT-SMS-006). Absent, startup fails with `model.startup.declarationmissing`, `details.key` `notificationHandler` (D-225) |
+| **Secret source** | Required, no default: `ISecretSource`, through which the library reads every secret it needs, asynchronously, when the application starts and before it serves a request: the key-encryption key versions and the fingerprint key versions, each fingerprint key version at least 32 bytes (OPS-SEC-001, AUTH-KEY-002); the maintenance credential (OPS-MIG-003a); the mail server's secret where the shipped mail-server adapter is used (INT-MAIL-001); and each declared social provider's credential, by the provider's name (IDN-LIFE-012). No secret is an argument of `AddJanus`. Absent, startup fails with `model.startup.declarationmissing`, `details.key` `secretSource`; a secret it cannot answer, or answers empty or short, stops the start with `model.startup.secretunavailable`, `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`. A `Janus.Cli` command reads the same values from one JSON document on standard input, save `migrate`, which reads no key (OPS-MIG-001, D-204), and one whose standard input is a terminal is refused under `details.key` `input` (OPS-SEC-001, CONV-DESIGN-007) |
 | **Subject-event handlers** | Erasure, restriction and takedown (`ErasureRequested`, `RestrictionChanged`, `TakedownExecuted`). Each registered subscriber (`ISubjectEventSubscriber`) names the resource types it covers (`Covers`), and every type declared sensitive SHALL be covered by at least one. **Startup fails otherwise** (PRIV-RIGHT-005b), `details.handler` naming the type. Subscriber names are distinct and `erasure-ledger` is the library's own (`model.startup.subscribername`, IDN-LIFE-003a); a name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`, any other refused with `model.startup.declarationinvalid` (INT-SMS-003) |
 | **Purpose handlers** | For every purpose resting on consent or on an objectable basis, a registered `IPurposeHandler` naming it (`Purposes`), under a name distinct among the purpose handlers and the subject-event subscribers (`Name`, IDN-LIFE-003a), which handles each `ConsentChanged` and `ObjectionChanged` of the purposes it names, delivered through the outbox (PRIV-RIGHT-001a, PRIV-CONS-008, D-203). **Startup fails otherwise** (PRIV-RIGHT-001a AC3), `details.handler` naming the purpose |
 | **Export contributors** | Each registered `IExportContributor` names the types whose records it holds (`Covers`) and answers its sections of a subject's export (PRIV-RIGHT-003); every type that declares an encrypted field or a sensitive category SHALL be covered by at least one. **Startup fails otherwise** with `model.startup.declarationmissing`, `details.handler` naming the type; contributor names are distinct, each under INT-SMS-003's name rule, a name outside it or given twice failing startup with `model.startup.declarationinvalid`, `details.declaration` `contributor.<name>`, `details.field` `name` (D-203, D-206); the names of the sections and values a contributor answers follow that rule without `.`, judged by `Janus.Hosting` before the assembly takes them (PRIV-RIGHT-003, D-206) |
@@ -329,10 +330,9 @@ anyone acts, and reads no record of a person (D-218).
 | **Preference declaration** | Each host-declared preference: name, type (`string` · `boolean` · `integer` · `enum` with its values), default, and whether the person or only an administrator may edit it (REG-PREF-001). The declaration MAY be empty; a malformed one fails startup |
 | **Restriction key suppliers** | Optional: for each `host:<name>` restriction key the host uses (AUTH-ABUSE-004), a per-send callback registered under that name that returns the key value the restriction is evaluated against. A restriction naming a `host:<name>` key with no registered supplier fails startup, and a change of the restriction set naming one is refused with `config.value.notallowed`, `details.supplier` naming it. The callback is `Func<SendContext, CancellationToken, ValueTask<string>>`; `SendContext` is a sealed record of `Purpose` (`10` section 5.15), `Kind` (`email` · `sms`), `SubjectId` (nullable) and `Source` (nullable: a send no request asked for has none) (D-153) |
 | **Calendar time zone** | `privacy.calendar.timezone`: the IANA zone in which the legal clock counts days (PRIV-RIGHT-002). Required, protected (D-153) |
-| **Message languages** | `notification.languages`: the BCP 47 tags every outbound message may be sent in (IDN-ATTR-001, AUTH-ABUSE-005). Required, at least one (D-153) |
+| **Message languages** | `notification.languages`: the BCP 47 tags every outbound message may be sent in (IDN-ATTR-001, `05` INT-SMS-006). Required, at least one (D-153) |
 | **Password screening sources** | Conditional: `service.name`, where `context` is among `password.blocklist.sources`, and `password.blocklist.selfhosted.address`, where `password.blocklist.source` is `selfHosted` (AUTH-PASS-004, `10` section 4) (D-197) |
-| **Email sending domain** | `notification.email.sendingdomain`, and the optional set of relay-registered domains (INT-MAIL-011). Required (D-153) |
-| **Recipients** | Optional: the processors and recipients the records of processing list (PRIV-ROPA-002), each `{ name, characterisation, dataReceived, location, agreementReference, callback }`; the library ships as the default set only the rows its own processing makes true (mail server, SMS gateway, hosting provider, password screening; `05` section 6, D-153, D-162). Every business processor, payment and shipping included, is the host's declaration |
+| **Recipients** | Optional: the processors and recipients the records of processing list (PRIV-ROPA-002), each `{ name, characterisation, dataReceived, location, agreementReference, callback }`; the library ships as the default set only the rows its own processing makes true (mail server, hosting provider, password screening; `05` section 6, D-153, D-162, D-225). Every business processor, payment and shipping included, is the host's declaration |
 | **Challenge verifier** | Optional: a callback that takes a challenge token and answers pass or fail (AUTH-ABUSE-008). Absent, bot-defence signals are audited and no challenge is shown (D-153) |
 | **Phone signal provider** | Optional: a callback answering `none` · `clear` · `risk` for a number (AUTH-FACT-002b). Absent, the record says `unavailable` (D-153) |
 | **Reserved usernames** | Optional: names added to the library's reserved list (REG-IDENT-009) (D-153) |
@@ -346,10 +346,7 @@ anyone acts, and reads no record of a person (D-218).
 | **DNS resolver** | Optional: `IDnsResolver` (`TextRecordsAsync`), the TXT lookup domain verification reads (REG-DOM-001). Absent, adding a domain to an organization's lock is refused with `config.value.notallowed`, `details.requires` `dnsResolver`, and a stored listed domain fails startup with `model.startup.declarationmissing` naming `dnsResolver`; a deployment that locks no domain needs none |
 | **Location file** | Optional: `ILocationSource`, which opens the IP-to-city file in the format INT-GEN-006 gives. Absent, no session carries a location and `degradation` is raised under the scopes `10` section 5.23 names (INT-GEN-006, AUTH-SESS-013, D-190) |
 | **Datacenter range file** | Optional: `IDatacenterRangeSource`, which opens the file of datacenter ranges in the format AUTH-ABUSE-008 gives. Absent or stale, `datacenterRange` does not fire and `degradation` is raised under the scopes `10` section 5.23 names until the host supplies one or takes `datacenterRange` out of `abuse.botdefence.signals` (AUTH-ABUSE-008, D-189, D-190) |
-| **Clock reference** | Optional: `IClockReference`, the offset the environment measured against its time source (INF-HOST-001). Absent, or unable to answer, `degradation` is raised under `clock.reference.absent` or `clock.reference.unread` |
-| **Certificate renewal** | Optional: `ICertificateRenewal`, the outcome of the latest certificate renewal (INF-TLS-003). Absent, or unable to answer, `degradation` is raised under `certificate.renewal.absent` or `certificate.renewal.unread` |
-| **Restore-test instance** | Optional: `IRestoreTestInstance`, which builds the throwaway instance the restore test restores into and tears it down (DR-007, DR-008). Absent, every run of the restore test fails as `unrestored` and raises `restore-test-failed` |
-| **Off-host erasure ledger** | Optional: `IErasureLedger`, which appends each completed erasure's line off the host (DR-016). Absent, erasures complete without a line, the residual R-A13 accepts; once one is registered, every erasure completed before it is appended too |
+| **Off-host erasure ledger** | Optional: `IErasureLedger`, which appends each completed erasure's line off the host (DR-016). Absent, erasures complete without a line, and a restore to a point before one reverses it (DR-006a); once one is registered, every erasure completed before it is appended too |
 
 Everything else has a safe default the host may override (P-001, D-107), including the
 public-holiday list, whose safe default is empty and which staff maintain at runtime as
@@ -358,12 +355,12 @@ the library cannot know for a deployment; every other key in `10-reference` §4 
 default at the safe end of its range. They are of three kinds. Most are required and
 have no default. Some may be empty: the preference declaration and the restriction key
 suppliers. The rest are required only where a feature the deployment uses needs them
-(the relationship sources, the image codec, a transport for a channel whose shipped
-transport is not in use, the mail server client, the password screening sources, the
-export contributors, a purpose handler for each purpose that needs one, and a cookie
-declaration for each cookie the host sets), or are optional (the declared roles, the
-capabilities, the jobs), each row stating what its absence does. A minimal configuration therefore
-needs only the required declarations and those its own features call for.
+(the relationship sources, the image codec, the mail server client, the password
+screening sources, the export contributors, a purpose handler for each purpose that
+needs one, and a cookie declaration for each cookie the host sets), or are optional (the
+declared roles, the capabilities, the jobs), each row stating what its absence does. A
+minimal configuration therefore needs only the required declarations and those its own
+features call for.
 
 *Corrected three times: the list originally said "exactly four things," which four
 other requirements already contradicted; the subject-event handlers added by D-068
@@ -482,23 +479,21 @@ source.
 
 | Extension point | Default shipped |
 |---|---|
-| Mail delivery (`IMailTransport`) | A default handler, calling `integration.mail.endpoint` |
-| SMS delivery (`ISmsTransport`) | A default handler, calling `integration.sms.endpoint`. A transport answers the gateway's identifier of each text it hands over, and reads a delivery report from the whole request the gateway made (INT-SMS-006, D-224) |
-| Notification handling (`INotificationHandler`) | Email and SMS. A replacement carries a message the library has already admitted under AUTH-ABUSE-004 and written to its outbox; it decides no restriction and counts nothing |
-| Message and content templates | A catalogue in `Janus.Hosting`, in English and Arabic: every message kind on every channel it goes out on, one text per language, each text message within its budget at its widest (AUTH-ABUSE-005, INT-SMS-003), and every link as the place `{link}`, which the library fills with the link's address (LIB-HOST-001, landing origins). A deployment that registers none is answered from it. An email owed in every declared language is composed by the library from each language's text (IDN-ATTR-001); no catalogue holds a text in more than one language |
+| Notification handling (`INotificationHandler`) | None: the host's, required (INT-SMS-006, D-225). The library holds no message text and no transport |
+| Alert handling (`IAlertHandler`) | None: the host's, required (OPS-ALERT-003, D-225) |
 | Audit sink | Database |
 | Authentication factors | The catalogue in `02-authentication` |
 | Record-level rules atop the permission model | None |
 | Mail server (`IMailServer`: mailbox provisioning and app passwords, INT-MAIL-001) | The JMAP adapter in `Janus.Hosting`, used where `integration.mailserver.endpoint` is set when the application starts and the host registered none (LIB-HOST-001, CONV-DESIGN-007) |
 | Secret source (`ISecretSource`: the secrets LIB-HOST-001 lists; INF-HOST-003) | None: the host supplies it (D-149). The library reads every secret through it, asynchronously, when the application starts and before it serves a request; no secret is an argument of `AddJanus`, and startup fails without it. A `Janus.Cli` command reads the same values from one key document on standard input (OPS-SEC-001), save `migrate`, which reads no key (OPS-MIG-001, D-204) |
-| Environment seams (clock reference, certificate renewal, DNS resolver, location file, datacenter range file, restore-test instance, off-host erasure ledger) | None: each is an optional declaration of LIB-HOST-001, whose row states what its absence does |
+| Environment seams (DNS resolver, location file, datacenter range file, off-host erasure ledger) | None: each is an optional declaration of LIB-HOST-001, whose row states what its absence does |
 
 A core namespace is `Janus.Core` or an area project's (`Janus.Identity`,
 `Janus.Authentication`, `Janus.Authorization`, `Janus.Privacy`). A product behind an
 extension point SHALL be named only in `Janus.Hosting`, where the shipped defaults and
 adapters live.
 
-*Source: D-022, D-012, P-003, D-162, D-166, D-176, D-189, D-197, D-204, D-224*
+*Source: D-022, D-012, P-003, D-162, D-166, D-176, D-189, D-197, D-204*
 
 **Acceptance criteria**
 1. Each is registered through configuration, not inheritance from a library type.
@@ -650,10 +645,10 @@ short-cuts no check.
 **Values (D-204).** `Janus.Testing` registers nothing on its own (OPS-ENV-001). It
 carries:
 
-- `InMemoryMailTransport` and `InMemorySmsTransport`, which keep every message sent,
-  readable by destination, and fail a delivery only where the test says so; the SMS
-  transport reports a balance of 99999999999999.9999, which the balance job records
-  (D-208);
+- `InMemoryNotifications` and `InMemoryAlerts`, an `INotificationHandler` and an
+  `IAlertHandler` that keep every message and alert handed to them, readable by
+  destination and by kind with each message's values, and fail a hand-over only where
+  the test says so (D-225);
 - `FixedSecretSource`, for tests, which answers a key-encryption key version and a
   fingerprint key version of 32 bytes each, drawn once for the instance so that each
   test's deployment starts clean (a development setup that keeps its database across
@@ -662,11 +657,10 @@ carries:
   JSON document the commands other than `migrate` read (OPS-SEC-001), with the same keys
   and the application connection the test gives it;
 - stand-ins for the optional environment seams that answer a reading in order, so a
-  development deployment raises no `degradation`: `FixedClockReference`
-  (`IClockReference`, no offset), `SucceededCertificateRenewal` (`ICertificateRenewal`, a
-  renewal that succeeded), and `EmptyLocationSource` and `EmptyDatacenterRangeSource`
-  (`ILocationSource`, `IDatacenterRangeSource`), each a file holding only its first line,
-  dated the day it is read, and no range (INT-GEN-006, AUTH-ABUSE-008);
+  development deployment raises no `degradation`: `EmptyLocationSource` and
+  `EmptyDatacenterRangeSource` (`ILocationSource`, `IDatacenterRangeSource`), each a
+  file holding only its first line, dated the day it is read, and no range (INT-GEN-006,
+  AUTH-ABUSE-008);
 - `SoftwarePasskey`, a WebAuthn authenticator in memory (ES256, `none` attestation, user
   presence and user verification performed, backup eligibility and backup state set on
   every ceremony, as a synced passkey reports them) that answers the library's creation
@@ -689,11 +683,11 @@ carries:
   (AUTH-OIDC-001, D-206);
 - `TestPeople`, over a running host whose routing comes before the browser profile (`17`
   BFF-ORDER-001, D-210): a customer registered through the registration endpoints with
-  what the in-memory transports hold (each verification link, pressed, REG-SESS-003),
-  its date of birth 1990-01-01, an adult's on every host (REG-PROF-002); the first
-  administrator, enrolled with a software passkey through the enrolment link; a staff
-  member invited by an administrator into the organization the test names, with the
-  roles the test names, and enrolled through the invitation; each passkey labelled
+  what the in-memory notification handler holds (each verification link, pressed,
+  REG-SESS-003), its date of birth 1990-01-01, an adult's on every host (REG-PROF-002);
+  the first administrator, enrolled with a software passkey through the enrolment link;
+  a staff member invited by an administrator into the organization the test names, with
+  the roles the test names, and enrolled through the invitation; each passkey labelled
   `Software passkey`; and for each a `TestSession`, an `HttpClient` that carries the
   session cookie, the synchronizer token and `X-Identity-Request` (BFF-CSRF-001,
   BFF-CSRF-003) on every request, with the person's subject, and a step-up with the
@@ -702,7 +696,7 @@ carries:
   pre-authentication cookie, the synchronizer token, `X-Identity-Request`, the origin
   and the fetch metadata), for what a guest does with no account: a collection (`21`
   REC-COL-001) and the record access (REC-ACC-001), the codes read from the in-memory
-  transports (D-222).
+  notification handler (D-222).
 
 A host's project that references the library's packages, a test project using
 `Janus.Testing` among them, carries the framework reference to `Microsoft.AspNetCore.App`
@@ -710,7 +704,7 @@ itself: the reference a package carries prunes nothing in the project that takes
 without its own the project resolves as packages what the shared framework serves (`08`
 CONV-LAYOUT-001, D-205).
 
-*Source: D-204, D-205, D-206, D-207, D-208, D-210, D-222*
+*Source: D-204, D-205, D-206, D-207, D-208, D-210, D-222, D-225*
 
 **Acceptance criteria**
 1. A test using only `Janus.Testing` and a host built on the public surface stands a
@@ -721,8 +715,7 @@ CONV-LAYOUT-001, D-205).
    administrative organization and meets a gate that asks for phishing resistance at
    `aal2`.
 4. A development deployment composed with the stand-ins raises no `degradation` for the
-   seams they stand in for, and its balance job records the SMS transport's balance and
-   raises no `background-job-failed` (D-208).
+   seams they stand in for (D-208, D-225).
 5. A state-changing request made through a `TestSession`, or through a `TestVisitor`,
    passes the browser profile's CSRF stages; a `TestVisitor` carries no sign-in session
    (D-222).

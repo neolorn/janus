@@ -18678,13 +18678,10 @@ section 5.24 (`privacy.consent.granted`, `privacy.consent.withdrawn`,
 
 **TL;DR.** The decision round H3 waits for (plan, section 3a). A host building its
 authentication and account applications on the library found four defects, seven gaps in
-the contract and fifteen questions (2026-10-29, checked against 285838ac). Two more gaps
-came from its SMS gateway, which names a text by its own identifier, sends every report
-of the account to one address and reports intermediate states: the library could read
-none of its reports. And the mail-server adapter has never met a real mail server. The
-round builds every item below. Questions 11 and 15 are already answered: round P checks
-the terms and notice versions (D-222) and serves people a host keeps data on without an
-account (D-221).
+the contract and fifteen questions (2026-10-29, checked against 285838ac). And the
+mail-server adapter has never met a real mail server. The round builds every item below.
+Questions 11 and 15 are already answered: round P checks the terms and notice versions
+(D-222) and serves people a host keeps data on without an account (D-221).
 
 **Defects.**
 
@@ -18863,40 +18860,9 @@ account (D-221).
     answers it at `GET /auth/session`, the account application's among them, where the
     done step runs (FE-REG-005, REG-SESS-008). Its absence there was a defect.
 
-**The SMS gateway's reports.**
-
-23. **The gateway's identifier and intermediate states.** `ISmsTransport.SendAsync`
-    answers `SmsAccepted`, carrying the gateway's identifier of the text where the
-    gateway's reports name the text by it, and none where they quote the library's
-    `Reference`. The library holds it as its SHA-256 beside the text, never logs it, and
-    looks a report up by it. `ReadReportAsync` replaces `ReadReport`: the transport is
-    given the whole request (`SmsReportRequest`: the method, the query parameters one
-    value a name, the content type and the body, at most 16 KiB) and answers the report,
-    naming either the library's reference or the gateway's identifier, and its outcome,
-    `Delivered`, `Failed` or `NotFinal`; or that the report does not read. A `NotFinal`
-    report changes nothing and is no rejection; `Delivered` and `Failed` do what
-    INT-SMS-005 states.
-
-24. **A key in the route.** The route becomes `GET` and `POST`
-    `/callbacks/sms/dlr/{key}`. `{key}` is compared in fixed time with the secret
-    `smsReportKey` the host's secret source supplies, read at startup, at least 32 bytes
-    (INT-GEN-002); a deployment that supplies none, or a shorter one, does not start
-    (`model.startup.secretunavailable`, `details.key` `smsReportKey`). A wrong key, and
-    a body over 16 KiB, are rejected as a guessed reference is, after the rate limit and
-    before any lookup. Where the gateway's identifiers can be guessed, the key is what
-    bars a forged report. The deployment gives the gateway the route's address with the
-    key, and keeps the route's path out of its proxy's logs.
-
-25. **A report the host routes.** `ISmsReports.TakeAsync`, in process, takes a report
-    the host read on a route of its own. A gateway that sends every report of an account
-    to one address, where more than one sender shares the account, leaves the routing to
-    the host, which alone knows every sender. It answers whether the report named a text
-    of the library's: where it did, the report is applied as at the route; where not,
-    nothing is changed, counted or recorded, since the host vouched for the request.
-
 **The mail server.**
 
-26. **The adapter meets a real Stalwart.** INT-MAIL-001's adapter is tested in the
+23. **The adapter meets a real Stalwart.** INT-MAIL-001's adapter is tested in the
     pipeline against a real Stalwart server of the release it is written for, 1.0 (its
     newest 1.0 patch when the round begins), its container image pinned by digest and
     run through `Testcontainers`, which joins the allow-list (CONV-DESIGN-008). The
@@ -18913,23 +18879,166 @@ account (D-221).
     by a decision. CONV-TEST-002 gains the rule: a shipped adapter for an external
     server is tested against a real one, never against a fake alone.
 
-**Propagated to:** `02` AUTH-FACT-015, AUTH-FACT-016, AUTH-SESS-005, AUTH-SESS-012,
-AUTH-KEY-002; `04` PRIV-CONS-005; `05` INT-GEN-002, INT-GEN-003, INT-SMS-005,
-INT-SMS-006, INT-MAIL-001, INT-MAIL-004; `06` OPS-SEC-001; `07` LIB-API-001,
-LIB-HOST-001, LIB-EXT-001; `08` CONV-ERR-001, CONV-DESIGN-008, CONV-TEST-002; `09`
-`POST /register/verify/{id}`, `GET /register/events`, `POST /enrol/begin` and
-`GET /enrol`, `POST /auth/link`, `POST /auth/factor`, `POST /auth/device/verify`,
-`POST /auth/device/resend`, `POST /auth/restore/begin` and `POST /auth/restore`,
-`GET /auth/session`, `POST /recovery/username`, `POST /recovery/complete`,
+**Propagated to:** `02` AUTH-FACT-015, AUTH-FACT-016, AUTH-SESS-005, AUTH-SESS-012; `04`
+PRIV-CONS-005; `05` INT-MAIL-001, INT-MAIL-004; `07` LIB-API-001; `08` CONV-ERR-001,
+CONV-DESIGN-008, CONV-TEST-002; `09` `POST /register/verify/{id}`,
+`GET /register/events`, `POST /enrol/begin` and `GET /enrol`, `POST /auth/link`,
+`POST /auth/factor`, `POST /auth/device/verify`, `POST /auth/device/resend`,
+`POST /auth/restore/begin` and `POST /auth/restore`, `GET /auth/session`,
+`POST /recovery/username`, `POST /recovery/complete`,
 `POST /recovery/report-loss/{id}/cancel`, `GET /account`,
 `POST /account/identifiers/{id}/verify`, `/undo` and `/abandon`,
 `POST /account/password`, `POST /account/invitation/acknowledge`, `GET /settings`,
-section 9 (the provider's address, the continuation), section 10 (the report route);
-`10` section 4 (`oidc.continuation.lifetime`) and the startup codes, the callback
-refusal, `DeviceVerified`; `17` BFF-CSRF-005a, BFF-STEP-001, BFF-ORDER-001 (stage 8);
-`18` FE-API-002, FE-API-004, FE-API-006, FE-COMP-002, FE-REG-005, FE-VER-001, FE-PM-002,
-FE-SEC-001; `19` INF-TLS-004; `20` REG-SESS-008; `implementation-plan.md` (round H3's
-row).
+section 9 (the provider's address, the continuation); `10` section 4
+(`oidc.continuation.lifetime`) and `DeviceVerified`; `17` BFF-CSRF-005a, BFF-STEP-001,
+BFF-ORDER-001 (stage 8); `18` FE-API-002, FE-API-004, FE-API-006, FE-COMP-002,
+FE-REG-005, FE-VER-001, FE-PM-002, FE-SEC-001; `20` REG-SESS-008;
+`implementation-plan.md` (round H3's row).
+
+---
+
+## D-225 — The library sends nothing, and keeps to its own work
+
+**Date:** 2026-10-29 · **Status:** accepted · **Amends:** D-022, D-044, D-048, D-071, D-220
+
+**TL;DR.** A communication library of its own carries every message a host's
+applications send: email, SMS and push. This library is identity, sign-in, permissions,
+the privacy of the data it holds and the mail server's mailboxes, and nothing else. A
+sweep of every chapter against that found what it still did beyond it: it composed and
+queued messages for senders of its own (specified, and never built), read an SMS
+gateway's balance and delivery reports, delivered its own alerts, watched the server's
+certificates and clock, tested backups, and kept a register of licences and a
+maintenance log; and its chapters carried a deployment's and a company's procedures and
+a frontend's technology. Each leaves the library as below. Round H3 builds this decision
+with D-224.
+
+1. **Messages leave through the host.** The library decides that a message is owed, to
+   whom, in which languages and with which values, admits it under the named
+   restrictions (AUTH-ABUSE-004), and hands it to the host's `INotificationHandler`, now
+   required and with no default. The handler is given a `SendRequest`: the send's
+   reference (the same at every attempt, so the host's idempotency key), the message
+   kind (`10` section 5.15), the channel (`email` · `sms`), the destination, the
+   languages (one, or every declared language in `notification.languages` order) and the
+   kind's values, the places of `10` section 5.26 filled (the code, the link and the
+   rest). It answers whether it took the message, and took means the host has recorded
+   it to be sent. The library's outbox keeps the immediate attempt and the retries under
+   `outbox.retry.*` for that handing over. The library holds no message text, renders
+   nothing and calls no gateway: `IMailTransport`, `ISmsTransport`, `IMessageTemplates`
+   and the shipped catalogue, the shipped senders and their keys
+   `integration.mail.endpoint` and `integration.sms.endpoint`, the SMS length budgets,
+   the SMS balance poll and its floor (`integration.sms.balancefloor`), and the
+   composing of one mail in several languages are removed. A message owed in every
+   declared language is one `SendRequest` carrying them all, which the host composes;
+   the restrictions judge it as before. *Rejected:* keeping the library's senders as a
+   fallback (none was built, and a second sender on one gateway account splits its
+   reports); depending on the communication library (the libraries never know each
+   other, D-220).
+
+2. **Outcomes come from the host.** The delivery-report route `GET /callbacks/sms/dlr`
+   is removed, with every rule of a gateway's report: the library talks to no gateway. A
+   host that learns a message's final outcome reports it in process,
+   `ISendOutcomes.ReportAsync(reference, delivered)`: a message that failed releases its
+   counts as INT-SMS-005 states, and a delivered `secondfactor` SMS releases its count
+   from each restriction marked `resend` (D-197). A reference naming no message of the
+   library's changes nothing and is answered false. The operation takes no access
+   context and meets no gate, since it can only make a person less restricted.
+
+3. **Alerts are raised here and delivered by the host.** The library decides when an
+   alert is raised and deduplicates it (OPS-ALERT-001, OPS-ALERT-002), and the job
+   `alert-dispatch` hands each raised alert to the host's `IAlertHandler`, required,
+   oldest first, retried until taken. Where an alert goes, by which channel and to whom,
+   the owner included, is the host's: the alert channels, the destination keys
+   (`alerting.email.destinations`, `alerting.sms.destinations`, `alerting.owner.*`,
+   `alerting.sms.severitythreshold`), OPS-ALERT-003's routing, OPS-ALERT-004,
+   OPS-ALERT-004a and the condition `alert-destination-changed` are removed, and
+   bootstrap no longer asks for the owner's destinations.
+
+4. **The server is the deployment's to watch.** The certificate renewal and clock
+   watches, their seams (`ICertificateRenewal`, `IClockReference`), the conditions
+   `certificate-renewal-failed` and `clock-drift`, their `degradation` scopes,
+   INF-TLS-003, INF-OBS-001 and INF-OBS-003 are removed. INF-HOST-001 stays a
+   requirement on the environment: the library needs a synchronised clock and does not
+   watch it.
+
+5. **Backups are the deployment's.** Chapter 12 keeps three items: erasure by key
+   destruction (DR-006a), the off-host erasure ledger replayed after a restore (DR-016),
+   and the key-encryption key's cryptoperiod (DR-009a). Every other item of it retires,
+   and with them the restore test, its job, its seam (`IRestoreTestInstance`), its keys
+   (`backup.*`), the condition `restore-test-failed`, the canary account bootstrap
+   seeded for it, INF-DB-004 and INT-MAIL-002's backup clause. The key rotations stay
+   and keep no backup's clock: they print no escrow copy, `--sealed` becomes `--retire`,
+   and `--retention` and `keepUntil` go, since keeping a retired version for a backup is
+   the deployment's (OPS-SEC-003).
+
+6. **No licence register and no maintenance log.** OPS-MAINT-001 retires with
+   `/admin/compliance/licences` and `/admin/compliance/maintenance`, their vocabularies,
+   and the `expiry-approaching` scope `envelope-rotation`. `expiry-approaching` stays
+   for the key-encryption key's cryptoperiod, and `maintenance.expiry.warninglead` stays
+   as its lead and the holiday list's. The job that warns of the cryptoperiod runs as
+   `kek-cryptoperiod`, in place of `envelope-rotation`, and the key's rotation is the
+   one maintenance exception left (`06` section 9).
+
+7. **A deployment's and a company's procedures leave the specification** for the host's
+   own documents: chapters 14 (the takedown procedure) and 16 (the offboarding
+   procedure), whose library functions stay specified where they are (the takedown, a
+   membership's end, session revocation); runbook sections 1, 2, 3.3, 5, 6, 7.1, 7.2,
+   10, 11 and 12, and the envelope in section 3.2; a deployment's gate on destructive
+   schema changes (OPS-DEP-001 to OPS-DEP-003), whose report stays as
+   `migrate --report`, which now states itself which statements are destructive
+   (OPS-MIG-001), and its pipeline as the only way to change production (INF-DEP-002);
+   the custody of the sealed envelope and of copies of keys (OPS-BOOT-003, DR-009,
+   DR-009b); the text of breach notices and the company's documents (PRIV-BREACH-001
+   criteria 1 and 4; IDN-LIFE-003 and PRIV-MINOR-002 criterion 1); a single host,
+   hosting abroad and certificate issuance (INF-HOST-002, INF-HOST-004, INF-TLS-002);
+   the risk register's R-A01, R-A04, R-A08, R-A11, R-A12, R-A13, R-O01, R-O02 and R-O03;
+   and the overview's regulatory context, its hosting and SMS rows, its server and
+   frontend stack, and the deferrals that are a deployment's.
+
+8. **A frontend's technology is its own.** FE-PLAT-001 to FE-PLAT-003, FE-LOC-001 to
+   FE-LOC-005 and FE-A11Y-001 retire. Chapter 18 keeps how a frontend uses the library.
+
+9. **What was out of date.** LIB-PKG-003: the packages are attached to the tagged
+   release (plan section 4), and a package feed is a host's. The 3,000 Actions minutes
+   and their monthly review go (CONV-GATE-002, OPS-DEP-005); the rule that the heavy
+   suites do not run on every push stays. The privacy features keep Egypt's law as their
+   default values, each a key or a declaration a host changes (D-166), and no feature
+   changes for it.
+
+10. **What a host now supplies.** `INotificationHandler` and `IAlertHandler`, each
+    required: absent, startup fails with `model.startup.declarationmissing`,
+    `details.key` `notificationHandler` or `alertHandler`, in place of `mailTransport`
+    and `smsTransport`. `Janus.Testing` carries an in-memory handler of each, holding
+    every message and alert handed to it, readable by destination with each kind's
+    values, so a test reads a code as a value and never out of a text (LIB-TEST-003).
+    The sample host registers its own of each.
+
+**Propagated to:** `00` sections 1.1, 2.1, 4, 6, 7.2, 7.3 and 8; `01` IDN-LIFE-002a,
+IDN-LIFE-003, IDN-LIFE-009b, IDN-ATTR-001; `02` AUTH-STEP-004, AUTH-SESS-010,
+AUTH-RECOV-002, AUTH-ABUSE-003 to AUTH-ABUSE-007, section 10; `03` AUTHZ-GATE-006; `04`
+PRIV-SENS-002, PRIV-RIGHT-005a, PRIV-RIGHT-005c, PRIV-ROPA-002, PRIV-BREACH-001,
+PRIV-MINOR-001, PRIV-MINOR-002; `05` INT-GEN-001, INT-GEN-003, INT-MAIL-002,
+INT-MAIL-006, INT-MAIL-006a, INT-MAIL-008, INT-MAIL-009, INT-MAIL-011, INT-SMS-001,
+INT-SMS-003 to INT-SMS-006, section 6; `06` OPS-MIG-001, OPS-DEP-001 to OPS-DEP-003,
+OPS-DEP-005, OPS-CFG-002, OPS-CFG-004, OPS-CFG-008, OPS-ALERT-001 to OPS-ALERT-004a,
+OPS-BOOT-001 to OPS-BOOT-004, OPS-SEC-001 to OPS-SEC-003, OPS-OBS-002, section 9 and
+OPS-MAINT-001, OPS-ENV-001; `07` LIB-PKG-003, LIB-API-001, LIB-API-003, LIB-API-005,
+LIB-HOST-001, LIB-EXT-001, LIB-TEST-003; `08` CONV-LAYOUT-001, CONV-SETUP-002,
+CONV-DESIGN-002, CONV-DESIGN-003, CONV-DESIGN-006, CONV-DESIGN-007, CONV-GATE-001,
+CONV-GATE-002, sections 9 to 11; `09` `POST /admin/recovery/approve`,
+`GET /privacy/export`, `POST /records/access`,
+`POST /admin/accounts/{subject}/sessions/revoke`, `POST /auth/break-glass`,
+`POST /admin/break-glass/generate`, `/admin/config/{key}`, `/admin/compliance/*`,
+section 10; `10` the codes, permissions, keys, conditions, scopes, audit actions,
+message kinds and places, principals, step-up actions, events and vocabularies of the
+items above; `11` sections 1, 2, 3.2, 3.3, 4, 5, 6, 7.1, 7.2, 8.3, 10, 11 and 12; `12`
+all; `13` the entries above, R-A05, R-A21, R-M22, R-M23, R-O04 and section 4; `14` and
+`16` all; `15` sections 3.3, 3.4, 3.5, 4, 5, 6.4, 6.5, 7 and 8; `17` BFF-MACH-001,
+BFF-MACH-003; `18` FE-PLAT-001 to FE-PLAT-003, FE-LOC-001 to FE-LOC-005, FE-COMP-006,
+FE-BG-001, FE-A11Y-001; `19` INF-TLS-002 to INF-TLS-004, INF-HOST-001 to INF-HOST-004,
+INF-DB-004, INF-BG-001, INF-DEP-002, INF-OBS-001, INF-OBS-003, sections 9 to 11; `20`
+REG-IDENT-001, REG-PROF-002, REG-MAIL-001; `21` REC-ACC-001, REC-TKD-001; the decision
+log's deferred table; `janus-explained.md`; `implementation-plan.md` (round H3's row and
+section 4).
 
 ---
 
@@ -19167,6 +19276,7 @@ row).
 | Round P questions 1 to 11: the terms document, staff rows, notices, an attached record's restriction, a guest's browser | D-222 |
 | Round P questions 12 and 13: where staff's mechanism and reasons are recorded | D-223 |
 | Round H3: what a host's own frontends meet | D-224 |
+| The library sends nothing, and keeps to its own work | D-225 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
@@ -19202,19 +19312,15 @@ Per P-003 — nothing deferred silently.
 | Third-party app platform, consent and dynamic registration (D-005) | First external client that is not first-party |
 | Multiple organization memberships enabled by default (D-003) | First person needing access across organizations |
 | Multi-market legal document sets, several governing languages on one deployment (D-146) | Serving a second market whose law names another language |
-| Approval gate on destructive DDL (D-019) | First additional person with deploy access |
 | Two-approver recovery (D-008) | First additional person with recovery approval rights |
 | Self-hosted password breach corpus (D-011) | If counsel objects to the range API |
 | Read/write separation for historical reporting (D-017) | When reporting queries outgrow tuning |
 | Hash-chained tamper-evident audit records (D-071) | When a second person shares administrative duties, or audit integrity is challenged |
 | Automated erasure routine for management schemas (D-101) | **The user's decision** — not an automatic trigger |
-| **Scripted one-command restore the owner can run** (D-085) | Once the system is released and stable |
 | Migration away from in-library authorization (D-015) | When permission queries are a top-3 slow query and index tuning has stopped helping |
 | **External key service with per-subject keys (D-082, superseded by D-097)** | If protecting pre-erasure backups against a compromised secrets manager ever justifies a second stateful store |
-| Templates editable outside the repository (D-059) | When a non-engineer needs to change a message |
 | Profile photos enabled for customers (D-060) | When a feature makes a customer photo meaningful |
 | Object storage for uploads (D-060) | Customer photos, or any genuinely large artifact |
 | District-level boundary polygons (D-061) | If city-level preselection proves too coarse |
 | Paid geocoding provider (D-061) | If customers demonstrably struggle with the address form |
-| Separate hosts per application (D-063) | When host compromise becomes a threat worth defending against |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
