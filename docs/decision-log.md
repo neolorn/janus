@@ -19042,6 +19042,151 @@ section 4).
 
 ---
 
+## D-226 — Round H3 questions 1, 2, 3, 8 and 9: the mail server's tokens, a loss report's link, a challenge's browser, and what a sign-in and a restore keep
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-224, D-225
+
+**TL;DR.** Round H3 asked nine questions. Questions 4 to 7 were about an SMS gateway's
+delivery reports, which D-225 removed with their route, and need no answer. The other
+five are answered here, each after reading the code it touches, and question 1 also
+against Stalwart 1.0's own documentation (2026-10-31). App passwords are managed with
+the mail server's management key acting on the person's account, and the library issues
+no token for the mail server (1). A loss report is found by its cancel token's
+fingerprint (2). Every sign-in challenge is bound to the browser that opened it, and a
+sign-in link to a challenge (3). A pending authorization moves into the session its
+sign-in establishes (4). A session the restore can still bring back keeps its cookie,
+which the two restore routes alone read (5). Round H3 builds this decision with D-225
+and the items it unparks.
+
+1. **The mail server's tokens (question 1).** Stalwart 1.0 grants a token from an
+   external provider one of three things: the account's full permissions, where the
+   token's client is the `oauthClientId` of an application installed on the mail server,
+   as its own web interface is; the interoperable scopes the token carries
+   (`urn:ietf:params:oauth:scope:mail` and the contacts, calendars and files scopes);
+   or, where it carries none, what `unscopedTokens` sets: `reject` by default,
+   `interoperable` as if it carried the four, or `full`, every permission of the
+   account, management included, which its documentation calls unsafe. `x:AppPassword/*`
+   is a management call under `urn:stalwart:jmap`, which no scope reaches, so the round
+   saw the person's token refused, as the documentation says. `requireAudience` does not
+   exist in 1.0.
+
+   - **App passwords by the management key.** The adapter lists, creates and revokes a
+     person's app passwords with the management key, acting on the person's account by
+     the request-level `accountId` (RFC 8620), which is how Stalwart has an
+     administrator act for a user: `x:AppPassword/query` and `x:AppPassword/get`, and
+     `x:AppPassword/set` to create and to destroy, which ask the key's role for
+     `impersonate`, `sysAppPasswordQuery`, `sysAppPasswordGet`, `sysAppPasswordCreate`
+     and `sysAppPasswordDestroy`. The account acted on is the server account that
+     carries the identifier of the mailbox the library holds for the acting account,
+     found as a push finds it (INT-MAIL-001), never one a request names; where the
+     server holds none, the call fails as a failed call does, and reconciliation reports
+     the drift (INT-MAIL-007). `IMailServer`'s three app-password calls take that
+     mailbox in place of the person's token. The rest of INT-MAIL-010 stands: the gate
+     and its second ask, the step-ups, the notice, the audit, the secret shown once and
+     nothing stored. The person's token was no barrier: the library issued it in process
+     from any session, and the management key already creates and destroys the accounts.
+
+   - **No token for the mail server.** The library's in-process token, the
+     `MailServerClient` declaration and its startup check are removed. A client a
+     deployment registers for the mail server is an ordinary registered client.
+
+   - **The mail server's check in 1.0's terms (INT-MAIL-004).** Its directory names the
+     provider address as `issuerUrl`, the clients whose tokens it accepts in
+     `acceptedAudiences`, `skipAudienceValidation` off, `opaqueTokenValidation` `none`,
+     `unscopedTokens` `reject`, and `email` as `claimUsername`. It accepts a token whose
+     `aud` is such a client and which carries an interoperable scope, and refuses one
+     issued to any other client; it would also accept an `aud` naming one of its own
+     resource identifiers, which the provider never issues (AUTH-OIDC-006).
+
+   - **A client receives the scopes it is registered with.** Besides `openid`, `email`,
+     `profile` and `offline_access`, the provider issues a client any scope it is
+     registered with (`register-client --scopes`) where it asks for it, and refuses a
+     scope the client is not registered with as `invalid_scope`; a client registered for
+     the mail server with `urn:ietf:params:oauth:scope:mail` receives the scope the mail
+     server grants access by.
+
+   *Rejected:* `unscopedTokens` `full` (every token issued to an accepted client would
+   carry the account's management permissions); the library's client as an installed
+   application's `oauthClientId` (the mail server's own web interface signs in with that
+   identifier, and the library's client is confidential). The round decides
+   INT-MAIL-010's calls and INT-MAIL-004 criteria 1 to 3 against the pinned server so
+   configured; where it answers otherwise, the item parks again (Tier 3).
+
+2. **A loss report's link (question 2).** `loss_reports` holds the cancel token's
+   SHA-256 fingerprint, as every link token is held to be found, beside the token
+   encrypted for the notices that repeat it. A cancel by the link finds its report by
+   that fingerprint, `{id}` unread, and a token that finds none is answered as a wrong
+   token is now (**404** `auth.credential.notfound`). The column is not null and unique,
+   and the migration that adds it gives each row already present a random value no token
+   hashes to: no release exists, so only a development database holds such a row
+   (OPS-MIG-005 criterion 3), and its report is cancelled from a session. *Rejected:* a
+   nullable column filled at the next notice (a column of the first release carries its
+   final constraint); `{id}` kept for the older reports (two ways to find one report).
+
+3. **A challenge's browser (question 3).** Items 17 and 18 rest on a binding no
+   challenge had.
+
+   - A sign-in challenge (`POST /auth/begin`) is bound, when it is opened, to the
+     pre-authentication session the browser carries, or to none where it carries none (a
+     browser holding a live session).
+
+   - `POST /auth/link` issues its link on a challenge: the browser's latest live
+     challenge opened with that identifier on which no factor has been accepted, or,
+     where it holds none, one it opens for the identifier as `/auth/begin` does, bound
+     to the browser. Its answer is unchanged. The link names its challenge, and the
+     challenge lives at least as long as the link, its end moved to the link's where it
+     would come first.
+
+   - A press presenting the link's token completes the link's challenge only where the
+     request carries the pre-authentication cookie that challenge is bound to; anywhere
+     else, or where it is bound to none, it answers the code to type, which is presented
+     at `/auth/factor` on that challenge.
+
+   - `POST /auth/device/resend` judges its challenge's binding as D-224 item 18 states.
+
+   This unparks items 17 and 18, and item 2's resend clause (AUTH-FACT-016 criterion 9).
+
+4. **The pending authorization after sign-in (question 8).** The rotation that ends the
+   pre-authentication session at a completed sign-in (BFF-CSRF-005a, AUTH-SESS-006)
+   carries the browser's pending authorization over to the session record it
+   establishes, in the same transaction. The continuation finds it on the session the
+   browser then carries and spends it; `continueTo` and `GET /auth/session` read it
+   there. Its lifetime still runs from its creation (`oidc.continuation.lifetime`), and
+   the session's end ends it. *Rejected:* the pre-authentication session kept beside the
+   new session (AUTH-SESS-006 ends it, and one browser would hold two bindings).
+
+5. **The restore's cookie (question 9).** Stage 5 clears a cookie that no longer
+   resolves, so the 401 that reports an idle expiry took away the cookie the restore
+   needs. Where the session a cookie names ended for inactivity and the restore admits
+   it (its answer's `details.reauthenticate` is `single-factor`: inside the absolute
+   window, under a policy requiring AAL2, not a break-glass session), stage 5 now keeps
+   the cookie and records the ended session for `POST /auth/restore/begin` and
+   `POST /auth/restore`, which alone read it. Every other request goes on as one that
+   carried no session, so stage 8 answers a route that requires one **401**
+   `auth.session.expired` with `details.reauthenticate` `single-factor`, as now. Once
+   the restore no longer admits it, stage 5 clears it as before. Stage 5 needs no route
+   for this, so it holds where the host's routing comes after the profile (D-210). The
+   session and the pre-authentication session share one CSRF cookie, and a browser
+   without a live session is issued a pre-authentication session on first contact
+   (BFF-CSRF-005a), whose token then takes the cookie: the two restore routes are
+   carried by the expired session's cookie and the CSRF token bound to the browser's
+   pre-authentication session, which the frontend reads from the cookie again after the
+   expiry's answer (FE-API-004). A completed restore ends that pre-authentication
+   session as a completed sign-in does, and sets the restored session's cookie and
+   token. *Rejected:* keeping the session's CSRF token by issuing no pre-authentication
+   session beside a restorable cookie (the browser could then begin no sign-in,
+   registration or recovery until the cookie ended).
+
+**Propagated to:** `02` AUTH-OIDC-001, AUTH-OIDC-006, AUTH-SESS-005, AUTH-SESS-012; `05`
+INT-MAIL-001, INT-MAIL-004, INT-MAIL-010; `07` LIB-HOST-001; `09` `POST /auth/begin`,
+`POST /auth/link`, `POST /auth/restore/begin` and `POST /auth/restore`,
+`POST /recovery/report-loss/{id}/cancel`, the app-password routes, section 9; `10`
+`model.startup.declarationmissing`; `13` R-A02; `17` BFF-CSRF-005a, BFF-STEP-001,
+BFF-ORDER-001 (stage 5); `18` FE-API-004; `20` REG-MAIL-002; `implementation-plan.md`
+(round H3's row).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -19277,6 +19422,7 @@ section 4).
 | Round P questions 12 and 13: where staff's mechanism and reasons are recorded | D-223 |
 | Round H3: what a host's own frontends meet | D-224 |
 | The library sends nothing, and keeps to its own work | D-225 |
+| Round H3 questions 1, 2, 3, 8 and 9: the mail server's tokens, a loss report's link, a challenge's browser, and what a sign-in and a restore keep | D-226 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

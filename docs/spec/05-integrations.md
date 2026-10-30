@@ -215,10 +215,10 @@ others.
 |---|---|
 | Authentication | Stalwart configured as an OIDC client against our provider |
 | Provisioning | Account lifecycle pushed as **JMAP objects** through the JMAP management API; the CLI is a client of the same API and is not a second contract |
-| App passwords | **Stored by Stalwart**, never by this system; managed for the person through the library's first-party OIDC client (INT-MAIL-010) |
+| App passwords | **Stored by Stalwart**, never by this system; managed for the person by the library with the mail server's management key (INT-MAIL-010, D-226) |
 | Storage | Stalwart's own database, not co-located with business data |
 
-*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187, D-188, D-224*
+*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187, D-188, D-224, D-226*
 
 **Restated** (D-146): every management operation happens through JMAP objects, so
 "management API" means JMAP and nothing else. The four concerns are unchanged. Should the edition change,
@@ -263,8 +263,9 @@ account the mailbox identifier its `description` carries (none where it carries 
 its address (none where `emailAddress` is absent, is not text, or does not read as an
 email address, D-187) and whether it is enabled; an account is listed enabled exactly
 where `authenticate` is not disabled and, under `Replace`, is enabled. App passwords are
-`AppPassword` objects (`x:AppPassword/get`, `x:AppPassword/set`) called with the
-person's token (INT-MAIL-010) and never with the management key.
+`AppPassword` objects (`x:AppPassword/query`, `x:AppPassword/get`, `x:AppPassword/set`),
+called with the management key on the person's account, which the request-level
+`accountId` names (INT-MAIL-010, D-226).
 
 **Acceptance criteria**
 1. No code reads Stalwart's database.
@@ -321,18 +322,28 @@ through Stalwart's API, never its database.
 ### 2.2 Authentication
 
 **INT-MAIL-004** — Our OIDC provider SHALL expose discovery, JWKS and userinfo for
-Stalwart's use. Token introspection SHALL NOT be provided. The mail server SHALL be
-configured to require its own client identifier as the audience of every access token
-it accepts (Stalwart `requireAudience`), reading the issuer and keys from discovery.
+Stalwart's use. Token introspection SHALL NOT be provided. The mail server SHALL accept
+an access token only where its `aud` names a client the deployment registers for the
+mail server, reading the issuer and keys from discovery: in Stalwart 1.0, an `Oidc`
+directory with the provider address as `issuerUrl`, those clients in
+`acceptedAudiences`, `skipAudienceValidation` off, `opaqueTokenValidation` `none`,
+`unscopedTokens` `reject` and `email` as `claimUsername` (D-226).
 
-*Source: D-005, D-041, D-164, D-166, D-224*
+*Source: D-005, D-041, D-164, D-166, D-224, D-226*
 
-Stalwart validates offline via JWKS and falls back to userinfo; it does not use
-introspection with client credentials. The `aud` check is the mail server's own: the
-library's adapter presents tokens and verifies none (AUTH-OIDC-006).
+Stalwart validates offline via JWKS and reads userinfo for a claim the token lacks; it
+does not use introspection with client credentials. The `aud` check is the mail server's
+own: the library presents no token to it (INT-MAIL-010). A token is accepted only where
+it also carries an interoperable scope, such as `urn:ietf:params:oauth:scope:mail`,
+which a client registered with it receives (AUTH-OIDC-001); one carrying none is refused
+under `unscopedTokens` `reject`, and `full` is never set, since it would give every
+accepted token the account's management permissions. Stalwart also accepts an `aud`
+naming one of its own resource identifiers, which the provider never issues
+(AUTH-OIDC-006).
 
 **Acceptance criteria**
-1. Stalwart authenticates successfully with introspection absent.
+1. Stalwart accepts an access token issued to a client it is configured to accept and
+   carrying `urn:ietf:params:oauth:scope:mail`, with introspection absent.
 2. The discovery document does not advertise an introspection endpoint.
 3. An access token issued to another client is refused by the mail server.
 4. Criteria 1 to 3 are decided against a real server of the release INT-MAIL-001 names,
@@ -595,18 +606,20 @@ hosting mailboxes is INT-MAIL-001's.*
 ---
 
 **INT-MAIL-010** — App passwords SHALL be created, listed and revoked through the mail
-server's **own app-password call**, made by the library with a token obtained for the
-signed-in person through the library's **first-party OIDC client** for the mail server
-(AUTH-OIDC-001, REG-MAIL-002). The library SHALL store **nothing** about an app
-password: the generated secret is shown once and the server holds the credential.
+server's **own app-password call**, made by the library with the mail server's
+**management key** on the signed-in person's account (REG-MAIL-002). The library SHALL
+store **nothing** about an app password: the generated secret is shown once and the
+server holds the credential.
 
-The token SHALL be issued in process, by the provider's own token generation, from the
-signed-in person's session record to the client the deployment declares as the mail
-server's (`MailServerClient`, LIB-HOST-001); it SHALL name that client as `aud`
-(AUTH-OIDC-006), last no longer than `oidc.accesstoken.lifetime` or the session
-record, and SHALL NOT be stored.
+The call SHALL act on the server account that carries the identifier of the mailbox the
+library holds for the acting account, found as a push finds it (INT-MAIL-001), and on no
+account a request names; in Stalwart 1.0 the request-level `accountId` (RFC 8620) names
+that account, and the management key's role holds `impersonate`, `sysAppPasswordQuery`,
+`sysAppPasswordGet`, `sysAppPasswordCreate` and `sysAppPasswordDestroy`. Where the
+server holds no such account, the call fails as a failed call does, and reconciliation
+reports the drift (INT-MAIL-007). The library issues no token for the call (D-226).
 
-*Source: D-146, D-164, D-166, D-179, D-186; amends D-006*
+*Source: D-146, D-164, D-166, D-179, D-186, D-226; amends D-006*
 
 The mail server generates the secret and accepts no supplied or pre-hashed value, so the
 library can neither choose nor retain one. What the library adds is the gate (step-up
@@ -629,8 +642,9 @@ answered, the failure is logged, and the password, whose secret nobody holds, st
 listed for its holder to revoke. `09` section 6 gives every answer.
 
 **Acceptance criteria**
-1. Creating an app password results in one call to the mail server's app-password
-   call carrying the person's token, and no row in the library's schema.
+1. Creating an app password results in one call to the mail server's app-password call,
+   presenting the management key and naming the person's account, and no row in the
+   library's schema.
 2. Listing returns what the server holds (label, created, expiry where set), never a
    cached copy.
 3. Revocation removes the credential at the server; a mail client using it fails on

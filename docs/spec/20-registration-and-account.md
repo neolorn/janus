@@ -1249,24 +1249,24 @@ security notices reach the personal address as well.
 ---
 
 **REG-MAIL-002** — Mail app passwords SHALL be created, listed and revoked **from the
-account application through the library**: the library holds a first-party OIDC client
-for the mail server (AUTH-OIDC-001), obtains a token for the signed-in person, makes the
-server's app-password call, shows the generated secret **once** and stores nothing.
-Creation and revocation SHALL be step-up actions, notified to the security-notice set
-and audited. Each app password SHALL carry a label and MAY carry an expiry. The three
-operations SHALL be present only where the account holds a mailbox the mail server is
-told to enable (INT-MAIL-006); otherwise, and where the deployment registers no mail
-server, each SHALL answer `identity.mailbox.notfound`. A mailbox is owed `enabled` while
-its holder is `active` or `restricted`: a restriction the person asked for does not cut
-them off from their mail or end their app passwords. A `restricted` account SHALL list
-and revoke its app passwords and SHALL be refused creation with `authz.restricted`
-(IDN-ACCT-007). A creation from the break-glass session or a session another application
-opened from it (BFF-SESS-006) SHALL be refused with `authz.denied` at the operation's
-gate step, before the mailbox is looked up (OPS-BOOT-002). A creation the gate refuses
-when it is asked again after the server's call is revoked at the server, its secret
-never shown, and is neither notified nor audited as a creation or a revocation; where
-that revocation fails, the password, whose secret nobody holds, stays listed for its
-holder to revoke (INT-MAIL-010, D-186).
+account application through the library**: the library makes the server's app-password
+call with the mail server's management key on the person's account (INT-MAIL-010,
+D-226), shows the generated secret **once** and stores nothing. Creation and revocation
+SHALL be step-up actions, notified to the security-notice set and audited. Each app
+password SHALL carry a label and MAY carry an expiry. The three operations SHALL be
+present only where the account holds a mailbox the mail server is told to enable
+(INT-MAIL-006); otherwise, and where the deployment registers no mail server, each SHALL
+answer `identity.mailbox.notfound`. A mailbox is owed `enabled` while its holder is
+`active` or `restricted`: a restriction the person asked for does not cut them off from
+their mail or end their app passwords. A `restricted` account SHALL list and revoke its
+app passwords and SHALL be refused creation with `authz.restricted` (IDN-ACCT-007). A
+creation from the break-glass session or a session another application opened from it
+(BFF-SESS-006) SHALL be refused with `authz.denied` at the operation's gate step, before
+the mailbox is looked up (OPS-BOOT-002). A creation the gate refuses when it is asked
+again after the server's call is revoked at the server, its secret never shown, and is
+neither notified nor audited as a creation or a revocation; where that revocation fails,
+the password, whose secret nobody holds, stays listed for its holder to revoke
+(INT-MAIL-010, D-186).
 
 *Source: D-146, D-166, D-179, D-186; amends D-006 (managed through the library, stored
 by the mail server)*

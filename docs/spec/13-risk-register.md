@@ -53,13 +53,13 @@ for web sign-in or step-up.
 authentication with third-party providers. Outside our control.
 
 **Management (D-146).** App passwords are created, listed and revoked from the account
-application through the library's first-party OIDC client for the mail server
-(REG-MAIL-002): creation and revocation are step-up actions, notified to the
-security-notice set and audited; the secret is shown once and the library stores
-nothing. An app password dies with the mailbox: when the membership ends the mailbox is
-disabled and every app password with it (REG-MAIL-003). The credential is still the
-weakest in the system, but it is now visible to its owner, revocable in one place and
-bounded by the membership.
+application through the library, which calls the mail server with its management key on
+the person's account (REG-MAIL-002, D-226): creation and revocation are step-up actions,
+notified to the security-notice set and audited; the secret is shown once and the
+library stores nothing. An app password dies with the mailbox: when the membership ends
+the mailbox is disabled and every app password with it (REG-MAIL-003). The credential is
+still the weakest in the system, but it is now visible to its owner, revocable in one
+place and bounded by the membership.
 
 ---
 

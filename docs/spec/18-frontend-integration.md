@@ -108,12 +108,14 @@ acts on the value as sent (AUTH-SESS-005 AC3a, BFF-STEP-001, D-139): `single-fac
 returned only for an idle expiry inside the absolute window of a principal whose policy
 requires `aal2` (staff), and one eligible factor (passkey or password) restores the
 session, through `POST /auth/restore/begin` and `POST /auth/restore` on the application
-where it expired (`09`, D-224); every other expiry, including an idle expiry under the
-system policy (every customer session), returns `full` and needs full authentication.
-The frontend never infers the value from the kind of expiry. Either way the interrupted
-request completes afterwards with its data intact.
+where it expired (`09`, D-224), the frontend reading the CSRF token from its cookie
+again after the expiry's answer, which set a new one (BFF-STEP-001, D-226); every other
+expiry, including an idle expiry under the system policy (every customer session),
+returns `full` and needs full authentication. The frontend never infers the value from
+the kind of expiry. Either way the interrupted request completes afterwards with its
+data intact.
 
-*Source: D-148; D-147; AUTH-SESS-005, BFF-STEP-001, D-139, D-224*
+*Source: D-148; D-147; AUTH-SESS-005, BFF-STEP-001, D-139, D-224, D-226*
 
 **The prompt SHALL offer every combination that reaches the gate**: exactly the
 `details.options` the step-up response lists (`09` `/auth/step-up`): for a customer who

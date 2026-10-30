@@ -470,20 +470,26 @@ lives `link.magic.lifetime`.
 the send, `auth.restriction.exceeded` with `retryAt`, identical for a registered and an
 unregistered identifier (AUTH-ABUSE-002, AUTH-ABUSE-004)
 
-*Source: D-146; AUTH-FACT-002, AUTH-FACT-003, AUTH-ABUSE-003, AUTH-ABUSE-004, D-162, D-166, D-183*
+*Source: D-146; AUTH-FACT-002, AUTH-FACT-003, AUTH-ABUSE-003, AUTH-ABUSE-004, D-162, D-166,
+D-183, D-224, D-226*
 
 The link completes **only in the browser that requested it and only on a press**
-(REG-SESS-003): the landing route (API-LAND-001) calls `POST /auth/factor` with
-`factor: "emailLink"` or `"phoneLink"` and the link token, and the server accepts it
-only with the requesting browser's pre-authentication cookie. The call carries no
+(REG-SESS-003). It is issued on a challenge (D-226): the browser's latest live challenge
+opened with that identifier on which no factor has been accepted, or, where the browser
+holds none, one opened for the identifier as `/auth/begin` opens one, bound to the
+browser; the challenge lives at least as long as its link. The landing route
+(API-LAND-001) calls `POST /auth/factor` with `factor: "emailLink"` or `"phoneLink"` and
+the link token, and the server completes the link's challenge only where the request
+carries the pre-authentication cookie that challenge is bound to. The call carries no
 `challengeId`: the token names its pending link and the challenge it belongs to, and a
-`challengeId` sent beside it is not read (D-224). Opened anywhere else,
-the same call without that cookie returns the code to type where the sign-in began,
-and signs nothing in. That code is an authentication code, not a verification code: it
-lives as long as its link (`link.magic.lifetime`) and is capped by
-`code.signin.attempts` wrong tries, after which it is refused `auth.code.expired`, a
-correct one included (AUTH-FACT-004). A session established by a link alone records AAL1 and a link is
-never a second step (AUTH-FACT-003).
+`challengeId` sent beside it is not read (D-224). Opened anywhere else, or where the
+challenge is bound to none, the same call returns the code to type where the sign-in
+began, presented at `/auth/factor` on that challenge, and signs nothing in. That code is
+an authentication code, not a verification code: it lives as long as its link
+(`link.magic.lifetime`) and is capped by `code.signin.attempts` wrong tries, after which
+it is refused `auth.code.expired`, a correct one included (AUTH-FACT-004). A session
+established by a link alone records AAL1 and a link is never a second step
+(AUTH-FACT-003).
 
 ---
 
@@ -555,7 +561,7 @@ the identifier resolves to nothing.
 }
 ```
 
-*Source: AUTH-FACT-002, AUTH-ABUSE-003, D-076, D-146*
+*Source: AUTH-FACT-002, AUTH-ABUSE-003, D-076, D-146, D-226*
 
 Every verified identifier of an account signs in, and a non-primary one behaves
 exactly as the primary (REG-IDENT-003). While `identifiers.username.enabled` is off a
@@ -571,6 +577,12 @@ allow-list, so issuing one reveals nothing about whether credentials exist.
 first factor succeeds. Returning "this account has no second factor" before any
 credential is presented hands an attacker exactly the targeting information they
 want.
+
+**The browser's challenge (D-226).** The challenge is bound, when it is opened, to the
+pre-authentication session the browser carries (BFF-CSRF-005a), or to none where it
+carries none, as a browser holding a live session does. A sign-in link's press and a
+fresh device code are judged against that binding (`POST /auth/link`,
+`POST /auth/device/resend`).
 
 ---
 
@@ -793,8 +805,9 @@ the send; `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stan
 *Source: AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-001, AUTH-ABUSE-004, D-224*
 
 The challenge is answered only with the pre-authentication cookie it is bound to
-(BFF-CSRF-005a). A resend is a send: it counts against `email.destination` as the first
-code did, and each code lives `code.verification.lifetime` from its own send.
+(BFF-CSRF-005a), the one it was opened with (`POST /auth/begin`, D-226). A resend is a
+send: it counts against `email.destination` as the first code did, and each code lives
+`code.verification.lifetime` from its own send.
 
 ---
 
@@ -913,9 +926,11 @@ the session record itself stores properties only (AUTH-SESS-002).
 AUTH-SESS-005's single-factor restore, on every application: a session that expired for
 inactivity inside its absolute window, under a policy requiring AAL2, is restored in
 place by one passkey or the password, and the frontend retries the request the expiry
-interrupted (FE-API-004, D-224). Both routes are carried by the expired session's cookie
-and the CSRF token bound to it, which the browser profile admits on these two routes
-alone (BFF-STEP-001).
+interrupted (FE-API-004, D-224). Both routes are carried by the expired session's
+cookie, which the browser keeps while the restore admits it and which these two routes
+alone read (`17` BFF-ORDER-001 stage 5), and by the CSRF token bound to the browser's
+pre-authentication session, the one the expiry's answer left in the CSRF cookie
+(BFF-STEP-001, D-226).
 
 ```json
 { }                                                       // begin
@@ -937,12 +952,14 @@ than `passkey` or `password`, or one `factors` did not name, is
 `auth.factor.notpermitted` before it is verified.
 **429**: `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands.
 
-*Source: AUTH-SESS-005, BFF-STEP-001, FE-API-004, D-139, D-224*
+*Source: AUTH-SESS-005, BFF-STEP-001, FE-API-004, D-139, D-224, D-226*
 
 A passkey's assertion must name the session's account in its user handle and be one of
 the passkeys `begin` named, or it is `auth.factor.rejected`. The restore presents one
 factor bound to the session secret the browser still holds (NIST SP 800-63B-4 section
-2.2.3); it raises no assurance property beyond what that factor proves.
+2.2.3); it raises no assurance property beyond what that factor proves. A completed
+restore ends the browser's pre-authentication session as a completed sign-in does, and
+sets the restored session's cookie and CSRF token (D-226).
 
 ---
 
@@ -1241,13 +1258,16 @@ and suspends it at once; or cancels a pending report.
 { "credentialId": "..." }
 ```
 
-**Accepts a session that has presented one usable factor, or one unused recovery
-code** — no step-up (AUTH-RECOV-007). The request exists for someone who has lost the
-factor a gate would ask for and cannot hold a complete session. Cancellation accepts the
-same, any full session of the account, or the link carried in every
-`credential-suspended` notification (AUTH-RECOV-007). Cancelled by the link, the
-request carries `{ "token": "..." }`, the token finds its report and `{id}` is not
-read, the landing sending the nil UUID (D-224).
+**Accepts a session that has presented one usable factor, or one unused recovery code**
+— no step-up (AUTH-RECOV-007). The request exists for someone who has lost the factor a
+gate would ask for and cannot hold a complete session. Cancellation accepts the same,
+any full session of the account, or the link carried in every `credential-suspended`
+notification (AUTH-RECOV-007). Cancelled by the link, the request carries
+`{ "token": "..." }`, the token finds its report by its fingerprint and `{id}` is not
+read, the landing sending the nil UUID (D-224, D-226); a token that finds none is
+answered **404** `auth.credential.notfound`, as a wrong token is. A report already open
+when the fingerprint was added holds a random one no token matches, and is cancelled
+from a session (OPS-MIG-005, D-226).
 
 **202** — accepted; the authenticator is `suspended`; body carries `invalidatesAt`
 **404**: `auth.credential.notfound` for an authenticator invalidated, or not the
@@ -1966,20 +1986,20 @@ is `POST /auth/logout` (AUTH-SESS-008).
 
 ### `GET /account/mail/apppasswords` · `POST /account/mail/apppasswords` · `DELETE /account/mail/apppasswords/{id}`
 
-Mail **app passwords**, managed through the library's first-party OIDC client for the
-mail server (REG-MAIL-002, INT-MAIL-010). The library obtains a token for the signed-in
-person, makes the server's app-password call and stores **nothing**. Present only where
-the account is `active` or `restricted` and holds a mailbox the mail server is told to
-enable (INT-MAIL-006); otherwise, and where the deployment registers no mail server,
-each answers **404** `identity.mailbox.notfound`. A `restricted` account lists and
-revokes its app passwords and creates none (IDN-ACCT-007). A creation from the
-break-glass session, or from a session another application opened from it
-(BFF-SESS-006), is refused **403** `authz.denied` at the operation's gate step, after
-the body is read and before the label is judged and the mailbox is looked up
-(OPS-BOOT-002, CONV-DESIGN-002): a creation without a `label` is **400** from any
-session, and an unusable label is **403** from either session and **422** from any
-other. Listing and revocation from either session answer **404**
-`identity.mailbox.notfound`, the reserved account holding no mailbox.
+Mail **app passwords**, managed by the library with the mail server's management key on
+the signed-in person's account (REG-MAIL-002, INT-MAIL-010, D-226). The library makes
+the server's app-password call and stores **nothing**. Present only where the account is
+`active` or `restricted` and holds a mailbox the mail server is told to enable
+(INT-MAIL-006); otherwise, and where the deployment registers no mail server, each
+answers **404** `identity.mailbox.notfound`. A `restricted` account lists and revokes
+its app passwords and creates none (IDN-ACCT-007). A creation from the break-glass
+session, or from a session another application opened from it (BFF-SESS-006), is refused
+**403** `authz.denied` at the operation's gate step, after the body is read and before
+the label is judged and the mailbox is looked up (OPS-BOOT-002, CONV-DESIGN-002): a
+creation without a `label` is **400** from any session, and an unusable label is **403**
+from either session and **422** from any other. Listing and revocation from either
+session answer **404** `identity.mailbox.notfound`, the reserved account holding no
+mailbox.
 
 ```json
 { "label": "...", "expiresAt": "..." }        // POST; expiresAt optional
@@ -2003,7 +2023,7 @@ session or a session opened from it (OPS-BOOT-002)
 no app password of the person under the identifier
 **422**: `auth.credential.labelinvalid`
 
-*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166, D-179, D-183, D-186, D-187*
+*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166, D-179, D-183, D-186, D-187, D-226*
 
 Creation and revocation are notified to the security-notice set and audited; no secret
 or hash appears in the library's database, logs or audit records. Ending a membership
@@ -3079,8 +3099,11 @@ not, because the library never renders user-facing text (D-054).
 session and is not silent is kept, its pushed request spent, as the browser's pending
 authorization, bound to its pre-authentication session (one a browser, a later one
 replacing it) for `oidc.continuation.lifetime`, and the browser goes to the sign-in
-address. The answer that completes the sign-in carries `continueTo`, the continuation's
-absolute address, and the authentication application sends the browser there.
+address. The rotation at the completed sign-in carries it over to the session it
+establishes (AUTH-SESS-006, D-226). The answer that completes the sign-in carries
+`continueTo`, the continuation's absolute address, and the authentication application
+sends the browser there; the continuation finds the pending authorization on the session
+the browser carries.
 
 **The provider's address** (D-224). Every route of this section is served only under the
 provider address the host declares (LIB-HOST-001): the issuer is that address exactly,
@@ -3089,14 +3112,14 @@ anywhere else is not the provider's and reaches the host's routing.
 
 *Source: AUTH-OIDC-001, AUTH-KEY-001, D-041, D-166, D-181, D-224*
 
-**Two kinds of client share the registry.** Protocol clients (Stalwart, future native
-clients) receive access and refresh tokens (AUTH-OIDC-003, AUTH-OIDC-004). **Each
-browser application's BFF is a confidential client** that uses the code flow once to
-establish its per-app session and receives **no refresh token** (AUTH-SESS-012,
-BFF-SESS-006, D-104). The kind is recorded on the client and determines what the
-token endpoint will issue. Every client carries one registered `redirect_uri`, an
-absolute `https` address (or `http` on a loopback IP literal), matched exactly at the
-push (AUTH-OIDC-006, API-REDIR-001 AC3).
+**Two kinds of client share the registry.** Protocol clients (a client a deployment
+registers for the mail server, INT-MAIL-004; future native clients) receive access and
+refresh tokens (AUTH-OIDC-003, AUTH-OIDC-004). **Each browser application's BFF is a
+confidential client** that uses the code flow once to establish its per-app session and
+receives **no refresh token** (AUTH-SESS-012, BFF-SESS-006, D-104). The kind is recorded
+on the client and determines what the token endpoint will issue. Every client carries
+one registered `redirect_uri`, an absolute `https` address (or `http` on a loopback IP
+literal), matched exactly at the push (AUTH-OIDC-006, API-REDIR-001 AC3).
 
 Refresh tokens rotate on use; reuse of a consumed token revokes the session family
 (AUTH-OIDC-003).

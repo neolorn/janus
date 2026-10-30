@@ -1369,13 +1369,17 @@ identifier in `sid` is a fault at the sign-on, never a refusal (BFF-SESS-006, D-
 session is kept, its pushed request spent, as the browser's **pending authorization**:
 its validated parameters, bound to the browser's pre-authentication session, one a
 browser and a later one replacing it, for `oidc.continuation.lifetime` (`10` section
-4.9, default 30 minutes). The browser goes to the sign-in address. The answer that
-completes the sign-in carries `continueTo`, the absolute address of
-`GET /oidc/authorize/continue` under the provider address, which issues the code as the
-authorization would have with the session now live, and spends the pending
-authorization; with none pending it sends the browser to the origin of the registered
-address of `redirect.defaultclient`. No destination crosses in the browser's hands
-(API-REDIR-001), and the pushed request keeps its 60 seconds (AUTH-OIDC-006).
+4.9, default 30 minutes). The browser goes to the sign-in address. The rotation that
+ends the pre-authentication session at the completed sign-in (AUTH-SESS-006) carries the
+pending authorization over to the session record it establishes, in the same
+transaction, its lifetime still running from its creation; the session's end ends it
+(D-226). The answer that completes the sign-in carries `continueTo`, the absolute
+address of `GET /oidc/authorize/continue` under the provider address, which finds the
+pending authorization on the session the browser carries, issues the code as the
+authorization would have with the session now live, and spends it; with none pending it
+sends the browser to the origin of the registered address of `redirect.defaultclient`.
+No destination crosses in the browser's hands (API-REDIR-001), and the pushed request
+keeps its 60 seconds (AUTH-OIDC-006).
 
 **What this reuses rather than invents:** the client registry (AUTH-OIDC-001,
 API-REDIR-002), exact-match `redirect_uri` (AUTH-OIDC-006, D-198), single-use
@@ -1574,7 +1578,9 @@ trusted device, if any, still applies). The frontend reauthenticates **in place*
 whichever application the expiry met, through `POST /auth/restore/begin` and
 `POST /auth/restore` (`09`, D-224), and retries the interrupted request with its data
 intact (FE-API-004); an expiry the restore admits never lands the person on a sign-in
-page with their work gone.
+page with their work gone. The browser keeps the expired session's cookie while the
+restore admits it, and the two restore routes alone read it (`17` BFF-ORDER-001 stage 5,
+D-226).
 
 Runtime-configurable. Ceilings: `session.aal2.absolute` ≤ 24 hours,
 `session.aal2.inactivity` ≤ 12 hours, `session.default.inactivity` ≤ 365 days,
@@ -3016,10 +3022,10 @@ friction without proportionate benefit.
 first-party, manually registered clients.
 
 **In scope:** authorization code with PKCE, discovery document, JWKS, userinfo, a
-manually managed client registry. Where a mail server is integrated, the registry SHALL
-include a **first-party client for the mail server**, through which the library obtains
-a token for the signed-in person to manage mail app passwords (REG-MAIL-002); the
-library stores no app password.
+manually managed client registry. Where a mail server validates the provider's tokens
+(INT-MAIL-004), a client the deployment registers for it is an ordinary registered
+client; the library manages mail app passwords with the mail server's management key,
+obtains no token for it and stores no app password (REG-MAIL-002, INT-MAIL-010, D-226).
 
 **Out of scope:** consent screens, dynamic client registration, public client
 self-service, developer portal, **token introspection**.
@@ -3029,13 +3035,15 @@ self-service, developer portal, **token introspection**.
 `--kind protocol|browser-application`, `--redirect <address>` and
 `--scopes "<scope> ..."`, which prints `{"registered":"<id>"}` and is audited as
 `auth.oidc.clientregistered`; it takes no secret. The library generates each client's
-secret when the client is first registered (32 random bytes, base64url), holds it
-under the deployment's data key (AUTH-KEY-002) and rotates it with the signing keys
+secret when the client is first registered (32 random bytes, base64url), holds it under
+the deployment's data key (AUTH-KEY-002) and rotates it with the signing keys
 (AUTH-KEY-001, OPS-SEC-002); a registration that changes a client leaves its secret
-alone. A running host takes a changed destination at its next start (API-REDIR-001
-AC3).
+alone. A running host takes a changed destination at its next start (API-REDIR-001 AC3).
+Besides `openid`, `email`, `profile` and `offline_access`, a client receives each scope
+it is registered with where its request asks for it, and a request for a scope its
+client is not registered with is refused with `invalid_scope` (D-226).
 
-*Source: D-005, D-041, D-146, D-166*
+*Source: D-005, D-041, D-146, D-166, D-226*
 
 Introspection is excluded because Stalwart validates offline via JWKS and does not
 use it; an endpoint nothing calls is attack surface for no benefit.
@@ -3044,12 +3052,12 @@ use it; an endpoint nothing calls is attack surface for no benefit.
 1. The discovery document is served and is valid.
 2. A client not in the registry cannot obtain a token.
 3. No dynamic registration endpoint exists.
-4. Where a mail server is integrated, its client is registered with the
-   `register-client` command as the deployment is stood up and declared to the library
-   as `MailServerClient` (LIB-HOST-001); its secret is generated by the library and
-   presented by no party; the token the library issues to it in process for the
-   signed-in person is scoped to that person and names that client as `aud`
-   (AUTH-OIDC-006), and no app-password secret is persisted by the library.
+4. Where a mail server is integrated, the library issues no token for it and persists no
+   app-password secret: the app-password calls present the mail server's management key
+   (INT-MAIL-010, D-226).
+5. A client registered with a scope beyond the four receives it where its request asks
+   for it, and a request for a scope its client is not registered with is refused with
+   `invalid_scope` (D-226).
 
 ---
 
@@ -3178,9 +3186,9 @@ it to its audience, which convention alone does not.
    `request_uri`.
 3. Every access token, on a code and on a refresh, carries `typ: at+jwt` and the seven
    claims, with `aud` the client it was issued to; a verifier configured as the mail
-   server is (issuer and keys from discovery, type `at+jwt`, audience the mail server's
-   client identifier, lifetime) takes the mail server's token and refuses one issued
-   to any other client.
+   server is (issuer and keys from discovery, type `at+jwt`, audience the identifier of
+   a client registered for the mail server, lifetime) takes that client's token and
+   refuses one issued to any other client (D-226).
 4. Discovery advertises `pushed_authorization_request_endpoint` and
    `require_pushed_authorization_requests: true`.
 
