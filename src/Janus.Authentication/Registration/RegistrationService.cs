@@ -2189,13 +2189,14 @@ internal sealed class RegistrationService(
     /// <param name="session">The registration session the browser carries.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The policy, or nothing where the session is no longer live.
+    /// The policy, and whether it was read as an invitation's organization's or as the
+    /// system's, or nothing where the session is no longer live.
     /// </returns>
-    public async ValueTask<Result<Policy>?> GoverningAsync(
+    public async ValueTask<(Result<Policy> Policy, bool Invited)?> GoverningAsync(
         RegistrationSessionId session,
         CancellationToken cancellationToken) =>
         await LiveAsync(session, cancellationToken).ConfigureAwait(false) is RegistrationSession live
-            ? await PolicyAsync(live, cancellationToken).ConfigureAwait(false)
+            ? (await PolicyAsync(live, cancellationToken).ConfigureAwait(false), live.Invitation is not null)
             : null;
 
     private async ValueTask<RegistrationSession?> LiveAsync(

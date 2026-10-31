@@ -3,12 +3,16 @@ using System.Collections.Frozen;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Invitations;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
+using Janus.Hosting.Configuration;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Configuration;
@@ -194,5 +198,78 @@ public sealed class FrontendSettingsTests : IAsyncDisposable
         Assert.Equal(
             "aal1",
             elsewhere.Json().GetProperty("policy").GetProperty("requiredAssurance").GetString());
+    }
+
+    /// <summary>
+    /// REG-INV-001, AUTH-PRIN-002: where the policy that governs a registration does not
+    /// read, the fault names what was read: the policy of the invitation's organization
+    /// for a registration opened at an invitation, and the key <c>policy.default</c> for
+    /// one opened without.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_001_AnUnreadablePolicyIsNamedByWhatTheRegistrationReadAsync()
+    {
+        using var randomness = RandomNumberGenerator.Create();
+        var token = OpaqueToken.Draw(randomness);
+
+        _deployment.Invitations.Held.Add(Invitation.Issued(
+            InvitationId.New(TimeProvider.System),
+            Strict,
+            SubjectId.New(randomness),
+            new InvitedIdentifiers(Email: null, Phone: null, CorporateEmail: null),
+            roles: [],
+            documents: [],
+            mailbox: null,
+            token.Fingerprint(),
+            _deployment.Clock.GetUtcNow(),
+            TimeSpan.FromDays(7)));
+
+        RequestSession invited = await RegisteringAsync(("clientId", "web"), ("invitationToken", token.Value));
+        RequestSession uninvited = await RegisteringAsync(("clientId", "web"));
+
+        _deployment.Configuration.Unread = Settings.PolicyDefault.Key;
+
+        Assert.StartsWith(
+            "The policy of the invitation's organization is unreadable",
+            await UnreadableAsync(invited),
+            StringComparison.Ordinal);
+        Assert.StartsWith(
+            "The key " + Settings.PolicyDefault.Key.ToString() + " is unreadable",
+            await UnreadableAsync(uninvited),
+            StringComparison.Ordinal);
+    }
+
+    // A browser that opened a registration, as the profile resolves what it carries.
+    private async Task<RequestSession> RegisteringAsync(params (string Name, object? Value)[] fields)
+    {
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/register");
+
+        RegistrationSessionId[] before = [.. _deployment.Registrations.All.Select(session => session.Id)];
+
+        Assert.Equal(StatusCodes.Status201Created, (await browser.SendAsync("POST", "/register", fields)).Status);
+
+        using var randomness = RandomNumberGenerator.Create();
+        var resolved = new RequestSession();
+
+        resolved.Resolved(
+            _deployment.Contacts.All.Single(contact => contact.Registration is RegistrationSessionId opened
+                && !before.Contains(opened)),
+            OpaqueToken.Draw(randomness));
+
+        return resolved;
+    }
+
+    // What the fault reading the settings says.
+    private async Task<string> UnreadableAsync(RequestSession browser)
+    {
+        await using AsyncServiceScope scope = _deployment.Scope();
+
+        return (await Assert.ThrowsAsync<InvalidOperationException>(async () => await scope.ServiceProvider
+                .GetRequiredService<FrontendSettings>()
+                .ReadAsync(browser, CancellationToken.None)))
+            .Message;
     }
 }

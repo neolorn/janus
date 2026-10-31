@@ -80,21 +80,22 @@ internal sealed class FrontendSettings(
 
     // AUTH-PRIN-002, REG-INV-001: the account's policy where the request carries its
     // session, the policy of the organization whose invitation a registration carries,
-    // and the system policy where it carries neither.
+    // and the system policy where it carries neither. The fault names what was read.
     private async ValueTask<Policy> InForceAsync(RequestSession browser, CancellationToken cancellationToken)
     {
-        Result<Policy>? governing =
+        (Result<Policy> Policy, bool Invited)? governing =
             browser.Live is null && browser.FirstContact?.Registration is RegistrationSessionId registering
                 ? await registrations.GoverningAsync(registering, cancellationToken).ConfigureAwait(false)
                 : null;
 
         Result<Policy> resolved = browser.Live is { } live
             ? await policies.ForAsync(live.Subject, cancellationToken).ConfigureAwait(false)
-            : governing ?? await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false);
+            : governing?.Policy
+                ?? await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false);
 
         string source = browser.Live is not null
             ? "The policy of the account"
-            : governing is not null
+            : governing is { Invited: true }
                 ? "The policy of the invitation's organization"
                 : "The key " + Settings.PolicyDefault.Key.ToString();
 

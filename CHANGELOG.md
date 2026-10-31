@@ -117,8 +117,9 @@ against the public contract of LIB-API-001.
   `SucceededCertificateRenewal` are gone. The deployment watches its own clock and
   certificates.
 - A `GET /settings` whose governing policy cannot be read names that policy in its
-  fault: the account's, the invitation's organization's, or `policy.default`, rather
-  than `policy.default` whichever it was.
+  fault: the account's, the invitation's organization's for a registration opened at an
+  invitation, or `policy.default` for any other browser, a registration opened without
+  an invitation included, rather than `policy.default` whichever it was.
 - Raised alerts are handed to the host's `IAlertHandler`, which a deployment must
   register: one that registers none does not start (`model.startup.declarationmissing`,
   `details.key` `alertHandler`). `alert-dispatch` hands each alert over once its
