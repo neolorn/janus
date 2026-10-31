@@ -106,7 +106,7 @@ public sealed class AlertLedgerTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.True(await ClaimedAsync(key, raise, Noon, cancellationToken));
         Assert.False(await ClaimedAsync(key, RaisedAlertId.Of(Noon), Noon, cancellationToken));
 
-        Assert.True(await WrittenAsync(ledger => ledger.TakenAsync(key, raise, cancellationToken), cancellationToken));
+        Assert.True(await WrittenAsync(ledger => ledger.TakenAsync(key, raise, Noon, cancellationToken), cancellationToken));
 
         Assert.False(await ClaimedAsync(key, raise, Noon, cancellationToken));
         Assert.False(await WrittenAsync(ledger => ledger.ForgetAsync(key, raise, cancellationToken), cancellationToken));
@@ -132,6 +132,37 @@ public sealed class AlertLedgerTests(HostFixture host) : IClassFixture<HostFixtu
             cancellationToken));
         Assert.True(await WrittenAsync(ledger => ledger.ForgetAsync(key, raise, cancellationToken), cancellationToken));
         Assert.True(await ClaimedAsync(key, RaisedAlertId.Of(Noon), Noon, cancellationToken));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-003 AC2, OPS-ALERT-002 AC1: a hand-over the handler took is recorded as
+    /// taken though an earlier, abandoned hand-over of the same raise gave its claim back
+    /// meanwhile and another raise claimed the key since; giving either claim back after
+    /// it changes nothing, and the next raise inside the window is folded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AC2_AHandOverTakenIsRecordedWhateverAnAbandonedOneGaveBackAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string key = "breakglass-used:" + Guid.NewGuid().ToString("N");
+        var raise = RaisedAlertId.Of(Noon);
+        DateTimeOffset later = Noon + TimeSpan.FromSeconds(1);
+        var another = RaisedAlertId.Of(later);
+
+        Assert.True(await ClaimedAsync(key, raise, Noon, cancellationToken));
+        Assert.True(await ClaimedAsync(key, raise, Noon, cancellationToken));
+        Assert.True(await WrittenAsync(ledger => ledger.ForgetAsync(key, raise, cancellationToken), cancellationToken));
+        Assert.True(await ClaimedAsync(key, another, later, cancellationToken));
+
+        Assert.True(await WrittenAsync(ledger => ledger.TakenAsync(key, raise, Noon, cancellationToken), cancellationToken));
+
+        Assert.False(await WrittenAsync(ledger => ledger.ForgetAsync(key, another, cancellationToken), cancellationToken));
+        Assert.False(await WrittenAsync(ledger => ledger.ForgetAsync(key, raise, cancellationToken), cancellationToken));
+        Assert.False(await WrittenAsync(
+            ledger => ledger.TakenAsync(key, another, later, cancellationToken),
+            cancellationToken));
+        Assert.False(await ClaimedAsync(key, RaisedAlertId.Of(later), later, cancellationToken));
     }
 
     private static async Task<bool> OverlappingAsync(

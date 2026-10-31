@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Alerting;
+using Janus.Hosting.Background;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -97,8 +99,9 @@ public sealed class AlertDispatchTests : IAsyncDisposable
 
         await faulted.Raised.AddAsync(new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised), CancellationToken.None);
 
-        _ = await Assert.ThrowsAsync<InvalidOperationException>(faulted.CarryAlertsAsync);
+        Error refused = await RefusedAsync(faulted);
 
+        Assert.Equal(ErrorCodes.SystemFault, refused.Code);
         _ = Assert.Single(faulted.Raised.Waiting);
         Assert.Empty(throwing.Taken);
 
@@ -158,7 +161,7 @@ public sealed class AlertDispatchTests : IAsyncDisposable
             held.Raised.RaisedAt,
             Settings.AlertingDedupeWindow.Default,
             CancellationToken.None));
-        Assert.True(await _deployment.Alerts.TakenAsync(key, held.Id, CancellationToken.None));
+        Assert.True(await _deployment.Alerts.TakenAsync(key, held.Id, held.Raised.RaisedAt, CancellationToken.None));
 
         Assert.Equal(1, await _deployment.CarryAlertsAsync());
         Assert.Empty(_deployment.Raised.Waiting);
@@ -251,6 +254,114 @@ public sealed class AlertDispatchTests : IAsyncDisposable
         Assert.Empty(_deployment.Raised.Waiting);
     }
 
+    /// <summary>
+    /// OPS-ALERT-003 AC2, BFF-ERR-002 AC2: what the host's handler threw is kept with the
+    /// refusal as the worker keeps a job's fault, by its type and frames and never its
+    /// message, so the operator reads why the handler failed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AC2_WhatTheHandlerThrewIsKeptByItsTypeAndFramesAsync()
+    {
+        var throwing = new ThrowingOnce();
+
+        await using var faulted = new Deployment(services: services => services.AddSingleton<IAlertHandler>(throwing));
+
+        Flow.Prepare(faulted);
+
+        AlertRaised raised = Alerts.Of(AlertCondition.BreakGlassUsed, "issue", faulted.Clock.GetUtcNow());
+
+        await faulted.Raised.AddAsync(new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised), CancellationToken.None);
+
+        Error refused = await RefusedAsync(faulted);
+
+        string kept = Assert.IsType<string>(refused.Details[FaultLog.Detail].GetString());
+
+        Assert.StartsWith(typeof(InvalidOperationException).FullName!, kept, StringComparison.Ordinal);
+        Assert.Contains(nameof(ThrowingOnce), kept, StringComparison.Ordinal);
+        Assert.DoesNotContain(ThrowingOnce.Message, kept, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-003 AC2, OPS-ALERT-002 AC1: a handler that ignores its token outlasts
+    /// its pass's claim, while a second pass hands the alert over and its handler takes
+    /// it. The first hand-over's token was cancelled when the claim lapsed, and what the
+    /// first does when it ends leaves the alert recorded as taken, so the next raise of
+    /// the condition inside the window is folded into it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AC2_AHandOverAbandonedPastItsClaimLeavesTheOneThatTookItTakenAsync()
+    {
+        var hanging = new Hanging();
+
+        await using (var deployment = new Deployment(services: services => services.AddScoped(provider => new AlertDispatch(
+            provider.GetRequiredService<IRaisedAlerts>(),
+            provider.GetRequiredService<IAlertLedger>(),
+            hanging,
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            hanging.Clock))))
+        {
+            Flow.Prepare(deployment);
+
+            TimeSpan timeout = Settings.OutboxClaimTimeout.Default;
+            var late = TimeSpan.FromSeconds(1);
+
+            await AddedAsync(deployment, Alerts.Of(AlertCondition.BreakGlassUsed, "issue", hanging.Clock.GetUtcNow()));
+
+            // The first pass reaches its handler a second after it claimed the alert.
+            deployment.Work.Meanwhile = () => hanging.Clock.Advance(late);
+
+            Task<int> first = deployment.CarryAlertsAsync();
+
+            await hanging.Entered;
+
+            hanging.Clock.Advance(timeout - late);
+
+            Assert.True(hanging.First.IsCancellationRequested);
+
+            // The first hand-over ends after the second pass has handed the alert over and
+            // before its handler answers.
+            hanging.Meanwhile = async () =>
+            {
+                hanging.End();
+
+                _ = await Assert.ThrowsAsync<InvalidOperationException>(() => first);
+            };
+
+            Assert.Equal(1, await deployment.CarryAlertsAsync());
+            Assert.Empty(deployment.Raised.Waiting);
+            _ = Assert.Single(hanging.Taken);
+
+            hanging.Clock.Advance(late);
+
+            await AddedAsync(deployment, Alerts.Of(AlertCondition.BreakGlassUsed, "issue", hanging.Clock.GetUtcNow()));
+
+            Assert.Equal(1, await deployment.CarryAlertsAsync());
+            Assert.Empty(deployment.Raised.Waiting);
+            _ = Assert.Single(hanging.Taken);
+        }
+    }
+
+    // One pass run as the worker runs it, answering the refusal that stopped it.
+    private static async Task<Error> RefusedAsync(Deployment deployment)
+    {
+        await using AsyncServiceScope scope = deployment.Scope();
+
+        return (await scope.ServiceProvider
+                .GetRequiredService<AlertDispatch>()
+                .CarryAsync(
+                    AccessContext.Of(BackgroundJobs.All.Single(job => job.Name == AlertDispatch.Job).Principal),
+                    CancellationToken.None))
+            .Match(
+                carried => throw new InvalidOperationException("The pass carried " + carried + " and refused nothing."),
+                error => error);
+    }
+
+    private static async Task AddedAsync(Deployment deployment, AlertRaised raised) =>
+        await deployment.Raised.AddAsync(new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised), CancellationToken.None);
+
     private async Task RaisedAsync(AlertCondition condition, string named) =>
         await WaitingAsync(Alerts.Of(condition, named, _deployment.Clock.GetUtcNow()));
 
@@ -263,6 +374,8 @@ public sealed class AlertDispatchTests : IAsyncDisposable
     // A handler that throws at its first hand-over and takes every later one.
     private sealed class ThrowingOnce : IAlertHandler
     {
+        public const string Message = "The host's delivery faulted.";
+
         private bool _thrown;
 
         public List<AlertRaised> Taken { get; } = [];
@@ -273,12 +386,141 @@ public sealed class AlertDispatchTests : IAsyncDisposable
             {
                 _thrown = true;
 
-                throw new InvalidOperationException("The host's delivery faulted.");
+                throw new InvalidOperationException(Message);
             }
 
             Taken.Add(alert);
 
             return ValueTask.FromResult(Result.Success());
+        }
+    }
+
+    // A handler whose first hand-over ignores its token and hangs until the test ends it,
+    // then throws; every later one runs what the test set and takes the alert. It keeps
+    // a clock whose timers fire as it is moved on, so its pass's deadline is seen.
+    private sealed class Hanging : IAlertHandler
+    {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private int _handed;
+
+        public Ticking Clock { get; } = new(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+
+        public Task Entered => _entered.Task;
+
+        public CancellationToken First { get; private set; }
+
+        public Func<Task>? Meanwhile { get; set; }
+
+        public List<AlertRaised> Taken { get; } = [];
+
+        public void End() => _ended.SetResult();
+
+        public async ValueTask<Result> TakeAsync(AlertRaised alert, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _handed) == 1)
+            {
+                First = cancellationToken;
+                _entered.SetResult();
+
+                await _ended.Task;
+
+                throw new InvalidOperationException("The host's delivery hung.");
+            }
+
+            if (Meanwhile is Func<Task> meanwhile)
+            {
+                Meanwhile = null;
+
+                await meanwhile();
+            }
+
+            Taken.Add(alert);
+
+            return Result.Success();
+        }
+    }
+
+    // A clock moved on by hand whose timers fire when it reaches them.
+    private sealed class Ticking(DateTimeOffset now) : TimeProvider
+    {
+        private readonly Lock _gate = new();
+
+        private readonly List<Timer> _timers = [];
+
+        private DateTimeOffset _now = now;
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            lock (_gate)
+            {
+                return _now;
+            }
+        }
+
+        public void Advance(TimeSpan span)
+        {
+            List<Timer> due;
+
+            lock (_gate)
+            {
+                _now += span;
+                due = [.. _timers.Where(timer => timer.Due <= _now)];
+            }
+
+            foreach (Timer timer in due)
+            {
+                timer.Fire();
+            }
+        }
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new Timer(this, callback, state);
+
+            _ = timer.Change(dueTime, period);
+
+            lock (_gate)
+            {
+                _timers.Add(timer);
+            }
+
+            return timer;
+        }
+
+        private sealed class Timer(Ticking clock, TimerCallback callback, object? state) : ITimer
+        {
+            public DateTimeOffset Due { get; private set; } = DateTimeOffset.MaxValue;
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+            {
+                Due = dueTime == Timeout.InfiniteTimeSpan ? DateTimeOffset.MaxValue : clock.GetUtcNow() + dueTime;
+
+                return true;
+            }
+
+            public void Fire()
+            {
+                Due = DateTimeOffset.MaxValue;
+                callback(state);
+            }
+
+            public void Dispose()
+            {
+                lock (clock._gate)
+                {
+                    _ = clock._timers.Remove(this);
+                }
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+
+                return ValueTask.CompletedTask;
+            }
         }
     }
 

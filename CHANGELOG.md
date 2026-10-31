@@ -134,14 +134,22 @@ against the public contract of LIB-API-001.
   register: one that registers none does not start (`model.startup.declarationmissing`,
   `details.key` `alertHandler`). `alert-dispatch` hands each alert over once its
   transaction commits, one per condition per window, and again at the next pass where
-  the handler did not take it, a handler that throws or outlasts `outbox.claim.timeout`
-  included, or where the pass ended before the handler answered: the `alerts` table
-  names the raise each deduplication claim was made for and whether the handler took it,
-  and a raise is never folded into a claim of its own that was not answered. The lapse of
+  the handler did not take it, a handler that throws included, or where the pass ended
+  before the handler answered. The handler's token is cancelled when the pass's claim on
+  the alert lapses; a handler that ignores it outlasts the claim, and the hand-over is
+  then at least once. The `alerts` table names the raise each deduplication claim was
+  made for and whether the handler took it: a raise is never folded into a claim of its
+  own that was not answered, and a hand-over the handler took is recorded as taken
+  whatever an earlier, abandoned hand-over of the same raise does after it. The lapse of
   `alert-dispatch` itself is handed over straight from the worker. The library sends no
   alert itself: the `alerting.*.destinations` and `alerting.owner.*` keys,
   `alerting.sms.severitythreshold`, the alert message and the `alert-destination-changed`
   condition are gone. `Janus.Testing` ships `InMemoryAlerts`.
+- What the host's alert handler, the host's notification handler or the mail server
+  throws is kept as every other fault the library catches is, by its type and frames
+  and never its message: in the failure `alert-dispatch` reports to the worker's log,
+  and in a log entry of its own for a message or a mailbox's push, each still an attempt
+  not taken.
 - The configuration catalogue holds `oidc.continuation.lifetime` (default 30 minutes,
   ceiling 1 hour), read and written through `/admin/config` as every runtime key is.
 - The provider answers only at the provider address the host declares: its issuer is

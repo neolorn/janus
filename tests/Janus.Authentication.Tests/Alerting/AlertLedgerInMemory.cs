@@ -41,18 +41,18 @@ internal sealed class AlertLedgerInMemory : IAlertLedger
     }
 
     /// <inheritdoc/>
-    public ValueTask<bool> TakenAsync(string key, RaisedAlertId raise, CancellationToken cancellationToken)
+    public ValueTask<bool> TakenAsync(string key, RaisedAlertId raise, DateTimeOffset at, CancellationToken cancellationToken)
     {
         lock (_gate)
         {
-            if (_raised.TryGetValue(key, out Claim? standing) && standing.Raise == raise)
+            if (_raised.TryGetValue(key, out Claim? standing) && standing.Raise != raise && !standing.Unanswered)
             {
-                _raised[key] = standing with { Unanswered = false };
-
-                return ValueTask.FromResult(true);
+                return ValueTask.FromResult(false);
             }
 
-            return ValueTask.FromResult(false);
+            _raised[key] = new Claim(at, raise, Unanswered: false);
+
+            return ValueTask.FromResult(true);
         }
     }
 

@@ -29,8 +29,9 @@ namespace Janus.Hosting.Alerting;
 /// inside one window hand it over once. A condition the handler did not take, a handler
 /// that threw among them, gives the key back and its claim up, and is handed over again
 /// on a later pass; one whose pass ended before the handler answered finds the key
-/// claimed for itself and unanswered, which does not count against it. The library
-/// delivers no alert itself.
+/// claimed for itself and unanswered, which does not count against it. A hand-over the
+/// handler took is recorded as taken whatever an earlier, abandoned hand-over of the same
+/// raise does after it. The library delivers no alert itself.
 /// </remarks>
 internal sealed class AlertDispatch(
     IRaisedAlerts alerts,
@@ -106,7 +107,7 @@ internal sealed class AlertDispatch(
                 continue;
             }
 
-            Result handed = await HandOverAsync(alert, cancellationToken).ConfigureAwait(false);
+            Result handed = await HandedOverAsync(alert, claim, cancellationToken).ConfigureAwait(false);
 
             bool refused = handed.Match(() => false, _ => true);
 
@@ -165,15 +166,30 @@ internal sealed class AlertDispatch(
     {
         ArgumentNullException.ThrowIfNull(alert);
 
+        DateTimeOffset now = time.GetUtcNow();
+        Error? failure = null;
+
+        TimeSpan timeout = (await configuration
+                .ReadAsync(Settings.OutboxClaimTimeout, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
+        return failure is null
+            ? await HandedOverAsync(alert, now + timeout, cancellationToken).ConfigureAwait(false)
+            : Result.Failure(failure);
+    }
+
+    // One hand-over whose handler is abandoned when the given instant comes: the lapse
+    // of the claim it is made under.
+    private async ValueTask<Result> HandedOverAsync(
+        RaisedAlert alert,
+        DateTimeOffset until,
+        CancellationToken cancellationToken)
+    {
         Error? failure = null;
 
         TimeSpan window = (await configuration
                 .ReadAsync(Settings.AlertingDedupeWindow, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
-
-        TimeSpan timeout = (await configuration
-                .ReadAsync(Settings.OutboxClaimTimeout, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<TimeSpan>(error, ref failure));
 
@@ -202,12 +218,12 @@ internal sealed class AlertDispatch(
             return Result.Success();
         }
 
-        Result taken = await TakenAsync(alert.Raised, timeout, cancellationToken).ConfigureAwait(false);
+        Result taken = await TakenAsync(alert.Raised, until, cancellationToken).ConfigureAwait(false);
         Error? untaken = taken.Match(() => (Error?)null, error => error);
 
         _ = (await InUnitAsync(
                 async () => Result.Success(untaken is null
-                    ? await ledger.TakenAsync(key, alert.Id, cancellationToken).ConfigureAwait(false)
+                    ? await ledger.TakenAsync(key, alert.Id, alert.Raised.RaisedAt, cancellationToken).ConfigureAwait(false)
                     : await ledger.ForgetAsync(key, alert.Id, cancellationToken).ConfigureAwait(false)),
                 cancellationToken)
             .ConfigureAwait(false))
@@ -221,13 +237,24 @@ internal sealed class AlertDispatch(
         return untaken is null ? Result.Success() : Result.Failure(untaken);
     }
 
-    // The handler is asked outside any transaction, for no longer than the claim stands:
-    // a hand-over still running then is abandoned as one not taken. A handler that
-    // throws did not take the alert; letting the fault out would leave the key claimed
-    // and the alert folded into a hand-over nobody answered (OPS-ALERT-003 AC2, D-225).
-    private async ValueTask<Result> TakenAsync(AlertRaised raised, TimeSpan timeout, CancellationToken cancellationToken)
+    // The handler is asked outside any transaction, and its token is cancelled when the
+    // claim lapses: a hand-over still running then is abandoned as one not taken, and
+    // none is begun once the claim has lapsed. A handler that ignores its token outlasts
+    // the claim, and the hand-over is then at least once: another pass may claim the
+    // alert and hand it over meanwhile. A handler that throws did not take the alert; its
+    // fault is kept with the failure as the worker keeps a job's (BFF-ERR-002 AC2), and
+    // letting it out would leave the key claimed and the alert folded into a hand-over
+    // nobody answered (OPS-ALERT-003 AC2, D-225).
+    private async ValueTask<Result> TakenAsync(AlertRaised raised, DateTimeOffset until, CancellationToken cancellationToken)
     {
-        using var abandoned = new CancellationTokenSource(timeout, time);
+        TimeSpan left = until - time.GetUtcNow();
+
+        if (left <= TimeSpan.Zero)
+        {
+            return Result.Failure(Error.From(ErrorCodes.SystemFault));
+        }
+
+        using var abandoned = new CancellationTokenSource(left, time);
         using var either = CancellationTokenSource.CreateLinkedTokenSource(abandoned.Token, cancellationToken);
 
         try
@@ -236,7 +263,7 @@ internal sealed class AlertDispatch(
         }
         catch (Exception fault) when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            return Result.Failure(Error.From(ErrorCodes.SystemFault));
+            return Result.Failure(FaultLog.Failure(fault));
         }
     }
 

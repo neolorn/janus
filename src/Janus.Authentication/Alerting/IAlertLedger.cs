@@ -36,13 +36,17 @@ internal interface IAlertLedger
 
     /// <summary>
     /// Records that the host's handler took the alert a raise claimed the key for, so a
-    /// later hand-over of the same raise is folded into it.
+    /// later hand-over of the same raise, and any other raise inside the window, is
+    /// folded into it. It is recorded whatever an earlier, abandoned hand-over of the same
+    /// raise gave back meanwhile, and over a claim another raise made since that no
+    /// handler has answered; another raise's claim that was taken stands.
     /// </summary>
     /// <param name="key">The deduplication key.</param>
     /// <param name="raise">The raise whose claim it is.</param>
+    /// <param name="at">When it fired.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Whether the claim standing was the raise's.</returns>
-    ValueTask<bool> TakenAsync(string key, RaisedAlertId raise, CancellationToken cancellationToken);
+    /// <returns>Whether it was recorded.</returns>
+    ValueTask<bool> TakenAsync(string key, RaisedAlertId raise, DateTimeOffset at, CancellationToken cancellationToken);
 
     /// <summary>
     /// Gives back the claim on a key whose alert the host's handler did not take, so its

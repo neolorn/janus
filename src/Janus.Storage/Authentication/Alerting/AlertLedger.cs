@@ -30,7 +30,9 @@ internal sealed class AlertLedger(DataConnections connections) : IAlertLedger
 
     private const string Taken =
         """
-        UPDATE identity.alerts SET unanswered = false WHERE key = @key AND raise = @raise;
+        INSERT INTO identity.alerts (key, at, raise, unanswered) VALUES (@key, @at, @raise, false)
+        ON CONFLICT (key) DO UPDATE SET at = excluded.at, raise = excluded.raise, unanswered = false
+        WHERE identity.alerts.raise = @raise OR identity.alerts.unanswered;
         """;
 
     private const string Forget =
@@ -68,32 +70,42 @@ internal sealed class AlertLedger(DataConnections connections) : IAlertLedger
     }
 
     /// <inheritdoc/>
-    public ValueTask<bool> TakenAsync(string key, RaisedAlertId raise, CancellationToken cancellationToken) =>
-        WrittenAsync(Taken, key, raise, cancellationToken);
-
-    /// <inheritdoc/>
-    public ValueTask<bool> ForgetAsync(string key, RaisedAlertId raise, CancellationToken cancellationToken) =>
-        WrittenAsync(Forget, key, raise, cancellationToken);
-
-    // One statement on the claim a raise holds on a key.
-    private async ValueTask<bool> WrittenAsync(
-        string statement,
+    public async ValueTask<bool> TakenAsync(
         string key,
         RaisedAlertId raise,
+        DateTimeOffset at,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
 
         AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
 
-        int written = await ambient.Connection
+        int recorded = await ambient.Connection
             .ExecuteAsync(new CommandDefinition(
-                statement,
+                Taken,
+                new { key, at = at.ToUniversalTime(), raise = raise.Value },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        return recorded > 0;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ForgetAsync(string key, RaisedAlertId raise, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        int forgotten = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Forget,
                 new { key, raise = raise.Value },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
-        return written > 0;
+        return forgotten > 0;
     }
 }
