@@ -31,6 +31,7 @@ namespace Janus.Authentication.Sessions;
 /// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="concurrent">The watch over sessions used implausibly far apart at once.</param>
 /// <param name="clients">Where the client a registration captured is read, for the return it answers.</param>
+/// <param name="pending">Where an authorization waits on a session's record for its continuation.</param>
 /// <param name="events">Where each session an end takes is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -55,6 +56,7 @@ internal sealed class SessionService(
     ILocationResolver locations,
     ConcurrentSessions concurrent,
     IOidcClientStore clients,
+    IPendingAuthorizationStore pending,
     IEvents events,
     IUnitOfWork work,
     TimeProvider time,
@@ -658,13 +660,22 @@ internal sealed class SessionService(
             ? await clients.FindAsync(named, cancellationToken).ConfigureAwait(false)
             : null;
 
+        // AUTH-SESS-012 (D-224): a sign-in a navigation completed learns here that an
+        // authorization waits on its record for the continuation.
+        bool waiting = await pending
+            .WaitsAsync(live.Spine, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
         return Result.Success(new SessionDetail(
             live.Subject,
             live.Attained,
             live.PhishingResistant,
             live.Aal2At,
             live.IdleExpiry < live.AbsoluteExpiry ? live.IdleExpiry : live.AbsoluteExpiry,
-            captured is null ? null : RedirectValidation.Landing(captured)));
+            captured is null ? null : RedirectValidation.Landing(captured))
+        {
+            AuthorizationWaiting = waiting,
+        });
     }
 
     /// <inheritdoc/>

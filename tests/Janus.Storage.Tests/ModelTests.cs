@@ -640,6 +640,16 @@ public sealed class ModelTests
             "passwords.set_at",
             "passwords.subject",
 
+            // Not an account field: an authorization request waiting for the sign-in
+            // that answers it, bound to a browser or to the record its sign-in
+            // established, its parameters under the deployment's key (AUTH-SESS-012).
+            "pending_authorizations.created_at",
+            "pending_authorizations.expires_at",
+            "pending_authorizations.id",
+            "pending_authorizations.parameters",
+            "pending_authorizations.preauthentication",
+            "pending_authorizations.session",
+
             // Credentials: a text code's enrolment its code has yet to confirm, with
             // the number it would be bound to and the code under the key (AUTH-FACT-002).
             "pending_enrolments.enc_code",

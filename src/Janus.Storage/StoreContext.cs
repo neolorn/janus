@@ -415,6 +415,12 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         Set<PreAuthenticationRecord>();
 
     /// <summary>
+    /// The authorization requests browsers have waiting for their sign-in.
+    /// </summary>
+    public DbSet<PendingAuthorizationRecord> PendingAuthorizations =>
+        Set<PendingAuthorizationRecord>();
+
+    /// <summary>
     /// The identifiers of live accounts waiting to be proved.
     /// </summary>
     public DbSet<PendingVerificationRecord> IdentifierVerifications =>
@@ -619,6 +625,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new RecordOfferConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
+        modelBuilder.ApplyConfiguration(new PendingAuthorizationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
         modelBuilder.ApplyConfiguration(new ChallengeConfiguration());
         modelBuilder.ApplyConfiguration(new VerificationCodeConfiguration());

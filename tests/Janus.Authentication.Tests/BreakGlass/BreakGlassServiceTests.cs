@@ -324,6 +324,7 @@ public sealed class BreakGlassServiceTests : IAsyncDisposable
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
             new OidcClientStoreInMemory(),
+            new PendingAuthorizationStoreInMemory(),
             _events,
             _work,
             _clock,

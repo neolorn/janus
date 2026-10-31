@@ -123,6 +123,7 @@ internal static class AuthenticationRegistration
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();
         services.AddScoped<PreAuthenticationService>();
+        services.AddScoped<PendingAuthorizations>();
         services.AddScoped<SynchronizerTokens>();
         services.AddScoped<ConcurrentSessions>();
         services.AddScoped<SessionService>();

@@ -805,6 +805,21 @@ table passwords
   constraint ck_passwords_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_passwords_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_passwords PRIMARY KEY (subject)
+table pending_authorizations
+  column id uuid not null
+  column preauthentication bytea
+  column session uuid
+  column parameters bytea not null
+  column created_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  constraint ck_pending_authorizations_bound CHECK ((num_nonnulls(preauthentication, session) = 1))
+  constraint ck_pending_authorizations_expires_at CHECK ((expires_at > created_at))
+  constraint fk_pending_authorizations_preauthentication FOREIGN KEY (preauthentication) REFERENCES identity.preauthentication_sessions(fingerprint) ON DELETE CASCADE
+  constraint fk_pending_authorizations_session FOREIGN KEY (session) REFERENCES identity.sessions(id) ON DELETE CASCADE
+  constraint pk_pending_authorizations PRIMARY KEY (id)
+  index ix_pending_authorizations_expires_at using btree (expires_at)
+  index ux_pending_authorizations_preauthentication unique using btree (preauthentication) WHERE (preauthentication IS NOT NULL)
+  index ux_pending_authorizations_session unique using btree (session) WHERE (session IS NOT NULL)
 table pending_enrolments
   column subject uuid not null
   column factor text not null

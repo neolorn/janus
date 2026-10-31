@@ -28,4 +28,11 @@ public sealed record SessionDetail(
     bool PhishingResistant,
     DateTimeOffset? LastStrongAuthAt,
     DateTimeOffset ExpiresAt,
-    string? Landing);
+    string? Landing)
+{
+    /// <summary>
+    /// Whether an authorization waits on the session's record for the continuation, as
+    /// it does after a sign-in a navigation completed (AUTH-SESS-012, D-224).
+    /// </summary>
+    public bool AuthorizationWaiting { get; init; }
+}

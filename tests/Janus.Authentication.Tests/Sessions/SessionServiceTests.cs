@@ -81,6 +81,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             _locations,
             new ConcurrentSessions(_sessions, _configuration, _alerts),
             new OidcClientStoreInMemory(),
+            new PendingAuthorizationStoreInMemory(),
             _events,
             _work,
             _clock,

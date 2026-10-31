@@ -11,4 +11,5 @@ namespace Janus.Hosting.BreakGlass;
 [JsonSerializable(typeof(PresentBreakGlassRequest))]
 [JsonSerializable(typeof(GeneratedBreakGlassView))]
 [JsonSerializable(typeof(BreakGlassStandingView))]
+[JsonSerializable(typeof(BreakGlassOpenedView))]
 internal sealed partial class BreakGlassJson : JsonSerializerContext;

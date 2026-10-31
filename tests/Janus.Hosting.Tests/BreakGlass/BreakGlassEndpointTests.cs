@@ -145,6 +145,35 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-012 AC10 (D-224): presenting the credential completes a sign-in, so
+    /// the authorization the browser had waiting is carried to the session it opened,
+    /// the answer says where it waits, and following it issues the code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC10_PresentingTheCredentialSaysWhereTheAuthorizationWaitsAsync()
+    {
+        string credential = await GeneratedAsync();
+
+        await Oidc.RelyingParty.RegisteredAsync(_deployment);
+
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync(
+            "GET",
+            await Oidc.RelyingParty.AuthorizeAsync(_deployment, Oidc.RelyingParty.Application, silent: false));
+
+        Answer opened = await PresentedAsync(browser, credential);
+        Answer continued = await browser.SendAsync("GET", "/oidc/authorize/continue");
+
+        Assert.Equal(StatusCodes.Status200OK, opened.Status);
+        Assert.Equal("https://identity.example.test/oidc/authorize/continue", opened.Text("continueTo"));
+        Assert.Equal(StatusCodes.Status302Found, continued.Status);
+        Assert.StartsWith(Oidc.RelyingParty.Destination + "?", Oidc.RelyingParty.Where(continued), StringComparison.Ordinal);
+        Assert.NotEmpty(Oidc.RelyingParty.Returned(continued, "code"));
+    }
+
+    /// <summary>
     /// OPS-BOOT-002 AC2 and AUTH-STEP-004 AC3: the session ends at the configured
     /// lifetime however recently it was used, and the exception ends with it.
     /// </summary>

@@ -1424,6 +1424,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         services.AddSingleton<IAccessGate>(_gate);
         services.AddSingleton<IPreAuthenticationStore>(_contacts);
+        services.AddSingleton<IPendingAuthorizationStore, PendingAuthorizationStoreInMemory>();
         services.AddSingleton<IConfigurationStore>(_configuration);
         services.AddSingleton<IUnitOfWork, UnitOfWorkInMemory>();
         services.AddSingleton<TimeProvider>(_clock);

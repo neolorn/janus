@@ -6,14 +6,17 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Hosting.Authentication;
 
@@ -584,19 +587,26 @@ internal static class AuthenticationEndpoints
     private static async Task<IResult> SessionAsync(
         ISessions sessions,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
 
         AccessContext holder = Asking(browser);
 
+        // AUTH-SESS-012 (D-224): a sign-in a navigation completed, such as a social
+        // provider's return, is told here where its authorization waits.
         return Answers.Of(
             await sessions
                 .ReadAsync(holder, browser.Required.Id, cancellationToken)
                 .ConfigureAwait(false),
             session => TypedResults.Json(
-                SessionDetailView.Of(session),
+                SessionDetailView.Of(session) with
+                {
+                    ContinueTo = session.AuthorizationWaiting ? Continuing(context) : null,
+                },
                 AuthenticationJson.Default.SessionDetailView,
                 contentType: null,
                 StatusCodes.Status200OK));
@@ -729,11 +739,16 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(time);
 
+        string? continueTo = null;
+
         if (outcome.Session is IssuedSession issued)
         {
-            if (Carried(context.Request, BrowserCookies.PreAuthentication) is string first)
+            // AUTH-SESS-012 AC10 (D-226): the rotation carries the authorization the
+            // browser had waiting to the record, and the answer says where it waits.
+            if (Carried(context.Request, BrowserCookies.PreAuthentication) is string first
+                && await contacts.RotateAsync(OpaqueToken.Of(first), issued.Id, cancellationToken).ConfigureAwait(false))
             {
-                await contacts.RotateAsync(OpaqueToken.Of(first), cancellationToken).ConfigureAwait(false);
+                continueTo = Continuing(context);
             }
 
             cookies.Write(context.Response, issued);
@@ -765,11 +780,18 @@ internal static class AuthenticationEndpoints
         }
 
         return TypedResults.Json(
-            SignInProgressView.Of(outcome.Progress),
+            SignInProgressView.Of(outcome.Progress) with { ContinueTo = continueTo },
             AuthenticationJson.Default.SignInProgressView,
             contentType: null,
             StatusCodes.Status200OK);
     }
+
+    // AUTH-SESS-012 (D-224): the continuation's address under the provider address the
+    // host declared.
+    private static string? Continuing(HttpContext context) =>
+        context.RequestServices.GetService<AuthenticationAddresses>() is AuthenticationAddresses addresses
+            ? OidcRegistration.Continuing(addresses)
+            : null;
 
     // BFF-STEP-001: the endpoints that read this are mounted as ones that need a
     // session, so the stage that requires one has already answered a request that

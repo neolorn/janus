@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An authorization request that is not silent and finds no live session is kept as the
+  browser's pending authorization, its validated parameters wrapped in the new
+  `pending_authorizations` table, bound to the pre-authentication session and carried to
+  the session record by the rotation at the completed sign-in, for
+  `oidc.continuation.lifetime`. `POST /auth/factor`, `POST /auth/device/verify` and
+  `POST /auth/break-glass` answer `continueTo` where one waits, and `GET /auth/session`
+  gives it too, as `SessionDetail.AuthorizationWaiting` tells a host reading the session
+  in process. `GET /oidc/authorize/continue` issues the code once to the client's
+  registered destination with its `state`; with nothing waiting it answers 302 to the
+  origin of `redirect.defaultclient`'s registered address, or to `/` while the key is
+  empty. `POST /auth/break-glass` now answers a JSON body.
 - A session that lapsed for inactivity under a policy requiring AAL2 is restored in place
   by `POST /auth/restore/begin` and `POST /auth/restore`, on one passkey or the password:
   the browser keeps the lapsed session's cookie, which those two routes alone read, and

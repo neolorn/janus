@@ -468,6 +468,11 @@ internal sealed class Deployment : IAsyncDisposable
     public PreAuthenticationStoreInMemory Contacts { get; } = new();
 
     /// <summary>
+    /// The authorizations browsers have waiting for their sign-in (AUTH-SESS-012).
+    /// </summary>
+    public PendingAuthorizationStoreInMemory Waiting { get; } = new();
+
+    /// <summary>
     /// The authenticated sessions as they stand.
     /// </summary>
     public SessionStoreInMemory Sessions { get; } = new();
@@ -1033,6 +1038,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IRegistrationSignals>(Signals);
         _ = services.AddSingleton<IRegistrationDirectory>(Directory);
         _ = services.AddSingleton<IPreAuthenticationStore>(Contacts);
+        _ = services.AddSingleton<IPendingAuthorizationStore>(Waiting);
         _ = services.AddSingleton<ISessionStore>(Sessions);
         _ = services.AddSingleton<IIdentifierDirectory>(Identifiers);
         _ = services.AddSingleton<IPendingVerificationStore>(Pending);
@@ -1195,6 +1201,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SessionService>();
         _ = services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         _ = services.AddScoped<PreAuthenticationService>();
+        _ = services.AddScoped<PendingAuthorizations>();
         _ = services.AddScoped<RegistrationService>();
         _ = services.AddScoped<IRegistration>(provider =>
             provider.GetRequiredService<RegistrationService>());

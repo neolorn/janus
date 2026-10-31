@@ -2965,6 +2965,8 @@ Janus.Core.SensitiveBodyAttribute.SensitiveBodyAttribute() -> void
 Janus.Core.SensitiveCategories
 Janus.Core.SessionDetail
 Janus.Core.SessionDetail.<Clone>$() -> Janus.Core.SessionDetail!
+Janus.Core.SessionDetail.AuthorizationWaiting.get -> bool
+Janus.Core.SessionDetail.AuthorizationWaiting.init -> void
 Janus.Core.SessionDetail.AssuranceLevel.get -> Janus.Core.AssuranceLevel
 Janus.Core.SessionDetail.AssuranceLevel.init -> void
 Janus.Core.SessionDetail.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.AssuranceLevel AssuranceLevel, out bool PhishingResistant, out System.DateTimeOffset? LastStrongAuthAt, out System.DateTimeOffset ExpiresAt, out string? Landing) -> void

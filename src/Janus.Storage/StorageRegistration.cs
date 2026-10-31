@@ -257,6 +257,9 @@ internal static class StorageRegistration
         services.AddScoped<IPreAuthenticationStore>(provider => new PreAuthenticationStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DeploymentDataKeyStore>()));
+        services.AddScoped<IPendingAuthorizationStore>(provider => new PendingAuthorizationStore(
+            provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DeploymentDataKeyStore>()));
         services.AddScoped<IChallengeStore>(provider => new ChallengeStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>()));

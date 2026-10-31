@@ -31,6 +31,9 @@ internal static class OidcRegistration
     /// <summary>The route the authorization request arrives at.</summary>
     public const string Authorization = "oidc/authorize";
 
+    /// <summary>The continuation of a browser's pending authorization (AUTH-SESS-012, D-224).</summary>
+    public const string Continuation = "oidc/authorize/continue";
+
     /// <summary>The route the authorization request is pushed to beforehand.</summary>
     public const string PushedAuthorization = "oidc/par";
 
@@ -121,6 +124,28 @@ internal static class OidcRegistration
                         .SetOrder(RegisteredDestination.Order));
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleAuthorizationRequestContext>(
                     handler => handler.UseScopedHandler<AuthorizationIssue>());
+
+                // AUTH-SESS-012 AC10 (D-224): the continuation answers the request a
+                // browser's sign-in was waited for with, read back off the session
+                // record, and that request was pushed when it was first made.
+                _ = options.AddEventHandler<OpenIddictServerEvents.ExtractAuthorizationRequestContext>(
+                    handler => handler
+                        .UseScopedHandler<AuthorizationContinued>()
+                        .SetOrder(AuthorizationContinued.Order));
+                _ = options.RemoveEventHandler(
+                    OpenIddictServerHandlers.Authentication.ValidateRequestUriParameter.Descriptor);
+                _ = options.AddEventHandler<OpenIddictServerEvents.ValidateAuthorizationRequestContext>(
+                    handler => handler
+                        .UseSingletonHandler<ReferenceOrContinued>()
+                        .SetOrder(OpenIddictServerHandlers.Authentication.ValidateRequestUriParameter.Descriptor.Order));
+                _ = options.RemoveEventHandler(
+                    OpenIddictServerHandlers.Authentication.ValidatePushedAuthorizationRequestsRequirement.Descriptor);
+                _ = options.AddEventHandler<OpenIddictServerEvents.ValidateAuthorizationRequestContext>(
+                    handler => handler
+                        .AddFilter<OpenIddictServerHandlerFilters.RequireDegradedModeDisabled>()
+                        .UseScopedHandler<PushedOrContinued>()
+                        .SetOrder(OpenIddictServerHandlers.Authentication
+                            .ValidatePushedAuthorizationRequestsRequirement.Descriptor.Order));
                 _ = options.AddEventHandler<OpenIddictServerEvents.ApplyAuthorizationResponseContext>(
                     handler => handler.UseScopedHandler<PushedRequestSpent>());
 
@@ -205,6 +230,7 @@ internal static class OidcRegistration
 
                 options.Issuer = new Uri(addresses.Provider, UriKind.Absolute);
                 ProvidedAt(options.AuthorizationEndpointUris, addresses, Authorization);
+                options.AuthorizationEndpointUris.Add(Under(addresses, Continuation));
                 ProvidedAt(options.PushedAuthorizationEndpointUris, addresses, PushedAuthorization);
                 ProvidedAt(options.TokenEndpointUris, addresses, Token);
                 ProvidedAt(options.UserInfoEndpointUris, addresses, UserInfo);
@@ -265,14 +291,31 @@ internal static class OidcRegistration
                 StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The absolute address of the continuation under the provider address, which the
+    /// answer that completes a sign-in carries as <c>continueTo</c> (AUTH-SESS-012, D-224).
+    /// </summary>
+    /// <param name="addresses">The addresses the host declares.</param>
+    /// <returns>The address.</returns>
+    /// <exception cref="ArgumentNullException">The addresses are absent.</exception>
+    public static string Continuing(AuthenticationAddresses addresses)
+    {
+        ArgumentNullException.ThrowIfNull(addresses);
+
+        return addresses.Provider.TrimEnd('/') + "/" + Continuation;
+    }
+
     // The server starts each list with a default of its own for the discovery
     // document and the key set, which would answer at any address, so each list holds
     // the provider's address alone.
     private static void ProvidedAt(List<Uri> routes, AuthenticationAddresses addresses, string route)
     {
         routes.Clear();
-        routes.Add(new Uri(addresses.Provider.TrimEnd('/') + "/" + route, UriKind.Absolute));
+        routes.Add(Under(addresses, route));
     }
+
+    private static Uri Under(AuthenticationAddresses addresses, string route) =>
+        new(addresses.Provider.TrimEnd('/') + "/" + route, UriKind.Absolute);
 
     private static void CookieRefused<TContext>(OpenIddictServerBuilder options)
         where TContext : OpenIddictServerEvents.BaseValidatingContext =>

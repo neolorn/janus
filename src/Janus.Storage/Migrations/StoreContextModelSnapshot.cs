@@ -1380,6 +1380,59 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Oidc.PendingAuthorizationRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<byte[]>("Parameters")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("parameters");
+
+                b.Property<byte[]>("PreAuthentication")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("preauthentication");
+
+                b.Property<Guid?>("Session")
+                    .HasColumnType("uuid")
+                    .HasColumnName("session");
+
+                b.HasKey("Id")
+                    .HasName("pk_pending_authorizations");
+
+                b.HasIndex("ExpiresAt")
+                    .HasDatabaseName("ix_pending_authorizations_expires_at");
+
+                b.HasIndex("PreAuthentication")
+                    .IsUnique()
+                    .HasDatabaseName("ux_pending_authorizations_preauthentication")
+                    .HasFilter("preauthentication IS NOT NULL");
+
+                b.HasIndex("Session")
+                    .IsUnique()
+                    .HasDatabaseName("ux_pending_authorizations_session")
+                    .HasFilter("session IS NOT NULL");
+
+                b.ToTable("pending_authorizations", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_pending_authorizations_bound", "num_nonnulls(preauthentication, session) = 1");
+
+                        t.HasCheckConstraint("ck_pending_authorizations_expires_at", "expires_at > created_at");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.SigningKeyRecord", b =>
             {
                 b.Property<string>("KeyId")
@@ -4774,6 +4827,21 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasForeignKey("Subject")
                     .OnDelete(DeleteBehavior.Cascade)
                     .HasConstraintName("fk_oidc_tokens_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Oidc.PendingAuthorizationRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authentication.Sessions.PreAuthenticationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("PreAuthentication")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .HasConstraintName("fk_pending_authorizations_preauthentication");
+
+                b.HasOne("Janus.Storage.Authentication.Sessions.SessionRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Session")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .HasConstraintName("fk_pending_authorizations_session");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Organizations.LockedDomainRecord", b =>

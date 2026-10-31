@@ -7,9 +7,11 @@ using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Hosting.BreakGlass;
 
@@ -25,8 +27,6 @@ namespace Janus.Hosting.BreakGlass;
 /// </remarks>
 internal static class BreakGlassEndpoints
 {
-    private static readonly IResult Opened = TypedResults.Ok();
-
     /// <summary>
     /// Mounts them.
     /// </summary>
@@ -43,7 +43,7 @@ internal static class BreakGlassEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.BreakGlassConsumed,
                     ErrorCodes.BreakGlassInvalid, ErrorCodes.Throttled))
             .Accepts<PresentBreakGlassRequest>(MediaTypeNames.Application.Json)
-            .Produces(StatusCodes.Status200OK);
+            .Produces<BreakGlassOpenedView>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/break-glass/generate", GenerateAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -99,15 +99,22 @@ internal static class BreakGlassEndpoints
         // BFF-CSRF-005a AC3 (D-206): presenting the credential is an authentication, so
         // the first contact the browser carried ends rather than standing beside the
         // session it opened.
-        if (context.Request.Cookies[BrowserCookies.PreAuthentication] is { Length: > 0 } first)
-        {
-            await contacts.RotateAsync(OpaqueToken.Of(first), cancellationToken).ConfigureAwait(false);
-        }
+        // AUTH-SESS-012 (D-224, D-226): it carries the authorization the browser had
+        // waiting to the session's record, and the answer says where it waits.
+        bool waiting = context.Request.Cookies[BrowserCookies.PreAuthentication] is { Length: > 0 } first
+            && await contacts.RotateAsync(OpaqueToken.Of(first), issued.Id, cancellationToken).ConfigureAwait(false);
 
         cookies.Write(context.Response, issued);
         cookies.ClearFirstContact(context.Response);
 
-        return Opened;
+        return TypedResults.Json(
+            new BreakGlassOpenedView(
+                waiting && context.RequestServices.GetService<AuthenticationAddresses>() is AuthenticationAddresses addresses
+                    ? OidcRegistration.Continuing(addresses)
+                    : null),
+            BreakGlassJson.Default.BreakGlassOpenedView,
+            contentType: null,
+            StatusCodes.Status200OK);
     }
 
     private static async Task<IResult> GenerateAsync(

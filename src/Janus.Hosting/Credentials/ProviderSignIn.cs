@@ -751,9 +751,11 @@ internal sealed class ProviderSignIn(
             cookies.Write(context.Response, issued);
             cookies.ClearFirstContact(context.Response);
 
+            // AUTH-SESS-012 (D-226): the authorization the browser had waiting goes to
+            // the record, where GET /auth/session finds it for the page landed on.
             if (browser.FirstContactSecret is OpaqueToken carried)
             {
-                await contacts.RotateAsync(carried, cancellationToken).ConfigureAwait(false);
+                _ = await contacts.RotateAsync(carried, issued.Id, cancellationToken).ConfigureAwait(false);
             }
         }
 

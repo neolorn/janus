@@ -313,6 +313,8 @@ internal static class BackgroundJobs
 
         _ = await services.GetRequiredService<ISessionStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
+        _ = await services.GetRequiredService<IPendingAuthorizationStore>()
+            .SweepAsync(now, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IPreAuthenticationStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IChallengeStore>()
