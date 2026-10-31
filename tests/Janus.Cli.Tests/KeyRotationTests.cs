@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -370,7 +371,8 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     /// <summary>
     /// OPS-SEC-003 AC4 (D-225): the run that rotates prints its report and no key, the
     /// rotation stays unretired until <c>--retire</c> asks, and that retires the previous
-    /// version, printing no key either.
+    /// version, printing no key either: neither key is on either stream of either run, in
+    /// any encoding the library writes a key in.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -390,9 +392,18 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         Assert.Equal(0, retired.ExitCode);
         Assert.Equal(Retirement((2, 3, 1)), retired.Output.Trim());
         Assert.NotNull(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
+        string printed = rotated.Output + rotated.Error + retired.Output + retired.Error;
+
         Assert.All(
             [Previous, Next],
-            key => Assert.DoesNotContain(Convert.ToBase64String(key), rotated.Output + retired.Output, StringComparison.Ordinal));
+            key => Assert.All(
+                [
+                    Convert.ToBase64String(key),
+                    Base64Url.EncodeToString(key),
+                    Convert.ToHexString(key),
+                    Convert.ToHexStringLower(key),
+                ],
+                encoded => Assert.DoesNotContain(encoded, printed, StringComparison.Ordinal)));
     }
 
     /// <summary>
