@@ -4649,9 +4649,10 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     /// AUTH-FACT-003 AC6, AUTH-ABUSE-002 (D-230): whether the answer names a sign-in turns
     /// on the browser's sign-ins alone, never on the account: a browser holding none is
     /// answered with the one its request opened, and one that began a sign-in with the
-    /// identifier with none, for an identifier no account holds, a channel the policy has
-    /// not enabled, an address a domain lock refuses and a number reported as at risk
-    /// alike, as for one the link goes to.
+    /// identifier with none, for an identifier no account holds, one that reads as
+    /// neither an address nor a number, a channel the policy has not enabled, an address
+    /// a domain lock refuses and a number reported as at risk alike, as for one the link
+    /// goes to.
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_003_AC6_WhetherTheAnswerNamesASignInNeverTurnsOnTheAccountAsync()
@@ -4662,6 +4663,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         (string? Opened, string? Held) disabled = await AnsweredAsync(Address);
         (string? Opened, string? Held) nobodys = await AnsweredAsync(Elsewhere);
+        (string? Opened, string? Held) unread = await AnsweredAsync("neither-an-address-nor-a-number");
 
         Enables(Factor.EmailLink);
 
@@ -4677,7 +4679,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         (string? Opened, string? Held) risk = await AnsweredAsync(Number);
 
         Assert.All(
-            [disabled, nobodys, sent, locked, risk],
+            [disabled, nobodys, unread, sent, locked, risk],
             answered =>
             {
                 Assert.NotNull(answered.Opened);
