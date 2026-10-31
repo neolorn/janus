@@ -410,6 +410,35 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): what stands on a record is every session of
+    /// it that has not ended, the record among them, lapsed or not, and nothing of
+    /// another record.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_WhatStandsOnARecordIsEverySessionOfItNotEndedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        Session record = Record(subject, inactivity: TimeSpan.FromMinutes(5));
+        Session application = Derived(record, SessionType.PerApp);
+        Session ended = Derived(record, SessionType.PerApp);
+        Session other = Record(subject);
+
+        ended.End(Noon + TimeSpan.FromMinutes(1));
+
+        await WrittenAsync(record, application, ended, other);
+
+        await using StoreContext reading = database.Context();
+        IReadOnlyList<Session> standing = await Store(reading).StandingOnAsync(
+            record.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new[] { record.Id, application.Id }.Select(id => id.Value).Order(),
+            Identifiers(standing).Select(id => id.Value).Order());
+    }
+
+    /// <summary>
     /// OPS-ALERT-007: where a session's city lies is kept with the place under the
     /// person's key and reads back as written, and a place written without it reads
     /// back without it.

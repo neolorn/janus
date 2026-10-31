@@ -1067,6 +1067,261 @@ internal sealed class AuthenticationService(
     }
 
     /// <summary>
+    /// Begins the restore in place of a session that lapsed for inactivity, which one
+    /// passkey or the password restores.
+    /// </summary>
+    /// <param name="secret">
+    /// The cookie of the session that lapsed, which the browser keeps while the restore
+    /// admits it, or nothing.
+    /// </param>
+    /// <param name="browser">
+    /// The pre-authentication session the request carries, or nothing.
+    /// </param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The challenge, the factors that may restore the session and the request options
+    /// naming the account's passkeys; <c>auth.session.expired</c> asking for a full
+    /// authentication where the session may not be restored; or <c>auth.throttled</c>
+    /// while the delay stands.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The source is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-SESS-005 and D-224 item 13 (`09` <c>POST /auth/restore/begin</c>).
+    /// The challenge is opened for the session's account and for no identifier, the
+    /// session naming its account alone, and is bound to the browser's
+    /// pre-authentication session as a sign-in's is (D-226).
+    /// </remarks>
+    public async ValueTask<Result<RestoreChallenge>> BeginRestoreAsync(
+        [NeverLogged] OpaqueToken? secret,
+        [NeverLogged] string? browser,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        Error? failure = null;
+
+        Session lapsed = (await sessions.RestorableAsync(secret, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Session>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<RestoreChallenge>(failure);
+        }
+
+        var attempt = new ThrottleAttempt(source, null) { Account = lapsed.Subject };
+
+        if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error held)
+        {
+            return Result.Failure<RestoreChallenge>(held);
+        }
+
+        List<Factor> factors = (await RestoredByAsync(lapsed.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<List<Factor>>(error, ref failure));
+
+        TimeSpan lifetime = (await configuration
+                .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<RestoreChallenge>(failure);
+        }
+
+        var handle = OpaqueToken.Draw(randomness);
+        var ceremony = OpaqueToken.Draw(randomness);
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RestoreChallenge>(notBegun);
+        }
+
+        await challenges
+            .AddAsync(
+                Challenge.Open(
+                    handle,
+                    lapsed.Subject,
+                    email: null,
+                    identifier: null,
+                    ceremony.Value,
+                    SignInLinks.Fingerprint(browser),
+                    time.GetUtcNow(),
+                    lifetime),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RestoreChallenge>(notCommitted);
+        }
+
+        return Result.Success(new RestoreChallenge(
+            handle.Value,
+            factors,
+            await webAuthn.PasskeysAsync(lapsed.Subject, ceremony.Value, cancellationToken).ConfigureAwait(false)));
+    }
+
+    /// <summary>
+    /// Restores in place a session that lapsed for inactivity, on one passkey or the
+    /// password, handing back the secrets the browser is to carry away.
+    /// </summary>
+    /// <param name="secret">
+    /// The cookie of the session that lapsed, which the browser keeps while the restore
+    /// admits it, or nothing.
+    /// </param>
+    /// <param name="challenge">The handle the restore's begin returned.</param>
+    /// <param name="presented">The factor and what proves it.</param>
+    /// <param name="origin">Where the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The session restored, complete; <c>auth.session.expired</c> asking for a full
+    /// authentication where it may not be restored; <c>auth.factor.notpermitted</c>
+    /// for a factor the begin did not name; the refusal of the factor, counted; or
+    /// <c>auth.throttled</c> while the delay stands.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-SESS-005 and D-224 item 13 (`09` <c>POST /auth/restore</c>). A
+    /// factor other than the passkey or the password, or one the begin did not name, is
+    /// refused before it is verified, and counts nothing. A refused factor is counted
+    /// and recorded as at <c>/auth/factor</c>. A passkey's assertion names the
+    /// session's account in its user handle and is one of the passkeys the begin named,
+    /// one the account held when the challenge opened, or it is refused
+    /// <c>auth.factor.rejected</c>. The restore raises nothing beyond what the factor
+    /// proves, and the challenge ends with it.
+    /// </remarks>
+    public async ValueTask<Result<SignInOutcome>> RestoreAsync(
+        [NeverLogged] OpaqueToken? secret,
+        string challenge,
+        FactorPresentation presented,
+        SessionOrigin origin,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(presented);
+        ArgumentNullException.ThrowIfNull(origin);
+
+        Error? failure = null;
+
+        Session lapsed = (await sessions.RestorableAsync(secret, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Session>(error, ref failure));
+
+        if (failure is not null || secret is not OpaqueToken carried)
+        {
+            return Result.Failure<SignInOutcome>(failure ?? Error.From(ErrorCodes.SessionExpired));
+        }
+
+        SubjectId subject = lapsed.Subject;
+        var attempt = new ThrottleAttempt(origin.Source, null) { Account = subject };
+
+        if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error held)
+        {
+            return Result.Failure<SignInOutcome>(held);
+        }
+
+        List<Factor> factors = (await RestoredByAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<List<Factor>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<SignInOutcome>(failure);
+        }
+
+        if (!factors.Contains(presented.Factor))
+        {
+            return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorNotPermitted));
+        }
+
+        Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
+
+        if (open is null
+            || open.Subject != subject
+            || (presented.Factor == FactorCatalogue.Discoverable
+                && presented.Assertion?.UserHandle is not { Length: > 0 }))
+        {
+            return Result.Failure<SignInOutcome>(
+                await CountedAsync(attempt, presented.Factor, subject, null, cancellationToken).ConfigureAwait(false)
+                ?? Error.From(ErrorCodes.FactorRejected));
+        }
+
+        DateTimeOffset opened = open.CreatedAt;
+
+        bool changeRequired = (await AcceptsAsync(
+                    open,
+                    subject,
+                    presented,
+                    beforeFirstFactor: false,
+                    token => CountAsync(attempt, presented.Factor, subject, null, token),
+                    cancellationToken,
+                    credential => credential.Factor == FactorCatalogue.Discoverable && credential.AddedAt <= opened)
+                .ConfigureAwait(false))
+            .Match(value => value.ChangeRequired, error => Withheld<bool>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<SignInOutcome>(failure);
+        }
+
+        await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
+
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SignInOutcome>(notBegun);
+        }
+
+        // D-166 X3: the challenge is held under its lock until it is removed, so a
+        // second restore on it waits, and one that finds it gone is refused.
+        if (await challenges.FindForUpdateAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false) is null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
+
+        IssuedSession? restored = (await sessions
+                .RestoreAsync(carried, [presented.Factor], origin, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => (IssuedSession?)value, error => Withheld<IssuedSession?>(error, ref failure));
+
+        if (failure is not null || restored is null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<SignInOutcome>(failure ?? Error.From(ErrorCodes.FactorRejected));
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SignInOutcome>(notCommitted);
+        }
+
+        Assurance proved = Assurance.Proved(Properties([presented.Factor]))
+            ?? new Assurance(AssuranceLevel.Aal1, PhishingResistant: false);
+
+        return Result.Success(new SignInOutcome(
+            new SignInProgress(
+                SignInStatus.Complete,
+                proved.Level,
+                proved.PhishingResistant,
+                [],
+                TrustDeviceOffered: false,
+                restored.Id,
+                Requirement: null,
+                changeRequired),
+            restored,
+            Remembered: null,
+            Trusted: null));
+    }
+
+    /// <summary>
     /// What a sign-in link does where it was opened, handing back the secrets a press
     /// in the browser its sign-in is bound to produced.
     /// </summary>
@@ -1396,7 +1651,8 @@ internal sealed class AuthenticationService(
         FactorPresentation presented,
         bool beforeFirstFactor,
         Func<CancellationToken, ValueTask<Error?>> counted,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<Authenticator, bool>? named = null)
     {
         if (FactorCatalogue.Entries.TryGetValue(presented.Factor, out FactorProperties? properties)
             && presented.Factor != FactorCatalogue.Password)
@@ -1404,7 +1660,7 @@ internal sealed class AuthenticationService(
             if (properties.IsWebAuthn)
             {
                 return Unproved(
-                    await CeremonyAsync(open, subject, presented, beforeFirstFactor, counted, cancellationToken)
+                    await CeremonyAsync(open, subject, presented, beforeFirstFactor, counted, named, cancellationToken)
                         .ConfigureAwait(false));
             }
 
@@ -1554,13 +1810,16 @@ internal sealed class AuthenticationService(
     // assertion presented as a passkey is refused once it verifies, as a second step
     // presented under its own name is refused: rolled back whole, counted nowhere and
     // recorded nowhere, nothing accepted on the challenge, and neither the policy's
-    // factors nor a domain lock judged after it.
+    // factors nor a domain lock judged after it. Where the caller names what may answer
+    // (a restore's passkeys, D-224 item 13), a credential it does not name is refused
+    // as a credential of another account is.
     private async ValueTask<Result<bool>> CeremonyAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
         bool beforeFirstFactor,
         Func<CancellationToken, ValueTask<Error?>> counted,
+        Func<Authenticator, bool>? named,
         CancellationToken cancellationToken)
     {
         if (presented.Assertion is null)
@@ -1584,7 +1843,7 @@ internal sealed class AuthenticationService(
 
         // A credential of another account answering this challenge is refused as any
         // other wrong credential is: whose it is is not disclosed.
-        if (refusal is null && answered.Subject != subject)
+        if (refusal is null && (answered.Subject != subject || named?.Invoke(answered) is false))
         {
             refusal = Error.From(ErrorCodes.FactorRejected);
         }
@@ -1994,6 +2253,44 @@ internal sealed class AuthenticationService(
                 subject,
                 cancellationToken)
             .ConfigureAwait(false);
+
+    // 09 POST /auth/restore/begin (D-224 item 13): each of the passkey and the password
+    // the account holds and the policy in force permits.
+    private async ValueTask<Result<List<Factor>>> RestoredByAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<List<Factor>>(failure);
+        }
+
+        IReadOnlyList<Authenticator> enrolled = await authenticators.OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        Factor passkey = FactorCatalogue.Discoverable;
+        Factor password = FactorCatalogue.Password;
+        List<Factor> factors = [];
+
+        if (policy.LoginFactors.Contains(passkey)
+            && enrolled.Any(credential => credential.IsUsable && credential.Factor == passkey))
+        {
+            factors.Add(passkey);
+        }
+
+        if (policy.LoginFactors.Contains(password)
+            && await HasPasswordAsync(subject, cancellationToken).ConfigureAwait(false))
+        {
+            factors.Add(password);
+        }
+
+        return Result.Success(factors);
+    }
 
     private async ValueTask<bool> HasPasswordAsync(
         SubjectId subject,

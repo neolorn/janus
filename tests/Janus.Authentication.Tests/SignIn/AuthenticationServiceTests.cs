@@ -5091,6 +5091,275 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): the restore of a lapsed session begins with
+    /// each of the passkey and the password the account holds and the policy permits,
+    /// and request options asking user verification and naming the account's active
+    /// passkeys, a suspended one and a second-factor security key not among them; the
+    /// password alone is named where the account holds no passkey, and neither where
+    /// the policy permits neither.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_ARestoreBeginsWithTheFactorsTheAccountHoldsAndThePolicyPermitsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SubjectId other = await AccountAsync();
+        var passkey = SoftwareAuthenticator.Holding();
+
+        _ = Carries(subject, Factor.Passkey, passkey, "Phone", "internal");
+        _ = Carries(subject, Factor.SecurityKey, SoftwareAuthenticator.Holding(), "Key", "usb");
+        Carries(subject, Factor.Passkey, SoftwareAuthenticator.Holding(), "Lost", "internal")
+            .Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+
+        OpaqueToken lapsed = Lapsed(subject);
+        OpaqueToken unkeyed = Lapsed(other);
+
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+        RestoreChallenge passwordOnly = Begun(await RestoreBegunAsync(unkeyed));
+
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with
+            {
+                RequiredAssurance = AssuranceLevel.Aal2,
+                LoginFactors = new HashSet<Factor>([Factor.Totp, Factor.Google]),
+            });
+
+        RestoreChallenge unpermitted = Begun(await RestoreBegunAsync(lapsed));
+
+        Assert.Equal([Factor.Passkey, Factor.Password], began.Factors);
+        Assert.Equal("required", began.WebAuthn.UserVerification);
+        Assert.Equal("example.test", began.WebAuthn.RelyingPartyId);
+        Assert.Equal([(Base64Url.EncodeToString(passkey.CredentialId), "internal")], Described(began.WebAuthn));
+        Assert.Equal([Factor.Password], passwordOnly.Factors);
+        Assert.Empty(passwordOnly.WebAuthn.AllowCredentials);
+        Assert.Empty(unpermitted.Factors);
+        Assert.NotEqual(began.Challenge, unpermitted.Challenge);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): the password restores the lapsed session in
+    /// place: the same session, a new secret, complete at what the password proves,
+    /// and the challenge ends with it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_ThePasswordRestoresTheLapsedSessionInPlaceAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        OpaqueToken lapsed = Lapsed(subject);
+        Session before = (await _live.FindByFingerprintAsync(lapsed.Fingerprint(), TestContext.Current.CancellationToken))!;
+
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+        SignInOutcome restored = Restored(await RestoredAsync(
+            lapsed,
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = Secret }));
+
+        IssuedSession issued = Assert.IsType<IssuedSession>(restored.Session);
+
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal1, false, before.Id),
+            (restored.Progress.Status, restored.Progress.AssuranceLevel, restored.Progress.PhishingResistant, issued.Id));
+        Assert.Empty(restored.Progress.Required);
+        Assert.Null(await _live.FindByFingerprintAsync(lapsed.Fingerprint(), TestContext.Current.CancellationToken));
+        Assert.Equal(before.Id, (await _live.FindByFingerprintAsync(issued.Secret.Fingerprint(), TestContext.Current.CancellationToken))?.Id);
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            RefusedRestore(await RestoredAsync(
+                issued.Secret,
+                began.Challenge,
+                new FactorPresentation(Factor.Password) { Value = Secret })));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): a passkey the begin named restores the
+    /// session, its assertion naming the session's account in its user handle; one
+    /// that names no account there, a passkey added after the begin, and a passkey of
+    /// another account are refused <c>auth.factor.rejected</c>, each counted.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_APasskeyTheBeginNamedRestoresTheSessionAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SubjectId other = await AccountAsync();
+        var passkey = SoftwareAuthenticator.Holding();
+        var theirs = SoftwareAuthenticator.Holding();
+        var later = SoftwareAuthenticator.Holding();
+
+        _ = Carries(subject, Factor.Passkey, passkey, "Phone", "internal");
+        _ = Carries(other, Factor.Passkey, theirs, "Theirs", "internal");
+        _configuration.Set(Settings.AbuseThrottleThreshold, 100);
+
+        OpaqueToken lapsed = Lapsed(subject);
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        _ = Carries(subject, Factor.Passkey, later, "Later", "internal");
+
+        string challenge = began.WebAuthn.Challenge;
+        string relyingParty = began.WebAuthn.RelyingPartyId;
+
+        ErrorCode?[] refused =
+        [
+            RefusedRestore(await RestoredAsync(lapsed, began.Challenge, new FactorPresentation(Factor.Passkey)
+            {
+                Assertion = passkey.Asserted(challenge, "https://example.test", relyingParty),
+            })),
+            RefusedRestore(await RestoredAsync(lapsed, began.Challenge, new FactorPresentation(Factor.Passkey)
+            {
+                Assertion = later.Asserted(
+                    challenge,
+                    "https://example.test",
+                    relyingParty,
+                    userHandle: WebAuthnService.Handle(subject)),
+            })),
+            RefusedRestore(await RestoredAsync(lapsed, began.Challenge, new FactorPresentation(Factor.Passkey)
+            {
+                Assertion = theirs.Asserted(
+                    challenge,
+                    "https://example.test",
+                    relyingParty,
+                    userHandle: WebAuthnService.Handle(other)),
+            })),
+        ];
+
+        SignInOutcome restored = Restored(await RestoredAsync(lapsed, began.Challenge, new FactorPresentation(Factor.Passkey)
+        {
+            Assertion = passkey.Asserted(
+                challenge,
+                "https://example.test",
+                relyingParty,
+                userHandle: WebAuthnService.Handle(subject)),
+        }));
+
+        Assert.All(refused, code => Assert.Equal(ErrorCodes.FactorRejected, code));
+        Assert.Equal(3, _audit.Failed.Count(failed => failed == (subject, Factor.Passkey)));
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal2, true),
+            (restored.Progress.Status, restored.Progress.AssuranceLevel, restored.Progress.PhishingResistant));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC2a (D-224 item 13): a factor other than the passkey or the
+    /// password, or one the begin did not name, is refused
+    /// <c>auth.factor.notpermitted</c> before it is verified and counts nothing; a
+    /// wrong password is refused and counted as at sign-in; neither restores the
+    /// session.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC2a_ARestoreTakesOnlyAFactorTheBeginNamedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+
+        OpaqueToken lapsed = Lapsed(subject);
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+
+        ErrorCode? totp = RefusedRestore(await RestoredAsync(
+            lapsed,
+            began.Challenge,
+            new FactorPresentation(Factor.Totp) { Value = "123456" }));
+        ErrorCode? passkey = RefusedRestore(await RestoredAsync(
+            lapsed,
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey)));
+
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+
+        ErrorCode? wrong = RefusedRestore(await RestoredAsync(
+            lapsed,
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = "notthepassword" }));
+
+        Assert.Equal(
+            (ErrorCodes.FactorNotPermitted, ErrorCodes.FactorNotPermitted, ErrorCodes.FactorRejected),
+            (totp, passkey, wrong));
+        Assert.Equal((subject, Factor.Password), Assert.Single(_audit.Failed));
+        Assert.NotEmpty(_throttle.Counted);
+        Assert.NotNull(await _live.FindByFingerprintAsync(lapsed.Fingerprint(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): a challenge of another account's restore, or
+    /// one nothing opened, restores nothing and is refused as a wrong factor is.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_AChallengeOfAnotherRestoreRestoresNothingAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SubjectId other = await AccountAsync();
+        OpaqueToken lapsed = Lapsed(subject);
+        RestoreChallenge theirs = Begun(await RestoreBegunAsync(Lapsed(other)));
+
+        ErrorCode?[] refused =
+        [
+            RefusedRestore(await RestoredAsync(lapsed, theirs.Challenge, new FactorPresentation(Factor.Password) { Value = Secret })),
+            RefusedRestore(await RestoredAsync(lapsed, "a-handle-nothing-opened", new FactorPresentation(Factor.Password) { Value = Secret })),
+        ];
+
+        Assert.All(refused, code => Assert.Equal(ErrorCodes.FactorRejected, code));
+        Assert.Equal(2, _audit.Failed.Count);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC3a and AC4, OPS-BOOT-002 (D-224 item 13): where the session may
+    /// not be restored, both steps answer <c>auth.session.expired</c> asking for a full
+    /// authentication: no cookie, a cookie naming nothing, a customer's idle expiry, an
+    /// expiry past the absolute window, and a break-glass session.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_ASessionTheRestoreDoesNotAdmitAsksForAFullAuthenticationAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        OpaqueToken late = Lapsed(subject);
+        OpaqueToken breakGlass = Lapsed(subject, breakGlassReason: "Locked out of every factor");
+        RestoreChallenge began = Begun(await RestoreBegunAsync(Lapsed(subject)));
+
+        _clock.Advance(TimeSpan.FromHours(23));
+
+        OpaqueToken customer = Lapsed(subject);
+
+        _configuration.Set(Settings.PolicyDefault, Janus.Core.Policies.SystemDefault);
+
+        OpaqueToken?[] refused = [null, OpaqueToken.Draw(_randomness), customer, late, breakGlass];
+
+        foreach (OpaqueToken? secret in refused)
+        {
+            Assert.Equal("full", Asked(await RestoreBegunAsync(secret)));
+            Assert.Equal("full", Asked(await RestoredAsync(
+                secret,
+                began.Challenge,
+                new FactorPresentation(Factor.Password) { Value = Secret })));
+        }
+
+        Assert.Empty(_audit.Failed);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 and AUTH-ABUSE-001 (D-224 item 13): both steps wait out the
+    /// delay the account has earned, answered <c>auth.throttled</c>.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_ARestoreWaitsOutTheDelayAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        OpaqueToken lapsed = Lapsed(subject);
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+
+        await FailedAsync(Address, Fresh, Settings.AbuseThrottleThreshold.Default);
+
+        Assert.Equal(
+            (ErrorCodes.Throttled, ErrorCodes.Throttled),
+            (
+                RefusedRestore(await RestoreBegunAsync(lapsed)),
+                RefusedRestore(await RestoredAsync(
+                    lapsed,
+                    began.Challenge,
+                    new FactorPresentation(Factor.Password) { Value = Secret }))));
+    }
+
+    /// <summary>
     /// REG-IDENT-006 AC6 and CONV-LOG-005 AC1: a sign-in link sent to an address the
     /// account has removed since does not sign in; the press is refused
     /// <c>auth.factor.rejected</c>, recorded against the account and counted.
@@ -7137,6 +7406,73 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     private static ErrorCode? Refused(Result<SignInProgress> outcome) =>
         outcome.Match(_ => (ErrorCode?)null, error => error.Code);
+
+    // A session of the account under a policy requiring AAL2, opened now and lapsed for
+    // inactivity inside its absolute window, as the secret its cookie carries.
+    private OpaqueToken Lapsed(SubjectId subject, string? breakGlassReason = null)
+    {
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with { RequiredAssurance = AssuranceLevel.Aal2 });
+
+        var session = Session.Begin(
+            SessionId.New(_clock),
+            subject,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            new SessionOrigin(Source, Browser),
+            _clock.GetUtcNow() - TimeSpan.FromHours(2),
+            TimeSpan.FromHours(1),
+            TimeSpan.FromHours(24),
+            breakGlassReason);
+        var secret = OpaqueToken.Draw(_randomness);
+
+        _live.AddAsync(
+                session,
+                secret.Fingerprint(),
+                OpaqueToken.Draw(_randomness).Fingerprint(),
+                TestContext.Current.CancellationToken)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
+
+        return secret;
+    }
+
+    private ValueTask<Result<RestoreChallenge>> RestoreBegunAsync(OpaqueToken? secret) =>
+        Service.BeginRestoreAsync(secret, browser: null, Source, TestContext.Current.CancellationToken);
+
+    private ValueTask<Result<SignInOutcome>> RestoredAsync(
+        OpaqueToken? secret,
+        string challenge,
+        FactorPresentation presented) =>
+        Service.RestoreAsync(
+            secret,
+            challenge,
+            presented,
+            new SessionOrigin(Source, Browser),
+            TestContext.Current.CancellationToken);
+
+    private static RestoreChallenge Begun(Result<RestoreChallenge> outcome) =>
+        outcome.Match(
+            challenge => challenge,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+    private static SignInOutcome Restored(Result<SignInOutcome> outcome) =>
+        outcome.Match(
+            restored => restored,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+    private static ErrorCode? RefusedRestore<TValue>(Result<TValue> outcome) =>
+        outcome.Match(_ => (ErrorCode?)null, error => error.Code);
+
+    // What a refusal asks to be done again, or nothing where it names nothing.
+    private static string? Asked<TValue>(Result<TValue> outcome) =>
+        outcome.Match(
+            _ => null,
+            error => error.Code == ErrorCodes.SessionExpired
+                && error.Details.TryGetValue("reauthenticate", out JsonElement asked)
+                    ? asked.GetString()
+                    : error.Code.ToString());
 
     private static ErrorCode? Code(Result outcome) =>
         outcome.Match(() => (ErrorCode?)null, error => error.Code);

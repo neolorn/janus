@@ -89,6 +89,17 @@ internal interface ISessionStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Every session standing on one record that has not ended, the record among them,
+    /// whether or not it has lapsed for inactivity.
+    /// </summary>
+    /// <param name="spine">The record.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The sessions.</returns>
+    ValueTask<IReadOnlyList<Session>> StandingOnAsync(
+        SessionId spine,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Downgrades every session of an account that has not ended, in the transaction
     /// that tightens the policy in force for it (AUTH-SESS-009).
     /// </summary>

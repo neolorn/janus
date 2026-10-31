@@ -31,7 +31,7 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
 
             table.HasCheckConstraint(
                 "ck_signin_challenges_identifier",
-                $"octet_length(identifier) = {Fingerprint.Length}");
+                $"identifier IS NULL OR octet_length(identifier) = {Fingerprint.Length}");
 
             table.HasCheckConstraint(
                 "ck_signin_challenges_browser",
@@ -58,8 +58,7 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
 
         builder.Property(challenge => challenge.Identifier)
             .HasColumnName("identifier")
-            .HasMaxLength(Fingerprint.Length)
-            .IsRequired();
+            .HasMaxLength(Fingerprint.Length);
 
         builder.Property(challenge => challenge.FingerprintVersion)
             .HasColumnName("fingerprint_version")

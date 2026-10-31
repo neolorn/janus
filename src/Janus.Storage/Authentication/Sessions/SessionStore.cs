@@ -253,6 +253,34 @@ internal sealed class SessionStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Session>> StandingOnAsync(
+        SessionId spine,
+        CancellationToken cancellationToken)
+    {
+        List<SessionRecord> records = await context.Sessions
+            .Where(session => session.Spine == spine && session.EndedAt == null)
+            .OrderBy(session => session.CreatedAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (records.Count is 0)
+        {
+            return [];
+        }
+
+        byte[] dataKey = await DataKeyAsync(records[0].Subject, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return [.. records.Select(record => Read(dataKey, record))];
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+        }
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<int> DowngradeAsync(
         SubjectId subject,
         DateTimeOffset at,

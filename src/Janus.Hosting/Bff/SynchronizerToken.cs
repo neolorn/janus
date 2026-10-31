@@ -13,16 +13,21 @@ namespace Janus.Hosting.Bff;
 /// The synchronizer token, validated against the session the request arrived on.
 /// </summary>
 /// <param name="tokens">What says whether a token belongs to a session.</param>
+/// <param name="resolved">What the session resolution stage established.</param>
 /// <param name="log">Where a refusal is recorded.</param>
 /// <remarks>
 /// Implements BFF-CSRF-001 and BFF-CSRF-006. Enforcement is here and nowhere else:
 /// an endpoint is protected because of where it is mounted, so a new one inherits
 /// this without doing anything and no attribute or key excludes an old one. The
 /// frontend reads the token from the cookie it was issued in and presents it in a
-/// header, which the browser never sets by itself.
+/// header, which the browser never sets by itself. A request whose session cookie
+/// names no live session goes on as one that carried none, so the token bound to its
+/// first contact is taken from it as well: the cookie of a session the restore in
+/// place admits is kept, and the two restore routes are carried by that token (D-226).
 /// </remarks>
 internal sealed class SynchronizerToken(
     SynchronizerTokens tokens,
+    RequestSession resolved,
     ILogger<SynchronizerToken> log) : IMiddleware
 {
     /// <summary>
@@ -71,9 +76,16 @@ internal sealed class SynchronizerToken(
 
         if (secret.Length is not 0)
         {
-            return await tokens
+            bool bound = await tokens
                 .MatchesAsync(OpaqueToken.Of(secret), OpaqueToken.Of(presented), cancellationToken)
                 .ConfigureAwait(false);
+
+            // BFF-ORDER-001 stage 5 (D-226): a cookie that names no live session leaves
+            // the request as one that carried none, whose token is its first contact's.
+            if (bound || resolved.Live is not null)
+            {
+                return bound;
+            }
         }
 
         string first = context.Request.Cookies[BrowserCookies.PreAuthentication] ?? string.Empty;

@@ -29,7 +29,7 @@ internal sealed class Challenge
         byte[] fingerprint,
         SubjectId? subject,
         IdentifierId? email,
-        byte[] identifier,
+        byte[]? identifier,
         string webAuthn,
         byte[]? browser,
         DateTimeOffset createdAt,
@@ -62,9 +62,10 @@ internal sealed class Challenge
 
     /// <summary>
     /// The keyed hash of the identifier it was opened with, which the identifier
-    /// component of the delay counts a refused factor against.
+    /// component of the delay counts a refused factor against, or nothing where it was
+    /// opened to restore a session, which names its account by the session alone.
     /// </summary>
-    public byte[] Identifier { get; }
+    public byte[]? Identifier { get; }
 
     /// <summary>The value an assertion against this challenge has to sign over.</summary>
     public string WebAuthn { get; }
@@ -96,7 +97,9 @@ internal sealed class Challenge
     /// <param name="handle">The secret the caller presents at every later step.</param>
     /// <param name="subject">Whose sign-in, or nothing.</param>
     /// <param name="email">The email it was opened with, where the account holds it.</param>
-    /// <param name="identifier">The keyed hash of the identifier it was opened with.</param>
+    /// <param name="identifier">
+    /// The keyed hash of the identifier it was opened with, or nothing for a restore.
+    /// </param>
     /// <param name="webAuthn">The WebAuthn challenge issued with it.</param>
     /// <param name="browser">
     /// What the opening browser's pre-authentication session hashes to, or nothing.
@@ -104,21 +107,16 @@ internal sealed class Challenge
     /// <param name="at">Now.</param>
     /// <param name="lifetime">How long it answers for.</param>
     /// <returns>The challenge.</returns>
-    /// <exception cref="ArgumentNullException">The identifier is absent.</exception>
     public static Challenge Open(
         OpaqueToken handle,
         SubjectId? subject,
         IdentifierId? email,
-        byte[] identifier,
+        byte[]? identifier,
         string webAuthn,
         [NeverLogged] byte[]? browser,
         DateTimeOffset at,
-        TimeSpan lifetime)
-    {
-        ArgumentNullException.ThrowIfNull(identifier);
-
-        return new(handle.Fingerprint(), subject, email, identifier, webAuthn, browser, at, at + lifetime, []);
-    }
+        TimeSpan lifetime) =>
+        new(handle.Fingerprint(), subject, email, identifier, webAuthn, browser, at, at + lifetime, []);
 
     /// <summary>
     /// The challenge as the store holds it.
@@ -126,7 +124,9 @@ internal sealed class Challenge
     /// <param name="fingerprint">What the handle hashes to.</param>
     /// <param name="subject">Whose sign-in, or nothing.</param>
     /// <param name="email">The email it was opened with, where the account holds it.</param>
-    /// <param name="identifier">The keyed hash of the identifier it was opened with.</param>
+    /// <param name="identifier">
+    /// The keyed hash of the identifier it was opened with, or nothing for a restore.
+    /// </param>
     /// <param name="webAuthn">The WebAuthn challenge issued with it.</param>
     /// <param name="browser">What the opening browser's pre-authentication session hashes to, or nothing.</param>
     /// <param name="createdAt">When it opened.</param>
@@ -139,7 +139,7 @@ internal sealed class Challenge
         byte[] fingerprint,
         SubjectId? subject,
         IdentifierId? email,
-        byte[] identifier,
+        byte[]? identifier,
         string webAuthn,
         [NeverLogged] byte[]? browser,
         DateTimeOffset createdAt,
@@ -148,7 +148,6 @@ internal sealed class Challenge
         IReadOnlyCollection<Factor> presented)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
-        ArgumentNullException.ThrowIfNull(identifier);
         ArgumentNullException.ThrowIfNull(presented);
 
         return new Challenge(

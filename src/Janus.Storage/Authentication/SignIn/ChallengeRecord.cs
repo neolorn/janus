@@ -32,9 +32,10 @@ internal sealed class ChallengeRecord
 
     /// <summary>
     /// The <c>identifier</c> column: the keyed hash of the identifier the sign-in was
-    /// opened with, which a refused factor is counted against.
+    /// opened with, which a refused factor is counted against, or nothing where it was
+    /// opened to restore a session.
     /// </summary>
-    public byte[] Identifier { get; set; } = [];
+    public byte[]? Identifier { get; set; }
 
     /// <summary>
     /// The <c>fingerprint_version</c> column: the version of the fingerprint key the

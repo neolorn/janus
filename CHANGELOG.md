@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A session that lapsed for inactivity under a policy requiring AAL2 is restored in place
+  by `POST /auth/restore/begin` and `POST /auth/restore`, on one passkey or the password:
+  the browser keeps the lapsed session's cookie, which those two routes alone read, and
+  they are carried by the token of the browser's pre-authentication session. The restore
+  rotates the cookie's secret, restores the record and every application session bound
+  to it, and ends the pre-authentication session. `signin_challenges.identifier` is
+  nullable, a restore being opened for no identifier.
 - A sign-in is bound to the pre-authentication session of the browser that opens it
   (`POST /auth/begin`, `IAuthentication.BeginAsync`'s `browser`), and a sign-in link is
   issued on that browser's latest sign-in for the identifier that no factor has answered,

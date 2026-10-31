@@ -87,6 +87,19 @@ internal static class AuthenticationEndpoints
             .Accepts<PresentFactorRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>()
             .Produces(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/restore/begin", BeginRestoreAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.Throttled))
+            .Produces<RestoreChallengeView>();
+        _ = group.MapPost("/restore", RestoreAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.SessionExpired, ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.FactorRejected, ErrorCodes.CredentialSuspended,
+                    ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnCounterMismatch,
+                    ErrorCodes.WebAuthnRelyingPartyChanged, ErrorCodes.WebAuthnUserVerificationRequired,
+                    ErrorCodes.Throttled))
+            .Accepts<PresentFactorRequest>(MediaTypeNames.Application.Json)
+            .Produces<SignInProgressView>();
         _ = group.MapPost("/link", LinkAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
             .Accepts<SignInRequest>(MediaTypeNames.Application.Json)
@@ -375,6 +388,83 @@ internal static class AuthenticationEndpoints
                         challenge,
                         presented,
                         RequestOrigin.Source(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                cookies,
+                contacts,
+                configuration,
+                time,
+                context,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // AUTH-SESS-005, D-224 item 13: the restore in place reads the cookie of the session
+    // that lapsed, which stage 5 kept and recorded for this route and the next alone,
+    // and is carried by the token of the browser's pre-authentication session (D-226).
+    private static async Task<IResult> BeginRestoreAsync(
+        AuthenticationService authentication,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authentication);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return Answers.Of(
+            await authentication
+                .BeginRestoreAsync(
+                    browser.Restorable,
+                    Carried(context.Request, BrowserCookies.PreAuthentication),
+                    RequestOrigin.Source(context.Request),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            challenge => TypedResults.Json(
+                RestoreChallengeView.Of(challenge),
+                AuthenticationJson.Default.RestoreChallengeView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    // AUTH-SESS-005, D-224 item 13: a completed restore ends the browser's
+    // pre-authentication session as a completed sign-in does, and sets the restored
+    // session's cookie and token (D-226).
+    private static async Task<IResult> RestoreAsync(
+        AuthenticationService authentication,
+        RequestSession browser,
+        BrowserSessionCookies cookies,
+        PreAuthenticationService contacts,
+        IConfigurationStore configuration,
+        TimeProvider time,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authentication);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        PresentFactorRequest request = await JsonBody
+            .ReadAsync<PresentFactorRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (request.ChallengeId is not { Length: > 0 } challenge)
+        {
+            return Answers.Malformed("challengeId");
+        }
+
+        if (request.Presented() is not FactorPresentation presented)
+        {
+            return Answers.Malformed("value");
+        }
+
+        return await ReachedAsync(
+                await authentication
+                    .RestoreAsync(
+                        browser.Restorable,
+                        challenge,
+                        presented,
+                        RequestOrigin.Of(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),
                 cookies,

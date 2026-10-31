@@ -77,6 +77,14 @@ internal sealed class RequestSession : IRequestAccess
     public Error? Expiry { get; private set; }
 
     /// <summary>
+    /// The cookie of a session that lapsed for inactivity and that the restore in place
+    /// admits, which the browser keeps and which <c>POST /auth/restore/begin</c> and
+    /// <c>POST /auth/restore</c> alone read, or nothing (BFF-ORDER-001 stage 5, D-226).
+    /// </summary>
+    [NeverLogged]
+    public OpaqueToken? Restorable { get; private set; }
+
+    /// <summary>
     /// Who is asking, or nothing where nobody is.
     /// </summary>
     public AccessContext? Context =>
@@ -119,6 +127,20 @@ internal sealed class RequestSession : IRequestAccess
         ArgumentNullException.ThrowIfNull(refusal);
 
         Expiry = refusal;
+    }
+
+    /// <summary>
+    /// Records that the cookie named a session the restore in place admits, which the
+    /// browser keeps.
+    /// </summary>
+    /// <param name="refusal">What resolving it answered.</param>
+    /// <param name="secret">What the cookie carried.</param>
+    /// <exception cref="ArgumentNullException">The refusal is absent.</exception>
+    public void Kept(Error refusal, [NeverLogged] OpaqueToken secret)
+    {
+        Ended(refusal);
+
+        Restorable = secret;
     }
 
     /// <summary>

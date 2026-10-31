@@ -1871,6 +1871,48 @@ GET /auth/providers/google/return
   303
     error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
   403 auth.session.csrfinvalid
+POST /auth/restore
+  request application/json
+    challengeId: string
+    factor: Factor
+    value: JsonElement?
+    linkToken: string
+    trustDevice: boolean
+    press: boolean
+  200
+    application/json
+      status: SignInStatus
+      assuranceLevel: AssuranceLevel
+      phishingResistant: boolean
+      required[]: Factor
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
+      webauthn.allowCredentials[].id: string
+      webauthn.allowCredentials[].transports[]: string
+      webauthn.userVerification: string
+      trustDeviceOffered: boolean
+      policyRequirement.field: PolicyField
+      policyRequirement.value: string
+      policyRequirement.deadline: DateTimeOffset
+      passwordChangeRequired: boolean
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  422 auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired
+  429 auth.throttled
+POST /auth/restore/begin
+  200
+    application/json
+      challengeId: string
+      factors[]: Factor
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
+      webauthn.allowCredentials[].id: string
+      webauthn.allowCredentials[].transports[]: string
+      webauthn.userVerification: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  429 auth.throttled
 GET /auth/session
   200
     application/json

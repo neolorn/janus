@@ -50,6 +50,8 @@ public sealed class IdentityEndpointsTests
         "POST /auth/break-glass",
         "POST /auth/device/verify",
         "POST /auth/factor",
+        "POST /auth/restore",
+        "POST /auth/restore/begin",
         "POST /auth/step-up",
         "POST /register/terms",
 
