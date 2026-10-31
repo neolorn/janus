@@ -789,6 +789,61 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
+    /// AUTH-OIDC-001 AC5 (D-227): the clause leaves the four their own rules. <c>openid</c>
+    /// is every client's, registered or not; <c>offline_access</c> a protocol client's
+    /// whatever it is registered with (AUTH-OIDC-002); <c>email</c> and <c>profile</c> a
+    /// client's registered with them, a request for one its client is not registered
+    /// with refused with <c>invalid_request</c> and no reference issued.
+    /// </summary>
+    /// <param name="registered">The scopes the client is registered with.</param>
+    /// <param name="asked">The scopes its request asks for.</param>
+    /// <param name="refused">The code it is refused with, or nothing where it is admitted.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("email", "openid email", null)]
+    [InlineData("openid email", "openid email offline_access", null)]
+    [InlineData("openid profile", "openid profile", null)]
+    [InlineData("openid profile", "openid email", "invalid_request")]
+    [InlineData("openid email", "openid profile", "invalid_request")]
+    public async Task AUTH_OIDC_001_AC5_TheFourScopesKeepTheirOwnRulesAsync(
+        string registered,
+        string asked,
+        string? refused)
+    {
+        await using var deployment = new Deployment();
+
+        await deployment.Clients.AddAsync(
+            new OidcClient(
+                Mailing,
+                Mailing,
+                OidcClientKind.Protocol,
+                RelyingParty.Destination,
+                registered.Split(' ')),
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Answer pushed = await RelyingParty.PushAsync(
+            deployment,
+            Mailing,
+            silent: false,
+            RelyingParty.Destination,
+            asked);
+
+        if (refused is null)
+        {
+            Assert.Equal(StatusCodes.Status201Created, pushed.Status);
+            Assert.True(pushed.Json().TryGetProperty("request_uri", out _));
+
+            return;
+        }
+
+        Assert.Equal(StatusCodes.Status400BadRequest, pushed.Status);
+        Assert.Equal(refused, pushed.Text("error"));
+        Assert.False(pushed.Json().TryGetProperty("request_uri", out _));
+    }
+
+    /// <summary>
     /// AUTH-OIDC-001: the token a protocol client obtains is the signed-in person's and
     /// nobody else's.
     /// </summary>
