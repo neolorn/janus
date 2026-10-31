@@ -1843,7 +1843,10 @@ its date; entries grouped under `Added`, `Changed`, `Deprecated`, `Removed`, `Fi
 that changes behaviour adds its line under `Unreleased`. A release moves `Unreleased` to
 a version section, moves `PublicAPI.Unshipped.txt` into `PublicAPI.Shipped.txt`
 (CONV-SETUP-003) and tags the commit `vMAJOR.MINOR.PATCH`; **MinVer** derives the
-package version from that tag (LIB-VER-001). Nothing else sets a version number. The
+package version from that tag (LIB-VER-001). A release candidate takes the same forms
+with its pre-release suffix (D-232): its version section is headed `X.Y.Z-rc.N`, its
+commit is tagged `vX.Y.Z-rc.N`, which MinVer reads as it is, and its release is marked
+as a pre-release. Nothing else sets a version number. The
 first version's section records what that version holds, under `Added` alone; the other
 groups measure a version against a released predecessor. Each release also refreshes the
 two embedded lists that age, each dated when drawn: the offline leaked-password list
@@ -1851,7 +1854,7 @@ two embedded lists that age, each dated when drawn: the offline leaked-password 
 the suffix rules the conversion sets aside being reviewed and updated with the list
 (D-189). The dictionary lists (AUTH-PASS-004) are static and are not refreshed.
 
-*Source: LIB-VER-001, LIB-VER-002, D-149, D-166, D-189*
+*Source: LIB-VER-001, LIB-VER-002, D-149, D-166, D-189, D-232*
 
 **Acceptance criteria**
 1. A behaviour-changing pull request without a changelog line fails a check.

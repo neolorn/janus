@@ -11,10 +11,10 @@ rules are in the working guide; this plan is the order of work.
 **Two milestones.** Milestone 1 is the library: everything the implementer can build and
 prove alone against the specification with a database and a shell, with every external
 system met at its abstraction. It ran phase by phase on phase reports alone. Milestone 2
-is the library's release: its release workflow and version 1.0.0, after the host rounds
-of section 3a. Deploying the library (a machine, its credentials, its gateways, its
-frontends) is a host's, in the host's own project, never this repository's (D-220). It
-does not start until Milestone 1's exit gate is green.
+is the library's release: its release workflow and its first release candidate,
+1.0.0-rc.1, after the host rounds of section 3a. Deploying the library (a machine, its
+credentials, its gateways, its frontends) is a host's, in the host's own project, never
+this repository's (D-220). It does not start until Milestone 1's exit gate is green.
 
 ---
 
@@ -163,7 +163,9 @@ D-225).
 | # | Step | Who | What | Done when |
 |---|---|---|---|---|
 | 1 | Repository workflows | implementer | Pipeline definitions for the gates of CONV-GATE-001/002, the sample host's among them (LIB-TEST-004), release workflow (tag, MinVer, changelog check, packing the packages of LIB-PKG-001, the `Janus.Cli` tool package and `Janus.Testing` among them, attaching them to the tag's release, and publishing them to a private package feed where the owner names one, LIB-PKG-003), dependency alerting, secret scanning, and the manually dispatched workflow that draws the leaked-password list with `tools/leaked-passwords/` on a hosted runner, its output the dated list CONV-VCS-005 refreshes at each release (D-197) | Every gate runs on a pull request; a tagged commit produces every package of LIB-PKG-001 at one version, attached to its release; the leaked-password workflow, dispatched by hand, yields the dated list as its artifact |
-| 2 | Release 1.0.0 | implementer, owner approves | Move `Unreleased` to `1.0.0`, ship the public-surface file, tag; the release workflow packs and attaches the packages (CONV-VCS-005) | Version 1.0.0's packages on the tag's release; changelog and migration note published; every known issue carried below answered |
+| 2 | Release 1.0.0-rc.1 | implementer, lead approves | Move `Unreleased` to `1.0.0-rc.1`, ship the public-surface file, tag `v1.0.0-rc.1`; the release is a pre-release; the release workflow packs and attaches the packages (CONV-VCS-005) | Version 1.0.0-rc.1's packages on the tag's release, marked as a pre-release; changelog and migration note published; every known issue carried below answered |
+
+The final 1.0.0 comes on the owner's word (D-232).
 
 **Known issues carried into Milestone 2.**
 

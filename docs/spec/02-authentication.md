@@ -2223,7 +2223,7 @@ of asking where a limit is 0; the anomaly alerts fire at
 `alerting.recovery.accountthreshold` and `alerting.recovery.approverthreshold`
 (OPS-ALERT-001).
 
-*Source: D-008, D-041, D-111, D-166, D-186*
+*Source: D-008, D-041, D-111, D-166, D-186, D-234*
 
 **Where the link goes.** To a channel **already recorded on the account** and chosen by
 the approver — for a customer whose mailbox is gone, the phone. Delivering the link by
@@ -2242,6 +2242,15 @@ confirmed by the new address only** — the approver's confirmation stands in fo
 old one. The remaining security-notice set is still notified and receives the undo
 (REG-IDENT-006, REG-IDENT-007), and all other sessions terminate (IDN-LIFE-008).
 
+**A lost mailbox in any mode (D-234).** Where the approver recorded the mailbox as lost,
+the session replaces an email the enrolment lists (`09` `GET /enrol`, `identifiers`)
+whatever `identifiers.email.max` is, verified by the new address alone, and the new
+address takes the replaced one's place, primary included, so the new-device code and
+every later recovery reach a mailbox the person holds (REG-IDENT-007). Nothing else
+opens: the session adds no identifier and removes none, and a person who lost more than
+one address replaces the one the enrolment names and tidies the rest after an ordinary
+sign-in.
+
 **Acceptance criteria**
 1. The link expires and cannot be reused.
 2. The reason is mandatory and recorded: an absent or blank reason is refused with
@@ -2254,6 +2263,10 @@ old one. The remaining security-notice set is still notified and receives the un
 6. The link is never sent to a channel supplied in the request.
 7. An approval whose link's send a sending restriction refuses is answered 429
    `auth.restriction.exceeded`, leaving no approval, no record of it and no send.
+8. With `identifiers.email.max` at 10, a customer whose approver recorded the mailbox
+   as lost replaces it on the enrolment session, and once the new address verifies it
+   holds the replaced one's place, primary included; the session can neither add nor
+   remove an identifier.
 
 ---
 

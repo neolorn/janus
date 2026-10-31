@@ -517,14 +517,29 @@ adapters live.
 ## 5. Versioning
 
 **LIB-VER-001** — The library SHALL use **Semantic Versioning 2.0.0** against the
-contract in LIB-API-001. The version SHALL be derived from the release tag (`vMAJOR.MINOR.PATCH`)
-by the build (CONV-VCS-005) and SHALL appear in no project file.
+contract in LIB-API-001, and SHALL ship release candidates of 1.0.0 (`v1.0.0-rc.N`)
+until the owner calls a release final. The version SHALL be derived from the release tag
+(`vMAJOR.MINOR.PATCH`, or `vMAJOR.MINOR.PATCH-rc.N` for a release candidate) by the build
+(CONV-VCS-005) and SHALL appear in no project file.
 
-*Source: D-026.4, D-149*
+**Release candidates (D-232).** A release candidate is `X.Y.Z-rc.N`, a SemVer 2.0.0
+pre-release numbered from 1 for each version, its release marked as a pre-release
+(CONV-VCS-005). Before the first final release nothing in this rule binds: a release
+candidate of 1.0.0 may change or remove anything in LIB-API-001's contract, and its
+changelog section and migration note name every change and removal since the release
+before it. From the first final release on, the rule binds against the newest final
+release; a release candidate is never that baseline, and `X.Y.Z-rc.N` is held to what
+`X.Y.Z` needs.
+
+*Source: D-026.4, D-149, D-232*
 
 **Acceptance criteria**
-1. A breaking change to any listed surface increments the major version.
-2. Additive changes increment the minor version.
+1. From the first final release on, a breaking change to any listed surface increments
+   the major version.
+2. From the first final release on, additive changes increment the minor version.
+3. Before the first final release, a release candidate that removes a member of
+   LIB-API-001's contract passes the release checks; after it, the same removal in a
+   minor release fails.
 
 ---
 

@@ -400,12 +400,15 @@ Within the enrolment session the person MAY call: `GET /enrol`,
 `POST /account/password`, `/auth/webauthn/register/*`, `/account/factors/totp/*` (set a
 password or enrol a passkey; for a recovery, replacing what was lost), and, for a
 recovery whose approver recorded the mailbox as lost,
-`PUT /account/identifiers/{id}/replace` completing on the **new address alone**
+`PUT /account/identifiers/{id}/replace` naming an email `GET /enrol`'s `identifiers`
+lists, taken whatever `identifiers.email.max` is and completing on the **new address
+alone**, the new address taking the replaced one's place, primary included
 (AUTH-RECOV-002: the approver's recorded confirmation stands in for the old address; the
-exception is stated in REG-IDENT-007), `POST /account/identifiers/{id}/verify` for that
-replace's pending verification alone (a code naming any other is answered as one naming
-no pending verification of the account, **422** `auth.code.invalid`, and a press as one
-that opens nothing, **422** `auth.code.expired`; that replace's link lands on the
+exception is stated in REG-IDENT-007; the session adds and removes no identifier,
+D-234), `POST /account/identifiers/{id}/verify` for that replace's pending verification
+alone (a code naming any other is answered as one naming no pending verification of the
+account, **422** `auth.code.invalid`, and a press as one that opens nothing, **422**
+`auth.code.expired`; that replace's link lands on the
 authentication application, where the enrolment session is held, and a press of it there
 verifies, as a press in the browser that staged any replace does, REG-SESS-003, D-190),
 and `POST /account/recoverycodes/exported` for the codes a second step enrolled beside a
@@ -446,7 +449,7 @@ empty otherwise. A password set on the session is refused **422**
 request carries no live enrolment session.
 
 *Source: D-148; AUTH-RECOV-002, AUTH-RECOV-005, API-LAND-001, D-140, D-146, D-147,
-D-188, D-189, D-190, D-224*
+D-188, D-189, D-190, D-224, D-234*
 
 ---
 
@@ -473,7 +476,7 @@ issued on, `{}` where the link is issued on one the browser holds (D-230) · **4
 unregistered identifier (AUTH-ABUSE-002, AUTH-ABUSE-004)
 
 *Source: D-146; AUTH-FACT-002, AUTH-FACT-003, AUTH-ABUSE-003, AUTH-ABUSE-004, D-162, D-166,
-D-183, D-224, D-226, D-230*
+D-183, D-224, D-226, D-230, D-233*
 
 The link completes **only in the browser that requested it and only on a press**
 (REG-SESS-003). It is issued on a challenge (D-226): the browser's latest live challenge
@@ -489,14 +492,16 @@ has not enabled alike (AUTH-ABUSE-002, D-230). The landing route (API-LAND-001) 
 the server completes the link's challenge only where the request carries the
 pre-authentication cookie that challenge is bound to. The call carries no `challengeId`:
 the token names its pending link and the challenge it belongs to, and a `challengeId`
-sent beside it is not read (D-224). Opened anywhere else, or where the challenge is
-bound to none, the same call returns the code to type where the sign-in began, presented
-at `/auth/factor` on that challenge, and signs nothing in. That code is an
-authentication code, not a verification code: it lives as long as its link
-(`link.magic.lifetime`) and is capped by `code.signin.attempts` wrong tries, after which
-it is refused `auth.code.expired`, a correct one included (AUTH-FACT-004). A session
-established by a link alone records AAL1 and a link is never a second step
-(AUTH-FACT-003).
+sent beside it is not read (D-224). Where the press leaves a second step or the
+new-browser code, its answer names the challenge in `challengeId`, and the landing page
+presents that step on it and completes the sign-in itself (`POST /auth/factor`, D-233).
+Opened anywhere else, or where the challenge is bound to none, the same call returns the
+code to type where the sign-in began, presented at `/auth/factor` on that challenge, and
+signs nothing in. That code is an authentication code, not a verification code: it
+lives as long as its link (`link.magic.lifetime`) and is capped by
+`code.signin.attempts` wrong tries, after which it is refused `auth.code.expired`, a
+correct one included (AUTH-FACT-004). A session established by a link alone records
+AAL1 and a link is never a second step (AUTH-FACT-003).
 
 ---
 
@@ -611,7 +616,8 @@ assurance.
   "required": [],                    // populated when status is factorRequired
   "webauthn": { },                   // where required names securityKey (AUTH-FACT-002b)
   "trustDeviceOffered": true,        // AUTH-FACT-015: the completing call may trust it
-  "continueTo": "..."                // AUTH-SESS-012: where an authorization waits
+  "continueTo": "...",               // AUTH-SESS-012: where an authorization waits
+  "challengeId": "..."               // D-233: a pressed sign-in link's open answer
 }
 ```
 
@@ -688,7 +694,16 @@ naming `factor`; it needs no `challengeId`, the token naming its challenge, and 
 `challengeId` sent beside it is not read (D-224). A pressed token that opens no pending
 link is recorded as a failed authentication behind the source delay of AUTH-ABUSE-001
 and answered `auth.code.expired` (**429** `auth.throttled` while the delay stands); an
-unpressed one changes and records nothing (CONV-LOG-005, D-166).
+unpressed one changes and records nothing (CONV-LOG-005, D-166). Where a pressed token
+completes its factor and the sign-in is not complete, the **200** (`factorRequired`, or
+`deviceVerificationRequired`) carries `challengeId`, the challenge the link completed its
+factor on, so the landing page presents the second step, or the new-browser code of
+`POST /auth/device/verify`, on that challenge and completes the sign-in itself; a
+`complete` answer and every refusal carry none. This reveals nothing new: the press
+completes only in the browser whose pre-authentication cookie the challenge is bound to
+(REG-SESS-003, D-226), the browser that already holds the identifier, and an unpressed
+open, or a call from another browser, is answered as this section states and names no
+challenge (D-233).
 
 **Sign-in codes.** A code presented as `emailCode`, as the `phoneCode` second step, or
 where a sign-in link was opened in another browser is an authentication code
@@ -752,7 +767,7 @@ requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
 AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195, D-197,
-D-198, D-199, D-200*
+D-198, D-199, D-200, D-233*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -1585,16 +1600,21 @@ once a write of the value to the account has ended its reservation, REG-IDENT-00
 ### `PUT /account/identifiers/{id}/replace`
 
 Single-address mode (`identifiers.<kind>.max` = 1): the change of an identifier in one
-operation (REG-IDENT-007). Step-up; the new value is verified by
-`POST /account/identifiers/{id}/verify`; on verification the swap applies at once and
-the undo goes to the remaining channels of the account. **Only where the account has no
-other channel at all** does the old address confirm before the swap, except within an
-admin-assisted enrolment session (AUTH-RECOV-002, REG-IDENT-007); the old address's
-message (`identifier-change-confirm`) carries a link of kind `identifier-confirm`
-(API-LAND-001), which the old address confirms by a press presented to
-`POST /account/identifiers/{id}/verify` with its token; the confirmation lives
-`code.verification.lifetime` from its send, and a press after that changes nothing and
-is answered **422** `auth.code.expired` (REG-IDENT-007). A repeated replace naming the
+operation (REG-IDENT-007). Within an admin-assisted enrolment session opened with
+`mailboxLost` it is taken in any mode: a replace naming an email `GET /enrol`'s
+`identifiers` lists is taken whatever `identifiers.email.max` is, verified by the new
+address alone, and the new address takes the replaced one's place, primary included;
+outside that session the replace stays a single-address-mode operation (D-234).
+Step-up; the new value is verified by `POST /account/identifiers/{id}/verify`; on
+verification the swap applies at once and the undo goes to the remaining channels of the
+account. **Only where the account has no other channel at all** does the old address
+confirm before the swap, except within an admin-assisted enrolment session
+(AUTH-RECOV-002, REG-IDENT-007); the old address's message (`identifier-change-confirm`)
+carries a link of kind `identifier-confirm` (API-LAND-001), which the old address
+confirms by a press presented to `POST /account/identifiers/{id}/verify` with its token;
+the confirmation lives `code.verification.lifetime` from its send, and a press after
+that changes nothing and is answered **422** `auth.code.expired` (REG-IDENT-007). A
+repeated replace naming the
 value already staged, from the session that staged it, sends again each of its records
 not yet spent, a resend counted, and refused with **429** `auth.restriction.exceeded`,
 by the restrictions as a first send is (AUTH-ABUSE-004), and otherwise answers as the
@@ -1613,18 +1633,20 @@ or an undo reserves, and nothing is staged (AUTH-ABUSE-004) **409**:
 identifier); `identity.identifier.locked` for a locked identifier (D-222) **422**:
 `identity.identifier.mixedscript`, `identity.identifier.domainnotallowed`;
 `identity.identifier.invalid` for an identifier the account does not hold, or a replace
-outside single-address mode (`10` section 1.1, D-222)
+outside single-address mode save one an enrolment session opened with `mailboxLost`
+takes (`10` section 1.1, D-222, D-234)
 
-*Source: D-148; D-146, REG-IDENT-007, D-166, D-187, D-189, D-190, D-197*
+*Source: D-148; D-146, REG-IDENT-007, D-166, D-187, D-189, D-190, D-197, D-234*
 
 Also the endpoint an enrolment session opened for a lost mailbox uses to set a new
 address confirmed by the new address alone (`POST /enrol/begin`, AUTH-RECOV-002). The
 session under which the swap completes rotates and every other session of the account
 ends, the staging session included where it is not the completing one; a swap completed
 under no session (the old address's confirmation, an enrolment session) ends every
-session (IDN-LIFE-008). Where the identifier is the number a `phoneCode` credential is
-bound to, the credential is taken out of use when the swap applies, as AUTH-FACT-002
-states (D-197).
+session of the account (IDN-LIFE-008); an enrolment session it completes under stays
+open, so the person goes on to set the credential (AUTH-RECOV-002). Where the identifier
+is the number a `phoneCode` credential is bound to, the credential is taken out of use
+when the swap applies, as AUTH-FACT-002 states (D-197).
 
 ---
 

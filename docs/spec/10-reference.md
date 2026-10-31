@@ -1595,9 +1595,21 @@ account's sign-in and the last of which a host's job calls (`21`, D-221).
 
 The name is the key of the policy's `gates` field (section 4.1a) and the value the
 `09` endpoint declares; it follows the `resource:action` shape of CONV-NAME-002 but is
-a gate name, not a permission string (D-151).
+a gate name, not a permission string (D-151). An action is stored, exported and audited
+by its name alone, never by a number (D-235).
 
-*Source: AUTH-STEP-001, D-132, D-146, D-147, D-151, D-166*
+**Retired names (D-235).** A gate names a current action of this table. The library
+keeps the names of the actions it once had and removed, the rows marked retired (today
+`alerting:destinations`), beside the current ones. A policy or override written through
+the API or the command-line tool names current actions only: a retired name is refused
+with the error a misspelled one gets. Reading a stored policy or override drops a gate
+that names a retired action, writes nothing at the read, and logs it once per policy at
+Information; a name neither current nor retired is still refused, since no write ever
+stored one and it means a damaged row. A migration deletes the gates naming a retired
+action from the stored policies and overrides, so that a later release need not keep
+reading past them.
+
+*Source: AUTH-STEP-001, D-132, D-146, D-147, D-151, D-166, D-235*
 
 Every gate is three values — level, phishing-resistance, maximum age
 (AUTH-STEP-002). Under the system policy the level is **the account's reachable
