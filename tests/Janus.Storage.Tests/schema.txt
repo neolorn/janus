@@ -1188,6 +1188,7 @@ table sends
   column resend_at timestamp with time zone
   column second_factor boolean not null default false
   column send bytea not null default '\x'::bytea
+  column released boolean not null default false
   constraint pk_sends PRIMARY KEY (reference)
   index ix_sends_answer using btree (answer)
   index ix_sends_send using btree (send)

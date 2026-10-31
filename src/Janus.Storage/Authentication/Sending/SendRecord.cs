@@ -30,6 +30,12 @@ internal sealed class SendRecord
     /// </summary>
     public bool Admitted { get; set; }
 
+    /// <summary>
+    /// The <c>released</c> column: whether the message failed for good, its counts
+    /// taken back, which a report of it still names until its send settles (D-227).
+    /// </summary>
+    public bool Released { get; set; }
+
     /// <summary>The <c>counted</c> column.</summary>
     public byte[][] Counted { get; set; } = [];
 

@@ -2136,6 +2136,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("integer")
                     .HasColumnName("fingerprint_version");
 
+                b.Property<bool>("Released")
+                    .HasColumnType("boolean")
+                    .HasColumnName("released");
+
                 b.PrimitiveCollection<byte[][]>("Resend")
                     .IsRequired()
                     .HasColumnType("bytea[]")

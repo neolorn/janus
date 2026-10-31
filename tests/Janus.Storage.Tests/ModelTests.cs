@@ -926,6 +926,7 @@ public sealed class ModelTests
             "sends.counted",
             "sends.fingerprint_version",
             "sends.reference",
+            "sends.released",
             "sends.resend",
             "sends.resend_at",
             "sends.second_factor",

@@ -113,9 +113,10 @@ public sealed class SendOutcomesTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-SMS-005 AC3: a repeated report changes nothing. A failure releases the
-    /// message's counts once, and a second delivery report of a <c>secondfactor</c> text
-    /// releases nothing more.
+    /// INT-SMS-005 AC3 (D-227): a repeated report changes nothing and is still answered
+    /// true, the message being one the library handed over. A failure releases the
+    /// message's counts once, a second delivery report of a <c>secondfactor</c> text
+    /// releases nothing more, and a reference never issued is answered false.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -124,10 +125,12 @@ public sealed class SendOutcomesTests : IAsyncDisposable
         SendReference failed = await SentAsync(secondFactor: false);
         SendReference delivered = await SentAsync(secondFactor: true);
 
-        _ = await ReportedAsync(failed, delivered: false);
-        _ = await ReportedAsync(failed, delivered: false);
-        _ = await ReportedAsync(delivered, delivered: true);
-        _ = await ReportedAsync(delivered, delivered: true);
+        Assert.True(await ReportedAsync(failed, delivered: false));
+        Assert.True(await ReportedAsync(failed, delivered: false));
+        Assert.True(await ReportedAsync(failed, delivered: true));
+        Assert.True(await ReportedAsync(delivered, delivered: true));
+        Assert.True(await ReportedAsync(delivered, delivered: true));
+        Assert.False(await ReportedAsync(SendReference.Draw(_randomness), delivered: false));
 
         Assert.Single(_ledger.Sends(Destination));
         Assert.Single(_ledger.Sends(Source));
