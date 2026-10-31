@@ -688,13 +688,14 @@ carries:
   the roles the test names, and enrolled through the invitation; each passkey labelled
   `Software passkey`; and for each a `TestSession`, an `HttpClient` that carries the
   session cookie, the synchronizer token and `X-Identity-Request` (BFF-CSRF-001,
-  BFF-CSRF-003) on every request, with the person's subject, and a step-up with the
-  person's passkey or password; and a visitor (`TestPeople.Visitor()`, a `TestVisitor`),
-  an `HttpClient` that carries what a `TestSession` carries save a sign-in session (the
-  pre-authentication cookie, the synchronizer token, `X-Identity-Request`, the origin
-  and the fetch metadata), for what a guest does with no account: a collection (`21`
-  REC-COL-001) and the record access (REC-ACC-001), the codes read from the in-memory
-  notification handler (D-222).
+  BFF-CSRF-003) on every request, with the person's subject, a step-up with the person's
+  passkey or password, and a restore in place with the same once the session has lapsed
+  idle (`POST /auth/restore/begin` and `POST /auth/restore`, D-228); and a visitor
+  (`TestPeople.Visitor()`, a `TestVisitor`), an `HttpClient` that carries what a
+  `TestSession` carries save a sign-in session (the pre-authentication cookie, the
+  synchronizer token, `X-Identity-Request`, the origin and the fetch metadata), for what
+  a guest does with no account: a collection (`21` REC-COL-001) and the record access
+  (REC-ACC-001), the codes read from the in-memory notification handler (D-222).
 
 A host's project that references the library's packages, a test project using
 `Janus.Testing` among them, carries the framework reference to `Microsoft.AspNetCore.App`
@@ -702,7 +703,7 @@ itself: the reference a package carries prunes nothing in the project that takes
 without its own the project resolves as packages what the shared framework serves (`08`
 CONV-LAYOUT-001, D-205).
 
-*Source: D-204, D-205, D-206, D-207, D-208, D-210, D-222, D-225*
+*Source: D-204, D-205, D-206, D-207, D-208, D-210, D-222, D-225, D-228*
 
 **Acceptance criteria**
 1. A test using only `Janus.Testing` and a host built on the public surface stands a

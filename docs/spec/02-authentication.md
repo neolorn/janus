@@ -1377,9 +1377,11 @@ transaction, its lifetime still running from its creation; the session's end end
 address of `GET /oidc/authorize/continue` under the provider address, which finds the
 pending authorization on the session the browser carries, issues the code as the
 authorization would have with the session now live, and spends it; with none pending it
-sends the browser to the origin of the registered address of `redirect.defaultclient`.
-No destination crosses in the browser's hands (API-REDIR-001), and the pushed request
-keeps its 60 seconds (AUTH-OIDC-006).
+sends the browser to the origin of the registered address of `redirect.defaultclient`,
+or, while that key is empty, to `/`, the root of the application that serves it, as
+API-REDIR-001 replaces any other destination (D-228). No destination crosses in the
+browser's hands (API-REDIR-001), and the pushed request keeps its 60 seconds
+(AUTH-OIDC-006).
 
 **What this reuses rather than invents:** the client registry (AUTH-OIDC-001,
 API-REDIR-002), exact-match `redirect_uri` (AUTH-OIDC-006, D-198), single-use

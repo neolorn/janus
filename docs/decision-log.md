@@ -19046,6 +19046,8 @@ section 4).
 
 > **Amended.** Answer 1: the scopes a client is registered with are those beyond `openid`, `email`, `profile` and `offline_access`, which keep their own rules (D-227).
 
+> **Amended.** Answer 4: with no authorization pending and `redirect.defaultclient` empty, the continuation answers `/` (D-228).
+
 **Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-224, D-225
 
 **TL;DR.** Round H3 asked nine questions. Questions 4 to 7 were about an SMS gateway's
@@ -19224,6 +19226,45 @@ AUTH-OIDC-001 covers the scopes beyond `openid`, `email`, `profile` and
    the refusal every registered client meets today for no gain in what it may receive).
 
 **Propagated to:** `02` AUTH-OIDC-001.
+
+---
+
+## D-228 — Round H3 questions 12 and 13: the continuation with nowhere to go, and a test's restore
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-226
+
+**TL;DR.** With no authorization pending and `redirect.defaultclient` empty, its
+default, `GET /oidc/authorize/continue` answers a **302** to `/`, the root of the
+application that serves it, as API-REDIR-001 replaces any other destination (12). A
+`TestSession` restores its session in place, as it steps up, with the person's passkey
+or password (13).
+
+1. **The continuation with nowhere to go (question 12).** `10` already says what an
+   empty `redirect.defaultclient` means: no fallback destination is carried, and the
+   frontend chooses its own. API-REDIR-001 already says where a browser goes when its
+   destination is not one the library may name: `/`, that application's root. The
+   continuation joins the two: `/` of the application it is served by, whose frontend
+   chooses what a person signed in with no application waiting sees.
+
+   *Rejected:* a 302 to the sign-in screen (the person has just signed in, and would
+   be asked again for nothing); an error body under a new code (the route never renders
+   a page, and nothing went wrong); startup refusing an empty key (the key is optional
+   by design, and a deployment with one browser application need not name it).
+
+2. **A test's restore (question 13).** LIB-TEST-003 gives each `TestSession` the
+   person's step-up and keeps the person's passkey inside it. A restore in place is
+   the same kind of act, a ceremony with the person's own credential on their own
+   session, and a host's tests meet it wherever its frontend restores after an idle
+   expiry. The `TestSession` makes the two restore calls with the person's passkey or
+   password, as `StepUpAsync` makes the step-up's.
+
+   *Rejected:* handing the passkey to the test (it would let a test act as the person
+   outside the session the library built for it); the sample host's test enrolling a
+   staff member of its own (a host's tests would repeat `TestPeople`'s steps to reach
+   a flow every frontend meets).
+
+**Propagated to:** `02` AUTH-SESS-012; `07` LIB-TEST-003; `09`
+`GET /oidc/authorize/continue`; `10` `redirect.defaultclient`.
 
 ---
 
@@ -19464,6 +19505,7 @@ AUTH-OIDC-001 covers the scopes beyond `openid`, `email`, `profile` and
 | The library sends nothing, and keeps to its own work | D-225 |
 | Round H3 questions 1, 2, 3, 8 and 9: the mail server's tokens, a loss report's link, a challenge's browser, and what a sign-in and a restore keep | D-226 |
 | Round H3 questions 10 and 11: a repeated failure report, and the four scopes | D-227 |
+| Round H3 questions 12 and 13: the continuation with nowhere to go, and a test's restore | D-228 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
