@@ -1053,17 +1053,12 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// DR-006a AC2: no erasure procedure attempts to modify a backup. The library takes
-    /// and writes no backup, and the one port through which it reaches one is the restore
-    /// test's, which restores a copy into a throwaway instance; nothing that erases names
-    /// it.
+    /// DR-006a AC2: no erasure procedure attempts to modify a backup. The library takes,
+    /// writes and restores no backup (D-225).
     /// </summary>
     [Fact]
     public void DR_006a_AC2_NoErasureProcedureReachesABackup()
     {
-        Assert.Equal(
-            ["HostingRegistration.cs", "IRestoreTestInstance.cs", "RestoreTest.cs"],
-            Named(text => Regex.IsMatch(text, @"\bIRestoreTestInstance\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
         Assert.Empty(Named(text => Regex.IsMatch(
             text,
             @"\bpg_(dump|dumpall|restore|basebackup)\b",

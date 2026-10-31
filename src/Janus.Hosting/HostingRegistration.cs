@@ -188,20 +188,6 @@ public static class HostingRegistration
         services.AddScoped<EventConsumers>();
         services.AddScoped<EventPublisher>();
 
-        // DR-007, DR-008: the backups and the throwaway instance are the environment's,
-        // so what restores into one is the deployment's to register, and one it does not
-        // register fails every test; what is restored is opened with the keys this
-        // process holds, which is what the test proves the backup readable with.
-        services.AddScoped(provider => new RestoreTest(
-            provider.GetService<IRestoreTestInstance>(),
-            provider.GetRequiredService<IKeyRing>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IPrivacyAudit>(),
-            provider.GetRequiredService<IAlertRaising>(),
-            provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetRequiredService<TimeProvider>(),
-            provider.GetRequiredService<ILogger<RestoreTest>>()));
-
         // PRIV-RET-002, OPS-MIG-003a: the partitions are reached over the maintenance
         // credential only, in an area of their own built with the keys this process holds.
         services.AddScoped(provider => new AuditRetention(

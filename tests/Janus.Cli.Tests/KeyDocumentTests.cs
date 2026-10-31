@@ -12,8 +12,8 @@ using Xunit;
 namespace Janus.Cli.Tests;
 
 /// <summary>
-/// Where the key material a command is piped goes: into the run's memory and out through
-/// the escrow copy, never into the library's schema (INF-HOST-003).
+/// Where the key material a command is piped goes: into the run's memory, never into the
+/// library's schema (INF-HOST-003).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class KeyDocumentTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>
@@ -22,7 +22,7 @@ public sealed class KeyDocumentTests(DatabaseFixture database) : IClassFixture<D
 
     private const string RotateFingerprintKey = "rotate-fingerprint-key";
 
-    private const string Sealed = "--sealed";
+    private const string Retire = "--retire";
 
     private const string Maintenance = "identity_maintenance";
 
@@ -32,7 +32,7 @@ public sealed class KeyDocumentTests(DatabaseFixture database) : IClassFixture<D
 
     /// <summary>
     /// INF-HOST-003 AC4: after bootstrap has fingerprinted the first administrator's
-    /// identifiers and mailbox, and both keys have been rotated and sealed, no column of
+    /// identifiers and mailbox, and both keys have been rotated and retired, no column of
     /// the library's schema holds either version of the fingerprint key, as bytes or in a
     /// written form.
     /// </summary>
@@ -51,9 +51,9 @@ public sealed class KeyDocumentTests(DatabaseFixture database) : IClassFixture<D
         [
             (await Invocation.PipedAsync(Invocation.Bootstrap(), Invocation.Keys(database.ConnectionString))).ExitCode,
             (await Invocation.PipedAsync([RotateKeyEncryptionKey], beforeTheFingerprintKey)).ExitCode,
-            (await Invocation.PipedAsync([RotateKeyEncryptionKey, Sealed], beforeTheFingerprintKey)).ExitCode,
+            (await Invocation.PipedAsync([RotateKeyEncryptionKey, Retire], beforeTheFingerprintKey)).ExitCode,
             (await Invocation.PipedAsync([RotateFingerprintKey], afterIt)).ExitCode,
-            (await Invocation.PipedAsync([RotateFingerprintKey, Sealed], afterIt)).ExitCode,
+            (await Invocation.PipedAsync([RotateFingerprintKey, Retire], afterIt)).ExitCode,
         ];
 
         await using NpgsqlConnection connection = await database.OpenAsync();

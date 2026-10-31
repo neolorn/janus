@@ -8,8 +8,8 @@ using Janus.Storage;
 namespace Janus.Hosting;
 
 /// <summary>
-/// What is kept in the log of a fault the library caught: the pipeline's, a background
-/// job's and a restore test step's alike.
+/// What is kept in the log of a fault the library caught: the pipeline's and a
+/// background job's alike.
 /// </summary>
 /// <remarks>
 /// Implements BFF-ERR-002 AC2. A fault is kept by its full type name and its stack

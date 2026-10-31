@@ -12,8 +12,7 @@ namespace Janus.Privacy.SubjectKeys;
 /// <summary>
 /// The key-encryption key's rotation: every value wrapped under a previous version is
 /// wrapped again under the current one, in batches that each commit with the progress
-/// they make, and the previous versions are retired once the escrow copy of the current
-/// one is sealed.
+/// they make, and the previous versions are retired when the operator asks.
 /// </summary>
 /// <param name="store">The progress and the wrapped values.</param>
 /// <param name="work">The transaction each batch commits in.</param>
@@ -177,8 +176,7 @@ internal sealed class KeyRotation(
     }
 
     /// <summary>
-    /// Retires the versions before the current one, once the operator has confirmed the
-    /// escrow copy of the current one sealed.
+    /// Retires the versions before the current one, once the rotation has completed.
     /// </summary>
     /// <param name="cancellationToken">Abandons the retirement, which then records nothing.</param>
     /// <returns>

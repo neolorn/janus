@@ -93,18 +93,11 @@ public static class AuditActions
     public static AuditAction KeyRotationCompleted { get; } = AuditAction.Parse("ops.keyrotation.completed");
 
     /// <summary>
-    /// The versions before a completed rotation's were retired once its escrow copy was
-    /// confirmed sealed, with the versions retired.
+    /// The versions before a completed rotation's were retired by <c>--retire</c>, with the
+    /// versions retired.
     /// </summary>
     /// <remarks>Implements OPS-SEC-003 AC3, AC4, AC5.</remarks>
     public static AuditAction KeyRotationRetired { get; } = AuditAction.Parse("ops.keyrotation.retired");
-
-    /// <summary>
-    /// A run of the automated restore test ended, with what it found, the time it took,
-    /// the objective it was judged against and whether its instance outlived it.
-    /// </summary>
-    /// <remarks>Implements DR-007 AC2, DR-008 AC2.</remarks>
-    public static AuditAction RestoreTestCompleted { get; } = AuditAction.Parse("ops.restoretest.completed");
 
     /// <summary>
     /// A run of the audit retention job ended, with how many monthly partitions it

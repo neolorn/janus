@@ -42,7 +42,6 @@ public sealed class AlertsTests
         "expiry-approaching",
         "holiday-list-exhausted",
         "no-emergency-credential",
-        "restore-test-failed",
         "restriction-loosened",
         "restriction-granted",
         "domain-reverification-failed",
@@ -66,7 +65,6 @@ public sealed class AlertsTests
         AlertCondition.ErasureDeliveryExhausted,
         AlertCondition.PrivacyDeadlineReached,
         AlertCondition.NoEmergencyCredential,
-        AlertCondition.RestoreTestFailed,
     ];
 
     /// <summary>

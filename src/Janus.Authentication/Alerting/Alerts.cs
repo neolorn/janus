@@ -41,7 +41,6 @@ internal static class Alerts
             AlertCondition.ErasureDeliveryExhausted => AlertSeverity.High,
             AlertCondition.PrivacyDeadlineReached => AlertSeverity.High,
             AlertCondition.NoEmergencyCredential => AlertSeverity.High,
-            AlertCondition.RestoreTestFailed => AlertSeverity.High,
             _ => AlertSeverity.Normal,
         };
 

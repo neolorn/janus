@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library no longer tests backups or prints keys: the `restore-test` job,
+  `IRestoreTestInstance`, the `backup.*` keys, the condition `restore-test-failed`, the
+  audit action `ops.restoretest.completed` and the canary account bootstrap seeded are
+  gone. `rotate-kek` and `rotate-fingerprint-key` print no escrow copy, retire the
+  previous versions with `--retire` in place of `--sealed`, and take no `--retention`;
+  the retirement's report no longer carries `keepUntil`.
 - The library no longer keeps licences or a maintenance log: `/admin/compliance/licences`,
   `/admin/compliance/maintenance`, the `licence-expiry` job and the `licences` and
   `maintenance_log` tables are gone. The daily `kek-cryptoperiod` job, which replaces

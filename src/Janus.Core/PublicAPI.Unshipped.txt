@@ -170,12 +170,12 @@ Janus.Core.AlertCondition.CallbackVerificationFailed = 14 -> Janus.Core.AlertCon
 Janus.Core.AlertCondition.ConcurrentSessionsImplausible = 8 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.Degradation = 13 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.DenialSpike = 9 -> Janus.Core.AlertCondition
-Janus.Core.AlertCondition.DomainRemoved = 25 -> Janus.Core.AlertCondition
-Janus.Core.AlertCondition.DomainReverificationFailed = 24 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.DomainRemoved = 24 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.DomainReverificationFailed = 23 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.ErasureDeliveryExhausted = 12 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.ExpiryApproaching = 18 -> Janus.Core.AlertCondition
-Janus.Core.AlertCondition.GoverningLanguageChanged = 26 -> Janus.Core.AlertCondition
-Janus.Core.AlertCondition.GoverningTextMissing = 27 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.GoverningLanguageChanged = 25 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.GoverningTextMissing = 26 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.HolidayListExhausted = 19 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.NoEmergencyCredential = 20 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.NonexistentNoticeRate = 15 -> Janus.Core.AlertCondition
@@ -184,10 +184,9 @@ Janus.Core.AlertCondition.PrivacyDeadlineReached = 17 -> Janus.Core.AlertConditi
 Janus.Core.AlertCondition.ProtectedSettingChanged = 6 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.ReadVolumeAnomaly = 3 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.RecoveryClustering = 1 -> Janus.Core.AlertCondition
-Janus.Core.AlertCondition.RelayDomainUnregistered = 28 -> Janus.Core.AlertCondition
-Janus.Core.AlertCondition.RestoreTestFailed = 21 -> Janus.Core.AlertCondition
-Janus.Core.AlertCondition.RestrictionGranted = 23 -> Janus.Core.AlertCondition
-Janus.Core.AlertCondition.RestrictionLoosened = 22 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RelayDomainUnregistered = 27 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RestrictionGranted = 22 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RestrictionLoosened = 21 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.SmsBalance = 10 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.StepUpPolicyWeakened = 7 -> Janus.Core.AlertCondition
 Janus.Core.AlertRaised
@@ -1617,9 +1616,6 @@ Janus.Core.IResources.MoveAsync(Janus.Core.ResourceReference resource, Janus.Cor
 Janus.Core.IResources.RegisterAsync(Janus.Core.ResourceRegistration! registration, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IResources.RegisterManyAsync(System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceRegistration!>! registrations, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IResources.RemoveAsync(Janus.Core.ResourceReference resource, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IRestoreTestInstance
-Janus.Core.IRestoreTestInstance.RestoreAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<string!>>
-Janus.Core.IRestoreTestInstance.TearDownAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRestrictionSet
 Janus.Core.IRestrictionSet.AllAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Restriction!>!>>
 Janus.Core.IRestrictionSet.DeleteAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RestrictionName name, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -4393,7 +4389,6 @@ static Janus.Core.AuditActions.RequestFulfilled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RequestLapsed.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RequestRefused.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RequestSubmitted.get -> Janus.Core.AuditAction
-static Janus.Core.AuditActions.RestoreTestCompleted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RestrictionEdited.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RestrictionGranted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RestrictionLifted.get -> Janus.Core.AuditAction
@@ -4490,10 +4485,6 @@ static Janus.Core.Configuration.Settings.All.get -> System.Collections.Generic.I
 static Janus.Core.Configuration.Settings.Argon2StrengthClasses.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Configuration.Argon2StrengthClass!>!
 static Janus.Core.Configuration.Settings.AuthzHandoutByHolding.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.AuthzReverseLookupBudget.get -> Janus.Core.Configuration.DurationSetting!
-static Janus.Core.Configuration.Settings.BackupRestoreTestCanary.get -> Janus.Core.Configuration.TextSetting!
-static Janus.Core.Configuration.Settings.BackupRestoreTestInterval.get -> Janus.Core.Configuration.DurationSetting!
-static Janus.Core.Configuration.Settings.BackupRestoreTestObjective.get -> Janus.Core.Configuration.DurationSetting!
-static Janus.Core.Configuration.Settings.BackupRetention.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.BreakGlassSessionLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.CodeSigninAttempts.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.CodeSigninLifetime.get -> Janus.Core.Configuration.DurationSetting!

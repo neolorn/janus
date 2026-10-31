@@ -24,8 +24,8 @@ public sealed class SettingWrittenFormTests
     /// Every key of the catalogue writes its default and reads the same value back.
     /// The keys whose default is no value at all, one derived at startup, two named
     /// only where the shipped transport is used, one named only where the mail server
-    /// adapter is used, one the deployment names and one naming a registered client,
-    /// are the only ones the round trip passes over.
+    /// adapter is used and one naming a registered client are the only ones the round
+    /// trip passes over.
     /// </summary>
     [Fact]
     public void Written_EveryDefaultOfTheCatalogue_ReadsBackAsItself()
@@ -46,7 +46,6 @@ public sealed class SettingWrittenFormTests
                 "integration.mail.endpoint",
                 "integration.sms.endpoint",
                 "integration.mailserver.endpoint",
-                "backup.restoretest.canary",
                 "redirect.defaultclient",
             ],
             passedOver);

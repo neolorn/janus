@@ -517,7 +517,6 @@ public sealed class AuthorizationModelTests
     [InlineData("read-volume-baseline")]
     [InlineData("holiday-list")]
     [InlineData("emergency-credential")]
-    [InlineData("restore-test")]
     [InlineData("audit-partitions")]
     [InlineData("kek-cryptoperiod")]
     [InlineData("sms-balance")]

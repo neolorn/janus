@@ -856,34 +856,6 @@ public static class Settings
         new("hosting.environment", SettingScope.Runtime);
 
     /// <summary>
-    /// The recovery-time objective the automatic restore test is measured against,
-    /// and the upper bound of the accepted objective.
-    /// </summary>
-    public static DurationSetting BackupRestoreTestObjective { get; } =
-        new("backup.restoretest.objective", SettingScope.Runtime, "PT8H", ceiling: "PT8H");
-
-    /// <summary>
-    /// How often the restore test runs: a count of days, so the interval never exceeds
-    /// the shortest calendar quarter, where months would be held at 31 days each.
-    /// </summary>
-    public static DurationSetting BackupRestoreTestInterval { get; } =
-        new("backup.restoretest.interval", SettingScope.Runtime, "P90D", ceiling: "P90D");
-
-    /// <summary>
-    /// The canary subject the restore test decrypts a field of and resolves the
-    /// fingerprint of. Bootstrap seeds it.
-    /// </summary>
-    public static TextSetting BackupRestoreTestCanary { get; } =
-        new("backup.restoretest.canary", SettingScope.Runtime, string.Empty);
-
-    /// <summary>
-    /// How long a backup is kept, which also bounds how long a pre-erasure backup
-    /// survives.
-    /// </summary>
-    public static DurationSetting BackupRetention { get; } =
-        new("backup.retention", SettingScope.Runtime, "P35D", floor: "P14D");
-
-    /// <summary>
     /// Whether the deployment is hosted inside or outside Egypt. The deployment names
     /// it, and an outside value makes the cross-border basis required.
     /// </summary>
@@ -1117,10 +1089,6 @@ public static class Settings
         RetentionAuditRoutine,
         RetentionConsent,
         HostingEnvironment,
-        BackupRestoreTestObjective,
-        BackupRestoreTestInterval,
-        BackupRestoreTestCanary,
-        BackupRetention,
         HostingLocation,
         HostingCrossBorderBasis,
         LegalGoverningLanguage,

@@ -102,7 +102,6 @@ public sealed class VocabularyContractTests
         "expiry-approaching",
         "holiday-list-exhausted",
         "no-emergency-credential",
-        "restore-test-failed",
         "restriction-loosened",
         "restriction-granted",
         "domain-reverification-failed",

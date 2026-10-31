@@ -259,7 +259,7 @@ public sealed class PersonalFieldCipherTests
     /// table and nothing else. The one wrap under it is called by the three stores that
     /// write such a row, a subject's, the deployment's and the rotation's re-wrap; the
     /// other sources that borrow it unwrap such a row, derive the token protection key
-    /// (AUTH-KEY-002), print the escrow copy or read which versions are held; and the
+    /// (AUTH-KEY-002) or read which versions are held; and the
     /// key wrap itself is written in one place.
     /// </summary>
     [Fact]
@@ -269,7 +269,7 @@ public sealed class PersonalFieldCipherTests
             ["DeploymentDataKeyStore.cs", "KeyRotationStore.cs", "SubjectKeyStore.cs"],
             Sources("PersonalFieldCipher.WrapUnderCurrent("));
         Assert.Equal(
-            ["EscrowCopy.cs", "KeyRingService.cs", "KeyRotation.cs", "PersonalFieldCipher.cs", "TokenProtection.cs"],
+            ["KeyRingService.cs", "KeyRotation.cs", "PersonalFieldCipher.cs", "TokenProtection.cs"],
             Sources(".BorrowKeyEncryptionKey"));
         Assert.Equal(["PersonalFieldCipher.cs"], Sources("EncryptKeyWrapPadded("));
     }

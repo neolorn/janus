@@ -33,10 +33,6 @@ alerting.sms.destinations text-list R minimum=1
 alerting.sms.severitythreshold choice R allowed=high,normal
 authz.handout.byholding flag R
 authz.reverselookup.budget duration R
-backup.restoretest.canary text R
-backup.restoretest.interval duration R ceiling=P90D
-backup.restoretest.objective duration R ceiling=PT8H
-backup.retention duration R floor=P14D
 breakglass.session.lifetime duration R ceiling=PT12H
 code.signin.attempts integer R ceiling=10
 code.signin.lifetime duration R ceiling=PT30M

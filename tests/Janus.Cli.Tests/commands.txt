@@ -104,8 +104,7 @@ replay-erasures
   1 api.request.malformed model.startup.secretunavailable system.fault
 rotate-fingerprint-key
   arguments
-    --sealed optional flag
-    --retention optional duration requires=--sealed
+    --retire optional flag
   input application/json
     connection: string
     keyEncryptionKeys.current: number
@@ -114,21 +113,16 @@ rotate-fingerprint-key
     fingerprintKeys.versions{}: string
   0
     application/json
-      fingerprintKeys.current: number
-      fingerprintKeys.versions{}: string
-    application/json
       version: number
       processed: number
-    application/json --sealed
+    application/json --retire
       version: number
       processed: number
       retired[]: number
-      keepUntil: DateTime
   1 api.request.malformed authz.denied model.rotation.notready model.startup.secretunavailable system.fault
 rotate-kek
   arguments
-    --sealed optional flag
-    --retention optional duration requires=--sealed
+    --retire optional flag
   input application/json
     connection: string
     keyEncryptionKeys.current: number
@@ -137,14 +131,10 @@ rotate-kek
     fingerprintKeys.versions{}: string
   0
     application/json
-      keyEncryptionKeys.current: number
-      keyEncryptionKeys.versions{}: string
-    application/json
       version: number
       processed: number
-    application/json --sealed
+    application/json --retire
       version: number
       processed: number
       retired[]: number
-      keepUntil: DateTime
   1 api.request.malformed authz.denied model.rotation.notready model.startup.secretunavailable system.fault

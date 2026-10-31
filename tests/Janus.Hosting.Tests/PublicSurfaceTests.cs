@@ -88,7 +88,6 @@ public sealed class PublicSurfaceTests
         typeof(IMessageTemplates), // LIB-EXT-001: message and content templates.
         typeof(INotificationHandler), // LIB-EXT-001: notification handling.
         typeof(IPurposeHandler), // LIB-HOST-001: a purpose handler.
-        typeof(IRestoreTestInstance), // LIB-HOST-001, optional: an environment seam (DR-007).
         typeof(ISecretSource), // LIB-EXT-001 and LIB-HOST-001: the secret source.
         typeof(ISmsTransport), // LIB-EXT-001 and LIB-HOST-001: SMS delivery.
         typeof(ISubjectEventSubscriber), // LIB-HOST-001: a subject-event handler.
@@ -899,7 +898,7 @@ public sealed class PublicSurfaceTests
     /// CONV-DESIGN-007, CONV-CODE-007: a composition a job builds inside the application
     /// over another credential registers the key ring the start filled, as it stands,
     /// and calls the storage's method and never the core's, whose ring would be a
-    /// second, empty one. The audit retention and the restore test build the only two.
+    /// second, empty one. The audit retention builds the only one.
     /// </summary>
     [Fact]
     public void CONV_DESIGN_007_AJobsOwnCompositionRegistersTheFilledRingAndNeverCallsTheCoreMethod()
@@ -913,7 +912,7 @@ public sealed class PublicSurfaceTests
                 .OrderBy(file => file.Name, StringComparer.Ordinal),
         ];
 
-        Assert.Equal(["AuditRetention.cs", "RestoreTest.cs"], compositions.Select(file => file.Name));
+        Assert.Equal(["AuditRetention.cs"], compositions.Select(file => file.Name));
         Assert.All(compositions, file =>
         {
             Assert.Contains("IKeyRing ring", file.Text, StringComparison.Ordinal);

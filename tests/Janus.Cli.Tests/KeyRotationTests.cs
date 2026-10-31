@@ -16,9 +16,9 @@ namespace Janus.Cli.Tests;
 
 /// <summary>
 /// What the <c>rotate-kek</c> command does to a deployment's wrapped keys: every one is
-/// re-wrapped under the new version in batches that survive a killed run, the escrow
-/// copy is printed, and the previous version retires once the copy is sealed
-/// (OPS-SEC-003, DR-009a).
+/// re-wrapped under the new version in batches that survive a killed run, no key is
+/// printed, and the previous version retires when <c>--retire</c> asks (OPS-SEC-003,
+/// DR-009a).
 /// </summary>
 /// <remarks>
 /// The cases share one database and run one after another, so each begins with no
@@ -29,11 +29,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
 {
     private const string Command = "rotate-kek";
 
-    private const string Sealed = "--sealed";
-
-    private const string Retention = "--retention";
-
-    private const string Kind = "key-encryption-key";
+    private const string Retire = "--retire";
 
     // OPS-SEC-003, D-153: the subject keys one transaction takes.
     private const int Batch = 500;
@@ -69,8 +65,8 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
-    /// OPS-SEC-001: <c>rotate-kek</c> reports as every command does. A seal confirmed
-    /// before any rotation is refused with exit code 1, one JSON line on standard error
+    /// OPS-SEC-001: <c>rotate-kek</c> reports as every command does. A retirement asked
+    /// for before any rotation is refused with exit code 1, one JSON line on standard error
     /// and nothing on standard output; the rotation exits 0 with nothing on standard
     /// error.
     /// </summary>
@@ -81,7 +77,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         await using NpgsqlConnection connection = await ResetAsync();
         await SeedAsync(connection, 1);
 
-        Invocation refused = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation refused = await Invocation.PipedAsync([Command, Retire], Rotating());
         Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
 
         Assert.Equal("model.rotation.notready", Reported.Refusal(refused));
@@ -202,7 +198,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
             new { signing = Wrapped(signing, deploymentKey), message = Wrapped(message, deploymentKey) });
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
-        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Retire], Rotating())).ExitCode);
 
         Assert.Equal([2], await connection.QueryAsync<int>("SELECT DISTINCT key_version FROM identity.subject_keys"));
         Assert.Equal(
@@ -247,7 +243,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         (byte[] Secret, byte[] Previous) before = await SecretsAsync(connection);
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
-        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Retire], Rotating())).ExitCode);
 
         (byte[] Secret, byte[] Previous) after = await SecretsAsync(connection);
         byte[] rewrapped = await connection.QuerySingleAsync<byte[]>(
@@ -296,7 +292,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
             });
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
-        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Retire], Rotating())).ExitCode);
 
         byte[] held = await connection.QuerySingleAsync<byte[]>("SELECT verifier FROM identity.provider_attempts");
 
@@ -327,7 +323,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         IReadOnlyList<(string Table, string? Digest)> before = await TablesAsync(connection);
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
-        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Retire], Rotating())).ExitCode);
 
         Assert.Equal(before, await TablesAsync(connection));
     }
@@ -372,13 +368,13 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
-    /// OPS-SEC-003 AC4: the command prints the escrow copy of the new version, the
-    /// rotation stays unretired until the seal is confirmed, and the confirmation
-    /// retires the previous version.
+    /// OPS-SEC-003 AC4 (D-225): the run that rotates prints its report and no key, the
+    /// rotation stays unretired until <c>--retire</c> asks, and that retires the previous
+    /// version, printing no key either.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_AC4_TheEscrowCopyIsPrintedAndTheRotationRetiresOnlyOnceItIsSealedAsync()
+    public async Task OPS_SEC_003_AC4_NoRunPrintsAKeyAndTheRotationRetiresOnlyWhenAskedAsync()
     {
         await using NpgsqlConnection connection = await ResetAsync();
         await SeedAsync(connection, 3);
@@ -386,38 +382,31 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
 
         Assert.Equal(0, rotated.ExitCode);
-        Assert.True(JsonNode.DeepEquals(
-            new JsonObject
-            {
-                ["keyEncryptionKeys"] = new JsonObject
-                {
-                    ["current"] = 2,
-                    ["versions"] = new JsonObject { ["2"] = Convert.ToBase64String(Next) },
-                },
-            },
-            JsonNode.Parse(Lines(rotated)[0])));
-        Assert.Equal("""{"version":2,"processed":3}""", Lines(rotated)[1]);
+        Assert.Equal("""{"version":2,"processed":3}""", rotated.Output.Trim());
         Assert.Null(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
 
-        Invocation sealedCopy = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation retired = await Invocation.PipedAsync([Command, Retire], Rotating());
 
-        Assert.Equal(0, sealedCopy.ExitCode);
-        Assert.Equal(await RetirementAsync(connection, (2, 3, 1)), sealedCopy.Output.Trim());
+        Assert.Equal(0, retired.ExitCode);
+        Assert.Equal(Retirement((2, 3, 1)), retired.Output.Trim());
         Assert.NotNull(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
+        Assert.All(
+            [Previous, Next],
+            key => Assert.DoesNotContain(Convert.ToBase64String(key), rotated.Output + retired.Output, StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// OPS-SEC-003 AC4: a seal confirmed before the command has produced a copy to seal
-    /// is refused and retires nothing.
+    /// OPS-SEC-003 AC4: a retirement asked for before the rotation completes is refused
+    /// and retires nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_AC4_ASealBeforeTheRotationCompletesIsRefusedAsync()
+    public async Task OPS_SEC_003_AC4_ARetirementBeforeTheRotationCompletesIsRefusedAsync()
     {
         await using NpgsqlConnection connection = await ResetAsync();
         await SeedAsync(connection, 3);
 
-        Invocation refused = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation refused = await Invocation.PipedAsync([Command, Retire], Rotating());
 
         Assert.Equal(1, refused.ExitCode);
         Assert.Equal("""{"code":"model.rotation.notready","details":{}}""", refused.Error.Trim());
@@ -425,62 +414,36 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
-    /// OPS-SEC-003, D-166 (317): the retirement reports the date the retired version is
-    /// kept until, the rotation's completion and backup.retention's default, or the
-    /// longer retention the operator names, and never a date earlier than the default
-    /// gives; a retention that is not a duration, or given without the seal, is refused
-    /// and retires nothing.
+    /// OPS-SEC-003 AC4 (D-225): the command takes <c>--retire</c> once and nothing else, so
+    /// the seal and the retention it took before are refused and retire nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_TheRetirementReportSaysHowLongTheRetiredVersionIsKeptAsync()
+    public async Task OPS_SEC_003_AC4_AnArgumentTheCommandDoesNotTakeIsRefusedAsync()
     {
-        byte[] third = RandomNumberGenerator.GetBytes(32);
-        byte[] fourth = RandomNumberGenerator.GetBytes(32);
-
         await using NpgsqlConnection connection = await ResetAsync();
         await SeedAsync(connection, 2);
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
 
-        Invocation defaulted = await Invocation.PipedAsync([Command, Sealed], Rotating());
-
-        Assert.Equal(await RetirementAsync(connection, (2, 2, 1)), defaulted.Output.Trim());
-
-        JsonObject toThird = Document(Maintenance, 3, (2, Next), (3, third));
-
-        Assert.Equal(0, (await Invocation.PipedAsync([Command], toThird)).ExitCode);
-
-        string[][] malformed =
+        (string[] Arguments, string Member)[] malformed =
         [
-            [Command, Retention, "P90D"],
-            [Command, Sealed, Retention],
-            [Command, Sealed, Retention, "ninety days"],
-            [Command, Sealed, Retention, "P90D", Retention, "P90D"],
+            ([Command, "--sealed"], "--sealed"),
+            ([Command, Retire, "--retention", "P90D"], "--retention"),
+            ([Command, Retire, Retire], Retire),
         ];
 
-        foreach (string[] arguments in malformed)
+        foreach ((string[] arguments, string member) in malformed)
         {
-            Invocation refused = await Invocation.PipedAsync(arguments, toThird);
+            Invocation refused = await Invocation.PipedAsync(arguments, Rotating());
 
             Assert.Equal(1, refused.ExitCode);
-            Assert.Equal("""{"code":"api.request.malformed","details":{"member":"--retention"}}""", refused.Error.Trim());
+            Assert.Equal(
+                $$$"""{"code":"api.request.malformed","details":{"member":"{{{member}}}"}}""",
+                refused.Error.Trim());
         }
 
-        Assert.Null(await connection.ExecuteScalarAsync<DateTime?>(
-            "SELECT retired_at FROM identity.key_rotations WHERE version = 3"));
-
-        Invocation longer = await Invocation.PipedAsync([Command, Sealed, Retention, "P90D"], toThird);
-
-        Assert.Equal(await RetirementAsync(connection, (3, 2, 2), retentionDays: 90), longer.Output.Trim());
-
-        JsonObject toFourth = Document(Maintenance, 4, (3, third), (4, fourth));
-
-        Assert.Equal(0, (await Invocation.PipedAsync([Command], toFourth)).ExitCode);
-
-        Invocation shorter = await Invocation.PipedAsync([Command, Retention, "P14D", Sealed], toFourth);
-
-        Assert.Equal(await RetirementAsync(connection, (4, 2, 3)), shorter.Output.Trim());
+        Assert.Null(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
     }
 
     /// <summary>
@@ -495,7 +458,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         await SeedAsync(connection, 4);
 
         await Invocation.PipedAsync([Command], Rotating());
-        await Invocation.PipedAsync([Command, Sealed], Rotating());
+        await Invocation.PipedAsync([Command, Retire], Rotating());
 
         IReadOnlyList<(string Action, string Principal, string Reason, Guid Acting, string Details)> recorded =
             [.. await connection.QueryAsync<(string, string, string, Guid, string)>(
@@ -535,7 +498,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
             Invocation.PipedAsync([Command], Rotating()),
             Invocation.PipedAsync([Command], Rotating()));
 
-        Assert.All(runs, run => Assert.Equal((0, """{"version":2,"processed":3}"""), (run.ExitCode, Lines(run)[1])));
+        Assert.All(runs, run => Assert.Equal((0, """{"version":2,"processed":3}"""), (run.ExitCode, Lines(run)[^1])));
         Assert.Equal(3, await UnderAsync(connection, 2));
 
         IReadOnlyList<(string Action, int Processed)> recorded = await RecordedAsync(connection);
@@ -548,35 +511,35 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
-    /// OPS-SEC-003 AC4, CONV-DESIGN-003 AC6: two confirmations of the seal at once each
-    /// retire with the progress held, so one retires the rotation and the other finds it
+    /// OPS-SEC-003 AC4, CONV-DESIGN-003 AC6: two retirements at once each retire with the
+    /// progress held, so one retires the rotation and the other finds it
     /// retired and is refused.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_AC4_TwoSealsAtOnceRetireTheRotationOnceAsync()
+    public async Task OPS_SEC_003_AC4_TwoRetirementsAtOnceRetireTheRotationOnceAsync()
     {
         await using NpgsqlConnection connection = await ResetAsync();
         await SeedAsync(connection, 3);
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
 
-        Invocation[] seals = await Task.WhenAll(
-            Invocation.PipedAsync([Command, Sealed], Rotating()),
-            Invocation.PipedAsync([Command, Sealed], Rotating()));
+        Invocation[] retirements = await Task.WhenAll(
+            Invocation.PipedAsync([Command, Retire], Rotating()),
+            Invocation.PipedAsync([Command, Retire], Rotating()));
 
-        Assert.Equal([0, 1], seals.Select(seal => seal.ExitCode).Order());
+        Assert.Equal([0, 1], retirements.Select(retirement => retirement.ExitCode).Order());
         Assert.Equal(
             """{"code":"model.rotation.notready","details":{}}""",
-            Assert.Single(seals, seal => seal.ExitCode == 1).Error.Trim());
+            Assert.Single(retirements, retirement => retirement.ExitCode == 1).Error.Trim());
         Assert.Single(await RecordedAsync(connection), row => row.Item1 == "ops.keyrotation.retired");
     }
 
     /// <summary>
     /// OPS-SEC-003 AC3: while something still wraps under the previous version, which is
-    /// an application not yet handed the new one, the seal is refused and the version
-    /// stays; what was found is re-wrapped, and once nothing more appears the seal
-    /// retires it.
+    /// an application not yet handed the new one, the retirement is refused and the
+    /// version stays; what was found is re-wrapped, and once nothing more appears the
+    /// retirement retires it.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -589,7 +552,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
 
         await SeedAsync(connection, 1);
 
-        Invocation refused = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation refused = await Invocation.PipedAsync([Command, Retire], Rotating());
 
         Assert.Equal(1, refused.ExitCode);
         Assert.Equal(
@@ -598,10 +561,10 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         Assert.Null(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
         Assert.Equal(0, await UnderAsync(connection, 1));
 
-        Invocation retired = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation retired = await Invocation.PipedAsync([Command, Retire], Rotating());
 
         Assert.Equal(0, retired.ExitCode);
-        Assert.Equal(await RetirementAsync(connection, (2, 3, 1)), retired.Output.Trim());
+        Assert.Equal(Retirement((2, 3, 1)), retired.Output.Trim());
     }
 
     /// <summary>
@@ -624,7 +587,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         Assert.Equal(0, await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.key_rotations"));
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
-        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Retire], Rotating())).ExitCode);
 
         Invocation again = await Invocation.PipedAsync([Command], Rotating());
 
@@ -657,7 +620,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         IReadOnlyList<(string Column, string? Digest)> before = await CiphertextsAsync(connection);
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
-        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Retire], Rotating())).ExitCode);
 
         Assert.Equal(before, await CiphertextsAsync(connection));
         Assert.Equal(ciphertext, await connection.QuerySingleAsync<byte[]>("SELECT enc_message FROM identity.send_outbox"));
@@ -681,43 +644,20 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         IReadOnlyDictionary<Guid, byte[]> seeded = await SeedAsync(connection, 3);
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
-        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Retire], Rotating())).ExitCode);
 
         JsonObject outOfCycle = Document(Maintenance, 3, (2, Next), (3, suspected));
 
         Invocation rotated = await Invocation.PipedAsync([Command], outOfCycle);
-        Invocation retired = await Invocation.PipedAsync([Command, Sealed], outOfCycle);
+        Invocation retired = await Invocation.PipedAsync([Command, Retire], outOfCycle);
 
         Assert.Equal("""{"version":3,"processed":3}""", Lines(rotated)[^1]);
-        Assert.Equal(await RetirementAsync(connection, (3, 3, 2)), retired.Output.Trim());
+        Assert.Equal(Retirement((3, 3, 2)), retired.Output.Trim());
 
         foreach ((Guid subject, byte[] wrapped) in await WrappedUnderAsync(connection, 3))
         {
             Assert.Equal(seeded[subject], Unwrapped(wrapped, suspected));
         }
-    }
-
-    /// <summary>
-    /// DR-009a AC4: the escrowed copy is replaced in the same operation. The run that
-    /// rotates prints the copy of the new version and nothing of the one it replaces, and
-    /// the operation retires the previous version only once that copy is sealed.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task DR_009a_AC4_TheOperationThatRotatesReplacesTheEscrowCopyAsync()
-    {
-        await using NpgsqlConnection connection = await ResetAsync();
-        await SeedAsync(connection, 2);
-
-        Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
-        var copy = JsonNode.Parse(Lines(rotated)[0]);
-        Invocation retired = await Invocation.PipedAsync([Command, Sealed], Rotating());
-
-        Assert.Equal(
-            ["2"],
-            copy?["keyEncryptionKeys"]?["versions"]?.AsObject().Select(version => version.Key) ?? []);
-        Assert.DoesNotContain(Convert.ToBase64String(Previous), rotated.Output, StringComparison.Ordinal);
-        Assert.Equal(await RetirementAsync(connection, (2, 2, 1)), retired.Output.Trim());
     }
 
     // A digest of every encrypted column of every table, by its name. The trail is
@@ -808,22 +748,12 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         return aes.DecryptKeyWrapPadded(wrapped);
     }
 
-    // OPS-SEC-003, D-166 (317): the report of a retirement, which says until when the
-    // retired version is kept: the rotation's completion and the retention, which is
-    // backup.retention's default of 35 days where the operator names none longer.
-    private static async Task<string> RetirementAsync(
-        NpgsqlConnection connection,
-        (int Version, int Processed, int Retired) rotation,
-        int retentionDays = 35)
-    {
-        DateTime completed = await connection.ExecuteScalarAsync<DateTime>(
-            "SELECT completed_at FROM identity.key_rotations WHERE kind = @kind AND version = @version",
-            new { kind = Kind, version = rotation.Version });
-
-        return string.Create(
+    // OPS-SEC-003 AC4: the report of a retirement, which names the versions retired and
+    // nothing of a key (D-225).
+    private static string Retirement((int Version, int Processed, int Retired) rotation) =>
+        string.Create(
             CultureInfo.InvariantCulture,
-            $$"""{"version":{{rotation.Version}},"processed":{{rotation.Processed}},"retired":[{{rotation.Retired}}],"keepUntil":{{JsonSerializer.Serialize(completed.AddDays(retentionDays))}}}""");
-    }
+            $$"""{"version":{{rotation.Version}},"processed":{{rotation.Processed}},"retired":[{{rotation.Retired}}]}""");
 
     private static string[] Lines(Invocation invocation) =>
         invocation.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

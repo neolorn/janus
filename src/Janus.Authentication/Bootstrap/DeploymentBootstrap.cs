@@ -20,8 +20,8 @@ namespace Janus.Authentication.Bootstrap;
 
 /// <summary>
 /// What stands a fresh deployment up: its named values, its administrative roles and
-/// organization, its first administrator with an enrolment link, the reserved
-/// <c>emergency</c> account and the restore test's canary subject.
+/// organization, its first administrator with an enrolment link and the reserved
+/// <c>emergency</c> account.
 /// </summary>
 /// <param name="seed">Where the deployment is seeded.</param>
 /// <param name="audit">Where the administrative organization's creation is recorded.</param>
@@ -36,8 +36,8 @@ namespace Janus.Authentication.Bootstrap;
 /// <param name="randomness">Where subject identifiers and the link's token come from.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements OPS-BOOT-001, OPS-BOOT-002, INT-MAIL-006 AC1a and AC1b, DR-007,
-/// IDN-PRIN-001, IDN-ACCT-004, IDN-ACCT-005, PRIV-MINOR-001, AUTHZ-GRANT-003, chapter
+/// Implements OPS-BOOT-001, OPS-BOOT-002, INT-MAIL-006 AC1a and AC1b, IDN-PRIN-001,
+/// IDN-ACCT-004, IDN-ACCT-005, PRIV-MINOR-001, AUTHZ-GRANT-003, chapter
 /// 10 sections 3 and 4.1a, D-133 and D-162. There is no gate: whoever reaches the database already holds more
 /// than the first account will (D-028), and what stands in for one is that nothing
 /// runs while a system administrator exists. No break-glass credential is made here;
@@ -61,12 +61,6 @@ internal sealed class DeploymentBootstrap(
     // What each account bootstrap creates records as the reason for what it was
     // granted, where no person stated one.
     private const string Reason = "OPS-BOOT-001";
-
-    // An address under the name RFC 2606 reserves for what can never resolve, so no
-    // message addressed to the canary reaches anybody.
-    private const string CanaryAddress = "canary@restore-test.invalid";
-
-    private const string CanaryName = "Restore canary";
 
     private static readonly RoleName SystemAdministrator = RoleName.Parse("system-administrator");
 
@@ -252,7 +246,6 @@ internal sealed class DeploymentBootstrap(
         [
             (IdentifierKind.Email, email.Canonical),
             (IdentifierKind.Phone, phone!.Canonical),
-            (IdentifierKind.Email, Canary().Canonical),
         ];
 
         if (mailbox is not null)
@@ -320,48 +313,6 @@ internal sealed class DeploymentBootstrap(
 
             return Result.Failure<BootstrapEnrolment>(unjoinedEmergency);
         }
-
-        // DR-007: one field encrypted under the canary's own subject key and one verified
-        // email found by its fingerprint are what the restore test proves readable. No
-        // person answers the age screen for it, so it records no answer, as the reserved
-        // account records none (PRIV-MINOR-001).
-        var canary = SubjectId.New(randomness);
-
-        await seed
-            .CreateAccountAsync(
-                canary,
-                [Verified(IdentifierId.New(time), IdentifierKind.Email, Canary(), now)],
-                CanaryDisplayName(),
-                adultAffirmed: null,
-                dateOfBirth: null,
-                group: null,
-                now,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        if (await JoinAsync(canary, organization, [], now, cancellationToken).ConfigureAwait(false)
-            is Error unjoinedCanary)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure<BootstrapEnrolment>(unjoinedCanary);
-        }
-
-        await seed
-            .ConfigureAsync(
-                new Dictionary<ConfigurationKey, string>
-                {
-                    [Settings.BackupRestoreTestCanary.Key] = Settings.BackupRestoreTestCanary.Write(canary.ToString()),
-                },
-                new Dictionary<ConfigurationKey, string>
-                {
-                    [Settings.BackupRestoreTestCanary.Key] =
-                        Settings.BackupRestoreTestCanary.Write(Settings.BackupRestoreTestCanary.Default),
-                },
-                Principal,
-                now,
-                cancellationToken)
-            .ConfigureAwait(false);
 
         var token = OpaqueToken.Draw(randomness);
 
@@ -436,16 +387,6 @@ internal sealed class DeploymentBootstrap(
     // identifiers they name as good as verified (D-028).
     private static NewIdentifier Verified(IdentifierId id, IdentifierKind kind, Entered entered, DateTimeOffset at) =>
         new(id, kind, entered.Value, entered.Canonical, Locked: false, at);
-
-    private static Entered Canary() =>
-        EmailAddress.TryParse(CanaryAddress, out EmailAddress address)
-            ? new Entered(CanaryAddress, address.Value, address)
-            : throw new InvalidOperationException("The canary's address is not an address.");
-
-    private static DisplayName CanaryDisplayName() =>
-        DisplayName.TryParse(CanaryName, out DisplayName name)
-            ? name
-            : throw new InvalidOperationException("The canary's name is not a display name.");
 
     // Chapter 10 section 4.1a, the column "Administrative organization, at bootstrap".
     // The domain lock stays off, which is the system default, so it is not overridden.

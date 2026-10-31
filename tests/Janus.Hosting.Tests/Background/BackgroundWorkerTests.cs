@@ -410,8 +410,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
     /// <summary>
     /// INF-BG-001 AC5 (D-209): a worker whose only job is due further ahead than the
-    /// longest delay the runtime's timer accepts (the restore test's default interval of
-    /// 90 days) keeps running, looks again after that delay without running the job
+    /// longest delay the runtime's timer accepts (an interval of a year) keeps running, looks again after that delay without running the job
     /// early, and runs it when it is due.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -419,15 +418,15 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     public async Task INF_BG_001_AC5_AJobDueBeyondTheTimersLongestDelayRunsWhenItIsDueAsync()
     {
         var longest = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
-        TimeSpan interval = Settings.BackupRestoreTestInterval.Default;
+        TimeSpan interval = Settings.RecoveryCodesReminder.Default;
         var time = new ManualTime(Noon);
         int ran = 0;
 
         var distant = BackgroundJob.Every(
             "distant",
-            "DR-007",
+            "INF-BG-001",
             SystemOperation.ExpirySweep,
-            Settings.BackupRestoreTestInterval,
+            Settings.RecoveryCodesReminder,
             (_, _, _) =>
             {
                 _ = Interlocked.Increment(ref ran);

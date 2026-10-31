@@ -100,35 +100,31 @@ public enum AlertCondition
     [JsonStringEnumMemberName("no-emergency-credential")]
     NoEmergencyCredential = 20,
 
-    /// <summary>A restore test failed or exceeded the recovery-time objective.</summary>
-    [JsonStringEnumMemberName("restore-test-failed")]
-    RestoreTestFailed = 21,
-
     /// <summary>A restriction was loosened.</summary>
     [JsonStringEnumMemberName("restriction-loosened")]
-    RestrictionLoosened = 22,
+    RestrictionLoosened = 21,
 
     /// <summary>A restriction grant was issued.</summary>
     [JsonStringEnumMemberName("restriction-granted")]
-    RestrictionGranted = 23,
+    RestrictionGranted = 22,
 
     /// <summary>A locked domain's record no longer verifies.</summary>
     [JsonStringEnumMemberName("domain-reverification-failed")]
-    DomainReverificationFailed = 24,
+    DomainReverificationFailed = 23,
 
     /// <summary>A domain was removed from a lock.</summary>
     [JsonStringEnumMemberName("domain-removed")]
-    DomainRemoved = 25,
+    DomainRemoved = 24,
 
     /// <summary>The governing language of legal documents changed.</summary>
     [JsonStringEnumMemberName("governing-language-changed")]
-    GoverningLanguageChanged = 26,
+    GoverningLanguageChanged = 25,
 
     /// <summary>A document has no text in the governing language.</summary>
     [JsonStringEnumMemberName("governing-text-missing")]
-    GoverningTextMissing = 27,
+    GoverningTextMissing = 26,
 
     /// <summary>The sending domain is not registered with the private relay.</summary>
     [JsonStringEnumMemberName("relay-domain-unregistered")]
-    RelayDomainUnregistered = 28,
+    RelayDomainUnregistered = 27,
 }

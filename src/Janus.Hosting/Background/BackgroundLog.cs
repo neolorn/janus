@@ -36,16 +36,4 @@ internal static partial class BackgroundLog
         Message = "The lapse of the background job {Job} was not raised: {Failure}.")]
     public static partial void LapseUnraised(ILogger log, string job, string failure);
 
-    /// <summary>
-    /// A step of the restore test threw rather than failed, which the test reads as the
-    /// failure of that step; the fault log entry is what says why.
-    /// </summary>
-    /// <param name="log">The logger.</param>
-    /// <param name="outcome">The failure the step's fault is read as.</param>
-    /// <param name="fault">The fault log entry of what was thrown.</param>
-    [LoggerMessage(
-        EventId = 3,
-        Level = LogLevel.Warning,
-        Message = "The restore test's step failed as {Outcome}: {Fault}.")]
-    public static partial void RestoreTestFaulted(ILogger log, string outcome, string fault);
 }
