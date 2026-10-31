@@ -342,7 +342,7 @@ AUTH-OIDC-006), acting as a **confidential client** of the library's provider, a
 retain no token afterwards.
 
 *Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193, D-194,
-D-195, D-196, D-198, D-199*
+D-195, D-196, D-198, D-199, D-229*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -403,6 +403,11 @@ may configure.
 **What it does not do.** It never receives a refresh token, never stores an access or
 ID token, never exchanges a code from the browser, and never accepts a `redirect_uri`
 from a request — the registered value is the only one.
+
+**Where it runs (D-229).** The sign-on belongs to an application at an origin apart from
+the authentication application's. An application served at that application's own
+origin is served by the sign-in session, the session that origin's cookie carries
+(BFF-SESS-002), and derives none; its frontend starts no sign-on (FE-API-006).
 
 **Acceptance criteria**
 1. A request to an application with no session and a live auth session completes

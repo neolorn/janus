@@ -19268,6 +19268,51 @@ or password (13).
 
 ---
 
+## D-229 — Round H3 question 14: the sign-on at the authentication application's origin
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-224
+
+**TL;DR.** The sign-on belongs to an application at an origin apart from the
+authentication application's. An application served at that application's own origin is
+served by the sign-in session and derives none, so its frontend starts no sign-on (14).
+The sample host proves the sign-on and back between two origins: its tests run it a
+second time, on the same deployment, as an application at an origin of its own.
+
+1. **An application at the authentication application's origin (question 14).** The
+   library puts the authentication application at an origin of its own and each other
+   browser application at another (BFF-SESS-003, D-104), and its cookies are one set per
+   origin (BFF-SESS-002). At the authentication application's origin the sign-in session
+   is the session that origin's cookie carries, and that application's own endpoints are
+   served by it, as the sample host's are. There is no per-app session to derive there:
+   a sign-on completed at that origin would put one in the place of the sign-in session,
+   under the one cookie both would need. So FE-API-006 binds the frontend of an
+   application at an origin of its own, and a frontend at the authentication
+   application's origin that finds no session sends the browser to its sign-in page.
+
+   *Rejected:* the rotation at the sign-in carrying the sign-on's attempt (reading A:
+   the return would then put a per-app session in the place of the sign-in session); a
+   return that finds no attempt on a live session sent to `/` (reading B: a `state` the
+   browser was never sent out with would be followed, where BFF-SESS-006 refuses it as a
+   forged return, and the route would be lost all the same).
+
+2. **The sample host at two origins.** The plan's row has a host built only from the
+   packages send a person from its application's sign-on to the sign-in and back to that
+   application's route, which is what a host with a second application meets. The sample
+   host's tests run it twice on one deployment, from the same packages: once as the
+   authentication application, and once at an origin of its own, with a sign-on client
+   of its own registered for it, the first's addresses as its `AuthenticationAddresses`
+   and the deployment's landing origins as the first declares them. The person starts at
+   the second's sign-on, signs in at the first and is shown the second's route
+   (reading C).
+
+   *Rejected:* meeting the row with the sign-in and the continuation alone at one origin
+   (reading D as the whole answer: the sign-on between two origins, which every host
+   with a second application meets, would go unproved from the packages).
+
+**Propagated to:** `07` LIB-TEST-004; `17` BFF-SESS-006; `18` FE-API-006.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -19506,6 +19551,7 @@ or password (13).
 | Round H3 questions 1, 2, 3, 8 and 9: the mail server's tokens, a loss report's link, a challenge's browser, and what a sign-in and a restore keep | D-226 |
 | Round H3 questions 10 and 11: a repeated failure report, and the four scopes | D-227 |
 | Round H3 questions 12 and 13: the continuation with nowhere to go, and a test's restore | D-228 |
+| Round H3 question 14: the sign-on at the authentication application's origin | D-229 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -195,7 +195,8 @@ exceptions to the content rule).
 
 ---
 
-**FE-API-006** — A frontend that finds no per-app session SHALL navigate the browser to
+**FE-API-006** — A frontend at an origin apart from the authentication application's
+that finds no per-app session SHALL navigate the browser to
 `GET /auth/signon?returnTo=<route>`, `<route>` being the path of its own route the
 person was on, as the URL serializes it (percent-encoded), itself percent-encoded as the
 query's value, so that the destination read is that path and is followed (API-REDIR-001,
@@ -206,10 +207,15 @@ session makes on its routes (FE-API-004, D-188, D-189) is refused 401 with no `d
 SHALL render the refusal and SHALL NOT navigate to the sign-on by itself.
 
 *Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188, D-189, D-198,
-D-224*
+D-224, D-229*
 
 The sign-on is the library's (BFF-SESS-006); the frontend only starts it, because only
 the frontend knows the route the person meant to reach.
+
+**At the authentication application's origin (D-229).** A frontend served at the
+authentication application's own origin is served by the sign-in session and has no
+per-app session to derive (BFF-SESS-006): finding no session, it sends the browser to
+its sign-in page, and the person comes back to its route as that frontend chooses.
 
 **Back where the sign-on began (D-224).** The authentication application's sign-in page,
 given an answer that completes a sign-in and carries `continueTo`, or finding it at

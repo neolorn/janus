@@ -732,21 +732,26 @@ with `Janus.Cli` as its tool), restored from a folder feed the gate fills, never
 project of the library's solution. It mounts its routing before the browser profile
 (`17` BFF-ORDER-001, D-210). Its test project carries the framework reference to
 `Microsoft.AspNetCore.App`, so the packages the shared framework serves resolve from it
-(`08` CONV-LAYOUT-001, D-205). Its domain is its own invention, never a real host's. It
-is a small business application: types of its own with an encrypted personal field, a
-sensitive type with a consent-based purpose, an objectable purpose with its handler, a
-subject-event subscriber and an export contributor, a declared role and a derivation
-over it, a job, and endpoints of its own needing a session or marked as answering
-anyone, protected by permissions, one bound to a step-up gate, with a list filtered by
-the gate and carrying capabilities. Its records live in an organization of their own,
-which its first administrator creates (`POST /admin/organizations`) and gives its first
-grants under `system:administer` (`03` AUTHZ-SCOPE-001, D-207), since a grant or a
-derivation in the administrative organization confers nothing on a customer, who holds
-no membership of it. An obstacle met in building it is a gap in the public surface,
-raised as a question, never closed by a project reference or an internals grant. Every
-later decision that adds to what a host meets adds to the sample.
+(`08` CONV-LAYOUT-001, D-205). Its domain is its own invention, never a real host's. Its
+tests run it twice on one deployment, from the same packages: as the authentication
+application, and at an origin of its own as a second application, with a sign-on client
+of its own registered for it, the first's addresses as its `AuthenticationAddresses` and
+the deployment's landing origins as the first declares them, so the sign-on is proved
+between two origins as a host with a second application meets it (`17` BFF-SESS-006,
+D-229). It is a small business application: types of its own with an encrypted personal
+field, a sensitive type with a consent-based purpose, an objectable purpose with its
+handler, a subject-event subscriber and an export contributor, a declared role and a
+derivation over it, a job, and endpoints of its own needing a session or marked as
+answering anyone, protected by permissions, one bound to a step-up gate, with a list
+filtered by the gate and carrying capabilities. Its records live in an organization of
+their own, which its first administrator creates (`POST /admin/organizations`) and gives
+its first grants under `system:administer` (`03` AUTHZ-SCOPE-001, D-207), since a grant
+or a derivation in the administrative organization confers nothing on a customer, who
+holds no membership of it. An obstacle met in building it is a gap in the public
+surface, raised as a question, never closed by a project reference or an internals
+grant. Every later decision that adds to what a host meets adds to the sample.
 
-*Source: D-204, D-205, D-207, D-210*
+*Source: D-204, D-205, D-207, D-210, D-229*
 
 **Acceptance criteria**
 1. Building the sample host and running its tests is a gate of `08` CONV-GATE-001.
@@ -759,7 +764,8 @@ later decision that adds to what a host meets adds to the sample.
    handled by the handler; a job admitted for its declared permission and refused for
    another; an organization created through `POST /admin/organizations` and given its
    first grants under `system:administer` held in the administrative organization, the
-   sample's records registered in it (D-207).
+   sample's records registered in it (D-207); a person sent from the second
+   application's sign-on to the sign-in and back to that application's route (D-229).
 3. The sample host references no project of the library's solution.
 
 ---
