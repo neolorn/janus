@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -33,7 +34,10 @@ namespace Janus.Hosting.Tests.Mailboxes;
 /// secret is drawn when the server is made and lives no longer than it: the recovery
 /// administrator, the server's certificate and its key, and the management key the
 /// server generates. The server is reached over TLS trusting that certificate alone, its
-/// name checked, as a deployment reaches it. One server per test class.
+/// name checked, as a deployment reaches it. One server per test class. A server made
+/// for a provider trusts the provider's authority and nothing else, reaches the provider
+/// at its host through the host the containers run on, and checks an access token in an
+/// <c>Oidc</c> directory configured as INT-MAIL-004 states (D-224, D-226).
 /// </remarks>
 public sealed class StalwartServer : IAsyncLifetime
 {
@@ -59,6 +63,9 @@ public sealed class StalwartServer : IAsyncLifetime
 
     private const string DataDirectory = "/var/lib/stalwart";
 
+    // Where the image's TLS clients read the authorities they trust.
+    private const string TrustedAuthorities = "/etc/ssl/certs/ca-certificates.crt";
+
     private static readonly byte[] DataStore = Encoding.UTF8.GetBytes("""{"@type":"RocksDb","path":"/var/lib/stalwart/"}""");
 
     // The release the server names as it starts.
@@ -77,6 +84,24 @@ public sealed class StalwartServer : IAsyncLifetime
 
     private byte[] _managementKey = [];
 
+    private readonly Trusted? _provider;
+
+    /// <summary>
+    /// A server that trusts no provider, for the adapter's calls.
+    /// </summary>
+    public StalwartServer()
+    {
+    }
+
+    /// <summary>
+    /// A server that checks the access tokens of one provider.
+    /// </summary>
+    /// <param name="issuer">The provider's issuer, as its discovery document states it.</param>
+    /// <param name="authority">The authority the provider's certificate is issued by.</param>
+    /// <param name="audiences">The clients whose access tokens the server accepts.</param>
+    internal StalwartServer(string issuer, X509Certificate2 authority, IReadOnlyList<string> audiences) =>
+        _provider = new Trusted(issuer, authority.ExportCertificatePem(), audiences);
+
     /// <summary>
     /// Where the server's HTTPS listener is reached, the value of
     /// <c>integration.mailserver.endpoint</c>.
@@ -87,6 +112,18 @@ public sealed class StalwartServer : IAsyncLifetime
     /// The release the server named as it started.
     /// </summary>
     public string Release { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// The directory a server made for a provider checks its tokens in, as the server
+    /// read it back once it was configured, with its identifier.
+    /// </summary>
+    public JsonElement? Directory { get; private set; }
+
+    /// <summary>
+    /// The directory the server authenticates by, as it read it back once it was
+    /// configured.
+    /// </summary>
+    public string? AuthenticatingBy { get; private set; }
 
     /// <summary>
     /// The identifier of the domain every mailbox here is in.
@@ -218,6 +255,25 @@ public sealed class StalwartServer : IAsyncLifetime
         return response.StatusCode;
     }
 
+    /// <summary>
+    /// What the server answers a mail client that opens its session with an access
+    /// token, as a client signed in through the provider does.
+    /// </summary>
+    /// <param name="token">The access token it presents.</param>
+    /// <returns>The status of the answer.</returns>
+    public async Task<HttpStatusCode> PresentedAsync(string token)
+    {
+        using HttpMessageHandler trusting = Trusting();
+        using var requests = new HttpClient(trusting, disposeHandler: false);
+        using var message = new HttpRequestMessage(HttpMethod.Get, new Uri(Endpoint, "jmap/session"));
+
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using HttpResponseMessage response = await requests.SendAsync(message, TestContext.Current.CancellationToken);
+
+        return response.StatusCode;
+    }
+
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {
@@ -262,16 +318,16 @@ public sealed class StalwartServer : IAsyncLifetime
 
         // Started again without the recovery variables, it serves the listeners its
         // configuration holds, the certificate's on HTTPS among them.
-        _server = Started()
-            .WithPortBinding(Https, assignRandomHostPort: true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged(Listening("https")))
-            .Build();
+        await ServingAsync();
 
-        await _server.StartAsync(cancellationToken);
-
-        Endpoint = new Uri(string.Create(
-            CultureInfo.InvariantCulture,
-            $"https://{_server.Hostname}:{_server.GetMappedPublicPort(Https)}/"));
+        // The directory a server authenticates by is read as it starts, so a server made
+        // for a provider is started once more over the same data after it is loaded.
+        if (_provider is not null)
+        {
+            await DirectedAsync(_provider);
+            await _server!.DisposeAsync();
+            await ServingAsync();
+        }
     }
 
     /// <inheritdoc/>
@@ -286,6 +342,22 @@ public sealed class StalwartServer : IAsyncLifetime
 
         await _data.DisposeAsync();
         _certificate?.Dispose();
+    }
+
+    // The server in normal mode over the data, reached at the port its HTTPS listener is
+    // given.
+    private async Task ServingAsync()
+    {
+        _server = Started()
+            .WithPortBinding(Https, assignRandomHostPort: true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged(Listening("https")))
+            .Build();
+
+        await _server.StartAsync(TestContext.Current.CancellationToken);
+
+        Endpoint = new Uri(string.Create(
+            CultureInfo.InvariantCulture,
+            $"https://{_server.Hostname}:{_server.GetMappedPublicPort(Https)}/"));
     }
 
     /// <summary>
@@ -304,10 +376,21 @@ public sealed class StalwartServer : IAsyncLifetime
             TimeSpan.FromSeconds(5));
 
     // The image with the data store's settings as its configuration file, over the data
-    // the server keeps across its two starts.
-    private ContainerBuilder Started() => new ContainerBuilder(Image)
-        .WithResourceMapping(DataStore, ConfigurationFile)
-        .WithVolumeMount(_data, DataDirectory);
+    // the server keeps across its starts. A server made for a provider trusts the
+    // provider's authority alone and finds the provider's host at the host the
+    // containers run on, where the provider listens.
+    private ContainerBuilder Started()
+    {
+        ContainerBuilder started = new ContainerBuilder(Image)
+            .WithResourceMapping(DataStore, ConfigurationFile)
+            .WithVolumeMount(_data, DataDirectory);
+
+        return _provider is null
+            ? started
+            : started
+                .WithResourceMapping(Encoding.ASCII.GetBytes(_provider.Authority), TrustedAuthorities)
+                .WithExtraHost(new Uri(_provider.Issuer).Host, "host-gateway");
+    }
 
     // A self-signed certificate for the names the server is reached by, the key used for
     // nothing but this server.
@@ -514,4 +597,67 @@ public sealed class StalwartServer : IAsyncLifetime
             keyed[0].GetProperty("created").GetProperty("key").GetProperty("secret").GetString()
             ?? throw new InvalidOperationException("The server generated no management key."));
     }
+
+    // INT-MAIL-004 in 1.0's terms (D-226): an Oidc directory naming the provider's issuer,
+    // the clients it accepts as audiences, the audience checked, no opaque token taken,
+    // an unscoped token refused and the address read from email; the server
+    // authenticates by it. Loaded with the management key once the server has started,
+    // as an operator loads it: the roles every account is given are made at the first
+    // start, which a setting written before it would leave without them.
+    private async Task DirectedAsync(Trusted provider)
+    {
+        var audiences = new JsonObject();
+
+        foreach (string audience in provider.Audiences)
+        {
+            audiences[audience] = true;
+        }
+
+        IReadOnlyList<JsonElement> directed = await CallAsync(
+            Call("x:Directory/set", new JsonObject
+            {
+                ["create"] = new JsonObject
+                {
+                    ["directory"] = new JsonObject
+                    {
+                        ["@type"] = "Oidc",
+                        ["description"] = "the provider",
+                        ["issuerUrl"] = provider.Issuer,
+                        ["acceptedAudiences"] = audiences,
+                        ["skipAudienceValidation"] = false,
+                        ["opaqueTokenValidation"] = "none",
+                        ["unscopedTokens"] = "reject",
+                        ["claimUsername"] = "email",
+                    },
+                },
+            }),
+            Call("x:Authentication/set", new JsonObject
+            {
+                ["update"] = new JsonObject
+                {
+                    ["singleton"] = new JsonObject { ["directoryId"] = "#directory" },
+                },
+            }),
+            Call("x:Directory/get", new JsonObject
+            {
+                ["#ids"] = new JsonObject { ["resultOf"] = "0", ["name"] = "x:Directory/set", ["path"] = "/created/directory/id" },
+            }),
+            Call("x:Authentication/get", new JsonObject { ["ids"] = new JsonArray("singleton") }));
+
+        _ = Created(directed[0], "directory");
+
+        if (!directed[1].TryGetProperty("updated", out JsonElement updated) || !updated.TryGetProperty("singleton", out _))
+        {
+            throw new InvalidOperationException("The server kept its directory: " + directed[1].GetRawText());
+        }
+
+        Directory = directed[2].GetProperty("list").EnumerateArray().Single();
+        AuthenticatingBy = directed[3].GetProperty("list")[0].TryGetProperty("directoryId", out JsonElement by)
+            ? by.GetString()
+            : null;
+    }
+
+    // The provider a server checks access tokens of: its issuer, the authority its
+    // certificate is issued by, as PEM, and the clients the server accepts.
+    private sealed record Trusted(string Issuer, string Authority, IReadOnlyList<string> Audiences);
 }

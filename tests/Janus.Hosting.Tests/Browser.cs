@@ -25,6 +25,12 @@ internal sealed class Browser(Deployment deployment)
     private readonly Dictionary<string, string> _cookies = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Gets the host the browser addresses, with its port where it names one; the
+    /// authentication application's, unless a test names another.
+    /// </summary>
+    public string Host { get; init; } = "identity.example.test";
+
+    /// <summary>
     /// What the browser holds, by cookie name.
     /// </summary>
     public IReadOnlyDictionary<string, string> Cookies => _cookies;
@@ -79,7 +85,7 @@ internal sealed class Browser(Deployment deployment)
         context.Connection.RemoteIpAddress = source;
         context.Request.Method = method;
         context.Request.Scheme = "https";
-        context.Request.Host = new HostString("identity.example.test");
+        context.Request.Host = new HostString(Host);
         context.Request.Path = Path(path, out QueryString query);
         context.Request.QueryString = query;
         context.Request.Headers["Sec-Fetch-Site"] = "same-origin";
@@ -137,7 +143,7 @@ internal sealed class Browser(Deployment deployment)
 
         context.Request.Method = "GET";
         context.Request.Scheme = "https";
-        context.Request.Host = new HostString("identity.example.test");
+        context.Request.Host = new HostString(Host);
         context.Request.Path = Path(path, out QueryString query);
         context.Request.QueryString = query;
         context.Request.Headers["Sec-Fetch-Site"] = "same-origin";
