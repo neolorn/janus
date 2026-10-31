@@ -1365,8 +1365,10 @@ internal sealed class IdentifierService(
 
         // REG-IDENT-007 is the change of single-address mode. Where the deployment
         // holds several of a kind, a change is an add and a remove, each of which
-        // says to the account what it is doing.
-        if (maximum is not 1)
+        // says to the account what it is doing. An enrolment session opened for a lost
+        // mailbox can neither add nor remove, so it replaces an email in any mode
+        // (AUTH-RECOV-002, D-234).
+        if (maximum is not 1 && !(enrolment is not null && changing.Kind is IdentifierKind.Email))
         {
             return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
         }

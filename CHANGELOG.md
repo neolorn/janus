@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An enrolment session opened for a lost mailbox replaces an email with
+  `PUT /account/identifiers/{id}/replace` whatever `identifiers.email.max` is, the new
+  address taking the replaced one's place, primary included. Outside that session the
+  replace stays a single-address-mode operation.
 - The provider acts only on a request its profile has passed, inside the branch the host
   mounted the library in. The authentication middleware ASP.NET Core's `WebApplication`
   adds ahead of a host's pipeline, where the host calls no `UseAuthentication` of its own,

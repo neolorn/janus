@@ -986,6 +986,50 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC3 and AUTH-RECOV-002 (D-234): at <c>identifiers.email.max</c> 10,
+    /// the enrolment session an approver opened for a lost mailbox replaces the primary
+    /// address over the endpoint, and the new address takes its place, primary included,
+    /// beside the account's other address.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_TheEnrolmentSessionReplacesTheLostAddressInAnyModeAsync()
+    {
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 10);
+
+        _ = await SignedInAsync();
+
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        IdentifierId held = await EmailAsync(subject);
+
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "another@example.test");
+
+        await LinkedAsync(subject, mailboxLost: true);
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        Answer replaced = await browser.SendAsync(
+            "PUT",
+            "/account/identifiers/" + held.Value + "/replace",
+            ("value", Replaced));
+        Answer verified = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + held.Value + "/verify",
+            ("code", Flow.Code(_deployment, IdentifierKind.Email)));
+
+        HeldIdentifier standing = Assert.Single(
+            (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All,
+            identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
+
+        Assert.Equal(StatusCodes.Status202Accepted, replaced.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, verified.Status);
+        Assert.Equal(held, standing.Id);
+        Assert.True(standing.IsPrimary);
+    }
+
+    /// <summary>
     /// REG-IDENT-007 AC10 and API-LAND-001 AC4 (D-190): the link of the replace an
     /// enrolment session staged lands on the authentication application, where that
     /// session is held, and a press of it under that session answers 204 and replaces
