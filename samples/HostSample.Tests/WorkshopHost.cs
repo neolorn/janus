@@ -41,7 +41,10 @@ public sealed class WorkshopHost : IAsyncLifetime
     // The back channel the application reaches its provider on (BFF-SESS-006).
     private const string SignOnChannel = "identity-signon";
 
-    private const string FirstAdministrator = "administrator@kites.example.test";
+    /// <summary>
+    /// The address the deployment's bootstrap names its first administrator by.
+    /// </summary>
+    internal const string FirstAdministrator = "administrator@kites.example.test";
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
 

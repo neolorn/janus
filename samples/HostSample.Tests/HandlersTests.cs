@@ -89,6 +89,35 @@ public sealed class HandlersTests(PostedHost host) : IClassFixture<PostedHost>
     }
 
     /// <summary>
+    /// LIB-TEST-004, INT-SMS-005 AC2: once the courier has reported what became of a
+    /// letter, the letter and the places it carried are gone from the post room, so
+    /// nothing a message carried stays at rest past its outcome: here the code that
+    /// verifies an address the first administrator adds to the account.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_004_ALetterTheCourierReportedLeavesNothingAtRestAsync()
+    {
+        const string address = "second.address@kites.example.test";
+
+        Answered asked = await Exchanges.SteppedAsync(
+            await host.AdministratorAsync(Cancellation),
+            HttpMethod.Post,
+            "account/identifiers",
+            new { kind = "email", value = address },
+            Cancellation);
+        Posted? letter = await EventuallyAsync(() => PostedAsync(address));
+        long carried = await PlacesAsync(letter?.Reference);
+        Result<bool> reported = await host.Courier.ReportAsync(letter?.Reference, delivered: true, Cancellation);
+
+        Assert.Equal(HttpStatusCode.Accepted, asked.Status);
+        Assert.True(carried > 0);
+        Assert.True(reported.Match(held => held, error => throw new InvalidOperationException(error.Code.ToString())));
+        Assert.Null(await PostedAsync(address));
+        Assert.Equal(0, await PlacesAsync(letter?.Reference));
+    }
+
+    /// <summary>
     /// INT-SMS-006 AC2, OPS-ALERT-003 AC4, LIB-TEST-004: the workshop composed without its
     /// post room, or without its duty board, does not start, and the refusal names the
     /// handler missing.
@@ -143,6 +172,18 @@ public sealed class HandlersTests(PostedHost host) : IClassFixture<PostedHost>
         return await rows.ReadAsync(Cancellation)
             ? new Posted(rows.GetString(0), rows.GetString(1), rows.GetString(2))
             : null;
+    }
+
+    // How many places the post room holds for a letter.
+    private async Task<long> PlacesAsync(string? reference)
+    {
+        await using DbConnection connection = await host.ConnectAsync(Cancellation);
+        await using DbCommand read = connection.CreateCommand();
+
+        read.CommandText = "SELECT count(*) FROM workshop.post_places WHERE reference = @reference";
+        Named(read, "reference", reference ?? string.Empty);
+
+        return (long)(await read.ExecuteScalarAsync(Cancellation) ?? 0L);
     }
 
     // How urgent the duty board says the alert of a condition is, where one is pinned.

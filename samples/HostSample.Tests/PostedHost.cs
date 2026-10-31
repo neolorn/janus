@@ -44,6 +44,10 @@ public sealed class PostedHost : IAsyncLifetime
 
     private TestPeople? _people;
 
+    private Uri? _enrolment;
+
+    private TestSession? _administrator;
+
     /// <summary>
     /// The workshop's courier, as the application registers it.
     /// </summary>
@@ -58,6 +62,34 @@ public sealed class PostedHost : IAsyncLifetime
     /// <returns>The browser.</returns>
     public TestVisitor Guest() =>
         (_people ?? throw new InvalidOperationException("The host has not started.")).Visitor();
+
+    /// <summary>
+    /// The first administrator, enrolled with a passkey through the link the bootstrap
+    /// left the first time a test asks, which reads no message to do it.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the enrolment.</param>
+    /// <returns>The administrator's session.</returns>
+    public async Task<TestSession> AdministratorAsync(CancellationToken cancellationToken)
+    {
+        if (_administrator is TestSession enrolled)
+        {
+            return enrolled;
+        }
+
+        if (!EmailAddress.TryParse(WorkshopHost.FirstAdministrator, out EmailAddress administrator))
+        {
+            throw new InvalidOperationException("The first administrator's address does not read as one.");
+        }
+
+        TestPeople people = _people ?? throw new InvalidOperationException("The host has not started.");
+
+        _administrator = await people.AdministratorAsync(
+            _enrolment ?? throw new InvalidOperationException("The host has not started."),
+            administrator,
+            cancellationToken);
+
+        return _administrator;
+    }
 
     /// <summary>
     /// Opens a connection to the deployment's database, to look at what the workshop
@@ -112,6 +144,8 @@ public sealed class PostedHost : IAsyncLifetime
 
         TestDeployment deployment = await WorkshopHost.PreparedAsync(_connectionString, secrets);
 
+        _enrolment = deployment.EnrolmentLink;
+
         _application = WorkshopHost
             .Composed(_server, _server.Channel, _clock, secrets, WorkshopApplication.Client, _connectionString)
             .Build();
@@ -134,6 +168,8 @@ public sealed class PostedHost : IAsyncLifetime
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
+        _administrator?.Dispose();
+
         if (_application is not null)
         {
             await _application.StopAsync(CancellationToken.None);
