@@ -48,6 +48,8 @@ table accounts
 table alerts
   column key character varying(256) not null
   column at timestamp with time zone not null
+  column raise uuid
+  column unanswered boolean not null default false
   constraint pk_alerts PRIMARY KEY (key)
 table ancestry
   column resource_type text not null
