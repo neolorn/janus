@@ -51,7 +51,6 @@ public sealed class VocabularyContractTests
         "record:takedownreverse",
         "erasure:complete",
         "config:loosen",
-        "alerting:destinations",
         "policy:change",
         "domain:manage",
         "restriction:edit",
@@ -330,7 +329,6 @@ public sealed class VocabularyContractTests
         Assert.Equal(
             [
                 "account-exists",
-                "alert",
                 "credential-enrolled",
                 "credential-suspended",
                 "credential-unbound",

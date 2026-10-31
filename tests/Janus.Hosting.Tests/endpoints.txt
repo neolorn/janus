@@ -218,7 +218,7 @@ POST /account/identifiers
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   409 identity.identifier.maximum
-  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript integration.sms.balancefloor
+  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript
   429 auth.restriction.exceeded
 PUT /account/identifiers/backup
   request application/json
@@ -255,7 +255,7 @@ PUT /account/identifiers/{id}/replace
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   409 identity.change.pending identity.identifier.locked
-  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript integration.sms.balancefloor
+  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript
   429 auth.restriction.exceeded
 POST /account/identifiers/{id}/undo
   request application/json
@@ -918,8 +918,7 @@ PUT /admin/config/{key}
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
-  409 config.change.superseded
-  422 config.change.reasonrequired config.key.protected config.value.aboveceiling config.value.belowfloor config.value.lastdestination config.value.notallowed integration.endpoint.insecure
+  422 config.change.reasonrequired config.key.protected config.value.aboveceiling config.value.belowfloor config.value.notallowed integration.endpoint.insecure
 POST /admin/documents/{document}/versions
   request application/json
     text: string
@@ -1614,7 +1613,7 @@ POST /admin/recovery/approve
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
-  422 auth.recovery.channelnotonaccount auth.recovery.reasonrequired auth.recovery.selfapproval integration.sms.balancefloor
+  422 auth.recovery.channelnotonaccount auth.recovery.reasonrequired auth.recovery.selfapproval
   429 auth.restriction.exceeded auth.throttled
 GET /admin/restrictions
   200
@@ -1829,7 +1828,7 @@ POST /auth/factor
   202
   400 api.request.malformed
   403 auth.policy.graceexpired auth.session.csrfinvalid
-  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired identity.identifier.domainnotallowed integration.sms.balancefloor
+  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired identity.identifier.domainnotallowed
   429 auth.restriction.exceeded auth.throttled
 POST /auth/link
   request application/json
@@ -1911,7 +1910,7 @@ POST /auth/step-up
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required
-  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired identity.identifier.domainnotallowed integration.sms.balancefloor
+  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired identity.identifier.domainnotallowed
   429 auth.restriction.exceeded auth.throttled
 POST /auth/webauthn/register/begin
   request application/json
@@ -2361,7 +2360,7 @@ PUT /records/collection/phone
   401 auth.session.expired
   403 auth.session.csrfinvalid
   409 identity.collection.incomplete identity.record.signedin
-  422 identity.identifier.invalid integration.sms.balancefloor
+  422 identity.identifier.invalid
   429 auth.restriction.exceeded auth.throttled
 POST /records/collection/verify
   request application/json
@@ -2544,7 +2543,7 @@ POST /register/identifiers
   401 auth.session.expired
   403 auth.session.csrfinvalid
   409 identity.identifier.maximum identity.registration.incomplete
-  422 identity.identifier.domainnotallowed integration.sms.balancefloor
+  422 identity.identifier.domainnotallowed
   429 auth.restriction.exceeded auth.throttled
 DELETE /register/identifiers/{id}
   200
@@ -2582,7 +2581,7 @@ PUT /register/identifiers/{id}
   401 auth.session.expired
   403 auth.session.csrfinvalid
   409 identity.identifier.locked identity.registration.incomplete
-  422 identity.identifier.domainnotallowed integration.sms.balancefloor
+  422 identity.identifier.domainnotallowed
   429 auth.restriction.exceeded auth.throttled
 PUT /register/phone
   request application/json
@@ -2603,7 +2602,6 @@ PUT /register/phone
   401 auth.session.expired
   403 auth.session.csrfinvalid
   409 identity.registration.incomplete
-  422 integration.sms.balancefloor
   429 auth.restriction.exceeded auth.throttled
 POST /register/phone/skip
   200
@@ -2666,7 +2664,7 @@ POST /register/verify/{id}
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid
-  422 auth.code.expired auth.code.invalid integration.sms.balancefloor
+  422 auth.code.expired auth.code.invalid
   429 auth.restriction.exceeded auth.throttled
 GET /settings
   200

@@ -3,9 +3,6 @@ abuse.botdefence.ranges.refresh duration R
 abuse.botdefence.repeatedattempts integer R
 abuse.botdefence.signals multiple-choice R allowed=datacenterRange,repeatedAttempts
 abuse.nonexistent.window duration R
-abuse.sms.balancefloor decimal R
-abuse.sms.drainfactor decimal R floor=1.0
-abuse.sms.pollinterval duration R
 abuse.source.ratelimit integer R
 abuse.source.sitelimit integer R
 abuse.throttle.account.cap duration R ceiling=PT1M
@@ -20,17 +17,11 @@ alerting.authfailures.threshold integer R
 alerting.callback.threshold integer R
 alerting.dedupe.window duration R
 alerting.denials.threshold integer R
-alerting.email.destinations text-list R minimum=1
 alerting.nonexistent.threshold integer R
-alerting.owner.email text R
-alerting.owner.enabled flag R
-alerting.owner.sms text R
 alerting.recovery.accountthreshold integer R
 alerting.recovery.approverthreshold integer R
 alerting.sessions.distance integer R
 alerting.sessions.window duration R
-alerting.sms.destinations text-list R minimum=1
-alerting.sms.severitythreshold choice R allowed=high,normal
 authz.handout.byholding flag R
 authz.reverselookup.budget duration R
 breakglass.session.lifetime duration R ceiling=PT12H
@@ -63,17 +54,13 @@ identifiers.username.changecooloff duration R floor=P1D
 identifiers.username.enabled flag R
 integration.callback.claimtimeout duration R floor=PT1M
 integration.callback.ratelimit integer R
-integration.mail.endpoint text P
 integration.mailserver.endpoint text P
-integration.sms.endpoint text P
 legal.governinglanguage text P
 link.invitation.lifetime duration R ceiling=P30D
 link.magic.lifetime duration R ceiling=PT1H
 location.database.maxage duration R
 location.database.refresh duration R
 maintenance.expiry.warninglead duration R
-notification.email.relayregistered text-set R
-notification.email.sendingdomain text R
 notification.languages text-list R minimum=1
 oidc.accesstoken.lifetime duration R ceiling=PT1H
 oidc.code.lifetime duration R ceiling=PT10M
