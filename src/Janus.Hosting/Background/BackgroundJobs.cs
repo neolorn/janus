@@ -53,9 +53,8 @@ internal static class BackgroundJobs
     // and the audit retention (PRIV-RET-002), whose partitions are counted in months.
     private static readonly TimeSpan Daily = TimeSpan.FromDays(1);
 
-    // INF-TLS-003: a failed renewal is seen the day it happens, and INF-HOST-001: a clock
-    // drifts by seconds a day, so an hour finds either long before an outage. OPS-BOOT-001
-    // AC3: a deployment without an emergency credential hears of it within the hour.
+    // OPS-BOOT-001 AC3: a deployment without an emergency credential hears of it within
+    // the hour.
     private static readonly TimeSpan Hourly = TimeSpan.FromHours(1);
 
     // AUTH-OIDC-003: no refresh token outlives its session and no session outlives
@@ -279,22 +278,6 @@ internal static class BackgroundJobs
             SystemOperation.Monitoring,
             Hourly,
             async (services, context, cancellationToken) => await services.GetRequiredService<EmergencyCredentialWatch>()
-                .WatchAsync(context, cancellationToken)
-                .ConfigureAwait(false)),
-        BackgroundJob.Every(
-            "clock-drift",
-            "INF-HOST-001",
-            SystemOperation.Monitoring,
-            Hourly,
-            async (services, context, cancellationToken) => await services.GetRequiredService<ClockDriftWatch>()
-                .WatchAsync(context, cancellationToken)
-                .ConfigureAwait(false)),
-        BackgroundJob.Every(
-            "certificate-renewal",
-            "INF-TLS-003",
-            SystemOperation.Monitoring,
-            Hourly,
-            async (services, context, cancellationToken) => await services.GetRequiredService<CertificateRenewalWatch>()
                 .WatchAsync(context, cancellationToken)
                 .ConfigureAwait(false)),
         BackgroundJob.Every(

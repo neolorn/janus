@@ -94,8 +94,6 @@ public sealed class VocabularyContractTests
         "sms-balance",
         "background-job-failed",
         "erasure-delivery-exhausted",
-        "certificate-renewal-failed",
-        "clock-drift",
         "degradation",
         "callback-verification-failed",
         "nonexistent-notice-rate",

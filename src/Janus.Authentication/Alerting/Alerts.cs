@@ -39,7 +39,6 @@ internal static class Alerts
             AlertCondition.StepUpPolicyWeakened => AlertSeverity.High,
             AlertCondition.ConcurrentSessionsImplausible => AlertSeverity.High,
             AlertCondition.ErasureDeliveryExhausted => AlertSeverity.High,
-            AlertCondition.CertificateRenewalFailed => AlertSeverity.High,
             AlertCondition.PrivacyDeadlineReached => AlertSeverity.High,
             AlertCondition.NoEmergencyCredential => AlertSeverity.High,
             AlertCondition.RestoreTestFailed => AlertSeverity.High,

@@ -15,8 +15,7 @@ namespace Janus.Hosting.Tests.Alerting;
 
 /// <summary>
 /// The testing package's stand-ins for the optional environment seams, read by what the
-/// library runs over each seam (LIB-TEST-003, INF-HOST-001, INF-TLS-003, INT-GEN-006,
-/// AUTH-ABUSE-008).
+/// library runs over each seam (LIB-TEST-003, INT-GEN-006, AUTH-ABUSE-008).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class StandInTests
@@ -31,10 +30,9 @@ public sealed class StandInTests
     private readonly FixedClock _clock = new(Noon);
 
     /// <summary>
-    /// LIB-TEST-003 AC4: a deployment composed with the four stand-ins, the datacenter
-    /// range signal counted, raises no degradation and no other alert from the clock
-    /// watch, the certificate watch, the location file or the range file, on a refresh
-    /// or on a read.
+    /// LIB-TEST-003 AC4: a deployment composed with the two stand-ins, the datacenter
+    /// range signal counted, raises no degradation and no other alert from the location
+    /// file or the range file, on a refresh or on a read.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -44,13 +42,9 @@ public sealed class StandInTests
             Settings.AbuseBotDefenceSignals,
             (IReadOnlySet<BotDefenceSignal>)new HashSet<BotDefenceSignal> { BotDefenceSignal.DatacenterRange });
 
-        var clock = new ClockDriftWatch(new FixedClockReference(), _configuration, _events, _clock);
-        var renewal = new CertificateRenewalWatch(new SucceededCertificateRenewal(), _events, _clock);
         var location = new LocationDatabase(new LocationCopy(), new EmptyLocationSource(_clock), _configuration, _events, _clock);
         var ranges = new DatacenterRanges(new DatacenterRangeCopy(), new EmptyDatacenterRangeSource(_clock), _configuration, _events, _clock);
 
-        Succeeded(await clock.WatchAsync(Watcher, TestContext.Current.CancellationToken));
-        Succeeded(await renewal.WatchAsync(Watcher, TestContext.Current.CancellationToken));
         Succeeded(await location.RefreshAsync(Watcher, TestContext.Current.CancellationToken));
         Succeeded(await ranges.RefreshAsync(Watcher, TestContext.Current.CancellationToken));
 

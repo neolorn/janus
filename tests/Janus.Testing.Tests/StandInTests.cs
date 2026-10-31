@@ -16,21 +16,6 @@ public sealed class StandInTests
     private static readonly DateTimeOffset Read = new(2026, 10, 20, 23, 30, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// LIB-TEST-003: the clock reference measures no offset, and the certificate renewal's
-    /// most recent attempt succeeded.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task LIB_TEST_003_TheClockIsOnTimeAndTheRenewalSucceededAsync()
-    {
-        Result<TimeSpan> offset = await new FixedClockReference().OffsetAsync(TestContext.Current.CancellationToken);
-        Result<DateTimeOffset?> failure = await new SucceededCertificateRenewal().LastFailureAsync(TestContext.Current.CancellationToken);
-
-        Assert.Equal(TimeSpan.Zero, offset.Match(value => value, _ => TimeSpan.MaxValue));
-        Assert.Null(failure.Match(value => value, _ => DateTimeOffset.MinValue));
-    }
-
-    /// <summary>
     /// LIB-TEST-003: the location file and the datacenter range file each hold their
     /// first line alone, dated the day they are read, and no range.
     /// </summary>

@@ -517,8 +517,6 @@ public sealed class AuthorizationModelTests
     [InlineData("read-volume-baseline")]
     [InlineData("holiday-list")]
     [InlineData("emergency-credential")]
-    [InlineData("clock-drift")]
-    [InlineData("certificate-renewal")]
     [InlineData("restore-test")]
     [InlineData("audit-partitions")]
     [InlineData("licence-expiry")]

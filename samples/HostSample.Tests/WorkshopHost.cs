@@ -408,8 +408,6 @@ public sealed class WorkshopHost : IAsyncLifetime
         _ = builder.Services.AddSingleton<IMailTransport>(Mail);
         _ = builder.Services.AddSingleton<ISmsTransport>(Sms);
         _ = builder.Services.AddSingleton<IAlertHandler>(Alerts);
-        _ = builder.Services.AddSingleton<IClockReference>(new FixedClockReference());
-        _ = builder.Services.AddSingleton<ICertificateRenewal>(new SucceededCertificateRenewal());
         _ = builder.Services.AddSingleton<ILocationSource>(new EmptyLocationSource(Clock));
         _ = builder.Services.AddSingleton<IDatacenterRangeSource>(new EmptyDatacenterRangeSource(Clock));
 

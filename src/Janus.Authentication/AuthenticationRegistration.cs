@@ -119,19 +119,6 @@ internal static class AuthenticationRegistration
         services.AddScoped<LicenceExpiry>();
         services.AddScoped<EnvelopeRotationWatch>();
 
-        // INF-HOST-001, INF-TLS-003: the clock and the renewer are the environment's, so
-        // what measures them is the deployment's to register, and one it does not
-        // register is raised as unwatched.
-        services.AddScoped(provider => new ClockDriftWatch(
-            provider.GetService<IClockReference>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertRaising>(),
-            provider.GetRequiredService<TimeProvider>()));
-        services.AddScoped(provider => new CertificateRenewalWatch(
-            provider.GetService<ICertificateRenewal>(),
-            provider.GetRequiredService<IAlertRaising>(),
-            provider.GetRequiredService<TimeProvider>()));
-
         // AUTH-SESS-001, AUTH-PASS-004, AUTH-FACT-005: the authentication services,
         // each of which reads the settings table for what it enforces.
         services.AddScoped<PolicyResolution>();

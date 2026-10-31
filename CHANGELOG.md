@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library no longer watches the server: the `clock-drift` and `certificate-renewal`
+  jobs, `ICertificateRenewal`, `IClockReference`, the conditions `certificate-renewal-failed`
+  and `clock-drift`, and the testing stand-ins `FixedClockReference` and
+  `SucceededCertificateRenewal` are gone. The deployment watches its own clock and
+  certificates.
 - A `GET /settings` whose governing policy cannot be read names that policy in its
   fault: the account's, the invitation's organization's, or `policy.default`, rather
   than `policy.default` whichever it was.
