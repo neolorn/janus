@@ -684,13 +684,20 @@ AUTH-SESS-012).
 
 ## 5. Gate result
 
-- This turn, before the push: every unit and contract test passes (5146 in eleven projects); the
-  commit-message, changelog, acceptance-test-names and forbidden-marker gates pass
-  over the commits since `bf97d066`; the full-history secret scan finds nothing. The
-  first full run of the Hosting tests found `GET /auth/session` resolving the pending
-  authorizations beside `ISessions`
+- This turn, before the push: every unit and contract test passes (5146 in eleven
+  projects); the commit-message, changelog, acceptance-test-names and forbidden-marker
+  gates pass over the commits since `bf97d066`; the full-history secret scan finds
+  nothing. The first full run of the Hosting tests found `GET /auth/session` resolving
+  the pending authorizations beside `ISessions`
   (`IdentityEndpointsTests.LIB_API_005_AC1_NoEndpointCarriesLogicItsServiceDoesNotAsync`
   and `LIB_API_005_AC3`); the read moved into `ISessions.ReadAsync` before the commit.
+- Pipeline on 6d00797b: the push run (41190682056) green; the pull-request run
+  (41190684879) red in the integration job alone, on
+  `DatabaseRoleTests.OPS_MIG_003_TheApplicationReachesTheRowsOfEveryTableAsync`: the
+  migration `20261031092033_WaitAnAuthorizationForItsSignIn` granted the application
+  role nothing on `pending_authorizations`. baac357d grants it in that migration, as
+  every migration adding a table does, nothing being released; `DatabaseRoleTests` (30)
+  and the migration, schema and pending-authorization tests (47) pass on this machine.
 - d310a60b breaks two changelog entries that a script of ours under `tmp/`, which
   inserts changelog lines, had written on one line each.
 - This turn, before the push: every unit and contract test passes (5139 in eleven
