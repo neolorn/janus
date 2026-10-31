@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The provider acts only on a request its profile has passed, inside the branch the host
+  mounted the library in. The authentication middleware ASP.NET Core's `WebApplication`
+  adds ahead of a host's pipeline, where the host calls no `UseAuthentication` of its own,
+  passes every request on, so a request a stage refuses reaches no provider endpoint and
+  the authorization endpoint finds the session the stages resolved. A host never calls
+  `UseAuthentication` for the library.
 - `TestSession.RestoreAsync` restores the session in place with the person's passkey or
   password, through `POST /auth/restore/begin` and `POST /auth/restore`, as `StepUpAsync`
   steps it up; the passkey stays inside the session.

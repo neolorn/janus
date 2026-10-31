@@ -73,6 +73,7 @@ using Janus.Privacy.Tests.Outbox;
 using Janus.Privacy.Tests.Requests;
 using Janus.Storage.Authentication.Oidc;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
@@ -97,6 +98,7 @@ internal sealed class Deployment : IAsyncDisposable
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly WebApplication _application;
     private readonly RequestDelegate _pipeline;
+    private readonly ServerInMemory? _server;
     private readonly KeyRingService _ring;
     private Janus.Hosting.Tests.Authorization.HandOutInMemory? _handOuts;
 
@@ -176,6 +178,12 @@ internal sealed class Deployment : IAsyncDisposable
     /// What the host registers for its own endpoints beside what the library registers;
     /// nothing, unless it says otherwise.
     /// </param>
+    /// <param name="composed">
+    /// Whether the web host composes the pipeline as it does when it starts, with the
+    /// framework's own middleware around the host's, the host calling no
+    /// <c>UseAuthentication</c> of its own (BFF-ORDER-001 AC8); the pipeline is named
+    /// by hand, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -192,7 +200,8 @@ internal sealed class Deployment : IAsyncDisposable
         Action<IEndpointRouteBuilder>? host = null,
         Action<JsonOptions>? json = null,
         Action<IApplicationBuilder>? routing = null,
-        Action<IServiceCollection>? services = null)
+        Action<IServiceCollection>? services = null,
+        bool composed = false)
     {
         Events = new EventsInMemory { Work = Work };
         Records.Work = Work;
@@ -287,6 +296,12 @@ internal sealed class Deployment : IAsyncDisposable
 
         services?.Invoke(builder.Services);
 
+        if (composed)
+        {
+            _server = new ServerInMemory();
+            _ = builder.WebHost.UseServer(_server);
+        }
+
         _application = builder.Build();
 
         // The web server composes these two around the middleware when it starts;
@@ -309,7 +324,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = _application.MapIdentityWellKnown();
         _ = ((IApplicationBuilder)_application).UseEndpoints(_ => { });
 
-        _pipeline = ((IApplicationBuilder)_application).Build();
+        _pipeline = composed ? Served : ((IApplicationBuilder)_application).Build();
 
         // CONV-DESIGN-007: the key ring is filled from the secret source, and the mail
         // server in use chosen, before anything asks either, which is what its hosted
@@ -328,6 +343,19 @@ internal sealed class Deployment : IAsyncDisposable
             .StartAsync(CancellationToken.None)
             .GetAwaiter()
             .GetResult();
+
+        // BFF-ORDER-001 AC8: the web host composes the pipeline as it starts, the
+        // framework's authentication middleware ahead of the host's where the host calls
+        // none, and hands it to the server.
+        if (composed)
+        {
+            _application.Services
+                .GetServices<IHostedService>()
+                .Single(service => service.GetType().Name == "GenericWebHostService")
+                .StartAsync(CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
     }
 
     /// <summary>
@@ -987,6 +1015,10 @@ internal sealed class Deployment : IAsyncDisposable
         }
     }
 
+    // A request run by the server the web host started, through the pipeline the host
+    // composed.
+    private Task Served(HttpContext context) => _server!.RunAsync(context.Features);
+
     // What a host mounts: the two profiles around the library's endpoints and its own,
     // with routing named by hand because no web server composes it here, before the
     // profiles or where the host adds it after them.
@@ -1457,6 +1489,8 @@ internal sealed class Deployment : IAsyncDisposable
         await _ring.StoppedAsync(CancellationToken.None);
         await _application.DisposeAsync();
         await Work.DisposeAsync();
+
+        _server?.Dispose();
 
         SocialProviders.Dispose();
         _randomness.Dispose();

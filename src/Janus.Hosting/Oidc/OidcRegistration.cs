@@ -211,6 +211,13 @@ internal static class OidcRegistration
                 _ = options.AddEventHandler<OpenIddictServerEvents.ValidateTokenContext>(
                     handler => handler.UseScopedHandler<TokenReuse>().SetOrder(TokenReuse.Order));
 
+                // BFF-ORDER-001 AC8 (D-230): the provider acts only on a request its
+                // profile has passed, whichever authentication middleware hands it on.
+                _ = options.AddEventHandler<OpenIddictServerEvents.ProcessRequestContext>(
+                    handler => handler
+                        .UseSingletonHandler<OnlyPastTheProfile>()
+                        .SetOrder(OnlyPastTheProfile.Order));
+
                 _ = options.UseAspNetCore();
             });
 

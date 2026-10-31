@@ -109,7 +109,9 @@ public static class PipelineProfiles
                 branch =>
                 {
                     Marked(branch);
+                    PassedMarked(branch);
                     _ = branch.UseAuthentication();
+                    PassedUnmarked(branch);
                 })
             .UseWhen(
                 context => MachineRoutes.IgnoresCookie(context.Request.Path),
@@ -244,8 +246,12 @@ public static class PipelineProfiles
 
         // AUTH-SESS-012: the authorization endpoint is answered here, after the layers
         // that established what the browser carries, because what it issues a code
-        // against is the session it found.
+        // against is the session it found. The provider acts only on a request that
+        // carries the mark, whichever authentication middleware hands it on, so the
+        // framework's own, ahead of the host's, passes it on (BFF-ORDER-001 AC8, D-230).
+        PassedMarked(application);
         _ = application.UseAuthentication();
+        PassedUnmarked(application);
 
         // Where the endpoints begin. A concealed refusal is answered with what the
         // response carries here and nothing an endpoint adds to it (BFF-ERR-003).
@@ -284,6 +290,25 @@ public static class PipelineProfiles
         _ = branch.UseMiddleware<ErrorTranslation>();
         _ = branch.UseMiddleware<MalformedRequest>();
     }
+
+    // The mark the provider acts on, set once the profile's stages have passed the
+    // request and taken off again once the authentication inside the profile has run, so
+    // nothing after it hands the provider the request (BFF-ORDER-001 AC8, D-230).
+    private static void PassedMarked(IApplicationBuilder branch) =>
+        _ = branch.Use((context, next) =>
+        {
+            context.Features.Set(ProfilePassed.Mark);
+
+            return next(context);
+        });
+
+    private static void PassedUnmarked(IApplicationBuilder branch) =>
+        _ = branch.Use((context, next) =>
+        {
+            context.Features.Set<ProfilePassed>(null);
+
+            return next(context);
+        });
 
     private static void Mountable(PathString path, string name)
     {
