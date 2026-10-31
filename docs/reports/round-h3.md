@@ -865,6 +865,12 @@ LIB-TEST-004, OPS-SEC-003 AC4).
   fixed in the library (section 1, D-230 review 2). The `AlertLedgerTests`, the model
   and migration tests, and `KeyRotationTests` ran on PostgreSQL on this machine while
   written.
+- Pipeline on cbf69d2e: the push run (41202974526) green; the pull-request run
+  (41202978489) red in the integration job alone, on
+  `SchemaContractTests.LIB_API_001_AC2_TheLibraryOwnedSchemaIsTheContractAsync`: the
+  schema contract did not list the two columns
+  `20261031115729_NameTheRaiseAnAlertIsClaimedFor` adds to `alerts`. The contract lists
+  them on top, and the test passes on this machine.
 - This turn (D-229): the sample host's sign-on and back was built and run against this
   branch's packages, met Q15, and was taken out again; nothing of it is committed. The
   checks before the push were run again on the branch as it stands.
