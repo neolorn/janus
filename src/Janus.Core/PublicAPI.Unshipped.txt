@@ -2298,7 +2298,6 @@ Janus.Core.PasswordStatus.Equals(Janus.Core.PasswordStatus? other) -> bool
 Janus.Core.PasswordStatus.PasswordStatus(bool Set, System.DateTimeOffset? ChangedAt) -> void
 Janus.Core.PasswordStatus.Set.get -> bool
 Janus.Core.PasswordStatus.Set.init -> void
-
 Janus.Core.Permission
 Janus.Core.Permission.Action.get -> string!
 Janus.Core.Permission.Equals(Janus.Core.Permission other) -> bool
