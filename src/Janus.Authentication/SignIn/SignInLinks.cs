@@ -21,6 +21,7 @@ namespace Janus.Authentication.SignIn;
 /// ending one.
 /// </summary>
 /// <param name="pending">Where the ones that have gone out are held.</param>
+/// <param name="challenges">Where the sign-in a link is issued on is held.</param>
 /// <param name="identifiers">Where an identifier is resolved to an account.</param>
 /// <param name="authenticators">Where the credential a code is issued for is read under its lock.</param>
 /// <param name="accounts">Where the account's state is read.</param>
@@ -46,10 +47,13 @@ namespace Janus.Authentication.SignIn;
 /// signed into and an address a domain lock refuses each produce the same answer as one
 /// that can, and differ only in what arrives at the channel. Each counts against the
 /// sending restrictions as the message would, so where a restriction refuses the ask it
-/// refuses all of them alike.
+/// refuses all of them alike. A link is issued on a sign-in, the asking browser's own
+/// where it holds one that nothing has answered yet, and keeps that sign-in answering
+/// as long as the link lives (D-226).
 /// </remarks>
 internal sealed class SignInLinks(
     IPendingSignInStore pending,
+    IChallengeStore challenges,
     IIdentifierDirectory identifiers,
     IAuthenticatorStore authenticators,
     IAccountDirectory accounts,
@@ -76,7 +80,10 @@ internal sealed class SignInLinks(
     /// no language of its own (IDN-ATTR-001).
     /// </param>
     /// <param name="source">The address the request came from.</param>
-    /// <param name="browser">What the asking browser carries, or nothing.</param>
+    /// <param name="browser">
+    /// What the asking browser's pre-authentication session carries, or nothing, which
+    /// the sign-in the link is issued on is bound to.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the delay the source has earned.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
@@ -149,7 +156,8 @@ internal sealed class SignInLinks(
     }
 
     /// <summary>
-    /// What the asking browser's token hashes to, or nothing where it carried none.
+    /// What a browser's pre-authentication session hashes to, or nothing where it
+    /// carried none.
     /// </summary>
     /// <param name="browser">What the browser carried.</param>
     /// <returns>The fingerprint, or nothing.</returns>
@@ -639,7 +647,15 @@ internal sealed class SignInLinks(
         // all (AUTH-ABUSE-003). Each of them counts against the sending restrictions as
         // the message would, so a restriction refuses alike too (AUTH-ABUSE-002 AC3).
         return holder is { } held
-            ? await IssueAsync(held.Subject, held.Identifier, channel, language, source, browser, ask, cancellationToken)
+            ? await IssueAsync(
+                    held.Subject,
+                    held.Identifier,
+                    channel,
+                    language,
+                    source,
+                    new Asker(Fingerprint(browser), throttle.Identify(identifier.Trim(), usernames)),
+                    ask,
+                    cancellationToken)
                 .ConfigureAwait(false)
             : await WithheldAsync(channel, language, source, ask, unheld: true, cancellationToken)
                 .ConfigureAwait(false);
@@ -664,13 +680,17 @@ internal sealed class SignInLinks(
             ask.Texted,
             cancellationToken);
 
+    // Who asked: the browser's pre-authentication session as it hashes, or nothing, and
+    // the identifier as a sign-in opened with it is counted against.
+    private sealed record Asker([property: NeverLogged] byte[]? Browser, [property: NeverLogged] byte[] Identifier);
+
     private async ValueTask<Result> IssueAsync(
         SubjectId subject,
         IdentifierId identifier,
         Channel channel,
         string language,
         string source,
-        string? browser,
+        Asker asker,
         Ask ask,
         CancellationToken cancellationToken)
     {
@@ -680,6 +700,11 @@ internal sealed class SignInLinks(
             .Match(value => value, error => Withheld<Policy>(error, ref failure));
 
         TimeSpan lifetime = (await configuration.ReadAsync(ask.Lifetime, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        // A sign-in a link opens lives as one /auth/begin opens does (D-226).
+        TimeSpan opens = (await configuration.ReadAsync(Settings.CodeVerificationLifetime, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
 
@@ -768,6 +793,10 @@ internal sealed class SignInLinks(
         // held on, which is what releases its one count once either is answered.
         await restrictions.CarriesAsync(sent, token.Fingerprint(), cancellationToken).ConfigureAwait(false);
 
+        byte[]? issuedOn = ask.CarriesLink
+            ? await IssuedOnAsync(subject, email, asker, opens, lifetime, cancellationToken).ConfigureAwait(false)
+            : null;
+
         await pending
             .ReplaceAsync(
                 PendingSignIn.Issue(
@@ -777,8 +806,8 @@ internal sealed class SignInLinks(
                     email,
                     credential: null,
                     code,
-                    Fingerprint(browser),
-                    challenge: null,
+                    asker.Browser,
+                    issuedOn,
                     time.GetUtcNow(),
                     lifetime),
                 cancellationToken)
@@ -791,6 +820,52 @@ internal sealed class SignInLinks(
         }
 
         return Result.Success();
+    }
+
+    // D-226: a link is issued on the asking browser's latest sign-in opened with the
+    // identifier that still answers and that nothing has answered yet, or on one opened
+    // for it as /auth/begin opens one, bound to the browser; either way the sign-in
+    // answers at least as long as the link. Written in the caller's unit of work, so a
+    // refused send leaves no sign-in behind it.
+    private async ValueTask<byte[]> IssuedOnAsync(
+        SubjectId subject,
+        IdentifierId? email,
+        Asker asker,
+        TimeSpan opens,
+        TimeSpan lifetime,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset now = time.GetUtcNow();
+
+        Challenge? latest = asker.Browser is { } browser
+            ? await challenges.LatestUnansweredAsync(browser, asker.Identifier, now, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
+        if (latest is not null)
+        {
+            latest.Outlive(now + lifetime);
+
+            await challenges.RecordAsync(latest, cancellationToken).ConfigureAwait(false);
+
+            return latest.Fingerprint;
+        }
+
+        var opened = Challenge.Open(
+            OpaqueToken.Draw(randomness),
+            subject,
+            email,
+            asker.Identifier,
+            OpaqueToken.Draw(randomness).Value,
+            asker.Browser,
+            now,
+            opens);
+
+        opened.Outlive(now + lifetime);
+
+        await challenges.AddAsync(opened, cancellationToken).ConfigureAwait(false);
+
+        return opened.Fingerprint;
     }
 
     // AUTH-FACT-004 AC3: each wrong try is refused as wrong, the one that reaches the

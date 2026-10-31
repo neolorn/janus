@@ -70,7 +70,9 @@ internal sealed class PendingSignIn
     public byte[] Code { get; }
 
     /// <summary>
-    /// What the requesting browser carried, or nothing where it carried none.
+    /// What the pre-authentication session of the browser it was asked from hashes to,
+    /// or nothing where it carried none: for a sign-in link, the browser the sign-in it
+    /// was issued on is bound to (D-226).
     /// </summary>
     [NeverLogged]
     public byte[]? Browser { get; }

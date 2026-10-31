@@ -69,6 +69,11 @@ internal static class AuthenticationEndpoints
                     ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.RestrictionExceeded))
             .Accepts<VerifyDeviceRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>();
+        _ = group.MapPost("/device/resend", ResendDeviceAsync)
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.CodeExpired, ErrorCodes.RestrictionExceeded, ErrorCodes.Throttled))
+            .Accepts<ResendDeviceRequest>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status202Accepted);
         _ = SessionRequired.On(group.MapPost("/step-up", StepUpAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -117,7 +122,8 @@ internal static class AuthenticationEndpoints
     }
 
     // AUTH-ABUSE-001 AC5: the browser's own tokens travel with the sign-in it opens, so
-    // a browser the account knows is not held by an attack on the account.
+    // a browser the account knows is not held by an attack on the account; the
+    // sign-in is bound to the browser's pre-authentication session (D-226).
     private static async Task<IResult> BeginAsync(
         IAuthentication authentication,
         HttpContext context,
@@ -139,6 +145,7 @@ internal static class AuthenticationEndpoints
                         RequestOrigin.Source(context.Request),
                         Carried(context.Request, BrowserCookies.Browser),
                         Carried(context.Request, BrowserCookies.Device),
+                        Carried(context.Request, BrowserCookies.PreAuthentication),
                         cancellationToken)
                     .ConfigureAwait(false),
                 challenge => TypedResults.Json(
@@ -148,9 +155,10 @@ internal static class AuthenticationEndpoints
                     StatusCodes.Status200OK));
     }
 
-    // REG-SESS-003, API-LAND-001: a link completes in the browser that asked for it
-    // and on a press; the same call from anywhere else changes nothing and carries
-    // back the code to type where the sign-in began.
+    // REG-SESS-003, API-LAND-001: a link completes in the browser its sign-in is bound
+    // to and on a press; the same call from anywhere else changes nothing and carries
+    // back the code to type where the sign-in began. A link's token names its sign-in,
+    // so a challengeId beside it is not read (D-224 item 17).
     private static async Task<IResult> PresentAsync(
         AuthenticationService authentication,
         BrowserSessionCookies cookies,
@@ -167,11 +175,6 @@ internal static class AuthenticationEndpoints
             .ReadAsync<PresentFactorRequest>(context.Request, cancellationToken)
             .ConfigureAwait(false);
 
-        if (request.ChallengeId is not { Length: > 0 } challenge)
-        {
-            return Answers.Malformed("challengeId");
-        }
-
         SessionOrigin origin = RequestOrigin.Of(context.Request);
 
         if (request.LinkToken is { Length: > 0 } token)
@@ -186,7 +189,6 @@ internal static class AuthenticationEndpoints
             return await LandedAsync(
                     await authentication
                         .LandAsync(
-                            challenge,
                             Carried(context.Request, BrowserCookies.PreAuthentication),
                             token,
                             request.Factor,
@@ -202,6 +204,11 @@ internal static class AuthenticationEndpoints
                     context,
                     cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        if (request.ChallengeId is not { Length: > 0 } challenge)
+        {
+            return Answers.Malformed("challengeId");
         }
 
         if (request.Presented() is not FactorPresentation presented)
@@ -285,6 +292,33 @@ internal static class AuthenticationEndpoints
                 context,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    // AUTH-FACT-016 AC9 (D-224 item 18): a new code is sent only to the browser the
+    // held sign-in is bound to (D-226).
+    private static async Task<IResult> ResendDeviceAsync(
+        IAuthentication authentication,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authentication);
+        ArgumentNullException.ThrowIfNull(context);
+
+        ResendDeviceRequest request = await JsonBody
+            .ReadAsync<ResendDeviceRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        return request.ChallengeId is not { Length: > 0 } challenge
+            ? Answers.Malformed("challengeId")
+            : Answers.Of(
+                await authentication
+                    .ResendDeviceCodeAsync(
+                        challenge,
+                        Carried(context.Request, BrowserCookies.PreAuthentication),
+                        RequestOrigin.Source(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                Accepted);
     }
 
     private static async Task<IResult> StepUpAsync(

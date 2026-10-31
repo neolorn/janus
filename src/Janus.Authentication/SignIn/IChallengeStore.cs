@@ -34,6 +34,21 @@ internal interface IChallengeStore
     ValueTask<Challenge?> FindForUpdateAsync(byte[] fingerprint, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The latest challenge a browser opened with an identifier that still answers and
+    /// on which no factor has been accepted, which a sign-in link is issued on (D-226).
+    /// </summary>
+    /// <param name="browser">What the browser's pre-authentication session hashes to.</param>
+    /// <param name="identifier">The keyed hash of the identifier it was opened with.</param>
+    /// <param name="now">Now.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The challenge, or nothing.</returns>
+    ValueTask<Challenge?> LatestUnansweredAsync(
+        byte[] browser,
+        byte[] identifier,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a new challenge.
     /// </summary>
     /// <param name="challenge">The challenge.</param>

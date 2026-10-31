@@ -2463,6 +2463,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("handle");
 
+                b.Property<byte[]>("Browser")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("browser");
+
                 b.Property<DateTimeOffset>("CreatedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
@@ -2478,6 +2483,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<int>("FingerprintVersion")
                     .HasColumnType("integer")
                     .HasColumnName("fingerprint_version");
+
+                b.Property<DateTimeOffset?>("HeldAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("held_at");
 
                 b.Property<byte[]>("Identifier")
                     .IsRequired()
@@ -2502,6 +2511,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Handle")
                     .HasName("pk_signin_challenges");
 
+                b.HasIndex("Browser")
+                    .HasDatabaseName("ix_signin_challenges_browser");
+
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_signin_challenges_expires_at");
 
@@ -2510,6 +2522,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("signin_challenges", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_signin_challenges_browser", "browser IS NULL OR octet_length(browser) = 32");
+
                         t.HasCheckConstraint("ck_signin_challenges_handle", "octet_length(handle) = 32");
 
                         t.HasCheckConstraint("ck_signin_challenges_identifier", "octet_length(identifier) = 32");

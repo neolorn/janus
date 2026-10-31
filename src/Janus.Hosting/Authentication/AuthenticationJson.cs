@@ -14,6 +14,7 @@ namespace Janus.Hosting.Authentication;
 [JsonSerializable(typeof(SignInRequest))]
 [JsonSerializable(typeof(PresentFactorRequest))]
 [JsonSerializable(typeof(VerifyDeviceRequest))]
+[JsonSerializable(typeof(ResendDeviceRequest))]
 [JsonSerializable(typeof(AbandonLinkRequest))]
 [JsonSerializable(typeof(SignInChallengeView))]
 [JsonSerializable(typeof(SignInProgressView))]

@@ -44,6 +44,7 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
             email: null,
             identifier,
             "a-value-an-assertion-signs",
+            browser: null,
             Noon,
             TimeSpan.FromMinutes(10));
 
@@ -114,6 +115,7 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
             email: null,
             RandomNumberGenerator.GetBytes(Fingerprint.Length),
             "a-value-an-assertion-signs",
+            browser: null,
             Noon,
             TimeSpan.FromMinutes(10));
 
@@ -128,8 +130,86 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
         Assert.Equal(1, completed.Count(answer => answer));
     }
 
+    /// <summary>
+    /// AUTH-FACT-003 AC4 and AUTH-FACT-016 AC9 (D-226): a sign-in is held with the
+    /// browser it is bound to; the browser's latest sign-in opened with an identifier,
+    /// still answering and answered by no factor, is the one found, and none is found
+    /// for another browser; the end a link moves and the instant the check held it are
+    /// carried by a change to it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_003_AC4_ABrowsersLatestUnansweredSignInIsFoundByItsBindingAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        byte[] browser = RandomNumberGenerator.GetBytes(Fingerprint.Length);
+        byte[] identifier = RandomNumberGenerator.GetBytes(Fingerprint.Length);
+        Challenge earlier = Opened(identifier, browser, Noon);
+        Challenge latest = Opened(identifier, browser, Noon.AddSeconds(1));
+        Challenge answered = Opened(identifier, browser, Noon.AddSeconds(2));
+        Challenge unbound = Opened(identifier, browser: null, Noon.AddSeconds(3));
+
+        answered.Accepted(Factor.Password);
+
+        await using (StoreContext writing = database.Context())
+        {
+            var challenges = new ChallengeStore(writing, Deployment.Fingerprints);
+
+            foreach (Challenge opened in new[] { earlier, latest, answered, unbound })
+            {
+                await challenges.AddAsync(opened, cancellationToken);
+            }
+
+            _ = await writing.SaveChangesAsync(cancellationToken);
+        }
+
+        await using (StoreContext changing = database.Context())
+        {
+            var challenges = new ChallengeStore(changing, Deployment.Fingerprints);
+            Challenge found = Assert.IsType<Challenge>(
+                await challenges.LatestUnansweredAsync(browser, identifier, Noon.AddMinutes(1), cancellationToken));
+
+            Assert.Equal(latest.Fingerprint, found.Fingerprint);
+            Assert.Equal(browser, found.Browser);
+            Assert.Null(found.HeldAt);
+            Assert.Null(await challenges.LatestUnansweredAsync(
+                RandomNumberGenerator.GetBytes(Fingerprint.Length),
+                identifier,
+                Noon.AddMinutes(1),
+                cancellationToken));
+
+            found.Outlive(Noon.AddMinutes(30));
+            found.Held(Noon.AddMinutes(2));
+
+            await challenges.RecordAsync(found, cancellationToken);
+            _ = await changing.SaveChangesAsync(cancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        var store = new ChallengeStore(reading, Deployment.Fingerprints);
+        Challenge kept = Assert.IsType<Challenge>(
+            await store.LatestUnansweredAsync(browser, identifier, Noon.AddMinutes(20), cancellationToken));
+
+        Assert.Equal(latest.Fingerprint, kept.Fingerprint);
+        Assert.Equal(Noon.AddMinutes(30), kept.ExpiresAt);
+        Assert.Equal(Noon.AddMinutes(2), kept.HeldAt);
+        Assert.Null((await store.FindAsync(unbound.Fingerprint, cancellationToken))?.Browser);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _randomness.Dispose();
+
+    // A sign-in opened with an identifier from a browser, or from none.
+    private Challenge Opened(byte[] identifier, byte[]? browser, DateTimeOffset at) =>
+        Challenge.Open(
+            OpaqueToken.Draw(_randomness),
+            subject: null,
+            email: null,
+            identifier,
+            "a-value-an-assertion-signs",
+            browser,
+            at,
+            TimeSpan.FromMinutes(10));
 
     // Each completion is its own request, holding the challenge and removing it as the
     // sign-in does around the session it issues.

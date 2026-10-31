@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A sign-in is bound to the pre-authentication session of the browser that opens it
+  (`POST /auth/begin`, `IAuthentication.BeginAsync`'s `browser`), and a sign-in link is
+  issued on that browser's latest sign-in for the identifier that no factor has answered,
+  or on one it opens, which lives as long as the link. A link's press carries no
+  `challengeId` (`IAuthentication.LandAsync` takes none) and signs in only where it
+  carries the session its sign-in is bound to. `POST /auth/device/resend`
+  (`IAuthentication.ResendDeviceCodeAsync`) sends a new code for a sign-in the
+  new-device check held, which a code the email destination restriction refused now
+  leaves held with its factor accepted. `signin_challenges` gains `browser` and
+  `held_at`.
 - `IAppPasswords.ListAsync` takes the access context alone; the session it took was
   never read.
 - `ISendOutcomes.ReportAsync` answers true to a repeated report of a message the

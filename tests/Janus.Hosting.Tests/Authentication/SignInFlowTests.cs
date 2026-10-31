@@ -138,6 +138,123 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-VER-001 AC8 and AUTH-FACT-003 AC4 (D-224, D-226): a sign-in link's press
+    /// carries no challengeId, the token naming its sign-in; it signs in only the
+    /// browser whose pre-authentication session that sign-in is bound to, and a
+    /// challengeId sent beside the token is not read.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_ASignInLinksPressCarriesNoChallengeIdAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        await RegisteredAsync();
+
+        var asking = new Browser(_deployment);
+        string challenge = await BegunAsync(asking);
+
+        _ = await asking.SendAsync("POST", "/auth/link", ("identifier", Flow.Address));
+
+        string token = Flow.Token(_deployment, IdentifierKind.Email);
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/auth/session");
+
+        Answer opened = await elsewhere.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "emailLink"),
+            ("linkToken", token),
+            ("press", true));
+        Answer pressed = await asking.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("factor", "emailLink"),
+            ("linkToken", token),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status200OK, opened.Status);
+        Assert.False(opened.Json().GetProperty("sameBrowser").GetBoolean());
+        Assert.False(elsewhere.Cookies.ContainsKey(Session));
+        Assert.Equal(StatusCodes.Status200OK, pressed.Status);
+        Assert.Equal("complete", pressed.Text("status"));
+        Assert.True(asking.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC9 (D-224 item 18): a resend while the email destination
+    /// restriction stands is answered <c>auth.restriction.exceeded</c> with
+    /// <c>retryAt</c>; one from a browser the held sign-in is not bound to is answered
+    /// <c>auth.code.expired</c>; one after <c>retryAt</c> from the browser it is bound to
+    /// sends a code, the one before it no longer verifies, and the new one completes the
+    /// sign-in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_016_AC9_AResendSendsANewCodeToTheBrowserTheSignInIsBoundToAsync()
+    {
+        await RegisteredAsync();
+
+        var browser = new Browser(_deployment);
+        string challenge = await BegunAsync(browser);
+
+        Answer held = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        Assert.Equal("deviceVerificationRequired", held.Text("status"));
+
+        string first = Emailed();
+
+        Answer early = await browser.SendAsync("POST", "/auth/device/resend", ("challengeId", challenge));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, early.Status);
+        Assert.Equal(ErrorCodes.RestrictionExceeded.ToString(), early.Text("code"));
+
+        DateTimeOffset retryAt = early.Json().GetProperty("details").GetProperty("retryAt").GetDateTimeOffset();
+
+        _deployment.Clock.Advance(retryAt - _deployment.Clock.GetUtcNow());
+
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/auth/session");
+
+        Answer astray = await elsewhere.SendAsync("POST", "/auth/device/resend", ("challengeId", challenge));
+        Answer resent = await browser.SendAsync("POST", "/auth/device/resend", ("challengeId", challenge));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, astray.Status);
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), astray.Text("code"));
+        Assert.Equal(StatusCodes.Status202Accepted, resent.Status);
+
+        string last = Emailed();
+
+        if (!string.Equals(first, last, StringComparison.Ordinal))
+        {
+            Assert.Equal(
+                StatusCodes.Status422UnprocessableEntity,
+                (await browser.SendAsync(
+                    "POST",
+                    "/auth/device/verify",
+                    ("challengeId", challenge),
+                    ("code", first))).Status);
+        }
+
+        Answer completed = await browser.SendAsync(
+            "POST",
+            "/auth/device/verify",
+            ("challengeId", challenge),
+            ("code", last));
+
+        Assert.Equal("complete", completed.Text("status"));
+        Assert.True(browser.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
     /// API-LAND-001 AC1 and AC3: what a link the library sends resolves to is data
     /// for the frontend to render, never a page of the library's own, and the landing
     /// route reaches it with one call.

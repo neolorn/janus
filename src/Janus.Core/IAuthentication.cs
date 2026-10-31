@@ -21,7 +21,9 @@ public interface IAuthentication
     /// <summary>
     /// Opens a sign-in for one identifier of any kind, detected and canonicalised, from
     /// a browser that may carry the tokens a remembered or trusted browser holds
-    /// (AUTH-ABUSE-001 AC5). An in-process caller carries no browser and passes neither.
+    /// (AUTH-ABUSE-001 AC5), bound to the browser's pre-authentication session where it
+    /// carries one (D-226). An in-process caller carries no browser and passes none of
+    /// the three.
     /// </summary>
     /// <param name="identifier">The email, phone or username as it was entered.</param>
     /// <param name="source">
@@ -30,6 +32,10 @@ public interface IAuthentication
     /// </param>
     /// <param name="remembered">The remembered browser's token, where one was carried.</param>
     /// <param name="trusted">The trusted device's token, where one was carried.</param>
+    /// <param name="browser">
+    /// The browser's pre-authentication session, where it carries one, which a sign-in
+    /// link's press and a fresh code of the new-device check are judged against.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The challenge, the policy's enabled primary factors and a WebAuthn challenge,
@@ -42,13 +48,14 @@ public interface IAuthentication
         string source,
         string? remembered,
         string? trusted,
+        string? browser,
         CancellationToken cancellationToken);
 
     /// <summary>
     /// Presents one factor against a challenge, until what is presented reaches the
     /// assurance the policy requires.
     /// </summary>
-    /// <param name="challenge">The handle <see cref="BeginAsync(string, string, string, string, CancellationToken)"/> returned.</param>
+    /// <param name="challenge">The handle <see cref="BeginAsync(string, string, string, string, string, CancellationToken)"/> returned.</param>
     /// <param name="presented">The factor and what proves it.</param>
     /// <param name="device">What the browser says it is.</param>
     /// <param name="source">The address the attempt came from.</param>
@@ -83,12 +90,34 @@ public interface IAuthentication
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Sends a new code for a sign-in the new-device check held, to the account's
+    /// primary email; the code before it no longer verifies.
+    /// </summary>
+    /// <param name="challenge">The handle the held sign-in carries.</param>
+    /// <param name="browser">
+    /// The browser's pre-authentication session, which has to be the one the sign-in
+    /// is bound to.
+    /// </param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success once the code is undertaken; <c>auth.code.expired</c> where the challenge
+    /// holds no sign-in held at the check, one answer for every cause; or the refusal of
+    /// the email destination restriction or of the delay.
+    /// </returns>
+    ValueTask<Result> ResendDeviceCodeAsync(
+        string challenge,
+        string? browser,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Raises a live session's assurance by presenting one more factor.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="session">The session the request arrived on.</param>
     /// <param name="challenge">
-    /// The handle <see cref="BeginAsync(string, string, string, string, CancellationToken)"/> returned, which a ceremony signs over and
+    /// The handle <see cref="BeginAsync(string, string, string, string, string, CancellationToken)"/> returned, which a ceremony signs over and
     /// which belongs to the asking principal or to nobody.
     /// </param>
     /// <param name="presented">The factor and what proves it.</param>
@@ -154,16 +183,14 @@ public interface IAuthentication
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// What a sign-in link does where it was opened. A press from the browser that
-    /// requested it signs in; anything else changes nothing and yields the code to
-    /// type where the sign-in began.
+    /// What a sign-in link does where it was opened. A press from the browser its
+    /// sign-in is bound to signs in; anything else changes nothing and yields the code
+    /// to type where the sign-in began. The token names the sign-in it was issued on,
+    /// so no handle is asked for (D-224, D-226).
     /// </summary>
-    /// <param name="challenge">
-    /// The handle the sign-in began with, which the requesting browser holds and no
-    /// other one does.
-    /// </param>
     /// <param name="browser">
-    /// What the requesting browser carries, or nothing where it carries none.
+    /// The pre-authentication session the request carries, or nothing where it carries
+    /// none.
     /// </param>
     /// <param name="linkToken">The token the message carried.</param>
     /// <param name="factor">
@@ -177,7 +204,6 @@ public interface IAuthentication
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The sign-in, or what the landing shows instead.</returns>
     ValueTask<Result<SignInLanding>> LandAsync(
-        string challenge,
         string? browser,
         [NeverLogged] string linkToken,
         Factor factor,

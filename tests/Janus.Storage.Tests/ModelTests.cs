@@ -976,12 +976,16 @@ public sealed class ModelTests
             // hashes to and carrying what it has presented so far (AUTH-FACT-001), the
             // email it was opened with, which a domain lock is judged on (REG-DOM-001),
             // and the keyed hash of the identifier it was opened with, with its version,
-            // which a refused factor is counted against (AUTH-ABUSE-001).
+            // which a refused factor is counted against (AUTH-ABUSE-001); what the
+            // pre-authentication session it is bound to hashes to, and when the
+            // new-device check held it (D-226).
+            "signin_challenges.browser",
             "signin_challenges.created_at",
             "signin_challenges.email",
             "signin_challenges.expires_at",
             "signin_challenges.fingerprint_version",
             "signin_challenges.handle",
+            "signin_challenges.held_at",
             "signin_challenges.identifier",
             "signin_challenges.presented",
             "signin_challenges.subject",

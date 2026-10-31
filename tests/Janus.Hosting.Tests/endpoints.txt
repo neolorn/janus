@@ -1767,6 +1767,14 @@ POST /auth/break-glass
   409 auth.breakglass.consumed
   422 auth.breakglass.invalid
   429 auth.throttled
+POST /auth/device/resend
+  request application/json
+    challengeId: string
+  202
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  422 auth.code.expired
+  429 auth.restriction.exceeded auth.throttled
 POST /auth/device/verify
   request application/json
     challengeId: string

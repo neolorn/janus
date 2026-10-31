@@ -240,7 +240,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
     /// <summary>
     /// CONV-LOG-005 AC1: with the host logging nothing at all, a handle that opens no
     /// sign-in, a wrong device-verification code (as that verification, naming no
-    /// factor), a pressed sign-in link that lands on no sign-in, an identity token that
+    /// factor), a pressed sign-in link token nothing issued, an identity token that
     /// does not hold up and an identity linked to no account are each recorded as a
     /// failed authentication, none of it through the log.
     /// </summary>
@@ -293,19 +293,15 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             ("challengeId", challenge),
             ("code", string.Equals(code, "000000", StringComparison.Ordinal) ? "111111" : "000000"));
 
-        // Every refusal here counts against the one address every browser shares, and
-        // the address the link goes to was just sent the code, so the clock moves past
-        // both before the next (AUTH-ABUSE-001, AUTH-ABUSE-004).
+        // Every refusal here counts against the one address every browser shares, so
+        // the clock moves past its delay before the next (AUTH-ABUSE-001).
         quiet.Clock.Advance(TimeSpan.FromMinutes(2));
-
-        _ = await signing.SendAsync("POST", "/auth/link", ("identifier", Flow.Address));
 
         Answer astray = await signing.SendAsync(
             "POST",
             "/auth/factor",
-            ("challengeId", "a-handle-nothing-opened"),
             ("factor", "emailLink"),
-            ("linkToken", Flow.Token(quiet, IdentifierKind.Email)),
+            ("linkToken", "a-token-nothing-issued"),
             ("press", true));
 
         quiet.Clock.Advance(TimeSpan.FromSeconds(10));
@@ -318,13 +314,13 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.FactorRejected.ToString(), nowhere.Text("code"));
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, wrongCode.Status);
-        Assert.Equal(ErrorCodes.FactorRejected.ToString(), astray.Text("code"));
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), astray.Text("code"));
         Assert.EndsWith("?error=" + ErrorCodes.FactorRejected, forged.Location, StringComparison.Ordinal);
         Assert.EndsWith("?error=" + ErrorCodes.FactorRejected, unlinked.Location, StringComparison.Ordinal);
         Assert.Equal<(SubjectId?, Factor)>(
             [
                 (null, Factor.Password),
-                (subject, Factor.EmailLink),
+                (null, Factor.EmailLink),
                 (null, Factor.Google),
                 (null, Factor.Google),
             ],

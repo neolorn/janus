@@ -34,6 +34,10 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
                 $"octet_length(identifier) = {Fingerprint.Length}");
 
             table.HasCheckConstraint(
+                "ck_signin_challenges_browser",
+                $"browser IS NULL OR octet_length(browser) = {Fingerprint.Length}");
+
+            table.HasCheckConstraint(
                 "ck_signin_challenges_subject_not_max_uuid",
                 MaxUuid.Refused("subject"));
         });
@@ -62,8 +66,14 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
             .IsRequired();
 
         builder.Property(challenge => challenge.WebAuthn).HasColumnName("webauthn");
+
+        builder.Property(challenge => challenge.Browser)
+            .HasColumnName("browser")
+            .HasMaxLength(Fingerprint.Length);
+
         builder.Property(challenge => challenge.CreatedAt).HasColumnName("created_at");
         builder.Property(challenge => challenge.ExpiresAt).HasColumnName("expires_at");
+        builder.Property(challenge => challenge.HeldAt).HasColumnName("held_at");
         builder.Property(challenge => challenge.Presented).HasColumnName("presented");
 
         builder.HasIndex(challenge => challenge.ExpiresAt)
@@ -71,6 +81,9 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
 
         builder.HasIndex(challenge => challenge.Subject)
             .HasDatabaseName("ix_signin_challenges_subject");
+
+        builder.HasIndex(challenge => challenge.Browser)
+            .HasDatabaseName("ix_signin_challenges_browser");
 
         builder.HasOne<AccountRecord>()
             .WithMany()

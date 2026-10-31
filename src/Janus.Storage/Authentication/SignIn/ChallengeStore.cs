@@ -19,7 +19,9 @@ namespace Janus.Storage.Authentication.SignIn;
 /// accepted so far are held under the spellings of chapter 10, so the column and the
 /// wire cannot drift apart (CONV-ENUM-001). The identifier's hash was computed under
 /// the current version of the fingerprint key, which is the version written beside it,
-/// so the rotation forgets it with the version.
+/// so the rotation forgets it with the version. The browser a challenge is bound to is
+/// held as what its pre-authentication session hashes to, never the session itself
+/// (D-226).
 /// </remarks>
 internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : IChallengeStore
 {
@@ -69,6 +71,28 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Challenge?> LatestUnansweredAsync(
+        byte[] browser,
+        byte[] identifier,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        ChallengeRecord? record = await context.SignInChallenges
+            .Where(challenge => challenge.Browser == browser
+                && challenge.Identifier == identifier
+                && challenge.ExpiresAt > now
+                && challenge.Presented.Length == 0)
+            .OrderByDescending(challenge => challenge.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return Read(record);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask AddAsync(Challenge challenge, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(challenge);
@@ -83,8 +107,10 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
                     Identifier = challenge.Identifier,
                     FingerprintVersion = Fingerprint.CurrentVersion(ring),
                     WebAuthn = challenge.WebAuthn,
+                    Browser = challenge.Browser,
                     CreatedAt = challenge.CreatedAt,
                     ExpiresAt = challenge.ExpiresAt,
+                    HeldAt = challenge.HeldAt,
                     Presented = Spellings(challenge),
                 },
                 cancellationToken)
@@ -101,6 +127,8 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The sign-in has no row to carry the change.");
 
+        record.ExpiresAt = challenge.ExpiresAt;
+        record.HeldAt = challenge.HeldAt;
         record.Presented = Spellings(challenge);
     }
 
@@ -135,8 +163,10 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
                 record.Email,
                 record.Identifier,
                 record.WebAuthn,
+                record.Browser,
                 record.CreatedAt,
                 record.ExpiresAt,
+                record.HeldAt,
                 [.. record.Presented.Select(VocabularyConverter<Factor>.Read)]);
 
     private static string[] Spellings(Challenge challenge) =>

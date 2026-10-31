@@ -103,32 +103,22 @@ internal sealed class AuthenticationService(
         ErrorCodes.WebAuthnUserVerificationRequired,
     }.ToFrozenSet();
 
-    /// <summary>
-    /// Opens a sign-in for an identifier, with the tokens only the browser boundary
-    /// can read.
-    /// </summary>
-    /// <param name="identifier">The identifier as it was entered.</param>
-    /// <param name="source">The address the request came from.</param>
-    /// <param name="remembered">
-    /// The token saying this browser has passed the new-device check, or nothing.
-    /// </param>
-    /// <param name="trusted">
-    /// The token saying this browser is trusted for the second step, or nothing.
-    /// </param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The challenge, or the delay the attempt has earned.</returns>
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The identifier is absent.</exception>
     /// <remarks>
     /// Implements AUTH-ABUSE-001 AC5. A browser the account knows by a token that
     /// stands for this account is not held by the components an attacker raises from
     /// anywhere; a token that stands for nothing, or for another account, exempts it
-    /// from nothing.
+    /// from nothing. The challenge is bound to the browser's pre-authentication session,
+    /// or to none where it carries none, which a sign-in link's press and a fresh code
+    /// of the new-device check are judged against (D-226).
     /// </remarks>
     public async ValueTask<Result<SignInChallenge>> BeginAsync(
         string identifier,
         string source,
         [NeverLogged] string? remembered,
         [NeverLogged] string? trusted,
+        [NeverLogged] string? browser,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identifier);
@@ -178,7 +168,15 @@ internal sealed class AuthenticationService(
 
         await challenges
             .AddAsync(
-                Challenge.Open(handle, subject, email, counted, ceremony.Value, time.GetUtcNow(), lifetime),
+                Challenge.Open(
+                    handle,
+                    subject,
+                    email,
+                    counted,
+                    ceremony.Value,
+                    SignInLinks.Fingerprint(browser),
+                    time.GetUtcNow(),
+                    lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -413,7 +411,6 @@ internal sealed class AuthenticationService(
 
     /// <inheritdoc/>
     public async ValueTask<Result<SignInLanding>> LandAsync(
-        string challenge,
         string? browser,
         [NeverLogged] string linkToken,
         Factor factor,
@@ -422,7 +419,6 @@ internal sealed class AuthenticationService(
         string source,
         CancellationToken cancellationToken) =>
         (await LandAsync(
-                challenge,
                 browser,
                 linkToken,
                 factor,
@@ -804,6 +800,42 @@ internal sealed class AuthenticationService(
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException">The source is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-016 AC9 and D-224 item 18. The delay is asked first, as
+    /// at every step of a sign-in (AUTH-ABUSE-001); then a challenge that has completed,
+    /// lapsed, was never held at the check or is bound to another browser, or to none,
+    /// is answered the one way, and nothing is counted, nothing having been presented
+    /// (D-226).
+    /// </remarks>
+    public async ValueTask<Result> ResendDeviceCodeAsync(
+        string challenge,
+        [NeverLogged] string? browser,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
+        var attempt = new ThrottleAttempt(source, open?.Identifier) { Account = open?.Subject };
+
+        if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
+        {
+            return Result.Failure(delayed);
+        }
+
+        if (open is not { Subject: SubjectId subject, HeldAt: not null }
+            || !open.BoundTo(SignInLinks.Fingerprint(browser)))
+        {
+            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+        }
+
+        return await SendCheckAsync(open, subject, source, cancellationToken).ConfigureAwait(false) is Error refused
+            ? Result.Failure(refused)
+            : Result.Success();
+    }
+
     /// <summary>
     /// Raises a live session's assurance, handing back the secret it now answers to.
     /// </summary>
@@ -1036,10 +1068,11 @@ internal sealed class AuthenticationService(
 
     /// <summary>
     /// What a sign-in link does where it was opened, handing back the secrets a press
-    /// in the requesting browser produced.
+    /// in the browser its sign-in is bound to produced.
     /// </summary>
-    /// <param name="challenge">The handle the sign-in began with.</param>
-    /// <param name="browser">What the asking browser carries, or nothing.</param>
+    /// <param name="browser">
+    /// The pre-authentication session the request carries, or nothing.
+    /// </param>
     /// <param name="linkToken">The token the message carried.</param>
     /// <param name="factor">The link factor the request named.</param>
     /// <param name="press">Whether the person pressed the control.</param>
@@ -1050,8 +1083,13 @@ internal sealed class AuthenticationService(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The sign-in, or what the landing shows instead.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-003 AC4 and D-224 item 17: the token names its pending link
+    /// and the sign-in that link was issued on, so no handle is asked for, and the link
+    /// completes only where the request carries the pre-authentication session that
+    /// sign-in is bound to, which is the one the link was asked from (D-226).
+    /// </remarks>
     public async ValueTask<Result<LandedSignIn>> LandAsync(
-        string challenge,
         string? browser,
         [NeverLogged] string linkToken,
         Factor factor,
@@ -1088,7 +1126,7 @@ internal sealed class AuthenticationService(
                 sameBrowser ? null : VerificationCode.Read(held.Code)));
         }
 
-        Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
+        Challenge? open = await OpenAsync(held.Challenge, cancellationToken).ConfigureAwait(false);
 
         var attempt = new ThrottleAttempt(origin.Source, open?.Identifier)
         {
@@ -1321,15 +1359,18 @@ internal sealed class AuthenticationService(
         return delay > TimeSpan.Zero ? Error.Throttled(time.GetUtcNow() + delay) : null;
     }
 
-    private async ValueTask<Challenge?> OpenAsync(string handle, CancellationToken cancellationToken)
+    private ValueTask<Challenge?> OpenAsync(string handle, CancellationToken cancellationToken) =>
+        OpenAsync(handle is { Length: > 0 } ? OpaqueToken.Of(handle).Fingerprint() : null, cancellationToken);
+
+    private async ValueTask<Challenge?> OpenAsync(byte[]? fingerprint, CancellationToken cancellationToken)
     {
-        if (handle is not { Length: > 0 })
+        if (fingerprint is null)
         {
             return null;
         }
 
         Challenge? open = await challenges
-            .FindAsync(OpaqueToken.Of(handle).Fingerprint(), cancellationToken)
+            .FindAsync(fingerprint, cancellationToken)
             .ConfigureAwait(false);
 
         return open is null || open.HasExpired(time.GetUtcNow()) ? null : open;
@@ -2033,6 +2074,58 @@ internal sealed class AuthenticationService(
         bool changeRequired,
         CancellationToken cancellationToken)
     {
+        // AUTH-FACT-016 (D-224): a code the restriction refuses leaves the factor
+        // accepted and the sign-in held at the check, which a resend then sends a code
+        // for once the restriction allows it.
+        if (await SendCheckAsync(open, subject, source, cancellationToken).ConfigureAwait(false) is Error refused)
+        {
+            return refused.Code == ErrorCodes.RestrictionExceeded
+                && await RecordHeldAsync(open, cancellationToken).ConfigureAwait(false) is Error notHeld
+                ? Result.Failure<SignInOutcome>(notHeld)
+                : Result.Failure<SignInOutcome>(refused);
+        }
+
+        return Result.Success(new SignInOutcome(
+            new SignInProgress(
+                SignInStatus.DeviceVerificationRequired,
+                reached.Level,
+                reached.PhishingResistant,
+                [],
+                TrustDeviceOffered: false,
+                Session: null,
+                Requirement: null,
+                changeRequired),
+            Session: null,
+            Remembered: null,
+            Trusted: null));
+    }
+
+    // The sign-in held at the check whose code the restriction refused, written in a
+    // unit of its own, the code's having been rolled back.
+    private async ValueTask<Error?> RecordHeldAsync(Challenge open, CancellationToken cancellationToken)
+    {
+        open.Held(time.GetUtcNow());
+
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return notBegun;
+        }
+
+        await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
+    }
+
+    // AUTH-FACT-016: the check's code to the primary email, written with the mark that
+    // the sign-in is held; a code issued again replaces the one before it (D-224).
+    private async ValueTask<Error?> SendCheckAsync(
+        Challenge open,
+        SubjectId subject,
+        string source,
+        CancellationToken cancellationToken)
+    {
         Error? failure = null;
 
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
@@ -2042,7 +2135,7 @@ internal sealed class AuthenticationService(
 
         if (primary is null || !EmailAddress.TryParse(primary.Canonical, out EmailAddress address))
         {
-            return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
+            return Error.From(ErrorCodes.FactorRejected);
         }
 
         // IDN-ATTR-001: the step carries no locale of the request, so the code goes out
@@ -2059,7 +2152,7 @@ internal sealed class AuthenticationService(
         if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
-            return Result.Failure<SignInOutcome>(notBegun);
+            return notBegun;
         }
 
         string code = (await codes.IssueAsync(open.Fingerprint, cancellationToken)
@@ -2070,7 +2163,7 @@ internal sealed class AuthenticationService(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure<SignInOutcome>(failure);
+            return failure;
         }
 
         SendReference sent = (await sending
@@ -2096,30 +2189,17 @@ internal sealed class AuthenticationService(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure<SignInOutcome>(failure);
+            return failure;
         }
 
         await links.CheckSentAsync(sent, open.Fingerprint, code, cancellationToken).ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<SignInOutcome>(notCommitted);
-        }
+        open.Held(time.GetUtcNow());
 
-        return Result.Success(new SignInOutcome(
-            new SignInProgress(
-                SignInStatus.DeviceVerificationRequired,
-                reached.Level,
-                reached.PhishingResistant,
-                [],
-                TrustDeviceOffered: false,
-                Session: null,
-                Requirement: null,
-                changeRequired),
-            Session: null,
-            Remembered: null,
-            Trusted: null));
+        await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
     }
 
     private async ValueTask<Result<SignInOutcome>> CompleteAsync(

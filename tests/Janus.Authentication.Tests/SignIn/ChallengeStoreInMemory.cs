@@ -37,6 +37,20 @@ internal sealed class ChallengeStoreInMemory : IChallengeStore
     }
 
     /// <inheritdoc/>
+    public ValueTask<Challenge?> LatestUnansweredAsync(
+        byte[] browser,
+        byte[] identifier,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_challenges.Values
+            .Where(challenge => challenge.BoundTo(browser)
+                && challenge.Identifier.AsSpan().SequenceEqual(identifier)
+                && !challenge.HasExpired(now)
+                && challenge.Presented.Count == 0)
+            .OrderByDescending(challenge => challenge.CreatedAt)
+            .FirstOrDefault());
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(Challenge challenge, CancellationToken cancellationToken)
     {
         _challenges[Key(challenge.Fingerprint)] = challenge;

@@ -702,6 +702,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
             email: null,
             RandomNumberGenerator.GetBytes(32),
             "a-value-an-assertion-signs",
+            browser: null,
             Noon,
             TimeSpan.FromMinutes(10));
 
