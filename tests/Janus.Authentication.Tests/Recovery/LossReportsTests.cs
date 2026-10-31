@@ -678,6 +678,60 @@ public sealed class LossReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-VER-001 AC8, AUTH-RECOV-007 (D-224 item 19, D-226): the link's token finds its
+    /// report by its fingerprint, and the credential the call names is not read, so a
+    /// landing page that sends the nil identifier cancels the report the token names.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_TheLinkCancelsTheReportItsTokenNamesWhateverTheCallNamesAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+        AuthenticatorId other = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(AccessContext.Of(subject), generator, Source, TestContext.Current.CancellationToken);
+
+        string token = _notifications.Mail[^1].Token();
+
+        _ = await Service.ReportAsync(AccessContext.Of(subject), other, Source, TestContext.Current.CancellationToken);
+
+        Assert.True(Succeeded(await Service.CancelAsync(
+            context: null,
+            new AuthenticatorId(Guid.Empty),
+            token,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(AuthenticatorState.Active, await StateAsync(generator));
+        Assert.NotEqual(AuthenticatorState.Active, await StateAsync(other));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 (D-226): a token that finds no report is answered as a wrong token
+    /// is, <c>auth.credential.notfound</c>, even on the holder's own session and naming
+    /// the reported credential, and cancels nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_ATokenThatFindsNoReportCancelsNothingAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(AccessContext.Of(subject), generator, Source, TestContext.Current.CancellationToken);
+
+        Result cancelled = await Service.CancelAsync(
+            AccessContext.Of(subject),
+            generator,
+            "a-token-no-notice-carried",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            cancelled.Match<ErrorCode?>(() => null, error => error.Code));
+        Assert.NotEqual(AuthenticatorState.Active, await StateAsync(generator));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007 AC3: with every notice failing delivery, invalidation is held
     /// when the window ends and the report carries that it was.
     /// </summary>

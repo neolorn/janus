@@ -1706,6 +1706,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("enc_cancel");
 
+                b.Property<byte[]>("CancelFingerprint")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("cancel_fingerprint");
+
                 b.Property<DateTimeOffset?>("HeldAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("held_at");
@@ -1728,6 +1733,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Credential")
                     .HasName("pk_loss_reports");
+
+                b.HasIndex("CancelFingerprint")
+                    .IsUnique()
+                    .HasDatabaseName("ux_loss_reports_cancel_fingerprint");
 
                 b.HasIndex("InvalidatesAt")
                     .HasDatabaseName("ix_loss_reports_invalidates_at");

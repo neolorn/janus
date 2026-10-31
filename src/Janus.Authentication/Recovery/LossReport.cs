@@ -1,5 +1,4 @@
 using System;
-using System.Security.Cryptography;
 using System.Text;
 using Janus.Core;
 
@@ -21,12 +20,14 @@ internal sealed class LossReport
         AuthenticatorId credential,
         SubjectId subject,
         [NeverLogged] byte[] cancel,
+        byte[] cancelFingerprint,
         DateTimeOffset reportedAt,
         DateTimeOffset invalidatesAt)
     {
         Credential = credential;
         Subject = subject;
         Cancel = cancel;
+        CancelFingerprint = cancelFingerprint;
         ReportedAt = reportedAt;
         InvalidatesAt = invalidatesAt;
         NotifiedAt = reportedAt;
@@ -46,6 +47,12 @@ internal sealed class LossReport
     /// </summary>
     [NeverLogged]
     public byte[] Cancel { get; }
+
+    /// <summary>
+    /// The token's SHA-256 fingerprint, which a cancel by the link finds the report by
+    /// (D-226).
+    /// </summary>
+    public byte[] CancelFingerprint { get; }
 
     /// <summary>When it was reported.</summary>
     public DateTimeOffset ReportedAt { get; }
@@ -83,7 +90,7 @@ internal sealed class LossReport
         OpaqueToken cancel,
         DateTimeOffset at,
         TimeSpan window) =>
-        new(credential, subject, Encoding.UTF8.GetBytes(cancel.Value), at, at + window);
+        new(credential, subject, Encoding.UTF8.GetBytes(cancel.Value), cancel.Fingerprint(), at, at + window);
 
     /// <summary>
     /// The report as the store holds it.
@@ -91,17 +98,19 @@ internal sealed class LossReport
     /// <param name="credential">Which credential.</param>
     /// <param name="subject">Whose it is.</param>
     /// <param name="cancel">The token every notification carries.</param>
+    /// <param name="cancelFingerprint">The token's fingerprint.</param>
     /// <param name="reportedAt">When it was reported.</param>
     /// <param name="invalidatesAt">When the window ends.</param>
     /// <param name="notifiedAt">When the last notice went out.</param>
     /// <param name="anyDelivered">Whether the host has taken any notice to send.</param>
     /// <param name="heldAt">When invalidation fell due undelivered, or nothing.</param>
     /// <returns>The report.</returns>
-    /// <exception cref="ArgumentNullException">The token is absent.</exception>
+    /// <exception cref="ArgumentNullException">The token or its fingerprint is absent.</exception>
     public static LossReport Existing(
         AuthenticatorId credential,
         SubjectId subject,
         [NeverLogged] byte[] cancel,
+        byte[] cancelFingerprint,
         DateTimeOffset reportedAt,
         DateTimeOffset invalidatesAt,
         DateTimeOffset notifiedAt,
@@ -109,23 +118,15 @@ internal sealed class LossReport
         DateTimeOffset? heldAt)
     {
         ArgumentNullException.ThrowIfNull(cancel);
+        ArgumentNullException.ThrowIfNull(cancelFingerprint);
 
-        return new LossReport(credential, subject, cancel, reportedAt, invalidatesAt)
+        return new LossReport(credential, subject, cancel, cancelFingerprint, reportedAt, invalidatesAt)
         {
             NotifiedAt = notifiedAt,
             AnyDelivered = anyDelivered,
             HeldAt = heldAt,
         };
     }
-
-    /// <summary>
-    /// Whether this is the token the notifications carried.
-    /// </summary>
-    /// <param name="presented">What was presented.</param>
-    /// <returns>Whether it answers.</returns>
-    public bool Matches([NeverLogged] string? presented) =>
-        presented is { Length: > 0 } carried
-        && CryptographicOperations.FixedTimeEquals(Cancel, Encoding.UTF8.GetBytes(carried));
 
     /// <summary>
     /// Whether a notice is owed: one every interval across the window, and one a day

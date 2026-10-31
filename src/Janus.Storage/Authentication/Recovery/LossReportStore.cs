@@ -40,6 +40,21 @@ internal sealed class LossReportStore(
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
+    public async ValueTask<LossReport?> FindByCancelAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprint);
+
+        return await ReadAsync(
+                await context.LossReports
+                    .FirstOrDefaultAsync(report => report.CancelFingerprint == fingerprint, cancellationToken)
+                    .ConfigureAwait(false),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask AddAsync(LossReport report, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(report);
@@ -51,6 +66,7 @@ internal sealed class LossReportStore(
                     Credential = report.Credential,
                     Subject = report.Subject,
                     Cancel = await HeldAsync(report, cancellationToken).ConfigureAwait(false),
+                    CancelFingerprint = report.CancelFingerprint,
                     ReportedAt = report.ReportedAt,
                     InvalidatesAt = report.InvalidatesAt,
                     NotifiedAt = report.NotifiedAt,
@@ -164,6 +180,7 @@ internal sealed class LossReportStore(
             record.Credential,
             record.Subject,
             cancel,
+            record.CancelFingerprint,
             record.ReportedAt,
             record.InvalidatesAt,
             record.NotifiedAt,

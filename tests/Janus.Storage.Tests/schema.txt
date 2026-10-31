@@ -588,6 +588,7 @@ table loss_reports
   column notified_at timestamp with time zone not null
   column any_delivered boolean not null
   column held_at timestamp with time zone
+  column cancel_fingerprint bytea not null
   constraint ck_loss_reports_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_loss_reports_window CHECK ((invalidates_at > reported_at))
   constraint fk_loss_reports_credential FOREIGN KEY (credential) REFERENCES identity.authenticators(id) ON DELETE CASCADE
@@ -596,6 +597,7 @@ table loss_reports
   index ix_loss_reports_invalidates_at using btree (invalidates_at)
   index ix_loss_reports_notified_at using btree (notified_at)
   index ix_loss_reports_subject using btree (subject)
+  index ux_loss_reports_cancel_fingerprint unique using btree (cancel_fingerprint)
 table mailboxes
   column id uuid not null
   column fingerprint bytea not null

@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /recovery/report-loss/{id}/cancel` with the link's `token` finds the report by
+  the token's fingerprint and does not read `{id}`, so a landing page sends the nil
+  identifier; a token that finds no report is answered 404 `auth.credential.notfound`.
+  `loss_reports` holds the fingerprint, and a report open before the change is cancelled
+  from a session.
 - A client registered with a scope beyond `openid`, `email`, `profile` and
   `offline_access` receives it where its request asks for it, and its access token
   carries it; a request for such a scope its client is not registered with is refused

@@ -479,9 +479,10 @@ public sealed class ModelTests
             "lifecycle_links.token",
 
             // Not an account field: a credential its holder reported lost, the window
-            // AUTH-RECOV-007 invalidates it at the end of, and what the notices across
-            // that window have reached.
+            // AUTH-RECOV-007 invalidates it at the end of, what the notices across that
+            // window have reached, and the fingerprint its link finds it by (D-226).
             "loss_reports.any_delivered",
+            "loss_reports.cancel_fingerprint",
             "loss_reports.credential",
             "loss_reports.enc_cancel",
             "loss_reports.held_at",

@@ -375,6 +375,41 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-VER-001 AC8 (D-224 item 19, D-226): a landing page cancels a report by the link
+    /// under the nil identifier, the token finding its report, and a token that finds
+    /// none is answered 404 <c>auth.credential.notfound</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_ALossReportsLinkUnderTheNilIdentifierCancelsItsReportAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        Browser browser = await RegisteredAsync();
+        AuthenticatorId credential = Enrolled();
+
+        _ = await browser.SendAsync(
+            "POST",
+            "/recovery/report-loss",
+            ("credentialId", credential.ToString()));
+
+        Browser elsewhere = await ArrivedAsync();
+
+        Answer wrong = await elsewhere.SendAsync(
+            "POST",
+            "/recovery/report-loss/" + Guid.Empty + "/cancel",
+            ("token", "a-token-no-notice-carried"));
+        Answer cancelled = await elsewhere.SendAsync(
+            "POST",
+            "/recovery/report-loss/" + Guid.Empty + "/cancel",
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Values["link"])));
+
+        Assert.Equal(StatusCodes.Status404NotFound, wrong.Status);
+        Assert.Equal(ErrorCodes.CredentialNotFound.ToString(), wrong.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007 AC3, AUTH-FACT-002 AC10 and chapter 09 (D-197): a suspended text
     /// code's credential is listed with <c>cancellable</c> true while a cancel returns
     /// it, and false once its number has left the account; its cancel is then 404

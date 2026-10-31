@@ -10,7 +10,8 @@ namespace Janus.Storage.Authentication.Recovery;
 /// <remarks>
 /// Implements AUTH-RECOV-007 and D-141. The cancel token is held as the notices
 /// carry it, because every repeat of the notice has to carry the same link, so it is
-/// held under the account's own key and an erasure leaves it unreadable.
+/// held under the account's own key and an erasure leaves it unreadable; its SHA-256
+/// fingerprint is held beside it, so a link finds its report (D-226).
 /// </remarks>
 internal sealed class LossReportRecord
 {
@@ -23,6 +24,9 @@ internal sealed class LossReportRecord
     /// <summary>The <c>enc_cancel</c> column.</summary>
     [NeverLogged]
     public byte[] Cancel { get; set; } = [];
+
+    /// <summary>The <c>cancel_fingerprint</c> column, which a cancel by the link reads.</summary>
+    public byte[] CancelFingerprint { get; set; } = [];
 
     /// <summary>The <c>reported_at</c> column.</summary>
     public DateTimeOffset ReportedAt { get; set; }
