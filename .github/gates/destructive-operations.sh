@@ -1,67 +1,28 @@
 #!/usr/bin/env bash
 
-# OPS-DEP-002: the migrations a deploy would apply are reported for their destructive
-# operations whether or not the gate is enabled. OPS-DEP-001: the gate is the
-# repository variable DESTRUCTIVE_DDL_GATE, `enabled` or `disabled`, so enabling it is
-# a variable change and not a pipeline edit; a run that finds it unset, empty or
-# holding anything else prints its report and fails, naming the variable. Enabled, a
-# destructive operation fails the run and names the manual workflow, and every other
-# match passes either way.
-#
-# The migrations judged are read one of two ways. A pull request or a push passes the
-# range, base then head, and the migrations judged are those the head holds and the
-# base does not. The deploy job (Milestone 2, step 1) passes `--applied FILE`, the
-# migration identifiers the target database holds in identity.__migrations_history,
-# one per line, and the migrations judged are those the head holds and the list lacks,
-# so one an earlier deploy left pending is judged again.
+# OPS-MIG-001, CONV-DESIGN-003 (D-206, D-225): the migrations a pull request or a push
+# adds are reported for their destructive operations. The report states which
+# statements are destructive and passes whatever it found, since whether one stops a
+# deploy is the host's pipeline's. The range is passed base then head, and the
+# migrations judged are those the head holds and the base does not.
 #
 # The report is the idempotent SQL script of those migrations (`08` section 1b), which
 # holds what each migration's Up runs and nothing of its Down, scanned for DROP,
 # ALTER ... TYPE, an added constraint, TRUNCATE and DELETE FROM, and, on a table the
 # same migrations did not create or have filled, SET NOT NULL, a unique index and a
-# column added NOT NULL without a default. Of those, the gate stops a deploy only on
-# data loss or a constraint that can fail against rows: DROP TABLE, DROP COLUMN,
-# DROP SCHEMA, any ALTER ... TYPE, TRUNCATE, DELETE FROM, and an added constraint,
-# SET NOT NULL, a unique index or a column added NOT NULL without a default on a table
-# the same migrations did not create or have filled. Every other match is listed as
-# reported and not destructive.
+# column added NOT NULL without a default. Of those, the destructive ones are DROP TABLE,
+# DROP COLUMN, DROP SCHEMA, any ALTER ... TYPE, TRUNCATE, DELETE FROM, and an added
+# constraint, SET NOT NULL, a unique index or a column added NOT NULL without a default
+# on a table the same migrations did not create or have filled. Every other match is
+# listed as reported and not destructive.
 
 set -euo pipefail
 
-applied=""
-base=""
-
-if [ "${1:-}" = --applied ]; then
-  applied=${2:?"--applied names the file of the migrations the target database holds"}
-  head=${3:-HEAD}
-else
-  base=${1:-}
-  head=${2:-HEAD}
-fi
+base=${1:-}
+head=${2:-HEAD}
 
 empty=0000000000000000000000000000000000000000
 storage=src/Janus.Storage
-workflow=.github/workflows/deploy-destructive.yml
-gate=${DESTRUCTIVE_DDL_GATE-}
-
-# The report is printed first in every case; what the variable holds decides the end.
-finish() {
-  if [ "$gate" != enabled ] && [ "$gate" != disabled ]; then
-    echo "DESTRUCTIVE_DDL_GATE is '${gate}'; set the repository variable DESTRUCTIVE_DDL_GATE to enabled or disabled."
-    exit 1
-  fi
-
-  if [ "$1" = stop ] && [ "$gate" = enabled ]; then
-    echo "The destructive-operation gate is enabled, so the automatic deploy stops here; run ${workflow} to apply these migrations."
-    exit 1
-  fi
-
-  if [ "$1" = stop ]; then
-    echo "The destructive-operation gate is disabled; reported only."
-  fi
-
-  exit 0
-}
 
 # The migrations a commit holds, in the order EF applies them, which is the order of
 # their identifiers.
@@ -71,29 +32,25 @@ held() {
     | LC_ALL=C sort -u || true
 }
 
-if [ -n "$applied" ]; then
-  before=$(tr -d '\r' < "$applied" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed '/^$/d' | LC_ALL=C sort -u)
-else
-  # A force-pushed branch leaves the event's previous commit unreachable, which is a
-  # fact about the push and not about the work. The range then starts where the
-  # branch left the default branch.
-  if [ -n "$base" ] && [ "$base" != "$empty" ] && ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-    base=$(git merge-base origin/main "$head" 2>/dev/null || git merge-base main "$head" 2>/dev/null || true)
-  fi
+# A force-pushed branch leaves the event's previous commit unreachable, which is a fact
+# about the push and not about the work. The range then starts where the branch left
+# the default branch.
+if [ -n "$base" ] && [ "$base" != "$empty" ] && ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+  base=$(git merge-base origin/main "$head" 2>/dev/null || git merge-base main "$head" 2>/dev/null || true)
+fi
 
-  # With no previous commit to compare with, no deployed migration is known, so every
-  # migration is one the deploy would apply.
-  before=""
-  if [ -n "$base" ] && [ "$base" != "$empty" ]; then
-    before=$(held "$base")
-  fi
+# With no previous commit to compare with, no applied migration is known, so every
+# migration is one the range adds.
+before=""
+if [ -n "$base" ] && [ "$base" != "$empty" ]; then
+  before=$(held "$base")
 fi
 
 added=$(LC_ALL=C comm -13 <(printf '%s\n' "$before" | sed '/^$/d') <(held "$head" | sed '/^$/d'))
 
 if [ -z "$added" ]; then
   echo "No migration is pending, so no destructive operation."
-  finish pass
+  exit 0
 fi
 
 echo "Migrations judged:"
@@ -252,7 +209,4 @@ fi
 
 if [ -z "$destructive" ]; then
   echo "No destructive operation in the migrations judged."
-  finish pass
 fi
-
-finish stop

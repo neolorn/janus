@@ -22,7 +22,7 @@ namespace Janus.Cli.Migration;
 /// runs no schema check, which needs the schema it creates, and none of the model's
 /// checks, which need the host's declaration; a run that applied every migration owed
 /// writes nothing. The report exits 0 whatever it found: whether a destructive statement
-/// stops a deploy is the pipeline's gate (OPS-DEP-001).
+/// stops a deploy is the host's pipeline's (D-225).
 /// </remarks>
 internal static class MigrateCommand
 {
