@@ -26,5 +26,13 @@ internal sealed class AlertConfiguration : IEntityTypeConfiguration<AlertRecord>
             .HasMaxLength(KeyLength);
 
         builder.Property(alert => alert.At).HasColumnName("at");
+
+        builder.Property(alert => alert.Raise).HasColumnName("raise");
+
+        // OPS-ALERT-003: a claim made before claims named their raise stands as
+        // answered, so it folds every raise inside its window as it did.
+        builder.Property(alert => alert.Unanswered)
+            .HasColumnName("unanswered")
+            .HasDefaultValue(false);
     }
 }

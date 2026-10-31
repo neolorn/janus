@@ -24,4 +24,15 @@ internal interface IAlertRaising
     /// <param name="cancellationToken">Abandons the delivery.</param>
     /// <returns>Nothing, or the failure where the host did not take the event.</returns>
     ValueTask<Result> RaiseAsync(AlertRaised raised, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records one raised condition for <c>alert-dispatch</c> under the identifier its
+    /// caller drew, and announces it to the host, inside the transaction in progress: a
+    /// caller that also hands the condition over itself hands it as this raise
+    /// (OPS-ALERT-003 AC3).
+    /// </summary>
+    /// <param name="alert">What fired, and the identifier it is raised under.</param>
+    /// <param name="cancellationToken">Abandons the delivery.</param>
+    /// <returns>Nothing, or the failure where the host did not take the event.</returns>
+    ValueTask<Result> RaiseAsync(RaisedAlert alert, CancellationToken cancellationToken);
 }

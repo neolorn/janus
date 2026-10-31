@@ -72,4 +72,8 @@ internal sealed class EventsInMemory : IEvents, IAlertRaising
     /// <inheritdoc/>
     public ValueTask<Result> RaiseAsync(AlertRaised raised, CancellationToken cancellationToken) =>
         PublishAsync(raised, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> RaiseAsync(RaisedAlert alert, CancellationToken cancellationToken) =>
+        PublishAsync(alert.Raised, cancellationToken);
 }

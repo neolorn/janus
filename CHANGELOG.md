@@ -123,10 +123,14 @@ against the public contract of LIB-API-001.
   register: one that registers none does not start (`model.startup.declarationmissing`,
   `details.key` `alertHandler`). `alert-dispatch` hands each alert over once its
   transaction commits, one per condition per window, and again at the next pass where
-  the handler did not take it; the lapse of `alert-dispatch` itself is handed over
-  straight from the worker. The library sends no alert itself: the `alerting.*.destinations`
-  and `alerting.owner.*` keys, `alerting.sms.severitythreshold`, the alert message and the
-  `alert-destination-changed` condition are gone. `Janus.Testing` ships `InMemoryAlerts`.
+  the handler did not take it, a handler that throws or outlasts `outbox.claim.timeout`
+  included, or where the pass ended before the handler answered: the `alerts` table
+  names the raise each deduplication claim was made for and whether the handler took it,
+  and a raise is never folded into a claim of its own that was not answered. The lapse of
+  `alert-dispatch` itself is handed over straight from the worker. The library sends no
+  alert itself: the `alerting.*.destinations` and `alerting.owner.*` keys,
+  `alerting.sms.severitythreshold`, the alert message and the `alert-destination-changed`
+  condition are gone. `Janus.Testing` ships `InMemoryAlerts`.
 - The configuration catalogue holds `oidc.continuation.lifetime` (default 30 minutes,
   ceiling 1 hour), read and written through `/admin/config` as every runtime key is.
 - The provider answers only at the provider address the host declares: its issuer is

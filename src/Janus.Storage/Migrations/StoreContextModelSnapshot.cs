@@ -72,6 +72,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("at");
 
+                b.Property<Guid?>("Raise")
+                    .HasColumnType("uuid")
+                    .HasColumnName("raise");
+
+                b.Property<bool>("Unanswered")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false)
+                    .HasColumnName("unanswered");
+
                 b.HasKey("Key")
                     .HasName("pk_alerts");
 

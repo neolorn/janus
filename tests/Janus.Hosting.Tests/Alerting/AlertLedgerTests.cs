@@ -28,9 +28,9 @@ public sealed class AlertLedgerTests(HostFixture host) : IClassFixture<HostFixtu
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// OPS-ALERT-002 AC2: two passes that overlap on a key never raised before claim it
-    /// once between them; the second waits for the first, then finds the key taken, and
-    /// neither faults.
+    /// OPS-ALERT-002 AC2: two passes that overlap on a key never raised before, each with
+    /// a raise of the condition, claim it once between them; the second waits for the
+    /// first, then finds the key taken, and neither faults.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -47,7 +47,7 @@ public sealed class AlertLedgerTests(HostFixture host) : IClassFixture<HostFixtu
         await holding.BeginAsync(cancellationToken);
 
         bool claimed = await first.ServiceProvider.GetRequiredService<IAlertLedger>()
-            .FirstAsync(key, Noon, Window, cancellationToken);
+            .FirstAsync(key, RaisedAlertId.Of(Noon), Noon, Window, cancellationToken);
 
         Task<bool> overlapping = OverlappingAsync(second.ServiceProvider, key, cancellationToken);
 
@@ -79,9 +79,59 @@ public sealed class AlertLedgerTests(HostFixture host) : IClassFixture<HostFixtu
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         string key = "background-job-failed:" + Guid.NewGuid().ToString("N");
 
-        Assert.True(await ClaimedAsync(key, Noon, cancellationToken));
-        Assert.False(await ClaimedAsync(key, Noon + Window - TimeSpan.FromSeconds(1), cancellationToken));
-        Assert.True(await ClaimedAsync(key, Noon + Window, cancellationToken));
+        Assert.True(await ClaimedAsync(key, RaisedAlertId.Of(Noon), Noon, cancellationToken));
+        Assert.False(await ClaimedAsync(
+            key,
+            RaisedAlertId.Of(Noon),
+            Noon + Window - TimeSpan.FromSeconds(1),
+            cancellationToken));
+        Assert.True(await ClaimedAsync(key, RaisedAlertId.Of(Noon), Noon + Window, cancellationToken));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-003 AC2 (D-225): a claim its own raise made and no handler answered does
+    /// not count against that raise, which claims the key again, while it still folds
+    /// another raise; once the handler takes it, it folds its own raise too, and giving
+    /// it back then changes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AC2_ARaiseIsNotFoldedIntoItsOwnUnansweredClaimAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string key = "breakglass-used:" + Guid.NewGuid().ToString("N");
+        var raise = RaisedAlertId.Of(Noon);
+
+        Assert.True(await ClaimedAsync(key, raise, Noon, cancellationToken));
+        Assert.True(await ClaimedAsync(key, raise, Noon, cancellationToken));
+        Assert.False(await ClaimedAsync(key, RaisedAlertId.Of(Noon), Noon, cancellationToken));
+
+        Assert.True(await WrittenAsync(ledger => ledger.TakenAsync(key, raise, cancellationToken), cancellationToken));
+
+        Assert.False(await ClaimedAsync(key, raise, Noon, cancellationToken));
+        Assert.False(await WrittenAsync(ledger => ledger.ForgetAsync(key, raise, cancellationToken), cancellationToken));
+        Assert.False(await ClaimedAsync(key, raise, Noon, cancellationToken));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-003 AC2 (D-225): a claim given back by the raise that made it leaves the
+    /// key to the next raise inside the window, and a raise gives back no claim but its
+    /// own.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AC2_AClaimIsGivenBackOnlyByItsOwnRaiseAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string key = "breakglass-used:" + Guid.NewGuid().ToString("N");
+        var raise = RaisedAlertId.Of(Noon);
+
+        Assert.True(await ClaimedAsync(key, raise, Noon, cancellationToken));
+        Assert.False(await WrittenAsync(
+            ledger => ledger.ForgetAsync(key, RaisedAlertId.Of(Noon), cancellationToken),
+            cancellationToken));
+        Assert.True(await WrittenAsync(ledger => ledger.ForgetAsync(key, raise, cancellationToken), cancellationToken));
+        Assert.True(await ClaimedAsync(key, RaisedAlertId.Of(Noon), Noon, cancellationToken));
     }
 
     private static async Task<bool> OverlappingAsync(
@@ -94,26 +144,33 @@ public sealed class AlertLedgerTests(HostFixture host) : IClassFixture<HostFixtu
         await work.BeginAsync(cancellationToken);
 
         bool claimed = await services.GetRequiredService<IAlertLedger>()
-            .FirstAsync(key, Noon, Window, cancellationToken);
+            .FirstAsync(key, RaisedAlertId.Of(Noon), Noon, Window, cancellationToken);
 
         await work.CommitAsync(cancellationToken);
 
         return claimed;
     }
 
-    private async Task<bool> ClaimedAsync(string key, DateTimeOffset at, CancellationToken cancellationToken)
+    private Task<bool> ClaimedAsync(
+        string key,
+        RaisedAlertId raise,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        WrittenAsync(ledger => ledger.FirstAsync(key, raise, at, Window, cancellationToken), cancellationToken);
+
+    // One write to the ledger, in a unit of work of its own.
+    private async Task<bool> WrittenAsync(Func<IAlertLedger, ValueTask<bool>> written, CancellationToken cancellationToken)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
         IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
         await work.BeginAsync(cancellationToken);
 
-        bool claimed = await scope.ServiceProvider.GetRequiredService<IAlertLedger>()
-            .FirstAsync(key, at, Window, cancellationToken);
+        bool done = await written(scope.ServiceProvider.GetRequiredService<IAlertLedger>());
 
         await work.CommitAsync(cancellationToken);
 
-        return claimed;
+        return done;
     }
 
     // The second pass is waiting on the row the first holds, as the database itself

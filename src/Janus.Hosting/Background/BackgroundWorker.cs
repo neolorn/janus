@@ -347,8 +347,10 @@ internal sealed class BackgroundWorker(
 
                     AlertRaised lapse = Alerts.Of(AlertCondition.BackgroundJobFailed, job.Name, now, Lapse(job));
 
+                    var raise = new RaisedAlert(RaisedAlertId.Of(now), lapse);
+
                     failure = (await services.GetRequiredService<IAlertRaising>()
-                            .RaiseAsync(lapse, cancellationToken)
+                            .RaiseAsync(raise, cancellationToken)
                             .ConfigureAwait(false))
                         .Match(() => (Error?)null, error => error);
 
@@ -367,13 +369,13 @@ internal sealed class BackgroundWorker(
 
                     // OPS-ALERT-003 AC3 and INF-BG-001 AC2 (D-166, 290): the carrier cannot
                     // carry the news of its own stall, so its lapse is also handed to the
-                    // host's alert handler here, once the raise has committed; the row it
-                    // raised is folded into this hand-over by the deduplication ledger once
-                    // the carrier runs again.
+                    // host's alert handler here, once the raise has committed, as the raise
+                    // it wrote: the row is folded into this hand-over by the deduplication
+                    // ledger once the carrier runs again, where the handler took it here.
                     if (job.Name == AlertDispatch.Job)
                     {
                         return await services.GetRequiredService<AlertDispatch>()
-                            .HandOverAsync(lapse, cancellationToken)
+                            .HandOverAsync(raise, cancellationToken)
                             .ConfigureAwait(false);
                     }
 

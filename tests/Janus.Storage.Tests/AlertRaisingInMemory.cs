@@ -23,4 +23,8 @@ internal sealed class AlertRaisingInMemory : IAlertRaising
 
         return ValueTask.FromResult(Result.Success());
     }
+
+    /// <inheritdoc/>
+    public ValueTask<Result> RaiseAsync(RaisedAlert alert, CancellationToken cancellationToken) =>
+        RaiseAsync(alert.Raised, cancellationToken);
 }

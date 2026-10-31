@@ -20,9 +20,17 @@ namespace Janus.Authentication.Alerting;
 internal sealed class AlertRaising(IRaisedAlerts alerts, IEvents events, IUnitOfWork work) : IAlertRaising
 {
     /// <inheritdoc/>
-    public async ValueTask<Result> RaiseAsync(AlertRaised raised, CancellationToken cancellationToken)
+    public ValueTask<Result> RaiseAsync(AlertRaised raised, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(raised);
+
+        return RaiseAsync(new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised), cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> RaiseAsync(RaisedAlert alert, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(alert);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
@@ -30,10 +38,9 @@ internal sealed class AlertRaising(IRaisedAlerts alerts, IEvents events, IUnitOf
             return Result.Failure(notBegun);
         }
 
-        await alerts.AddAsync(new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised), cancellationToken)
-            .ConfigureAwait(false);
+        await alerts.AddAsync(alert, cancellationToken).ConfigureAwait(false);
 
-        Result published = await events.PublishAsync(raised, cancellationToken).ConfigureAwait(false);
+        Result published = await events.PublishAsync(alert.Raised, cancellationToken).ConfigureAwait(false);
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {

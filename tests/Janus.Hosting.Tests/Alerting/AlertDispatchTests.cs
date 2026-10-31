@@ -79,6 +79,93 @@ public sealed class AlertDispatchTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-003 AC2 (D-225): a handler that throws did not take the alert, so the
+    /// pass gives its deduplication key back and leaves it waiting, and the next pass
+    /// hands it over again and the handler takes it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AC2_AnAlertWhoseHandlerThrewIsHandedAgainUntilTakenAsync()
+    {
+        var throwing = new ThrowingOnce();
+
+        await using var faulted = new Deployment(services: services => services.AddSingleton<IAlertHandler>(throwing));
+
+        Flow.Prepare(faulted);
+
+        AlertRaised raised = Alerts.Of(AlertCondition.BreakGlassUsed, "issue", faulted.Clock.GetUtcNow());
+
+        await faulted.Raised.AddAsync(new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised), CancellationToken.None);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(faulted.CarryAlertsAsync);
+
+        _ = Assert.Single(faulted.Raised.Waiting);
+        Assert.Empty(throwing.Taken);
+
+        Assert.Equal(1, await faulted.CarryAlertsAsync());
+        Assert.Empty(faulted.Raised.Waiting);
+        Assert.Equal(AlertCondition.BreakGlassUsed, Assert.Single(throwing.Taken).Condition);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-003 AC2 (D-225): a pass that ended after it claimed the alert and its
+    /// deduplication key, before the handler answered, left the key claimed for that
+    /// raise; the raise is not folded into its own unanswered hand-over, so once the
+    /// pass's claim has timed out the next pass hands it over.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AC2_AnAlertWhosePassEndedBeforeTheHandlerAnsweredIsHandedAgainAsync()
+    {
+        await RaisedAsync(AlertCondition.BreakGlassUsed, "issue");
+
+        RaisedAlert held = Assert.Single(_deployment.Raised.Waiting);
+        TimeSpan timeout = Settings.OutboxClaimTimeout.Default;
+
+        _deployment.Raised.TakeOver(held.Id, _deployment.Clock.GetUtcNow() + timeout);
+        Assert.True(await _deployment.Alerts.FirstAsync(
+            Alerts.Deduplication(held.Raised.IdempotencyKey),
+            held.Id,
+            held.Raised.RaisedAt,
+            Settings.AlertingDedupeWindow.Default,
+            CancellationToken.None));
+
+        _deployment.Clock.Advance(timeout);
+
+        Assert.Equal(1, await _deployment.CarryAlertsAsync());
+        Assert.Empty(_deployment.Raised.Waiting);
+        Assert.Equal(
+            AlertCondition.BreakGlassUsed,
+            Assert.Single(_deployment.AlertHandler.Taken).Condition);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-003 AC2, OPS-ALERT-002 AC1: an alert the handler took and that a pass
+    /// ended before removing is folded into its own hand-over rather than handed again.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AC2_AnAlertAlreadyTakenIsNotHandedAgainAsync()
+    {
+        await RaisedAsync(AlertCondition.BreakGlassUsed, "issue");
+
+        RaisedAlert held = Assert.Single(_deployment.Raised.Waiting);
+        string key = Alerts.Deduplication(held.Raised.IdempotencyKey);
+
+        Assert.True(await _deployment.Alerts.FirstAsync(
+            key,
+            held.Id,
+            held.Raised.RaisedAt,
+            Settings.AlertingDedupeWindow.Default,
+            CancellationToken.None));
+        Assert.True(await _deployment.Alerts.TakenAsync(key, held.Id, CancellationToken.None));
+
+        Assert.Equal(1, await _deployment.CarryAlertsAsync());
+        Assert.Empty(_deployment.Raised.Waiting);
+        Assert.Empty(_deployment.AlertHandler.Taken);
+    }
+
+    /// <summary>
     /// OPS-ALERT-002 AC1: two raises of one condition under one key inside the window
     /// are handed over once.
     /// </summary>
@@ -172,6 +259,28 @@ public sealed class AlertDispatchTests : IAsyncDisposable
 
     private async Task WaitingAsync(AlertRaised raised) =>
         await _deployment.Raised.AddAsync(new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised), CancellationToken.None);
+
+    // A handler that throws at its first hand-over and takes every later one.
+    private sealed class ThrowingOnce : IAlertHandler
+    {
+        private bool _thrown;
+
+        public List<AlertRaised> Taken { get; } = [];
+
+        public ValueTask<Result> TakeAsync(AlertRaised alert, CancellationToken cancellationToken)
+        {
+            if (!_thrown)
+            {
+                _thrown = true;
+
+                throw new InvalidOperationException("The host's delivery faulted.");
+            }
+
+            Taken.Add(alert);
+
+            return ValueTask.FromResult(Result.Success());
+        }
+    }
 
     // A handler that notes, at each hand-over, whether a transaction was open.
     private sealed class Watching(Func<bool> open) : IAlertHandler

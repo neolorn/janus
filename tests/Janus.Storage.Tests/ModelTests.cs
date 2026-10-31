@@ -126,9 +126,12 @@ public sealed class ModelTests
             "accounts.terms_version",
 
             // Not an account field: the alert ledger of OPS-ALERT-002, holding one row
-            // per condition told and when it last went out.
+            // per condition told, when it last went out, and the raise it was claimed
+            // for and whether the handler took it (OPS-ALERT-003).
             "alerts.at",
             "alerts.key",
+            "alerts.raise",
+            "alerts.unanswered",
 
             // Authorization: the ancestry closure of AUTHZ-INHERIT-002, which is what a
             // permission query joins instead of walking the tree.
