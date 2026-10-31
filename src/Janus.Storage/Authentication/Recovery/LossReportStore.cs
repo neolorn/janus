@@ -20,8 +20,9 @@ namespace Janus.Storage.Authentication.Recovery;
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-RECOV-007, PRIV-RIGHT-005a and CONV-DESIGN-003. The cancel token
-/// is held rather than fingerprinted, because every repeat of the notice carries the
-/// same link, so it is held under the account's own key.
+/// is held under the account's own key, because every repeat of the notice carries the
+/// same link, and its fingerprint beside it, by which the link's cancel finds the
+/// report (D-226).
 /// </remarks>
 internal sealed class LossReportStore(
     StoreContext context,
