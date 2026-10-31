@@ -142,6 +142,21 @@ internal static class OidcRegistration
 
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(
                     handler => handler.UseScopedHandler<TokenIssue>());
+
+                // AUTH-OIDC-001 AC5, D-226: a client receives each scope it is registered
+                // with, so the server's check of a requested scope against its own and the
+                // deployment's rows gives way, at each endpoint that reads one, to the
+                // check against the client's registration.
+                Scoped<OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext>(
+                    options,
+                    OpenIddictServerHandlers.Authentication.ValidatePushedScopes.Descriptor);
+                Scoped<OpenIddictServerEvents.ValidateAuthorizationRequestContext>(
+                    options,
+                    OpenIddictServerHandlers.Authentication.ValidateScopes.Descriptor);
+                Scoped<OpenIddictServerEvents.ValidateTokenRequestContext>(
+                    options,
+                    OpenIddictServerHandlers.Exchange.ValidateScopes.Descriptor);
+
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleUserInfoRequestContext>(
                     handler => handler.UseScopedHandler<ClaimsAnswer>());
                 // AUTH-KEY-001, CONV-CODE-007, D-181: the server's own steps that take a
@@ -265,6 +280,16 @@ internal static class OidcRegistration
             handler => handler
                 .UseScopedHandler<SessionCookieRefused<TContext>>()
                 .SetOrder(SessionCookieRefused<TContext>.Order));
+
+    private static void Scoped<TContext>(OpenIddictServerBuilder options, OpenIddictServerHandlerDescriptor replaced)
+        where TContext : OpenIddictServerEvents.BaseValidatingContext
+    {
+        _ = options.RemoveEventHandler(replaced);
+        _ = options.AddEventHandler<TContext>(
+            handler => handler
+                .UseScopedHandler<RegisteredScopes<TContext>>()
+                .SetOrder(replaced.Order));
+    }
 
     private static void ErrorAlone<TContext>(OpenIddictServerBuilder options)
         where TContext : OpenIddictServerEvents.BaseRequestContext =>

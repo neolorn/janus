@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A client registered with a scope beyond `openid`, `email`, `profile` and
+  `offline_access` receives it where its request asks for it, and its access token
+  carries it; a request for such a scope its client is not registered with is refused
+  with `invalid_scope`.
 - App passwords are listed, created and revoked with the mail server's management key on
   the account that carries the identifier of the person's mailbox, and a call fails
   where the server holds no such account. `IMailServer`'s three app-password calls take

@@ -33,6 +33,8 @@ public sealed class OidcFlowTests
 {
     private const string Second = "another-browser-app";
     private const string Prefix = "/identity/v1";
+    private const string Mailing = "mailing-client";
+    private const string MailScope = "urn:ietf:params:oauth:scope:mail";
 
     /// <summary>
     /// AUTH-OIDC-001 AC1: the discovery document names the endpoints the deployment
@@ -714,6 +716,76 @@ public sealed class OidcFlowTests
 
         Assert.Equal(StatusCodes.Status404NotFound, reached.Status);
         Assert.Empty(await deployment.Clients.AllAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 AC5 (D-226): a client registered with a scope beyond the four
+    /// receives it where its request asks for it, and the access token carries it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_AC5_AClientReceivesAScopeItIsRegisteredWithAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await deployment.Clients.AddAsync(
+            new OidcClient(
+                Mailing,
+                Mailing,
+                OidcClientKind.Protocol,
+                RelyingParty.Destination,
+                ["openid", "email", "offline_access", MailScope]),
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        Answer answered = await browser.SendAsync(
+            "GET",
+            await RelyingParty.AuthorizeAsync(
+                deployment,
+                Mailing,
+                silent: true,
+                RelyingParty.Destination,
+                "openid " + MailScope));
+
+        Assert.Equal(StatusCodes.Status302Found, answered.Status);
+
+        Answer exchanged = await new Machine(deployment).PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(RelyingParty.Returned(answered, "code"), Mailing));
+
+        Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
+        Assert.Contains(
+            MailScope,
+            exchanged.Text("scope").Split(' '));
+        Assert.Contains(
+            MailScope,
+            MailServerAdapter.Claims(exchanged.Text("access_token")).GetProperty("scope").GetString()!.Split(' '));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 AC5 (D-226): a request for a scope its client is not registered with
+    /// is refused with <c>invalid_scope</c>, and no reference is issued for it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_AC5_AScopeTheClientIsNotRegisteredWithIsRefusedAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RelyingParty.RegisteredAsync(deployment);
+
+        Answer refused = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Protocol,
+            silent: false,
+            RelyingParty.Destination,
+            "openid " + MailScope);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal("invalid_scope", refused.Text("error"));
+        Assert.False(refused.Json().TryGetProperty("request_uri", out _));
     }
 
     /// <summary>
