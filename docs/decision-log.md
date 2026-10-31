@@ -19315,6 +19315,8 @@ second time, on the same deployment, as an application at an origin of its own.
 
 ## D-230 — Round H3 question 15 and review: the provider inside its branch, a link's own sign-in, and public values
 
+> **Amended.** Item 1: source-based rate limiting was missed at `/oidc/authorize` alone; `/oidc/par` and `/oidc/token`, held by the machine profile, which has no source rate limit, were answered outside it, so a fault there was not answered as the profile answers one (D-231).
+
 **Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-225, D-226, D-229
 
 **TL;DR.** The provider, and every handler the library gives the framework's
@@ -19377,6 +19379,50 @@ renumbering stands (3).
    *Rejected:* restoring the earlier values with gaps (a promise no release has made).
 
 **Propagated to:** `02` AUTH-FACT-003; `09` `POST /auth/link`; `17` BFF-ORDER-001.
+
+---
+
+## D-231 — Round H3 questions 17 and 18: the sample host's part of the row, and the provider's machine routes
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-225, D-230
+
+**TL;DR.** The sample host does in the gate what round H3's row asks of a host; that the
+key rotations print no key is the command-line tool's, proven by its own tests, so the
+sample runs no rotation (1). At `/oidc/par` and `/oidc/token` no stage of the machine
+profile refuses a request before the provider, so BFF-ORDER-001 AC8 holds there as the
+provider acting on them only inside that profile; D-230 item 1 named source-based rate
+limiting for them in error (2).
+
+1. **The sample host's part of the row (question 17).** Round H3's row lists what a host
+   built only on the public surface does, then that the key rotations print no key and
+   that no code of a retired item remains, and says the sample host does each in the
+   gate. A key rotation is an operator's act with the command-line tool, not part of
+   what a host composes, and LIB-TEST-004 names none among what the sample's tests
+   prove. The tool's own tests prove OPS-SEC-003 AC4 against PostgreSQL; in the sample a
+   rotation would need a key document of the next version, built for the test alone.
+   The sample host does each clause of the row about a host; the key rotations and the
+   retired code are the library's, proven by its own tests.
+
+   *Rejected:* a rotation run by the sample host (a document with no meaning for a host,
+   proving again what the tool's own tests prove).
+
+2. **The provider's machine routes (question 18).** The machine profile holds
+   `/oidc/par` and `/oidc/token` and has no source rate limit of its own: the provider
+   authenticates each client calling them with the secret the library generated for it
+   (BFF-MACH-001). Around the provider the profile sets its mark and answers a fault and
+   an unreadable request; none of its stages refuses a request before the provider does,
+   the refusal of a request carrying the session cookie being the provider's own
+   (BFF-MACH-001 AC2). In a host built on `WebApplication` the provider answered these
+   two routes outside the profile, so a fault there was not answered as the profile
+   answers one; source-based rate limiting was missed at `/oidc/authorize` alone, not at
+   all three as D-230 item 1 said. BFF-ORDER-001 AC8 holds at the two routes as the
+   provider acting on them only inside their profile, a fault in it answered by the
+   profile's error translation.
+
+   *Rejected:* a source rate limit on the provider's machine routes (BFF-MACH-001 leaves
+   a volumetric flood to the reverse proxy, and holds each client by its secret).
+
+**Propagated to:** D-230 (item 1, amended); `implementation-plan.md` (the H3 row).
 
 ---
 
@@ -19620,6 +19666,7 @@ renumbering stands (3).
 | Round H3 questions 12 and 13: the continuation with nowhere to go, and a test's restore | D-228 |
 | Round H3 question 14: the sign-on at the authentication application's origin | D-229 |
 | Round H3 question 15 and review: the provider inside its branch, a link's own sign-in, and public values | D-230 |
+| Round H3 questions 17 and 18: the sample host's part of the row, and the provider's machine routes | D-231 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
