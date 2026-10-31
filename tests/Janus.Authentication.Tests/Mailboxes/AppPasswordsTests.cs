@@ -23,8 +23,8 @@ namespace Janus.Authentication.Tests.Mailboxes;
 
 /// <summary>
 /// The mail app passwords of the signed-in person: created, listed and revoked at the
-/// mail server with the person's token, gated, notified and audited, and kept nowhere
-/// on the library's side (REG-MAIL-002, INT-MAIL-010).
+/// mail server on the account of the mailbox they hold, gated, notified and audited, and
+/// kept nowhere on the library's side (REG-MAIL-002, INT-MAIL-010, D-226).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AppPasswordsTests : IAsyncDisposable
@@ -56,28 +56,27 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
-    private readonly MailServerTokensInMemory _tokens;
+    private readonly Mailbox _mailbox;
     private readonly SubjectId _person;
     private readonly SessionId _session;
 
     /// <summary>
-    /// An active account holding an enabled mailbox and a verified email, signed in a
-    /// moment ago with a password.
+    /// An active account holding an enabled mailbox, which the server hosts, and a
+    /// verified email, signed in a moment ago with a password.
     /// </summary>
     public AppPasswordsTests()
     {
         _notifications.Work = _work;
-        _tokens = new MailServerTokensInMemory(_sessions, _clock);
         _configuration.Set(Settings.NotificationLanguages, ["en"]);
         _person = SubjectId.New(_randomness);
         _accounts.Stands(_person, AccountState.Active);
         _passwords.Hold(_person, Noon);
         _ = _identifiers.Verified(_person, IdentifierKind.Email, Mail);
 
-        var mailbox = Mailbox.Reserved(Parsed(Mail), Noon.AddDays(-1));
-
-        mailbox.Hold(_person);
-        _mailboxes.Held.Add(mailbox);
+        _mailbox = Mailbox.Reserved(Parsed(Mail), Noon.AddDays(-1));
+        _mailbox.Hold(_person);
+        _mailboxes.Held.Add(_mailbox);
+        _server.Set(Mail, enabled: true, _mailbox.Id);
         _session = Opened(_person, Noon);
     }
 
@@ -97,7 +96,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
     /// <summary>
     /// REG-MAIL-002 AC1, INT-MAIL-010 AC1 and AC4: creation is one call to the server
-    /// carrying the person's token, the secret the server generated is answered once,
+    /// naming the mailbox the person holds, the secret the server generated is answered once,
     /// and what the library writes, the notice and the audit row, carries neither the
     /// secret nor the label.
     /// </summary>
@@ -107,8 +106,8 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         IssuedAppPassword issued = Issued(await CreateAsync("Phone", _session));
 
         Assert.Equal(Assert.Single(_server.Secrets), issued.Secret);
-        Assert.Equal(Assert.Single(_tokens.Issued), Assert.Single(_server.Tokens));
-        Assert.Equal("Phone", Assert.Single(_server.AppPasswordsOf(_person)).Label);
+        Assert.Equal(_mailbox.Id, Assert.Single(_server.Calls));
+        Assert.Equal("Phone", Assert.Single(_server.AppPasswordsOf(Mail)).Label);
         Assert.Equal(
             (AuditActions.MailCredentialCreated, _person, issued.Id),
             Assert.Single(_audit.MailCredentials));
@@ -132,7 +131,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.StepUpRequired, Refused(await CreateAsync("Phone", stale)));
         Assert.Equal(ErrorCodes.StepUpRequired, Refused(await RevokeAsync(AppPasswordId.Parse("app-password-1"), stale)));
-        Assert.Empty(_server.Tokens);
+        Assert.Empty(_server.Calls);
         Assert.Empty(_notifications.Sent);
         Assert.Empty(_audit.MailCredentials);
     }
@@ -149,7 +148,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
         Accepted(await RevokeAsync(issued.Id, _session));
 
-        Assert.Empty(_server.AppPasswordsOf(_person));
+        Assert.Empty(_server.AppPasswordsOf(Mail));
         Assert.Equal(
             (AuditActions.MailCredentialRevoked, _person, issued.Id),
             _audit.MailCredentials[^1]);
@@ -204,7 +203,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.Restricted, Refused(refused));
         Assert.Single(_server.Secrets);
-        Assert.Empty(_server.AppPasswordsOf(_person));
+        Assert.Empty(_server.AppPasswordsOf(Mail));
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
         Assert.Equal(1, _work.RolledBack);
@@ -251,7 +250,8 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         IReadOnlyList<AppPassword> first = Listed(await ListAsync(_session));
 
         _ = await _server.CreateAppPasswordAsync(
-            _tokens.Issued[0],
+            _mailbox.Id,
+            _mailbox.Address,
             "Laptop",
             Noon.AddDays(30),
             TestContext.Current.CancellationToken);
@@ -261,7 +261,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         Assert.Equal(["Phone"], first.Select(password => password.Label));
         Assert.Equal(["Phone", "Laptop"], second.Select(password => password.Label));
         Assert.Equal(Noon.AddDays(30), second[1].ExpiresAt);
-        Assert.Equal(4, _server.Tokens.Count);
+        Assert.Equal(4, _server.Calls.Count);
         Assert.Empty(_audit.MailCredentials.Skip(1));
     }
 
@@ -302,7 +302,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await RevokeAsync(AppPasswordId.Parse("app-password-1"), _session)));
         Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await CreateAsync("Phone", _session)));
-        Assert.Empty(_server.Tokens);
+        Assert.Empty(_server.Calls);
     }
 
     /// <summary>
@@ -315,41 +315,46 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     {
         IssuedAppPassword kept = Issued(await CreateAsync("Phone", _session));
         IssuedAppPassword revoked = Issued(await CreateAsync("Laptop", _session));
-        int tokens = _server.Tokens.Count;
+        int calls = _server.Calls.Count;
 
         _accounts.Stands(_person, AccountState.Restricted);
         _restriction.Restrict(_person);
 
         Assert.Equal(MailboxState.Enabled, Assert.Single(_mailboxes.Held).Owed(stands: true));
         Assert.Equal(ErrorCodes.Restricted, Refused(await CreateAsync("Tablet", _session)));
-        Assert.Equal(tokens, _server.Tokens.Count);
+        Assert.Equal(calls, _server.Calls.Count);
         Assert.Equal(["Phone", "Laptop"], Listed(await ListAsync(_session)).Select(password => password.Label));
 
         Accepted(await RevokeAsync(revoked.Id, _session));
 
-        Assert.Equal(kept.Id, Assert.Single(_server.AppPasswordsOf(_person)).Id);
+        Assert.Equal(kept.Id, Assert.Single(_server.AppPasswordsOf(Mail)).Id);
         Assert.Equal(
             (AuditActions.MailCredentialRevoked, _person, revoked.Id),
             _audit.MailCredentials[^1]);
     }
 
     /// <summary>
-    /// AUTH-OIDC-001 AC4: the token stands on the session named, which has to be live
-    /// and the person's own; a session that is not issues nothing and the server is
-    /// never called.
+    /// INT-MAIL-010 AC1, D-226: the calls act on the account that carries the identifier
+    /// of the mailbox the acting account holds, and on no other; where the server holds
+    /// none, an account under the mailbox's address carrying another identifier or none,
+    /// each call fails as a failed call does and nothing is recorded or notified.
     /// </summary>
-    [Fact]
-    public async Task AUTH_OIDC_001_AC4_OnlyThePersonsLiveSessionObtainsATokenAsync()
+    /// <param name="carried">What the account under the mailbox's address carries.</param>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("0192f1a0-5c3e-7a10-8f00-00000000b002")]
+    public async Task INT_MAIL_010_AC1_TheCallsActOnTheAccountOfTheMailboxHeldAndNoOtherAsync(string? carried)
     {
-        var other = SubjectId.New(_randomness);
+        _server.Set(Mail, enabled: null);
+        _server.Set(Mail, enabled: true, carried is null ? null : new MailboxId(Guid.Parse(carried)));
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await ListAsync(Opened(other, Noon))));
-
-        await _sessions.EndSpineAsync(_session, Noon, TestContext.Current.CancellationToken);
-
-        Assert.Equal(ErrorCodes.SessionExpired, Refused(await ListAsync(_session)));
-        Assert.Empty(_tokens.Issued);
-        Assert.Empty(_server.Tokens);
+        Assert.Equal(ErrorCodes.SystemFault, Refused(await ListAsync(_session)));
+        Assert.Equal(ErrorCodes.SystemFault, Refused(await CreateAsync("Phone", _session)));
+        Assert.Equal(ErrorCodes.SystemFault, Refused(await RevokeAsync(AppPasswordId.Parse("app-password-1"), _session)));
+        Assert.Equal([_mailbox.Id, _mailbox.Id, _mailbox.Id], _server.Calls);
+        Assert.Empty(_server.Secrets);
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_audit.MailCredentials);
     }
 
     /// <summary>
@@ -360,7 +365,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     {
         Assert.Equal(ErrorCodes.CredentialLabelInvalid, Refused(await CreateAsync(" ", _session)));
         Assert.Equal(ErrorCodes.CredentialLabelInvalid, Refused(await CreateAsync(new string('a', 65), _session)));
-        Assert.Empty(_server.Tokens);
+        Assert.Empty(_server.Calls);
     }
 
     private static void Accepted(Result outcome) =>
@@ -385,7 +390,6 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     private AppPasswords Built(IMailServer? server) =>
         new(
             new MailServerInUseInMemory(server),
-            _tokens,
             _mailboxes,
             _accounts,
             _restriction,

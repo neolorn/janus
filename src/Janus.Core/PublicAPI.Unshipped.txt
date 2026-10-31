@@ -1515,11 +1515,8 @@ Janus.Core.ILegalDocuments.TranslateAsync(Janus.Core.AccessContext! context, Jan
 Janus.Core.ILocationSource
 Janus.Core.ILocationSource.OpenAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.IO.Stream!>>
 Janus.Core.IMailServer
-Janus.Core.IMailServer.AppPasswordsAsync(string! accessToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AppPassword!>!>>
-Janus.Core.IMailServer.CreateAppPasswordAsync(string! accessToken, string! label, System.DateTimeOffset? expiresAt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedAppPassword!>>
 Janus.Core.IMailServer.MailboxesAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.HostedMailbox!>!>>
 Janus.Core.IMailServer.ProvisionAsync(Janus.Core.MailboxPush! push, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IMailServer.RevokeAppPasswordAsync(string! accessToken, Janus.Core.AppPasswordId id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMailServerInUse
 Janus.Core.IMailServerInUse.Chosen() -> Janus.Core.Result<Janus.Core.IMailServer!>
 Janus.Core.INotificationHandler
@@ -1831,13 +1828,6 @@ Janus.Core.LossReported.Equals(Janus.Core.LossReported? other) -> bool
 Janus.Core.LossReported.InvalidatesAt.get -> System.DateTimeOffset
 Janus.Core.LossReported.InvalidatesAt.init -> void
 Janus.Core.LossReported.LossReported(Janus.Core.AuthenticatorId Credential, System.DateTimeOffset InvalidatesAt) -> void
-Janus.Core.MailServerClient
-Janus.Core.MailServerClient.<Clone>$() -> Janus.Core.MailServerClient!
-Janus.Core.MailServerClient.ClientId.get -> string!
-Janus.Core.MailServerClient.ClientId.init -> void
-Janus.Core.MailServerClient.Deconstruct(out string! ClientId) -> void
-Janus.Core.MailServerClient.Equals(Janus.Core.MailServerClient? other) -> bool
-Janus.Core.MailServerClient.MailServerClient(string! ClientId) -> void
 Janus.Core.MailboxId
 Janus.Core.MailboxId.Deconstruct(out System.Guid Value) -> void
 Janus.Core.MailboxId.Equals(Janus.Core.MailboxId other) -> bool
@@ -3826,9 +3816,6 @@ override Janus.Core.LinkLanding.ToString() -> string!
 override Janus.Core.LossReported.Equals(object? obj) -> bool
 override Janus.Core.LossReported.GetHashCode() -> int
 override Janus.Core.LossReported.ToString() -> string!
-override Janus.Core.MailServerClient.Equals(object? obj) -> bool
-override Janus.Core.MailServerClient.GetHashCode() -> int
-override Janus.Core.MailServerClient.ToString() -> string!
 override Janus.Core.MailboxId.GetHashCode() -> int
 override Janus.Core.MailboxId.ToString() -> string!
 override Janus.Core.MailboxPush.Equals(object? obj) -> bool
@@ -4871,8 +4858,6 @@ static Janus.Core.LinkLanding.operator !=(Janus.Core.LinkLanding? left, Janus.Co
 static Janus.Core.LinkLanding.operator ==(Janus.Core.LinkLanding? left, Janus.Core.LinkLanding? right) -> bool
 static Janus.Core.LossReported.operator !=(Janus.Core.LossReported? left, Janus.Core.LossReported? right) -> bool
 static Janus.Core.LossReported.operator ==(Janus.Core.LossReported? left, Janus.Core.LossReported? right) -> bool
-static Janus.Core.MailServerClient.operator !=(Janus.Core.MailServerClient? left, Janus.Core.MailServerClient? right) -> bool
-static Janus.Core.MailServerClient.operator ==(Janus.Core.MailServerClient? left, Janus.Core.MailServerClient? right) -> bool
 static Janus.Core.MailboxId.Of(System.DateTimeOffset reservedAt) -> Janus.Core.MailboxId
 static Janus.Core.MailboxId.operator !=(Janus.Core.MailboxId left, Janus.Core.MailboxId right) -> bool
 static Janus.Core.MailboxId.operator ==(Janus.Core.MailboxId left, Janus.Core.MailboxId right) -> bool
@@ -5253,3 +5238,6 @@ Janus.Core.SendRequest.Channel.init -> void
 Janus.Core.ISendOutcomes
 Janus.Core.ISendOutcomes.ReportAsync(Janus.Core.SendReference reference, bool delivered, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<bool>>
 Janus.Core.SendRequest.SendRequest(Janus.Core.SendReference Reference, Janus.Core.MessageKind Kind, Janus.Core.SendKind Channel, Janus.Core.SubjectId? Subject, string! Destination, System.Collections.Generic.IReadOnlyList<string!>! Languages, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! Values) -> void
+Janus.Core.IMailServer.RevokeAppPasswordAsync(Janus.Core.MailboxId mailbox, Janus.Core.EmailAddress address, Janus.Core.AppPasswordId id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IMailServer.CreateAppPasswordAsync(Janus.Core.MailboxId mailbox, Janus.Core.EmailAddress address, string! label, System.DateTimeOffset? expiresAt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedAppPassword!>>
+Janus.Core.IMailServer.AppPasswordsAsync(Janus.Core.MailboxId mailbox, Janus.Core.EmailAddress address, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AppPassword!>!>>

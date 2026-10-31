@@ -1071,27 +1071,18 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// INT-MAIL-010, LIB-HOST-001: the app passwords of a hosted mailbox are reached
-    /// with a token issued to the mail server's client, so a deployment that registers a
-    /// mail server and declares no client for it is stopped as it starts, and the same
-    /// deployment starts once it declares one.
+    /// AUTH-OIDC-001 AC4, INT-MAIL-010, D-226: the app passwords of a hosted mailbox are
+    /// reached with the mail server's management key and the library issues no token
+    /// for the mail server, so a deployment that registers a mail server starts with no
+    /// client declared for it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_MAIL_010_ADeploymentHostingMailDeclaresTheMailServersClientAsync()
+    public async Task AUTH_OIDC_001_AC4_ADeploymentHostingMailStartsWithNoClientDeclaredForItAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        using (IHost undeclared = Deployed(mail: true))
-        {
-            StartupException refused = await Assert.ThrowsAsync<StartupException>(
-                async () => await undeclared.StartAsync(cancellationToken));
-
-            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
-            Assert.Equal("mailServerClient.clientId", refused.Failure?.Details["key"].GetString());
-        }
-
-        using IHost declared = Deployed(mail: true, mailClient: true);
+        using IHost declared = Deployed(mail: true);
 
         await declared.StartAsync(cancellationToken);
         await declared.StopAsync(cancellationToken);
@@ -1382,7 +1373,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        using IHost deployment = Deployed(mail: registered, mailClient: registered);
+        using IHost deployment = Deployed(mail: registered);
         IMailServerInUse inUse = deployment.Services.GetRequiredService<IMailServerInUse>();
 
         Assert.Throws<InvalidOperationException>(() => inUse.Chosen());
@@ -1993,7 +1984,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool client = true,
         bool codec = false,
         bool mail = false,
-        bool mailClient = false,
         IReadOnlyList<SocialProvider>? providers = null,
         ISecretSource? secrets = null,
         bool notificationHandler = true,
@@ -2016,7 +2006,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 client,
                 codec,
                 mail,
-                mailClient,
                 providers: providers,
                 secrets: secrets,
                 notificationHandler: notificationHandler,
@@ -2042,7 +2031,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool client = true,
         bool codec = false,
         bool mail = false,
-        bool mailClient = false,
         string? connection = null,
         IReadOnlyList<SocialProvider>? providers = null,
         ISecretSource? secrets = null,
@@ -2084,11 +2072,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (mail)
         {
             services.AddSingleton<IMailServer>(new MailServerInMemory());
-        }
-
-        if (mailClient)
-        {
-            services.AddSingleton(new MailServerClient("mail-server"));
         }
 
         if (handlers)

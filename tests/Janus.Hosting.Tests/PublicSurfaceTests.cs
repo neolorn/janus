@@ -779,9 +779,8 @@ public sealed class PublicSurfaceTests
     /// that project's own, which the entry point registers itself, and it reaches a
     /// member no public contract declares through an internal contract of exactly that
     /// member, which the implementation's own project declares, implements and registers
-    /// by its method: the settings restriction over the settings-change gate, and the
-    /// mail server's token over the token minting. Neither takes a class of another
-    /// project that stands behind a contract.
+    /// by its method: the settings restriction over the settings-change gate. It takes
+    /// no class of another project that stands behind a contract.
     /// </summary>
     [Fact]
     public void CONV_DESIGN_007_ABridgingTypeAsksTheContractTheImplementationsProjectDeclares()
@@ -793,11 +792,6 @@ public sealed class PublicSurfaceTests
                 typeof(Janus.Authorization.Gate.ISettingsChangeGate),
                 nameof(Janus.Authorization.Gate.ISettingsChangeGate.RequireSettingsChangeAsync),
                 "Janus.Authorization"),
-            (
-                typeof(Janus.Hosting.Oidc.MailServerTokens),
-                typeof(Janus.Authentication.Oidc.ITokenMinting),
-                nameof(Janus.Authentication.Oidc.ITokenMinting.MintAsync),
-                "Janus.Authentication"),
         ];
         Type?[] own = [.. Beyond().Select(Built)];
 

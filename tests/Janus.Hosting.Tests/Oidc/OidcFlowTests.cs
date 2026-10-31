@@ -717,13 +717,12 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// AUTH-OIDC-001 AC4: the token a protocol client obtains is the signed-in person's
-    /// and nobody else's, which is what the mail server manages app passwords under;
-    /// the library holds none of those passwords.
+    /// AUTH-OIDC-001: the token a protocol client obtains is the signed-in person's and
+    /// nobody else's.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_OIDC_001_AC4_TheProtocolClientsTokenIsTheSignedInPersonsAsync()
+    public async Task AUTH_OIDC_001_TheProtocolClientsTokenIsTheSignedInPersonsAsync()
     {
         await using var deployment = new Deployment();
 

@@ -54,19 +54,22 @@ public sealed class MailServerInUseTests
             throw new InvalidOperationException("The mail server is not called here.");
 
         public ValueTask<Result<IReadOnlyList<AppPassword>>> AppPasswordsAsync(
-            string accessToken,
+            MailboxId mailbox,
+            EmailAddress address,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The mail server is not called here.");
 
         public ValueTask<Result<IssuedAppPassword>> CreateAppPasswordAsync(
-            string accessToken,
+            MailboxId mailbox,
+            EmailAddress address,
             string label,
             DateTimeOffset? expiresAt,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The mail server is not called here.");
 
         public ValueTask<Result> RevokeAppPasswordAsync(
-            string accessToken,
+            MailboxId mailbox,
+            EmailAddress address,
             AppPasswordId id,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The mail server is not called here.");

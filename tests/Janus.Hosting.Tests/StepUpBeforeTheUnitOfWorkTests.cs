@@ -1528,17 +1528,6 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
     // organization gave them, whose registry holds the mail server's client.
     private async Task<(Browser Person, SubjectId Subject)> MailboxHolderAsync()
     {
-        await _deployment.Clients.AddAsync(
-            new OidcClient(
-                "mail-server",
-                "mail-server",
-                OidcClientKind.Protocol,
-                "https://mail.example.test/callback",
-                ["openid", "email", "offline_access"]),
-            Encoding.UTF8.GetBytes("the-mail-servers-secret"),
-            _deployment.Clock.GetUtcNow(),
-            TestContext.Current.CancellationToken);
-
         Browser person = await Flow.SignedInAsync(_deployment);
         SubjectId subject = _deployment.Directory.Created[^1].Subject;
         var mailbox = Mailbox.Reserved(
@@ -1549,6 +1538,7 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
 
         mailbox.Hold(subject);
         _deployment.Mailboxes.Held.Add(mailbox);
+        _deployment.MailServer.Set(address.Value, enabled: true, mailbox.Id);
 
         return (person, subject);
     }

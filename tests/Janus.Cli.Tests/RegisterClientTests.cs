@@ -23,13 +23,13 @@ public sealed class RegisterClientTests(BootstrappedDeployment deployment) : ICl
     private const string Redirect = "https://mail.example.test/callback";
 
     /// <summary>
-    /// AUTH-OIDC-001 AC4: the mail-server client is registered as the deployment is
-    /// stood up with no secret supplied: the library draws one, holds it wrapped, and
-    /// writes the registration down under the command's principal with nothing of it.
+    /// AUTH-OIDC-001: a protocol client is registered as the deployment is stood up with
+    /// no secret supplied: the library draws one, holds it wrapped, and writes the
+    /// registration down under the command's principal with nothing of it.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_OIDC_001_AC4_TheMailServerClientIsRegisteredWithNoSecretSuppliedAsync()
+    public async Task AUTH_OIDC_001_AProtocolClientIsRegisteredWithNoSecretSuppliedAsync()
     {
         DateTimeOffset before = DateTimeOffset.UtcNow;
         Invocation run = await RegisteredAsync(Arguments("mail", "protocol", Redirect));

@@ -13,18 +13,20 @@ namespace Janus.Hosting.Tests.Mailboxes;
 
 /// <summary>
 /// The mail server's JMAP management interface as a test holds it: domains, accounts and
-/// app passwords, the management key it accepts and the people's tokens it knows,
-/// answering each request as the object reference describes and recording every one.
+/// app passwords, and the management key it accepts, answering each request as the
+/// object reference describes and recording every one.
 /// </summary>
 /// <remarks>
 /// A create whose name exists in its domain is refused. The name filter is a text match,
-/// as the server's is, and a query answers one page at a time.
+/// as the server's is, and a query answers one page at a time. An app password belongs
+/// to the account a call's <c>accountId</c> names, and a call naming no account the
+/// server holds is answered the method error <c>accountNotFound</c> (RFC 8620 section
+/// 3.6.2).
 /// </remarks>
 internal sealed class JmapServerInMemory : HttpMessageHandler
 {
     private readonly Dictionary<string, string> _domains = new(StringComparer.Ordinal);
     private readonly Dictionary<string, JsonObject> _accounts = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _people = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<JsonObject>> _passwords = new(StringComparer.Ordinal);
     private readonly List<Received> _received = [];
     private int _next;
@@ -48,7 +50,7 @@ internal sealed class JmapServerInMemory : HttpMessageHandler
     /// <summary>
     /// What it answers every request with instead of reading it, where a test says.
     /// </summary>
-    public Func<HttpResponseMessage>? Answer { get; set; }
+    public Func<HttpResponseMessage?>? Answer { get; set; }
 
     /// <summary>
     /// Every request, in order.
@@ -108,19 +110,28 @@ internal sealed class JmapServerInMemory : HttpMessageHandler
         [.. _accounts.Values.Where(account => (string?)account["emailAddress"] == address)];
 
     /// <summary>
-    /// Knows a person's token.
+    /// Holds an app password for an account, as the server would have stored it.
     /// </summary>
-    /// <param name="token">The token.</param>
-    /// <param name="person">Whose it is.</param>
-    public void Knows(string token, string person) => _people[token] = person;
+    /// <param name="accountId">The account's identifier.</param>
+    /// <param name="password">The app password, its identifier among its properties.</param>
+    public void Hold(string accountId, JsonObject password)
+    {
+        if (!_passwords.TryGetValue(accountId, out List<JsonObject>? held))
+        {
+            held = [];
+            _passwords[accountId] = held;
+        }
+
+        held.Add(password);
+    }
 
     /// <summary>
-    /// The app passwords it holds for a person.
+    /// The app passwords it holds for an account.
     /// </summary>
-    /// <param name="person">Whose.</param>
+    /// <param name="accountId">The account's identifier.</param>
     /// <returns>What it holds.</returns>
-    public IReadOnlyList<JsonObject> PasswordsOf(string person) =>
-        _passwords.TryGetValue(person, out List<JsonObject>? held) ? held : [];
+    public IReadOnlyList<JsonObject> PasswordsOf(string accountId) =>
+        _passwords.TryGetValue(accountId, out List<JsonObject>? held) ? held : [];
 
     /// <inheritdoc/>
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -139,9 +150,9 @@ internal sealed class JmapServerInMemory : HttpMessageHandler
 
         _received.Add(new Received(request.Method, request.RequestUri, bearer, read));
 
-        if (Answer is not null)
+        if (Answer?.Invoke() is HttpResponseMessage answer)
         {
-            return Answer();
+            return answer;
         }
 
         if (read?["methodCalls"] is not JsonArray calls)
@@ -165,11 +176,19 @@ internal sealed class JmapServerInMemory : HttpMessageHandler
                     .DeepClone();
             }
 
-            bool management = !method.StartsWith("x:AppPassword/", StringComparison.Ordinal);
-
-            if (management ? bearer != ManagementKey : bearer is null || !_people.ContainsKey(bearer))
+            if (bearer != ManagementKey)
             {
                 return new HttpResponseMessage(HttpStatusCode.Unauthorized);
+            }
+
+            string? accountId = (string?)arguments["accountId"];
+
+            if (method.StartsWith("x:AppPassword/", StringComparison.Ordinal)
+                && (accountId is null || !_accounts.ContainsKey(accountId)))
+            {
+                responses.Add(new JsonArray("error", new JsonObject { ["type"] = "accountNotFound" }, callId));
+
+                continue;
             }
 
             JsonObject answered = method switch
@@ -183,8 +202,11 @@ internal sealed class JmapServerInMemory : HttpMessageHandler
                 "x:Account/query" => Queried(AccountsFound(arguments), arguments),
                 "x:Account/get" => Got(arguments, id => _accounts.GetValueOrDefault(id)),
                 "x:Account/set" => AccountsSet(arguments),
-                "x:AppPassword/get" => PasswordsGot(_people[bearer!]),
-                "x:AppPassword/set" => PasswordsSet(_people[bearer!], arguments),
+                "x:AppPassword/query" => Queried(PasswordsOf(accountId!).Select(password => (string)password["id"]!), arguments),
+                "x:AppPassword/get" => Got(
+                    arguments,
+                    id => PasswordsOf(accountId!).FirstOrDefault(password => (string?)password["id"] == id)),
+                "x:AppPassword/set" => PasswordsSet(accountId!, arguments),
                 _ => throw new InvalidOperationException("The server knows no method " + method + "."),
             };
 
@@ -373,27 +395,14 @@ internal sealed class JmapServerInMemory : HttpMessageHandler
         return answer;
     }
 
-    private JsonObject PasswordsGot(string person) =>
-        new()
-        {
-            ["list"] = new JsonArray([.. PasswordsOf(person).Select(password => (JsonNode?)new JsonObject
-            {
-                ["id"] = password["id"]!.DeepClone(),
-                ["description"] = password["description"]!.DeepClone(),
-                ["createdAt"] = password["createdAt"]!.DeepClone(),
-                ["expiresAt"] = password["expiresAt"]?.DeepClone(),
-            })]),
-            ["notFound"] = new JsonArray(),
-        };
-
-    private JsonObject PasswordsSet(string person, JsonObject arguments)
+    private JsonObject PasswordsSet(string accountId, JsonObject arguments)
     {
         var answer = new JsonObject();
 
-        if (!_passwords.TryGetValue(person, out List<JsonObject>? held))
+        if (!_passwords.TryGetValue(accountId, out List<JsonObject>? held))
         {
             held = [];
-            _passwords[person] = held;
+            _passwords[accountId] = held;
         }
 
         if (arguments["create"] is JsonObject create)

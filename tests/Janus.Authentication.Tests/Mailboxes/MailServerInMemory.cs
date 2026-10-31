@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -14,9 +12,9 @@ namespace Janus.Authentication.Tests.Mailboxes;
 /// A mail server that hosts accounts in memory and honours the contract: a push whose
 /// key it has applied changes nothing, a push that meets an account under the mailbox's
 /// name not carrying its identifier is answered <c>integration.mailserver.conflict</c>
-/// and changes nothing, and a listing answers what it holds. Its app
-/// passwords belong to the person a token's <c>sub</c> names, read as a server that
-/// validates tokens offline reads it; a token it cannot read is refused.
+/// and changes nothing, and a listing answers what it holds. Its app passwords belong
+/// to an account, which a call reaches by the mailbox it names: the account under the
+/// mailbox's address that carries its identifier, and none other (INT-MAIL-010, D-226).
 /// </summary>
 internal sealed class MailServerInMemory : IMailServer
 {
@@ -29,9 +27,9 @@ internal sealed class MailServerInMemory : IMailServer
     private int _generated;
 
     /// <summary>
-    /// Every token an app-password call carried, in order.
+    /// Every mailbox an app-password call named, in order.
     /// </summary>
-    public List<string> Tokens { get; } = [];
+    public List<MailboxId> Calls { get; } = [];
 
     /// <summary>
     /// Every secret the server generated, in order.
@@ -167,44 +165,41 @@ internal sealed class MailServerInMemory : IMailServer
                     [.. _hosted.Select(pair => new HostedMailbox(pair.Value.Mailbox, Listed(pair.Key), pair.Value.Enabled))]));
 
     /// <summary>
-    /// The app passwords the server holds for one person.
+    /// The app passwords the server holds for the account at an address.
     /// </summary>
-    /// <param name="subject">Whose.</param>
+    /// <param name="address">The account's address.</param>
     /// <returns>What it holds.</returns>
-    public IReadOnlyList<AppPassword> AppPasswordsOf(SubjectId subject) =>
-        _passwords.TryGetValue(subject.ToString(), out List<AppPassword>? held) ? held : [];
+    public IReadOnlyList<AppPassword> AppPasswordsOf(string address) =>
+        _passwords.TryGetValue(address, out List<AppPassword>? held) ? held : [];
 
     /// <inheritdoc/>
     public ValueTask<Result<IReadOnlyList<AppPassword>>> AppPasswordsAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         CancellationToken cancellationToken)
     {
-        Tokens.Add(accessToken);
+        Calls.Add(mailbox);
 
         return ValueTask.FromResult(
-            Unreachable ? Result.Failure<IReadOnlyList<AppPassword>>(Error.From(ErrorCodes.SystemFault))
-            : Holder(accessToken) is not string holder ? Result.Failure<IReadOnlyList<AppPassword>>(Error.From(ErrorCodes.Denied))
-            : Result.Success<IReadOnlyList<AppPassword>>(
-                _passwords.TryGetValue(holder, out List<AppPassword>? held) ? [.. held] : []));
+            Holder(mailbox, address) is not string holder
+                ? Result.Failure<IReadOnlyList<AppPassword>>(Error.From(ErrorCodes.SystemFault))
+                : Result.Success<IReadOnlyList<AppPassword>>(
+                    _passwords.TryGetValue(holder, out List<AppPassword>? held) ? [.. held] : []));
     }
 
     /// <inheritdoc/>
     public ValueTask<Result<IssuedAppPassword>> CreateAppPasswordAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         string label,
         DateTimeOffset? expiresAt,
         CancellationToken cancellationToken)
     {
-        Tokens.Add(accessToken);
+        Calls.Add(mailbox);
 
-        if (Unreachable)
+        if (Holder(mailbox, address) is not string holder)
         {
             return ValueTask.FromResult(Result.Failure<IssuedAppPassword>(Error.From(ErrorCodes.SystemFault)));
-        }
-
-        if (Holder(accessToken) is not string holder)
-        {
-            return ValueTask.FromResult(Result.Failure<IssuedAppPassword>(Error.From(ErrorCodes.Denied)));
         }
 
         _generated++;
@@ -232,20 +227,16 @@ internal sealed class MailServerInMemory : IMailServer
 
     /// <inheritdoc/>
     public ValueTask<Result> RevokeAppPasswordAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         AppPasswordId id,
         CancellationToken cancellationToken)
     {
-        Tokens.Add(accessToken);
+        Calls.Add(mailbox);
 
-        if (Unreachable)
+        if (Holder(mailbox, address) is not string holder)
         {
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.SystemFault)));
-        }
-
-        if (Holder(accessToken) is not string holder)
-        {
-            return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.Denied)));
         }
 
         return ValueTask.FromResult(
@@ -261,22 +252,12 @@ internal sealed class MailServerInMemory : IMailServer
 
     private sealed record Hosted(MailboxId? Mailbox, bool Enabled);
 
-    // The payload of a compact token is its second segment, base64url without padding.
-    private static string? Holder(string accessToken)
-    {
-        string[] segments = accessToken.Split('.');
-
-        if (segments.Length is not 3)
-        {
-            return null;
-        }
-
-        string payload = segments[1].Replace('-', '+').Replace('_', '/');
-
-        payload = payload.PadRight(payload.Length + ((4 - (payload.Length % 4)) % 4), '=');
-
-        using var claims = JsonDocument.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
-
-        return claims.RootElement.TryGetProperty("sub", out JsonElement subject) ? subject.GetString() : null;
-    }
+    // The account a call acts on: the one under the mailbox's address that carries its
+    // identifier, where the server is reached and holds one.
+    private string? Holder(MailboxId mailbox, EmailAddress address) =>
+        !Unreachable
+        && _hosted.TryGetValue(address.Value, out Hosted? hosted)
+        && hosted.Mailbox == mailbox
+            ? address.Value
+            : null;
 }

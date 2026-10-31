@@ -15,8 +15,9 @@ namespace Janus.Core;
 /// INT-MAIL-010 and LIB-EXT-001. Optional: a deployment that registers none hosts no
 /// mailbox, and an organization's addresses are then addresses like any other. Mail the
 /// library owes never goes through it: every message leaves through the host's
-/// notification handler (INT-SMS-006). The app-password calls carry the person's token and act on the
-/// account the server finds in it, never on one the library names.
+/// notification handler (INT-SMS-006). The app-password calls name the mailbox the library
+/// holds for the acting account and act on the account that carries its identifier,
+/// found as a push finds it, never on one a request names (D-226).
 /// </remarks>
 public interface IMailServer
 {
@@ -40,19 +41,25 @@ public interface IMailServer
     ValueTask<Result<IReadOnlyList<HostedMailbox>>> MailboxesAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Lists the app passwords the server holds for the person the token was issued to.
+    /// Lists the app passwords the server holds for the account of a mailbox.
     /// </summary>
-    /// <param name="accessToken">The person's token.</param>
+    /// <param name="mailbox">The mailbox's identifier, which its account carries.</param>
+    /// <param name="address">The mailbox's address, in its canonical form.</param>
     /// <param name="cancellationToken">Abandons the listing.</param>
-    /// <returns>What the server holds, or the failure where no listing could be had.</returns>
+    /// <returns>
+    /// What the server holds, or the failure where no listing could be had, the server
+    /// holding no account that carries the mailbox's identifier among them.
+    /// </returns>
     ValueTask<Result<IReadOnlyList<AppPassword>>> AppPasswordsAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Has the server generate an app password for the person the token was issued to.
+    /// Has the server generate an app password for the account of a mailbox.
     /// </summary>
-    /// <param name="accessToken">The person's token.</param>
+    /// <param name="mailbox">The mailbox's identifier, which its account carries.</param>
+    /// <param name="address">The mailbox's address, in its canonical form.</param>
     /// <param name="label">What the person calls it.</param>
     /// <param name="expiresAt">When it stops working, or nothing for no expiry.</param>
     /// <param name="cancellationToken">Abandons the call.</param>
@@ -61,25 +68,27 @@ public interface IMailServer
     /// server generated none.
     /// </returns>
     ValueTask<Result<IssuedAppPassword>> CreateAppPasswordAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         string label,
         DateTimeOffset? expiresAt,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Has the server revoke one of the app passwords of the person the token was issued
-    /// to.
+    /// Has the server revoke one of the app passwords of the account of a mailbox.
     /// </summary>
-    /// <param name="accessToken">The person's token.</param>
+    /// <param name="mailbox">The mailbox's identifier, which its account carries.</param>
+    /// <param name="address">The mailbox's address, in its canonical form.</param>
     /// <param name="id">What the server calls it.</param>
     /// <param name="cancellationToken">Abandons the call.</param>
     /// <returns>
     /// Nothing once the server holds it no more, <c>auth.credential.notfound</c> where
-    /// it holds no such app password for that person, or the failure where it could
+    /// it holds no such app password for that account, or the failure where it could
     /// not be told.
     /// </returns>
     ValueTask<Result> RevokeAppPasswordAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         AppPasswordId id,
         CancellationToken cancellationToken);
 }

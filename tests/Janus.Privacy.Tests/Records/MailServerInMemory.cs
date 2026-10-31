@@ -22,13 +22,15 @@ internal sealed class MailServerInMemory : IMailServer
 
     /// <inheritdoc/>
     public ValueTask<Result<IReadOnlyList<AppPassword>>> AppPasswordsAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(Result.Success<IReadOnlyList<AppPassword>>([]));
 
     /// <inheritdoc/>
     public ValueTask<Result<IssuedAppPassword>> CreateAppPasswordAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         string label,
         DateTimeOffset? expiresAt,
         CancellationToken cancellationToken) =>
@@ -36,7 +38,8 @@ internal sealed class MailServerInMemory : IMailServer
 
     /// <inheritdoc/>
     public ValueTask<Result> RevokeAppPasswordAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         AppPasswordId id,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.CredentialNotFound)));

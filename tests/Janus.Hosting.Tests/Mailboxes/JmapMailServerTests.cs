@@ -28,8 +28,6 @@ public sealed class JmapMailServerTests : IDisposable
 
     private const string Endpoint = "https://mail.example.test/";
 
-    private const string PersonToken = "ada-token";
-
     private static readonly MailboxId Mailbox = new(Guid.Parse("0192f1a0-5c3e-7a10-8f00-00000000a001"));
 
     private static readonly MailboxId Another = new(Guid.Parse("0192f1a0-5c3e-7a10-8f00-00000000b002"));
@@ -47,7 +45,6 @@ public sealed class JmapMailServerTests : IDisposable
     public JmapMailServerTests()
     {
         _ = _server.Domain("example.test");
-        _server.Knows(PersonToken, "ada");
         _configuration.Set(Settings.IntegrationMailServerEndpoint, Endpoint);
     }
 
@@ -67,9 +64,18 @@ public sealed class JmapMailServerTests : IDisposable
         Assert.True(Succeeded(await started.Server.ProvisionAsync(Push(MailboxState.Disabled), cancellationToken)));
         Assert.True(Succeeded(await started.Server.ProvisionAsync(Push(MailboxState.Enabled), cancellationToken)));
         _ = await started.Server.MailboxesAsync(cancellationToken);
-        IssuedAppPassword issued = Value(await started.Server.CreateAppPasswordAsync(PersonToken, "Phone", null, cancellationToken));
-        _ = await started.Server.AppPasswordsAsync(PersonToken, cancellationToken);
-        Assert.True(Succeeded(await started.Server.RevokeAppPasswordAsync(PersonToken, issued.Id, cancellationToken)));
+        IssuedAppPassword issued = Value(await started.Server.CreateAppPasswordAsync(
+            Mailbox,
+            Email(Address),
+            "Phone",
+            null,
+            cancellationToken));
+        _ = await started.Server.AppPasswordsAsync(Mailbox, Email(Address), cancellationToken);
+        Assert.True(Succeeded(await started.Server.RevokeAppPasswordAsync(
+            Mailbox,
+            Email(Address),
+            issued.Id,
+            cancellationToken)));
         Assert.True(Succeeded(await started.Server.ProvisionAsync(Push(MailboxState.Removed), cancellationToken)));
 
         Assert.NotEmpty(_server.Requests);
@@ -385,35 +391,40 @@ public sealed class JmapMailServerTests : IDisposable
     }
 
     /// <summary>
-    /// INT-MAIL-010 AC1: creating an app password is one call to the server's
-    /// app-password call carrying the person's token and never the management key; the
-    /// server generates the secret; the listing reads what the server holds; a revocation
-    /// removes it there, and one of an app password the server does not hold is not
-    /// found.
+    /// INT-MAIL-010 AC1, D-226: creating an app password is one call to the server's
+    /// app-password call presenting the management key, its <c>accountId</c> the
+    /// account that carries the mailbox's identifier, found as a push finds it; the
+    /// server generates the secret; the listing reads what the server holds on that
+    /// account; a revocation removes it there, and one of an app password the server
+    /// does not hold for it is not found.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task INT_MAIL_010_AC1_AnAppPasswordIsOneCallCarryingThePersonsTokenAsync()
+    public async Task INT_MAIL_010_AC1_AnAppPasswordIsOneCallOnTheMailboxsAccountAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string account = _server.Account(Address, Mailbox.ToString(), new JsonObject { ["@type"] = "Inherit" });
+        _ = _server.Account("grace@example.test", Another.ToString(), new JsonObject { ["@type"] = "Inherit" });
 
         await using Started started = await StartedAsync();
         var expiresAt = new DateTimeOffset(2027, 3, 1, 9, 30, 0, TimeSpan.Zero);
 
         IssuedAppPassword issued = Value(await started.Server.CreateAppPasswordAsync(
-            PersonToken,
+            Mailbox,
+            Email(Address),
             "Phone",
             expiresAt,
             cancellationToken));
 
-        JmapServerInMemory.Received created = Assert.Single(_server.Requests);
-        JsonNode call = Assert.Single((JsonArray)created.Body!["methodCalls"]!)!;
+        JsonNode call = Assert.Single(
+            _server.Requests.SelectMany(request => (JsonArray)request.Body!["methodCalls"]!),
+            call => ((string)call![0]!).StartsWith("x:AppPassword/", StringComparison.Ordinal))!;
 
-        Assert.Equal(PersonToken, created.Bearer);
         Assert.Equal("x:AppPassword/set", (string?)call[0]);
+        Assert.Equal(account, (string?)call[1]!["accountId"]);
         Assert.Equal("generated-" + issued.Id, issued.Secret);
 
-        JsonObject held = Assert.Single(_server.PasswordsOf("ada"));
+        JsonObject held = Assert.Single(_server.PasswordsOf(account));
 
         Assert.Equal("Phone", (string?)held["description"]);
         Assert.Equal("2027-03-01T09:30:00Z", (string?)held["expiresAt"]);
@@ -421,14 +432,66 @@ public sealed class JmapMailServerTests : IDisposable
 
         Assert.Equal(
             [new AppPassword(issued.Id, "Phone", new DateTimeOffset(2026, 9, 30, 12, 0, 0, TimeSpan.Zero), expiresAt)],
-            Value(await started.Server.AppPasswordsAsync(PersonToken, cancellationToken)));
+            Value(await started.Server.AppPasswordsAsync(Mailbox, Email(Address), cancellationToken)));
 
-        Assert.True(Succeeded(await started.Server.RevokeAppPasswordAsync(PersonToken, issued.Id, cancellationToken)));
-        Assert.Empty(_server.PasswordsOf("ada"));
+        Assert.True(Succeeded(await started.Server.RevokeAppPasswordAsync(
+            Mailbox,
+            Email(Address),
+            issued.Id,
+            cancellationToken)));
+        Assert.Empty(_server.PasswordsOf(account));
         Assert.Equal(
             ErrorCodes.CredentialNotFound,
-            Refusal(await started.Server.RevokeAppPasswordAsync(PersonToken, issued.Id, cancellationToken)));
-        Assert.All(_server.Requests, request => Assert.Equal(PersonToken, request.Bearer));
+            Refusal(await started.Server.RevokeAppPasswordAsync(Mailbox, Email(Address), issued.Id, cancellationToken)));
+        Assert.All(_server.Requests, request => Assert.Equal(_server.ManagementKey, request.Bearer));
+        Assert.All(
+            _server.Requests
+                .SelectMany(request => (JsonArray)request.Body!["methodCalls"]!)
+                .Where(call => ((string)call![0]!).StartsWith("x:AppPassword/", StringComparison.Ordinal)),
+            call => Assert.Equal(account, (string?)call![1]!["accountId"]));
+    }
+
+    /// <summary>
+    /// INT-MAIL-010, D-226: where the server holds no account under the mailbox's name, or
+    /// holds one that does not carry the mailbox's identifier, each app-password call
+    /// fails as a failed call does, and no app-password method is called on any account.
+    /// </summary>
+    /// <param name="description">What the account at the server carries, where there is one.</param>
+    /// <param name="exists">Whether the server holds an account under the mailbox's name.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(null, true)]
+    [InlineData("0192f1a0-5c3e-7a10-8f00-00000000b002", true)]
+    public async Task INT_MAIL_010_ACallActsOnNoAccountButTheOneCarryingTheMailboxAsync(string? description, bool exists)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        if (exists)
+        {
+            _ = _server.Account(Address, description, new JsonObject { ["@type"] = "Inherit" });
+        }
+
+        await using Started started = await StartedAsync();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await started.Server.AppPasswordsAsync(Mailbox, Email(Address), cancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await started.Server.CreateAppPasswordAsync(Mailbox, Email(Address), "Phone", null, cancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await started.Server.RevokeAppPasswordAsync(
+                Mailbox,
+                Email(Address),
+                AppPasswordId.Parse("p0001"),
+                cancellationToken)));
+        Assert.DoesNotContain(
+            _server.Requests.SelectMany(request => (JsonArray)request.Body!["methodCalls"]!),
+            call => ((string)call![0]!).StartsWith("x:AppPassword/", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -446,39 +509,38 @@ public sealed class JmapMailServerTests : IDisposable
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
+        string account = _server.Account(Address, Mailbox.ToString(), new JsonObject { ["@type"] = "Inherit" });
+
         await using Started started = await StartedAsync();
 
-        _server.Answer = () => Answered(
-            "x:AppPassword/get",
-            new JsonObject
-            {
-                ["list"] = new JsonArray(new JsonObject
-                {
-                    ["id"] = id,
-                    ["description"] = "Phone",
-                    ["createdAt"] = "2026-09-30T12:00:00Z",
-                    ["expiresAt"] = null,
-                }),
-            });
+        _server.Hold(account, new JsonObject
+        {
+            ["id"] = id,
+            ["description"] = "Phone",
+            ["createdAt"] = "2026-09-30T12:00:00Z",
+            ["expiresAt"] = null,
+        });
 
         Assert.Equal(
             ErrorCodes.SystemFault,
-            (await started.Server.AppPasswordsAsync(PersonToken, cancellationToken))
+            (await started.Server.AppPasswordsAsync(Mailbox, Email(Address), cancellationToken))
                 .Match<ErrorCode?>(_ => null, error => error.Code));
 
-        _server.Answer = () => Answered(
-            "x:AppPassword/set",
-            new JsonObject
-            {
-                ["created"] = new JsonObject
+        _server.Answer = () => AppPasswordCall(_server.Requests[^1])
+            ? Answered(
+                "x:AppPassword/set",
+                new JsonObject
                 {
-                    ["password"] = new JsonObject { ["id"] = id, ["secret"] = "generated" },
-                },
-            });
+                    ["created"] = new JsonObject
+                    {
+                        ["password"] = new JsonObject { ["id"] = id, ["secret"] = "generated" },
+                    },
+                })
+            : null;
 
         Assert.Equal(
             ErrorCodes.SystemFault,
-            (await started.Server.CreateAppPasswordAsync(PersonToken, "Phone", expiresAt: null, cancellationToken))
+            (await started.Server.CreateAppPasswordAsync(Mailbox, Email(Address), "Phone", expiresAt: null, cancellationToken))
                 .Match<ErrorCode?>(_ => null, error => error.Code));
     }
 
@@ -524,7 +586,11 @@ public sealed class JmapMailServerTests : IDisposable
             (await started.Server.MailboxesAsync(cancellationToken)).Match<ErrorCode?>(_ => null, error => error.Code));
         Assert.Equal(
             ErrorCodes.SystemFault,
-            Refusal(await started.Server.RevokeAppPasswordAsync(PersonToken, AppPasswordId.Parse("p0001"), cancellationToken)));
+            Refusal(await started.Server.RevokeAppPasswordAsync(
+                Mailbox,
+                Email(Address),
+                AppPasswordId.Parse("p0001"),
+                cancellationToken)));
     }
 
     /// <summary>
@@ -665,6 +731,9 @@ public sealed class JmapMailServerTests : IDisposable
     private static ErrorCode? Refusal(Result result) => result.Match<ErrorCode?>(() => null, error => error.Code);
 
     // One method's answer as the server writes it, to the one call a request makes.
+    private static bool AppPasswordCall(JmapServerInMemory.Received request) =>
+        ((string)((JsonArray)request.Body!["methodCalls"]!)[0]![0]!).StartsWith("x:AppPassword/", StringComparison.Ordinal);
+
     private static HttpResponseMessage Answered(string method, JsonObject arguments) =>
         new(HttpStatusCode.OK)
         {
@@ -742,19 +811,22 @@ public sealed class JmapMailServerTests : IDisposable
             throw new InvalidOperationException("The host's mail server is not called here.");
 
         public ValueTask<Result<IReadOnlyList<AppPassword>>> AppPasswordsAsync(
-            string accessToken,
+            MailboxId mailbox,
+            EmailAddress address,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The host's mail server is not called here.");
 
         public ValueTask<Result<IssuedAppPassword>> CreateAppPasswordAsync(
-            string accessToken,
+            MailboxId mailbox,
+            EmailAddress address,
             string label,
             DateTimeOffset? expiresAt,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The host's mail server is not called here.");
 
         public ValueTask<Result> RevokeAppPasswordAsync(
-            string accessToken,
+            MailboxId mailbox,
+            EmailAddress address,
             AppPasswordId id,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The host's mail server is not called here.");

@@ -188,7 +188,6 @@ internal static class AuthenticationRegistration
         services.AddScoped<RedirectValidation>();
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
-        services.AddScoped<ITokenMinting>(provider => provider.GetRequiredService<OidcService>());
 
         services.AddScoped<OrganizationReads>();
 
@@ -253,11 +252,10 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<TimeProvider>()));
 
-        // INT-MAIL-010: the app passwords are the mail server's, reached with a token
-        // the provider issues to the server's client; without a server there are none.
+        // INT-MAIL-010: the app passwords are the mail server's, reached with its
+        // management key on the mailbox's account; without a server there are none.
         services.AddScoped<IAppPasswords>(provider => new AppPasswords(
             provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetRequiredService<IMailServerTokens>(),
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IAccountDirectory>(),
             provider.GetRequiredService<ISettingsRestriction>(),

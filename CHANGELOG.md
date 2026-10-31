@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- App passwords are listed, created and revoked with the mail server's management key on
+  the account that carries the identifier of the person's mailbox, and a call fails
+  where the server holds no such account. `IMailServer`'s three app-password calls take
+  the mailbox's identifier and address in place of the person's token. The library
+  issues no token for the mail server: `MailServerClient` is gone, and a deployment that
+  registers a mail server no longer declares one.
 - Every message the library owes is handed to the host's `INotificationHandler`, which a
   deployment must register: one that registers none does not start
   (`model.startup.declarationmissing`, `details.key` `notificationHandler`), and one

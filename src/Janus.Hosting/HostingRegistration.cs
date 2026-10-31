@@ -263,8 +263,6 @@ public static class HostingRegistration
             provider.GetService<AuthenticationAddresses>(),
             provider.GetService<LandingOrigins>(),
             provider.GetService<SignOnClient>(),
-            provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
             provider.GetService<IDnsResolver>(),
             provider.GetServices<SocialProvider>(),
@@ -326,17 +324,6 @@ public static class HostingRegistration
         services.AddScoped<IAppPasswordLog, AppPasswordLog>();
         services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel);
-
-        // INT-MAIL-010: the token the provider issues to the mail server's client, with
-        // which the app passwords are reached; without a server there are none.
-        services.AddScoped<IMailServerTokens>(provider => new MailServerTokens(
-            provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerFactory>(),
-            provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerDispatcher>(),
-            provider.GetRequiredService<ITokenMinting>(),
-            provider.GetRequiredService<IOidcClientStore>(),
-            provider.GetService<MailServerClient>(),
-            provider.GetRequiredService<AuthenticationAddresses>(),
-            provider.GetRequiredService<TimeProvider>()));
 
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
         // registered after it, and the web server is one, so the checks that read the
