@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `TestSession.RestoreAsync` restores the session in place with the person's passkey or
+  password, through `POST /auth/restore/begin` and `POST /auth/restore`, as `StepUpAsync`
+  steps it up; the passkey stays inside the session.
 - An authorization request that is not silent and finds no live session is kept as the
   browser's pending authorization, its validated parameters wrapped in the new
   `pending_authorizations` table, bound to the pre-authentication session and carried to

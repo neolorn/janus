@@ -103,6 +103,51 @@ public sealed class TestSession : HttpClient
     }
 
     /// <summary>
+    /// Restores the session in place with the person's passkey or password, through
+    /// <c>POST /auth/restore/begin</c> and <c>POST /auth/restore</c>, as the frontend does
+    /// when a request is refused <c>auth.session.expired</c> with
+    /// <c>details.reauthenticate</c> <c>single-factor</c>; the refused request is then
+    /// made again by the test (AUTH-SESS-005, D-228).
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the restore.</param>
+    /// <returns>The work of restoring it.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The session may not be restored, or the restore did not complete with the one
+    /// factor the person holds.
+    /// </exception>
+    public async ValueTask RestoreAsync(CancellationToken cancellationToken)
+    {
+        Answer begun = await Exchange
+            .SendAsync(this, HttpMethod.Post, "auth/restore/begin", null, [HttpStatusCode.OK], cancellationToken)
+            .ConfigureAwait(false);
+
+        JsonNode presented = _passkey is not null
+            ? _passkey.Get(Assertion(begun.Body))
+            : JsonValue.Create(_password!);
+
+        Answer restored = await Exchange
+            .SendAsync(
+                this,
+                HttpMethod.Post,
+                "auth/restore",
+                new JsonObject
+                {
+                    ["challengeId"] = begun.Text("challengeId"),
+                    ["factor"] = _passkey is not null ? "passkey" : "password",
+                    ["value"] = presented,
+                },
+                [HttpStatusCode.OK],
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (restored.Text("status") is not "complete")
+        {
+            throw new InvalidOperationException(
+                "POST auth/restore answered " + restored.Text("status") + " to the one factor the person holds.");
+        }
+    }
+
+    /// <summary>
     /// Ends the browser and clears the person's passkey with it (CONV-CODE-007).
     /// </summary>
     /// <param name="disposing">Whether it is disposed rather than finalized.</param>
@@ -126,7 +171,8 @@ public sealed class TestSession : HttpClient
         address.AbsoluteUri.EndsWith('/') ? address : new Uri(address.AbsoluteUri + "/");
 
     /// <summary>
-    /// The request options <c>POST /auth/begin</c> answers for an assertion.
+    /// The request options <c>POST /auth/begin</c> or <c>POST /auth/restore/begin</c>
+    /// answers for an assertion.
     /// </summary>
     /// <param name="begun">The answer's body.</param>
     /// <returns>The options.</returns>
@@ -142,6 +188,6 @@ public sealed class TestSession : HttpClient
             }
         }
 
-        throw new InvalidOperationException("POST auth/begin answered no WebAuthn challenge.");
+        throw new InvalidOperationException("The answer carried no WebAuthn challenge.");
     }
 }

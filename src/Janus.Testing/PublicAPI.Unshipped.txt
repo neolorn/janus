@@ -30,6 +30,7 @@ Janus.Testing.TestPeople.AdministratorAsync(System.Uri! enrolment, Janus.Core.Em
 Janus.Testing.TestPeople.CustomerAsync(Janus.Core.EmailAddress email, Janus.Core.PhoneNumber? phone, string! password, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestSession!>
 Janus.Testing.TestPeople.StaffMemberAsync(Janus.Testing.TestSession! administrator, Janus.Core.OrganizationId organization, Janus.Core.EmailAddress email, Janus.Core.PhoneNumber? phone, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! roles, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestSession!>
 Janus.Testing.TestSession
+Janus.Testing.TestSession.RestoreAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 Janus.Testing.TestSession.StepUpAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 Janus.Testing.TestSession.Subject.get -> Janus.Core.SubjectId
 Janus.Testing.TestDeployment
