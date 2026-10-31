@@ -3212,6 +3212,54 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC3 and AUTH-RECOV-002 (D-234): within the enrolment session an
+    /// approver opened for a lost mailbox, the replace of an email is taken whatever
+    /// <c>identifiers.email.max</c> is, and the new address takes the replaced one's
+    /// place, primary included; under an account session the same replace stays a
+    /// single-address-mode operation.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_AnEnrolmentSessionReplacesALostAddressInAnyModeAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 10);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Third);
+
+        ErrorCode refused = Refused(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+
+        Accepted(await Service.ReplaceAsync(
+            opened,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+        Accepted(await Service.VerifyAsync(
+            opened,
+            email,
+            Code(email),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        IReadOnlyList<HeldIdentifier> held = await HeldAsync();
+        HeldIdentifier replaced = Named(held, Second);
+
+        Assert.Equal(ErrorCodes.IdentifierInvalid, refused);
+        Assert.Equal(email, replaced.Id);
+        Assert.True(replaced.IsPrimary);
+        Assert.DoesNotContain(held, identifier => identifier.Canonical == Primary);
+        Assert.False(Named(held, Third).IsPrimary);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a code, whose wrong try keeps its count
     /// on the code's record and the delay's counts, presented inside a unit of work
     /// another opened is a fault of the calling code: nothing is counted and no try of
