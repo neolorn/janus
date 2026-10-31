@@ -39,6 +39,9 @@ against the public contract of LIB-API-001.
   rotates the cookie's secret, restores the record and every application session bound
   to it, and ends the pre-authentication session. `signin_challenges.identifier` is
   nullable, a restore being opened for no identifier.
+- `SendReference.TryParse` reads any text that is not 128 bits in unpadded base64url as
+  no reference, rather than throwing on a character outside the alphabet or on padding,
+  so a host's report naming such text changes nothing.
 - `POST /auth/link` answers `{ "challengeId": "..." }` where the ask opened the sign-in
   the link is issued on, and `{}` where the link went on one the browser holds, so the
   code a link shows in another browser is typed on the sign-in the answer names.

@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
@@ -19,6 +20,12 @@ namespace Janus.Core;
 public readonly record struct SendReference
 {
     private const int Length = 16;
+
+    // The 22 characters 128 bits take in base64url, unpadded, as a reference is drawn.
+    private const int Encoded = 22;
+
+    private static readonly SearchValues<char> Alphabet =
+        SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_");
 
     private readonly string? _value;
 
@@ -50,18 +57,21 @@ public readonly record struct SendReference
     /// </summary>
     /// <param name="value">The reference as text.</param>
     /// <param name="reference">The reference, where the text is one.</param>
-    /// <returns>Whether the text is 128 bits in base64url.</returns>
+    /// <returns>
+    /// Whether the text is 128 bits in base64url, unpadded; any other text, whatever it
+    /// holds, is read as no reference and is never a fault.
+    /// </returns>
     /// <remarks>
-    /// Implements AUTH-ABUSE-004: the reference drawn at a send's admission travels with
-    /// its row until the row is removed, and is read back from it at each attempt.
+    /// Implements AUTH-ABUSE-004 and INT-SMS-005 AC3: the reference drawn at a send's
+    /// admission travels with its row until the row is removed, and is read back from it
+    /// at each attempt; a host's report naming text that is no reference changes nothing.
     /// </remarks>
     public static bool TryParse([NotNullWhen(true)][NeverLogged] string? value, out SendReference reference)
     {
-        Span<byte> drawn = stackalloc byte[Length];
-
-        bool read = value is not null
-            && Base64Url.TryDecodeFromChars(value, drawn, out int written)
-            && written == Length;
+        bool read = value is { Length: Encoded }
+            && !value.AsSpan().ContainsAnyExcept(Alphabet)
+            && Base64Url.IsValid(value, out int decoded)
+            && decoded == Length;
 
         reference = read ? new SendReference(value!) : default;
 
