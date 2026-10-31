@@ -67,6 +67,11 @@ internal sealed partial class WaitAnAuthorizationForItsSignIn : Migration
             column: "session",
             unique: true,
             filter: "session IS NOT NULL");
+
+        migrationBuilder.Sql(
+            """
+            GRANT SELECT, INSERT, UPDATE, DELETE ON identity.pending_authorizations TO identity_app;
+            """);
     }
 
     /// <inheritdoc />
