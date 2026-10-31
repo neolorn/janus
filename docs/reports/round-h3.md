@@ -97,11 +97,8 @@ marked "at base".
   30 minutes, R, ceiling 1 hour), proven by the reference gate
   (`SettingsCatalogueTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource`), and
   read when a pending authorization is kept (item 12, under D-226 item 4 below).
-- The sample host (LIB-TEST-004), of the plan's row: an email-link sign-in from a new
-  browser with no second mail; the settings, the enrolment document and whether a
-  password is set (the three `FrontendTests` above); a staff session restored in place
-  (under D-228 below). The sign-on and back between two origins, as D-229 has it, waits
-  on Q15 (section 2).
+- The sample host (LIB-TEST-004), of the plan's row: each clause mapped to its test
+  under D-230 below.
 
 
 D-225, by item:
@@ -341,7 +338,110 @@ D-228, by item:
     The workshop's own organization keeps the system policy, under which a technician's
     session is offered no single-factor restore (AUTH-SESS-005 AC3a).
 
+D-230, by item, with the review of `c1b0c835..8b8a6095`:
+
+- Item 1, the framework's own authentication (BFF-ORDER-001 AC8, Q15), in a host built
+  on `WebApplication` that calls no `UseAuthentication` of its own
+  (`tests/Janus.Hosting.Tests/Deployment.cs` composed so); each failed before the change:
+  - `FrameworkAuthenticationTests.BFF_ORDER_001_AC8_AnAuthorizationRequestAStageRefusesReachesNoProviderEndpointAsync`
+    (`/oidc/authorize` refused by the source rate limit);
+  - `FrameworkAuthenticationTests.BFF_ORDER_001_AC8_AMachineRouteOfTheProviderIsAnsweredOnlyInsideItsProfileAsync`
+    (a theory over `/oidc/par` and `/oidc/token`; Q18);
+  - `FrameworkAuthenticationTests.BFF_ORDER_001_AC8_AnAuthorizationRequestThatFindsNoSessionIsKeptForItsBrowserAsync`;
+  - `FrameworkAuthenticationTests.BFF_ORDER_001_AC8_TheProviderIsTheOneHandlerTheLibraryGivesTheFrameworkAsync`.
+  - Every other request handler checked: the provider's server handler is the one
+    scheme the library registers that handles requests. The provider's framework adds a
+    placeholder scheme of no handler of its own, so that no default is inferred; no
+    default authenticate scheme is set, so the middleware the framework adds
+    authenticates nobody; and no authorization handler provider is registered, so the
+    framework adds no authorization middleware.
+  - The sample host's sign-on and back between two origins (LIB-TEST-004 AC2, D-229),
+    with no `UseAuthentication` in the sample:
+    `SignOnTests.LIB_TEST_004_AC2_APersonIsSentFromTheSecondApplicationsSignOnToTheSignInAndBackAsync`.
+- Item 2, a link's own sign-in (AUTH-FACT-003 AC4 and AC6, AUTH-ABUSE-002, `09`
+  `POST /auth/link`):
+  - `AuthenticationServiceTests.AUTH_FACT_003_AC4_ALinkAskedWithoutASignInOpensOneBoundToTheBrowserAsync`,
+    now typing the code on the answer's `challengeId` and completing;
+  - `AuthenticationServiceTests.AUTH_FACT_003_AC6_ABrowserHoldingNoSignInIsAnsweredWithTheOneItsRequestOpenedAsync`;
+  - `AuthenticationServiceTests.AUTH_FACT_003_AC6_WhetherTheAnswerNamesASignInNeverTurnsOnTheAccountAsync`
+    (an identifier no account holds, a disabled channel, a domain lock, a `risk`
+    number, and one the link goes to);
+  - `SignInFlowTests.AUTH_FACT_003_AC6_TheLinkAnswerNamesTheSignInItsRequestOpenedAsync`;
+  - `ThrottlingTests.BFF_ABUSE_002_AC1_TheLinkRequestIsAnsweredAlikeForAHeldAndAnUnheldAddressAsync`,
+    asserting the `challengeId`.
+- Item 3, the renumbered enumerations: Q16 (section 4).
+- Review 1, an alert whose handler threw (OPS-ALERT-003 AC2, D-225 item 3): the ledger's
+  claim names the raise it was made for and whether a handler answered it, through the
+  migration `20261031115729_NameTheRaiseAnAlertIsClaimedFor`:
+  - `AlertDispatchTests.OPS_ALERT_003_AC2_AnAlertWhoseHandlerThrewIsHandedAgainUntilTakenAsync`;
+  - `AlertDispatchTests.OPS_ALERT_003_AC2_AnAlertWhosePassEndedBeforeTheHandlerAnsweredIsHandedAgainAsync`;
+  - `AlertDispatchTests.OPS_ALERT_003_AC2_AnAlertAlreadyTakenIsNotHandedAgainAsync`;
+  - `AlertLedgerTests.OPS_ALERT_003_AC2_ARaiseIsNotFoldedIntoItsOwnUnansweredClaimAsync`;
+  - `AlertLedgerTests.OPS_ALERT_003_AC2_AClaimIsGivenBackOnlyByItsOwnRaiseAsync`.
+  - A handler that took the alert, where the write that records it fails, is handed it
+    again: the hand-over is at least once.
+- Review 2, the sample host's own handlers (LIB-TEST-004, D-225 item 10): the workshop
+  registers its post room (`INotificationHandler`), its duty board (`IAlertHandler`)
+  and its courier, which reports outcomes through `ISendOutcomes`; `WorkshopHost` gives
+  them way to `Janus.Testing`'s in-memory handlers, its tests reading codes, and
+  `PostedHost` keeps the workshop's own:
+  - `HandlersTests.INT_SMS_006_AC1_AMessageTheLibraryOwesReachesTheWorkshopsPostRoomAsync`;
+  - `HandlersTests.OPS_ALERT_003_AC2_AnAlertTheLibraryRaisesIsPinnedOnTheWorkshopsDutyBoardAsync`;
+  - `HandlersTests.INT_SMS_005_AC2_ALetterTheCourierCouldNotDeliverGivesBackItsCountAsync`;
+  - `HandlersTests.INT_SMS_006_AC2_AWorkshopMissingEitherHandlerDoesNotStartAsync` (a
+    theory over both handlers).
+  - The courier's report of text that is no reference found `SendReference.TryParse`
+    throwing on a character outside the alphabet; it now reads any text that is not 128
+    bits in unpadded base64url as no reference (INT-SMS-005 AC3):
+    `SendReferenceTests.INT_SMS_005_AC3_TextThatIsNoReferenceReadsAsNone` and
+    `SendReferenceTests.INT_SMS_005_ADrawnReferenceReadsBackAsItself`.
+- Review 3, a link's own sign-in: item 2 above.
+- Review 4, the policy fault's label (REG-INV-001, AUTH-PRIN-002):
+  `FrontendSettingsTests.REG_INV_001_AnUnreadablePolicyIsNamedByWhatTheRegistrationReadAsync`.
+- Review 5, the key rotations print no key (OPS-SEC-003 AC4):
+  `KeyRotationTests.OPS_SEC_003_AC4_NoRunPrintsAKeyAndTheRotationRetiresOnlyWhenAskedAsync`
+  reads both streams of both runs for both keys in standard and URL-safe base64 and in
+  upper- and lower-case hexadecimal.
+
+The plan's row, clause by clause, on the sample host:
+
+- From its application's sign-on to the sign-in and back to that application's route:
+  `SignOnTests.LIB_TEST_004_AC2_APersonIsSentFromTheSecondApplicationsSignOnToTheSignInAndBackAsync`.
+- A staff session restored in place after an idle expiry:
+  `RestoreTests.AUTH_SESS_005_AC4_AStaffSessionIsRestoredInPlaceAfterAnIdleExpiryAsync`.
+- An email-link sign-in from a new browser with no second mail:
+  `FrontendTests.AUTH_FACT_016_AC8_ALinkPressedInANewBrowserSignsInWithNoSecondMailAsync`.
+- The settings: `FrontendTests.REG_IDENT_001_ABrowserWithNoSessionReadsTheSettingsAsync`.
+- The enrolment document, and whether a password is set (on `GET /account` and on the
+  enrolment session): `FrontendTests.FE_SEC_001_AnEnrolmentSessionReadsItsScreensDocumentAsync`.
+- Every message reaches the host's handler, and nothing leaves the library any other
+  way: `HandlersTests.INT_SMS_006_AC1_AMessageTheLibraryOwesReachesTheWorkshopsPostRoomAsync`;
+  the sample registers no sender, and every other sample test reads its messages from
+  the handler it registers.
+- Every alert reaches the host's handler:
+  `HandlersTests.OPS_ALERT_003_AC2_AnAlertTheLibraryRaisesIsPinnedOnTheWorkshopsDutyBoardAsync`.
+- An outcome the host reports releases the counts INT-SMS-005 names:
+  `HandlersTests.INT_SMS_005_AC2_ALetterTheCourierCouldNotDeliverGivesBackItsCountAsync`.
+- A deployment with either handler missing does not start:
+  `HandlersTests.INT_SMS_006_AC2_AWorkshopMissingEitherHandlerDoesNotStartAsync`.
+- The key rotations print no key: no sample test; Q17.
+- No code of a retired item remains, and the mail server's criteria against Stalwart: the
+  library's, not the sample's (D-225 items 1 to 7, D-224 item 23 above).
+
+Public surface changed this turn (`PublicAPI.Unshipped.txt` of `Janus.Core`, nothing
+released): `IAuthentication.SendLinkAsync` answers `Result<RequestedLink>`, and
+`RequestedLink` is added, its `Challenge` the handle of the sign-in the ask opened
+(D-230 item 2).
+
 Tests changed in what they assert:
+
+- `ThrottlingTests`' alike answers and
+  `SignInFlowTests.AUTH_FACT_002b_AC6_ALinkByTextToAReportedNumberIsAnsweredAsAnyAskAsync`
+  compare the bodies with the `challengeId` an ask opened taken out (`Answer.Drawn`), as
+  a handle drawn per request says nothing about existence (D-230); whether a body carries
+  one stays compared.
+- `AlertLedgerTests.OPS_ALERT_002_AC2_`'s two overlapping passes each claim for a raise of
+  their own, as two raises of one condition do.
 
 - `ChallengeStoreTests.OPS_SEC_003_AnIdentifierIsHeldOnlyBesideItsVersionAsync`: a null
   identifier beside a version is now written, not refused, since a restore opens a
@@ -373,7 +473,7 @@ pipeline.
 
 Each waits on a question; nothing of them is in the code:
 
-- The sample host's sign-on and back between two origins (LIB-TEST-004 AC2, D-229): Q15.
+- A key rotation run by the sample host: Q17.
 
 ## 3. Resolved by rule
 
@@ -430,13 +530,6 @@ Each waits on a question; nothing of them is in the code:
     real port.
   - Rule: the browser takes the host it sends to, defaulting to the authentication
     application's, as the machine client does.
-- `AlertCondition` (`src/Janus.Core`):
-  - What was out of step: once D-225 removed two conditions, the members' values no
-    longer ran in the order of `10`'s table.
-  - Governing item: OPS-ALERT-001, the conditions as `10` lists them.
-  - Rule: the values are renumbered in table order, as
-    `OPS_ALERT_001_TheValuesRunInTheOrderOfTheTable` asserts.
-
 
 ## 4. Open questions
 
@@ -682,7 +775,7 @@ AUTH-SESS-012).
   sentence in the plan's row or LIB-TEST-004.
 - Parks: the sample host's sign-on and back only.
 
-**Q15 (Tier 3).** The provider's routes are answered before the browser and machine
+**Q15 (Tier 3), answered by D-230 item 1.** The provider's routes are answered before the browser and machine
 profiles in a host built on `WebApplication` (BFF-ORDER-001, AUTH-SESS-012,
 BFF-SESS-006, LIB-TEST-004).
 
@@ -716,8 +809,62 @@ BFF-SESS-006, LIB-TEST-004).
   profile's stages (source rate limiting among them).
 - Parks: the sample host's sign-on and back between two origins only.
 
+**Q16 (Tier 2), answered by D-230 item 3.** Three enumerations renumbered
+(OPS-ALERT-001, INT-SMS-006, AUTH-STEP-002; first recorded under section 3, which it
+failed: the values in `PublicAPI.Unshipped.txt` are the public surface).
+
+- What the code holds: D-225 retired six alert conditions (`AlertDestinationChanged`,
+  `SmsBalance`, `CertificateRenewalFailed`, `ClockDrift`, `RestoreTestFailed` and
+  `RelayDomainUnregistered`), the message kind `Alert` and the step-up action
+  `AlertingDestinations`; `AlertCondition` (with `BreakGlassGenerated` moved from 31
+  to its place in the table), `MessageKind` and `StepUpAction` were renumbered in
+  `10`'s order with no gap, so a value a host stored under the earlier numbering reads
+  as another member.
+- Answer: the renumbering stands; nothing released carried the earlier values.
+- Parks: nothing.
+
+**Q17 (Tier 2).** Whether the sample host runs a key rotation (the plan's row H3,
+LIB-TEST-004, OPS-SEC-003 AC4).
+
+- What the code needs: the row says the sample host does each of its clauses in the
+  gate; one is "the key rotations print no key".
+- What the spec says: LIB-TEST-004 lists what the sample's tests prove and names no key
+  rotation; D-225 item 10 and the review list the handlers' clauses.
+- What the code holds: the rotations' criteria are proven by `Janus.Cli`'s
+  `KeyRotationTests` against PostgreSQL; the sample installs the command-line tool and
+  runs `register-client` alone. `FixedSecretSource` holds one key, so a rotation in
+  the sample needs a key document of the next version the sample builds itself.
+- Reading A: the clause is the library's, as the retired code and the Stalwart clauses
+  are. Smallest fix: none.
+- Reading B: the sample rotates its deployment's key encryption key with `rotate-kek`
+  and `--retire`, the next key in a document of its own, and its test reads both
+  streams for both keys. Smallest fix: one sample test.
+- Parks: the sample's rotation only.
+
+**Q18 (Tier 3).** BFF-ORDER-001 AC8 at `/oidc/par` and `/oidc/token`.
+
+- AC8 asks that "a request a stage refuses reaches no provider endpoint", and the round's
+  message names source rate limiting for one. Those two routes are mounted in the machine
+  profile, whose stages (BFF-MACH-001) include no source rate limit and none that
+  refuses a request a provider endpoint would take; a cookie-bearing request is refused
+  by the provider's own handler.
+- What the tests prove for them instead: the provider acts on each only inside the
+  machine profile (it sees the profile's mark), and a fault inside the provider is
+  answered by the profile's error translation (500 `system.fault`).
+- Parks: nothing.
+
 ## 5. Gate result
 
+- This turn (D-230), before the push: every unit and contract test passes (5167 in eleven
+  projects); the commit-message, changelog, acceptance-test-names and forbidden-marker
+  gates pass over the commits since `514024d1`; the full-history secret scan finds
+  nothing. The commit-message gate first refused three unpushed bodies written as wrapped
+  prose; they were reworded into dash fragments before the push. The sample host's
+  solution was packed, restored, built, checked by `dotnet format --verify-no-changes`
+  and its tests run (28 passed); its first run found `SendReference.TryParse` throwing,
+  fixed in the library (section 1, D-230 review 2). The `AlertLedgerTests`, the model
+  and migration tests, and `KeyRotationTests` ran on PostgreSQL on this machine while
+  written.
 - This turn (D-229): the sample host's sign-on and back was built and run against this
   branch's packages, met Q15, and was taken out again; nothing of it is committed. The
   checks before the push were run again on the branch as it stands.
