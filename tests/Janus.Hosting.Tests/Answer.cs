@@ -43,4 +43,17 @@ internal sealed record Answer(
     /// <param name="name">Which property.</param>
     /// <returns>Its text.</returns>
     public string Text(string name) => Json().GetProperty(name).GetString() ?? string.Empty;
+
+    /// <summary>
+    /// The body with the handle of a sign-in the request opened taken out, which is
+    /// drawn per request and says nothing about existence (AUTH-FACT-003 AC6); whether
+    /// the body carries one stays in it.
+    /// </summary>
+    /// <returns>The body.</returns>
+    public string Drawn() =>
+        Body.Length is not 0
+        && Json() is { ValueKind: JsonValueKind.Object } body
+        && body.TryGetProperty("challengeId", out JsonElement handle)
+            ? Body.Replace(handle.GetString()!, string.Empty, StringComparison.Ordinal)
+            : Body;
 }

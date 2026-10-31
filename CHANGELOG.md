@@ -39,6 +39,13 @@ against the public contract of LIB-API-001.
   rotates the cookie's secret, restores the record and every application session bound
   to it, and ends the pre-authentication session. `signin_challenges.identifier` is
   nullable, a restore being opened for no identifier.
+- `POST /auth/link` answers `{ "challengeId": "..." }` where the ask opened the sign-in
+  the link is issued on, and `{}` where the link went on one the browser holds, so the
+  code a link shows in another browser is typed on the sign-in the answer names.
+  `IAuthentication.SendLinkAsync` answers a `RequestedLink`. The ask opens a sign-in
+  wherever the browser holds none, for an identifier that resolves to nothing, an
+  address a domain lock refuses, a number reported as `risk` and a channel the policy
+  has not enabled alike.
 - A sign-in is bound to the pre-authentication session of the browser that opens it
   (`POST /auth/begin`, `IAuthentication.BeginAsync`'s `browser`), and a sign-in link is
   issued on that browser's latest sign-in for the identifier that no factor has answered,

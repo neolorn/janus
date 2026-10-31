@@ -393,7 +393,7 @@ internal sealed class AuthenticationService(
     }
 
     /// <inheritdoc/>
-    public ValueTask<Result> SendLinkAsync(
+    public ValueTask<Result<RequestedLink>> SendLinkAsync(
         string identifier,
         string language,
         string source,

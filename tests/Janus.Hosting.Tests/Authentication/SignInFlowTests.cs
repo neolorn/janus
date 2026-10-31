@@ -23,6 +23,9 @@ public sealed class SignInFlowTests : IAsyncDisposable
     private const string Session = "__Host-identity-session";
     private const string Browsers = "__Host-identity-browser";
 
+    // An address no account holds.
+    private const string Nobody = "nobody@example.test";
+
     private readonly Deployment _deployment = new();
 
     /// <summary>
@@ -134,6 +137,56 @@ public sealed class SignInFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, pressed.Status);
         Assert.Equal("complete", pressed.Text("status"));
         Assert.Equal("aal1", pressed.Text("assuranceLevel"));
+        Assert.True(asking.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC6 (D-230): a link asked for from a browser holding no sign-in is
+    /// answered with the challengeId of the one its request opened, on which the code
+    /// the link shows in another browser completes the sign-in; asked from a browser that
+    /// began one with the identifier, an address nobody holds here, it is answered with
+    /// an empty object.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_003_AC6_TheLinkAnswerNamesTheSignInItsRequestOpenedAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        await RegisteredAsync();
+
+        var asking = new Browser(_deployment);
+        var beginning = new Browser(_deployment);
+
+        _ = await asking.SendAsync("GET", "/auth/session");
+        _ = await beginning.SendAsync("GET", "/auth/session");
+        _ = await beginning.SendAsync("POST", "/auth/begin", ("identifier", Nobody));
+
+        Answer holding = await beginning.SendAsync("POST", "/auth/link", ("identifier", Nobody));
+        Answer opening = await asking.SendAsync("POST", "/auth/link", ("identifier", Flow.Address));
+        string token = Flow.Token(_deployment, IdentifierKind.Email);
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/auth/session");
+
+        Answer opened = await elsewhere.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("factor", "emailLink"),
+            ("linkToken", token),
+            ("press", true));
+        Answer typed = await asking.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", opening.Text("challengeId")),
+            ("factor", "emailLink"),
+            ("value", opened.Text("code")));
+
+        Assert.Equal(StatusCodes.Status202Accepted, opening.Status);
+        Assert.NotEmpty(opening.Text("challengeId"));
+        Assert.Equal((StatusCodes.Status202Accepted, "{}"), (holding.Status, holding.Body));
+        Assert.Equal(StatusCodes.Status200OK, typed.Status);
+        Assert.Equal("complete", typed.Text("status"));
         Assert.True(asking.Cookies.ContainsKey(Session));
     }
 
@@ -1089,7 +1142,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status202Accepted, held.Status);
         Assert.Equal(held.Status, nobodys.Status);
-        Assert.Equal(held.Body, nobodys.Body);
+        Assert.Equal(held.Drawn(), nobodys.Drawn());
         Assert.Equal(sent, risky.Sms.Taken.Count);
     }
 

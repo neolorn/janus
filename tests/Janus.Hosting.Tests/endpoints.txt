@@ -1846,6 +1846,8 @@ POST /auth/link
   request application/json
     identifier: string
   202
+    application/json
+      challengeId: string
   400 api.request.malformed
   403 auth.session.csrfinvalid
   429 auth.restriction.exceeded auth.throttled

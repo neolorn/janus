@@ -1422,7 +1422,7 @@ Janus.Core.IAuthentication.ListDevicesAsync(Janus.Core.AccessContext! context, S
 Janus.Core.IAuthentication.PresentAsync(string! challenge, Janus.Core.FactorPresentation! presented, Janus.Core.DeviceDescription! device, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SignInProgress!>>
 Janus.Core.IAuthentication.SendCodeAsync(string! identifier, string! language, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAuthentication.ResendDeviceCodeAsync(string! challenge, string? browser, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IAuthentication.SendLinkAsync(string! identifier, string! language, string! source, string? browser, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAuthentication.SendLinkAsync(string! identifier, string! language, string! source, string? browser, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RequestedLink!>>
 Janus.Core.IAuthentication.StepUpAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! challenge, Janus.Core.FactorPresentation! presented, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SignInProgress!>>
 Janus.Core.IAuthentication.VerifyDeviceAsync(string! challenge, string! code, Janus.Core.DeviceDescription! device, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SignInProgress!>>
 Janus.Core.IBreakGlass
@@ -2734,6 +2734,13 @@ Janus.Core.RequestAccess.Equals(Janus.Core.RequestAccess? other) -> bool
 Janus.Core.RequestAccess.RequestAccess(Janus.Core.AccessContext! Context, Janus.Core.SessionId Session) -> void
 Janus.Core.RequestAccess.Session.get -> Janus.Core.SessionId
 Janus.Core.RequestAccess.Session.init -> void
+Janus.Core.RequestedLink
+Janus.Core.RequestedLink.<Clone>$() -> Janus.Core.RequestedLink!
+Janus.Core.RequestedLink.Challenge.get -> string?
+Janus.Core.RequestedLink.Challenge.init -> void
+Janus.Core.RequestedLink.Deconstruct(out string? Challenge) -> void
+Janus.Core.RequestedLink.Equals(Janus.Core.RequestedLink? other) -> bool
+Janus.Core.RequestedLink.RequestedLink(string? Challenge) -> void
 Janus.Core.ReservedUsernames
 Janus.Core.ReservedUsernames.All.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Janus.Core.ReservedUsernames.Holds(Janus.Core.Username username) -> bool
@@ -3992,6 +3999,9 @@ override Janus.Core.RelationshipDeclaration.ToString() -> string!
 override Janus.Core.RequestAccess.Equals(object? obj) -> bool
 override Janus.Core.RequestAccess.GetHashCode() -> int
 override Janus.Core.RequestAccess.ToString() -> string!
+override Janus.Core.RequestedLink.Equals(object? obj) -> bool
+override Janus.Core.RequestedLink.GetHashCode() -> int
+override Janus.Core.RequestedLink.ToString() -> string!
 override Janus.Core.ResourceAccess.Equals(object? obj) -> bool
 override Janus.Core.ResourceAccess.GetHashCode() -> int
 override Janus.Core.ResourceAccess.ToString() -> string!
@@ -5029,6 +5039,8 @@ static Janus.Core.RegistrationState.operator ==(Janus.Core.RegistrationState? le
 static Janus.Core.RelationshipDeclaration.operator !=(Janus.Core.RelationshipDeclaration? left, Janus.Core.RelationshipDeclaration? right) -> bool
 static Janus.Core.RelationshipDeclaration.operator ==(Janus.Core.RelationshipDeclaration? left, Janus.Core.RelationshipDeclaration? right) -> bool
 static Janus.Core.RelationshipSource.Of<TContext, TRow>(string! relationship, System.Func<TContext!, System.Linq.IQueryable<TRow>!>! rows) -> Janus.Core.RelationshipSource!
+static Janus.Core.RequestedLink.operator !=(Janus.Core.RequestedLink? left, Janus.Core.RequestedLink? right) -> bool
+static Janus.Core.RequestedLink.operator ==(Janus.Core.RequestedLink? left, Janus.Core.RequestedLink? right) -> bool
 static Janus.Core.ReservedUsernames.Default.get -> Janus.Core.ReservedUsernames!
 static Janus.Core.ReservedUsernames.Of(System.Collections.Generic.IEnumerable<string!>! added) -> Janus.Core.ReservedUsernames!
 static Janus.Core.RequestAccess.operator !=(Janus.Core.RequestAccess? left, Janus.Core.RequestAccess? right) -> bool

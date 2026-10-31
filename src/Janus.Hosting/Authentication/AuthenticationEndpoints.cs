@@ -106,7 +106,7 @@ internal static class AuthenticationEndpoints
         _ = group.MapPost("/link", LinkAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
             .Accepts<SignInRequest>(MediaTypeNames.Application.Json)
-            .Produces(StatusCodes.Status202Accepted);
+            .Produces<RequestedLinkView>(StatusCodes.Status202Accepted);
         _ = group.MapPost("/link/abandon", AbandonLinkAsync)
             .Declares(EndpointDeclaration.Answering())
             .Accepts<AbandonLinkRequest>(MediaTypeNames.Application.Json)
@@ -480,7 +480,8 @@ internal static class AuthenticationEndpoints
     }
 
     // AUTH-ABUSE-003: accepted whether or not the identifier belongs to an account
-    // and whether or not the policy enables the entry the link would be.
+    // and whether or not the policy enables the entry the link would be, naming the
+    // sign-in the ask opened where it opened one (AUTH-FACT-003 AC6).
     private static async Task<IResult> LinkAsync(
         IAuthentication authentication,
         HttpContext context,
@@ -504,7 +505,11 @@ internal static class AuthenticationEndpoints
                         Carried(context.Request, BrowserCookies.PreAuthentication),
                         cancellationToken)
                     .ConfigureAwait(false),
-                Accepted);
+                requested => TypedResults.Json(
+                    RequestedLinkView.Of(requested),
+                    AuthenticationJson.Default.RequestedLinkView,
+                    contentType: null,
+                    StatusCodes.Status202Accepted));
     }
 
     private static async Task<IResult> CodeAsync(

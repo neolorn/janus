@@ -386,9 +386,9 @@ public sealed class ThrottlingTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// BFF-ABUSE-002 AC1: a sign-in link asked for an address an account holds and
-    /// one asked for an address nobody holds are answered alike: status, body and
-    /// every header.
+    /// BFF-ABUSE-002 AC1, AUTH-FACT-003 AC6: a sign-in link asked for an address an
+    /// account holds and one asked for an address nobody holds are answered alike:
+    /// status, body and every header, each naming the sign-in its request opened.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -399,6 +399,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
         (Answer held, Answer unheld, int sent) = await AskedAsync("/auth/link");
 
         Assert.Equal(StatusCodes.Status202Accepted, held.Status);
+        Assert.NotEmpty(held.Text("challengeId"));
         AssertAlike(held, unheld);
         Assert.Equal(2, sent);
     }
@@ -424,7 +425,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
     private static void AssertAlike(Answer held, Answer unheld)
     {
         Assert.Equal(held.Status, unheld.Status);
-        Assert.Equal(held.Body, unheld.Body);
+        Assert.Equal(held.Drawn(), unheld.Drawn());
         Assert.Equal(held.SetCookie, unheld.SetCookie);
         Assert.Equal(
             held.Headers.OrderBy(header => header.Key, StringComparer.OrdinalIgnoreCase),

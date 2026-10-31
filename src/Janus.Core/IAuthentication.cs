@@ -155,9 +155,10 @@ public interface IAuthentication
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, whether or not the identifier resolves to an account and whether or
-    /// not the policy enables the link factor of its kind.
+    /// not the policy enables the link factor of its kind, naming the sign-in the ask
+    /// opened where the browser held none opened with the identifier.
     /// </returns>
-    ValueTask<Result> SendLinkAsync(
+    ValueTask<Result<RequestedLink>> SendLinkAsync(
         string identifier,
         string language,
         string source,

@@ -49,7 +49,8 @@ namespace Janus.Authentication.SignIn;
 /// sending restrictions as the message would, so where a restriction refuses the ask it
 /// refuses all of them alike. A link is issued on a sign-in, the asking browser's own
 /// where it holds one that nothing has answered yet, and keeps that sign-in answering
-/// as long as the link lives (D-226).
+/// as long as the link lives (D-226). Where the browser holds none, the ask opens one
+/// and names it in its answer, whatever reaches the channel (D-230).
 /// </remarks>
 internal sealed class SignInLinks(
     IPendingSignInStore pending,
@@ -85,9 +86,12 @@ internal sealed class SignInLinks(
     /// the sign-in the link is issued on is bound to.
     /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or the delay the source has earned.</returns>
+    /// <returns>
+    /// Success, naming the sign-in the ask opened where it opened one, or the delay the
+    /// source has earned.
+    /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public ValueTask<Result> SendLinkAsync(
+    public ValueTask<Result<RequestedLink>> SendLinkAsync(
         string identifier,
         string language,
         string source,
@@ -107,12 +111,13 @@ internal sealed class SignInLinks(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the delay the source has earned.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public ValueTask<Result> SendCodeAsync(
+    public async ValueTask<Result> SendCodeAsync(
         string identifier,
         string language,
         string source,
         CancellationToken cancellationToken) =>
-        AskAsync(identifier, language, source, browser: null, Codes, cancellationToken);
+        (await AskAsync(identifier, language, source, browser: null, Codes, cancellationToken).ConfigureAwait(false))
+        .Match(_ => Result.Success(), Result.Failure);
 
     /// <summary>
     /// The pending sign-in a link token answers to, where it has not lapsed.
@@ -574,7 +579,7 @@ internal sealed class SignInLinks(
         public bool Texted => Kinds.Contains(IdentifierKind.Phone);
     }
 
-    private async ValueTask<Result> AskAsync(
+    private async ValueTask<Result<RequestedLink>> AskAsync(
         string identifier,
         string language,
         string source,
@@ -594,7 +599,7 @@ internal sealed class SignInLinks(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            return Result.Failure<RequestedLink>(failure);
         }
 
         Channel? channel = Read(identifier, usernames, ask);
@@ -614,17 +619,20 @@ internal sealed class SignInLinks(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            return Result.Failure<RequestedLink>(failure);
         }
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure(Error.Throttled(time.GetUtcNow() + delay));
+            return Result.Failure<RequestedLink>(Error.Throttled(time.GetUtcNow() + delay));
         }
+
+        var asker = new Asker(Fingerprint(browser), throttle.Identify(identifier.Trim(), usernames));
 
         if (channel is null)
         {
-            return Result.Success();
+            return await OpenedAsync(Result.Success(), subject: null, email: null, asker, ask, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         // AUTH-FACT-002b AC6: a sign-in link by text is the whole of the sign-in, so
@@ -638,7 +646,14 @@ internal sealed class SignInLinks(
                 .AllowsAsync(channel.Factor, channel.Canonical, owner, cancellationToken)
                 .ConfigureAwait(false))
         {
-            return await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
+            return await OpenedAsync(
+                    await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
+                        .ConfigureAwait(false),
+                    owner,
+                    email: null,
+                    asker,
+                    ask,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -653,13 +668,77 @@ internal sealed class SignInLinks(
                     channel,
                     language,
                     source,
-                    new Asker(Fingerprint(browser), throttle.Identify(identifier.Trim(), usernames)),
+                    asker,
                     ask,
                     cancellationToken)
                 .ConfigureAwait(false)
-            : await WithheldAsync(channel, language, source, ask, unheld: true, cancellationToken)
+            : await OpenedAsync(
+                    await WithheldAsync(channel, language, source, ask, unheld: true, cancellationToken)
+                        .ConfigureAwait(false),
+                    subject: null,
+                    email: null,
+                    asker,
+                    ask,
+                    cancellationToken)
                 .ConfigureAwait(false);
     }
+
+    // AUTH-FACT-003 AC6, AUTH-ABUSE-002 (D-230): an ask for a link that nothing goes out
+    // for opens a sign-in where the browser holds none, as one the link goes out for
+    // does, so whether its answer names one never turns on the account. The sign-in is
+    // opened for what the identifier resolves to, as /auth/begin opens one, once the
+    // answer has counted.
+    private async ValueTask<Result<RequestedLink>> OpenedAsync(
+        Result answered,
+        SubjectId? subject,
+        IdentifierId? email,
+        Asker asker,
+        Ask ask,
+        CancellationToken cancellationToken)
+    {
+        if (answered.Match<Error?>(() => null, error => error) is Error refused)
+        {
+            return Result.Failure<RequestedLink>(refused);
+        }
+
+        if (!ask.CarriesLink)
+        {
+            return Result.Success(new RequestedLink(Challenge: null));
+        }
+
+        Error? failure = null;
+
+        TimeSpan lifetime = (await configuration.ReadAsync(ask.Lifetime, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        TimeSpan opens = (await configuration.ReadAsync(Settings.CodeVerificationLifetime, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<RequestedLink>(failure);
+        }
+
+        if ((await BeganAsync(ask, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RequestedLink>(notBegun);
+        }
+
+        (_, string? opened) = await IssuedOnAsync(subject, email, asker, opens, lifetime, cancellationToken)
+            .ConfigureAwait(false);
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Success(new RequestedLink(opened)), Result.Failure<RequestedLink>);
+    }
+
+    // An ask that may go by text runs in the outermost unit of work, as Ask.Texted says.
+    private async ValueTask<Result> BeganAsync(Ask ask, CancellationToken cancellationToken) =>
+        ask.Texted
+            ? await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false)
+            : (await work.BeginAsync(cancellationToken).ConfigureAwait(false)).Match(_ => Result.Success(), Result.Failure);
 
     // An ask no message answers, because no account holds the address or the account
     // cannot be reached by it, is answered as the one and counted as the other.
@@ -684,7 +763,7 @@ internal sealed class SignInLinks(
     // the identifier as a sign-in opened with it is counted against.
     private sealed record Asker([property: NeverLogged] byte[]? Browser, [property: NeverLogged] byte[] Identifier);
 
-    private async ValueTask<Result> IssueAsync(
+    private async ValueTask<Result<RequestedLink>> IssueAsync(
         SubjectId subject,
         IdentifierId identifier,
         Channel channel,
@@ -710,8 +789,10 @@ internal sealed class SignInLinks(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            return Result.Failure<RequestedLink>(failure);
         }
+
+        IdentifierId? email = channel.Kind is IdentifierKind.Email ? identifier : null;
 
         // A factor the policy has not enabled is refused exactly as an address no
         // account holds: the caller is told nothing either way, and nothing goes out
@@ -720,11 +801,16 @@ internal sealed class SignInLinks(
             || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
                 is not (AccountState.Active or AccountState.Restricted))
         {
-            return await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
+            return await OpenedAsync(
+                    await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
+                        .ConfigureAwait(false),
+                    subject,
+                    email,
+                    asker,
+                    ask,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
-
-        IdentifierId? email = channel.Kind is IdentifierKind.Email ? identifier : null;
 
         // An address a domain lock refuses is sent nothing, as a factor the policy has
         // not enabled is (REG-DOM-001, AUTH-ABUSE-003).
@@ -733,9 +819,16 @@ internal sealed class SignInLinks(
                 is Error locked)
         {
             return locked.Code == ErrorCodes.IdentifierDomainNotAllowed
-                ? await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
+                ? await OpenedAsync(
+                        await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
+                            .ConfigureAwait(false),
+                        subject,
+                        email,
+                        asker,
+                        ask,
+                        cancellationToken)
                     .ConfigureAwait(false)
-                : Result.Failure(locked);
+                : Result.Failure<RequestedLink>(locked);
         }
 
         string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -757,13 +850,10 @@ internal sealed class SignInLinks(
             values["link"] = landing.Of(LinkKind.SignIn, token.Value);
         }
 
-        Result begun = ask.Texted
-            ? await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false)
-            : (await work.BeginAsync(cancellationToken).ConfigureAwait(false)).Match(_ => Result.Success(), Result.Failure);
-
-        if (begun.Match<Error?>(() => null, error => error) is Error notBegun)
+        if ((await BeganAsync(ask, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
-            return Result.Failure(notBegun);
+            return Result.Failure<RequestedLink>(notBegun);
         }
 
         SendReference sent = (await sending
@@ -786,14 +876,14 @@ internal sealed class SignInLinks(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure(failure);
+            return Result.Failure<RequestedLink>(failure);
         }
 
         // AUTH-ABUSE-004: the send is named by the record its code and its link are
         // held on, which is what releases its one count once either is answered.
         await restrictions.CarriesAsync(sent, token.Fingerprint(), cancellationToken).ConfigureAwait(false);
 
-        byte[]? issuedOn = ask.CarriesLink
+        (byte[] Fingerprint, string? Opened)? issuedOn = ask.CarriesLink
             ? await IssuedOnAsync(subject, email, asker, opens, lifetime, cancellationToken).ConfigureAwait(false)
             : null;
 
@@ -807,28 +897,24 @@ internal sealed class SignInLinks(
                     credential: null,
                     code,
                     asker.Browser,
-                    issuedOn,
+                    issuedOn?.Fingerprint,
                     time.GetUtcNow(),
                     lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure(notCommitted);
-        }
-
-        return Result.Success();
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Success(new RequestedLink(issuedOn?.Opened)), Result.Failure<RequestedLink>);
     }
 
     // D-226: a link is issued on the asking browser's latest sign-in opened with the
     // identifier that still answers and that nothing has answered yet, or on one opened
     // for it as /auth/begin opens one, bound to the browser; either way the sign-in
     // answers at least as long as the link. Written in the caller's unit of work, so a
-    // refused send leaves no sign-in behind it.
-    private async ValueTask<byte[]> IssuedOnAsync(
-        SubjectId subject,
+    // refused send leaves no sign-in behind it. The handle is the one of a sign-in
+    // opened here, which the ask is answered with (D-230).
+    private async ValueTask<(byte[] Fingerprint, string? Opened)> IssuedOnAsync(
+        SubjectId? subject,
         IdentifierId? email,
         Asker asker,
         TimeSpan opens,
@@ -848,11 +934,12 @@ internal sealed class SignInLinks(
 
             await challenges.RecordAsync(latest, cancellationToken).ConfigureAwait(false);
 
-            return latest.Fingerprint;
+            return (latest.Fingerprint, null);
         }
 
+        var handle = OpaqueToken.Draw(randomness);
         var opened = Challenge.Open(
-            OpaqueToken.Draw(randomness),
+            handle,
             subject,
             email,
             asker.Identifier,
@@ -865,7 +952,7 @@ internal sealed class SignInLinks(
 
         await challenges.AddAsync(opened, cancellationToken).ConfigureAwait(false);
 
-        return opened.Fingerprint;
+        return (opened.Fingerprint, handle.Value);
     }
 
     // AUTH-FACT-004 AC3: each wrong try is refused as wrong, the one that reaches the
