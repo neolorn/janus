@@ -55,7 +55,6 @@ internal sealed class AppPasswords(
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<AppPassword>>> ListAsync(
         AccessContext context,
-        SessionId session,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);

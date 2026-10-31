@@ -10,6 +10,7 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IAppPasswords.ListAsync` takes the access context alone; the session it took was\n  never read.
 - `ISendOutcomes.ReportAsync` answers true to a repeated report of a message the\n  library handed over, a failed one included, until its send settles; the `sends` table\n  keeps a released message, marked `released`, for that long.
 - The documentation of `integration.callback.rejected` states what to do on it: call
   again once `details.retryAt` has passed where it is carried, and otherwise correct the

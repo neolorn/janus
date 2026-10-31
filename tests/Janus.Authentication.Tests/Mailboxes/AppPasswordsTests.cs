@@ -229,7 +229,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         _server.Unreachable = false;
 
         Assert.Equal(ErrorCodes.Restricted, Refused(refused));
-        Assert.Equal("Phone", Assert.Single(Listed(await ListAsync(_session))).Label);
+        Assert.Equal("Phone", Assert.Single(Listed(await ListAsync())).Label);
         Assert.Equal((_person, ErrorCodes.SystemFault), Assert.Single(_log.Unrevoked));
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
@@ -247,7 +247,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     {
         _ = Issued(await CreateAsync("Phone", _session));
 
-        IReadOnlyList<AppPassword> first = Listed(await ListAsync(_session));
+        IReadOnlyList<AppPassword> first = Listed(await ListAsync());
 
         _ = await _server.CreateAppPasswordAsync(
             _mailbox.Id,
@@ -256,7 +256,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             Noon.AddDays(30),
             TestContext.Current.CancellationToken);
 
-        IReadOnlyList<AppPassword> second = Listed(await ListAsync(_session));
+        IReadOnlyList<AppPassword> second = Listed(await ListAsync());
 
         Assert.Equal(["Phone"], first.Select(password => password.Label));
         Assert.Equal(["Phone", "Laptop"], second.Select(password => password.Label));
@@ -281,11 +281,9 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await Built(_server).ListAsync(
             AccessContext.Of(bare),
-            Opened(bare, Noon),
             TestContext.Current.CancellationToken)));
         Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await Built(server: null).ListAsync(
             Asking,
-            _session,
             TestContext.Current.CancellationToken)));
 
         _accounts.Stands(_person, AccountState.Restricted);
@@ -295,7 +293,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
         _accounts.Stands(_person, AccountState.Suspended);
 
-        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await ListAsync(_session)));
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await ListAsync()));
 
         _accounts.Stands(_person, AccountState.Active);
         Assert.Single(_mailboxes.Held).Retire(Noon);
@@ -323,7 +321,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         Assert.Equal(MailboxState.Enabled, Assert.Single(_mailboxes.Held).Owed(stands: true));
         Assert.Equal(ErrorCodes.Restricted, Refused(await CreateAsync("Tablet", _session)));
         Assert.Equal(calls, _server.Calls.Count);
-        Assert.Equal(["Phone", "Laptop"], Listed(await ListAsync(_session)).Select(password => password.Label));
+        Assert.Equal(["Phone", "Laptop"], Listed(await ListAsync()).Select(password => password.Label));
 
         Accepted(await RevokeAsync(revoked.Id, _session));
 
@@ -348,7 +346,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         _server.Set(Mail, enabled: null);
         _server.Set(Mail, enabled: true, carried is null ? null : new MailboxId(Guid.Parse(carried)));
 
-        Assert.Equal(ErrorCodes.SystemFault, Refused(await ListAsync(_session)));
+        Assert.Equal(ErrorCodes.SystemFault, Refused(await ListAsync()));
         Assert.Equal(ErrorCodes.SystemFault, Refused(await CreateAsync("Phone", _session)));
         Assert.Equal(ErrorCodes.SystemFault, Refused(await RevokeAsync(AppPasswordId.Parse("app-password-1"), _session)));
         Assert.Equal([_mailbox.Id, _mailbox.Id, _mailbox.Id], _server.Calls);
@@ -415,8 +413,8 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     private async Task<Result> RevokeAsync(AppPasswordId id, SessionId session) =>
         await Passwords.RevokeAsync(Asking, session, id, Source, TestContext.Current.CancellationToken);
 
-    private async Task<Result<IReadOnlyList<AppPassword>>> ListAsync(SessionId session) =>
-        await Passwords.ListAsync(Asking, session, TestContext.Current.CancellationToken);
+    private async Task<Result<IReadOnlyList<AppPassword>>> ListAsync() =>
+        await Passwords.ListAsync(Asking, TestContext.Current.CancellationToken);
 
     private SessionId Opened(SubjectId subject, DateTimeOffset at)
     {

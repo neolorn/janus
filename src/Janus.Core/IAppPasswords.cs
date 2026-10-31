@@ -30,12 +30,10 @@ public interface IAppPasswords
     /// What the mail server holds for the person, read from it each time.
     /// </summary>
     /// <param name="context">Who is asking.</param>
-    /// <param name="session">The session the request came in under.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The app passwords, or the refusal or the server's failure.</returns>
     ValueTask<Result<IReadOnlyList<AppPassword>>> ListAsync(
         AccessContext context,
-        SessionId session,
         CancellationToken cancellationToken);
 
     /// <summary>
