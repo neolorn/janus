@@ -6,11 +6,14 @@ using System.Net;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Tests.Oidc;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using OpenIddict.Server;
@@ -35,6 +38,8 @@ public sealed class FrameworkAuthenticationTests : IAsyncDisposable
     private static readonly IPAddress Neighbour = IPAddress.Parse("203.0.113.9");
 
     private readonly ConcurrentQueue<(string Path, bool Governed)> _reached = new();
+
+    private readonly ConcurrentQueue<(string Path, bool Marked)> _left = new();
 
     private readonly Deployment _deployment;
 
@@ -156,10 +161,42 @@ public sealed class FrameworkAuthenticationTests : IAsyncDisposable
         Assert.False(registered.IsService(typeof(IAuthorizationHandlerProvider)));
     }
 
+    /// <summary>
+    /// BFF-ORDER-001 AC8 (D-230): the profile's mark is off the request once the
+    /// authentication inside the profile has run, whether the provider answered the
+    /// request, threw at it or handed it on, so nothing outside the profile finds it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC8_TheProfilesMarkIsTakenOffWhateverTheProviderDidAsync()
+    {
+        await RelyingParty.RegisteredAsync(_deployment);
+
+        string authorization = await RelyingParty.AuthorizeAsync(_deployment, RelyingParty.Application, silent: false);
+
+        Answer answered = await new Browser(_deployment).SendAsync("GET", authorization);
+        _ = await new Browser(_deployment).SendAsync("GET", "/auth/session");
+
+        _faulting = true;
+
+        Answer faulted = await new Machine(_deployment).PostAsync(
+            "/oidc/par",
+            RelyingParty.Request(RelyingParty.Application, silent: false, RelyingParty.Destination, "openid"));
+
+        Assert.Equal(StatusCodes.Status302Found, answered.Status);
+        Assert.Equal(StatusCodes.Status500InternalServerError, faulted.Status);
+        Assert.Contains(_left, left => left.Path == "/oidc/authorize");
+        Assert.Contains(_left, left => left.Path == "/auth/session");
+        Assert.Contains(_left, left => left.Path == "/oidc/par");
+        Assert.All(_left, left => Assert.False(left.Marked, left.Path));
+    }
+
     // The provider's first step after the library's own, which records each request the
     // provider acts on and whether the machine profile governed it, and faults where the
     // test says so.
-    private void Probed(IServiceCollection services) =>
+    private void Probed(IServiceCollection services)
+    {
+        _ = services.AddSingleton<IStartupFilter>(new Leaving(_left));
         _ = services.AddOpenIddict().AddServer(server => server.AddEventHandler<OpenIddictServerEvents.ProcessRequestContext>(
             handler => handler
                 .UseInlineHandler(context =>
@@ -175,4 +212,30 @@ public sealed class FrameworkAuthenticationTests : IAsyncDisposable
                         : ValueTask.CompletedTask;
                 })
                 .SetOrder(OnlyPastTheProfile.Order + 1)));
+    }
+
+    // The host's outermost layer, which records, as each request leaves the pipeline
+    // however it was answered, whether it still carries the profile's mark.
+    private sealed class Leaving(ConcurrentQueue<(string Path, bool Marked)> left) : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) =>
+            application =>
+            {
+                _ = application.Use(async (context, inner) =>
+                {
+                    try
+                    {
+                        await inner(context);
+                    }
+                    finally
+                    {
+                        left.Enqueue((
+                            context.Request.Path.Value ?? string.Empty,
+                            context.Features.Get<ProfilePassed>() is not null));
+                    }
+                });
+
+                next(application);
+            };
+    }
 }

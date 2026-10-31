@@ -293,13 +293,22 @@ public static class PipelineProfiles
 
     // The mark the provider acts on, set once the profile's stages have passed the
     // request and taken off again once the authentication inside the profile has run, so
-    // nothing after it hands the provider the request (BFF-ORDER-001 AC8, D-230).
+    // nothing after it hands the provider the request (BFF-ORDER-001 AC8, D-230). It is
+    // taken off where the authentication hands the request on, and in any case once the
+    // authentication has ended, where the provider answered the request or threw at it.
     private static void PassedMarked(IApplicationBuilder branch) =>
-        _ = branch.Use((context, next) =>
+        _ = branch.Use(async (context, next) =>
         {
             context.Features.Set(ProfilePassed.Mark);
 
-            return next(context);
+            try
+            {
+                await next(context).ConfigureAwait(false);
+            }
+            finally
+            {
+                context.Features.Set<ProfilePassed>(null);
+            }
         });
 
     private static void PassedUnmarked(IApplicationBuilder branch) =>
