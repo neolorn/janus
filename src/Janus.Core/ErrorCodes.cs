@@ -1099,7 +1099,9 @@ public static class ErrorCodes
     public static ErrorCode TruthTableDisagreement { get; } = ErrorCode.Parse("authz.truthtable.disagreement");
 
     /// <summary>
-    /// A callback was refused, or arrived faster than the callback rate allows.
+    /// A callback was refused, or arrived faster than the callback rate allows. Where
+    /// <c>details.retryAt</c> is carried, call again once it has passed; otherwise correct
+    /// the callback before it is sent again.
     /// </summary>
     /// <remarks>Implements INT-GEN-003, BFF-MACH-001, chapter 10 section 1.6.</remarks>
     public static ErrorCode CallbackRejected { get; } = ErrorCode.Parse("integration.callback.rejected");
