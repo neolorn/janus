@@ -100,8 +100,8 @@ marked "at base".
 - The sample host (LIB-TEST-004), of the plan's row: an email-link sign-in from a new
   browser with no second mail; the settings, the enrolment document and whether a
   password is set (the three `FrontendTests` above); a staff session restored in place
-  (under D-228 below). The sign-on and back to the application's route waits on Q14
-  (section 2).
+  (under D-228 below). The sign-on and back between two origins, as D-229 has it, waits
+  on Q15 (section 2).
 
 
 D-225, by item:
@@ -373,7 +373,7 @@ pipeline.
 
 Each waits on a question; nothing of them is in the code:
 
-- The sample host's sign-on and back to the application's route: Q14.
+- The sample host's sign-on and back between two origins (LIB-TEST-004 AC2, D-229): Q15.
 
 ## 3. Resolved by rule
 
@@ -646,7 +646,7 @@ D-226 item 1).
   and restores with it. Smallest fix: none in the documents.
 - Parks: the sample host's restore in place only.
 
-**Q14 (Tier 2).** How the sample host's sign-on comes back to the application's route
+**Q14 (Tier 2), answered by D-229 (reading C).** How the sample host's sign-on comes back to the application's route
 when the provider and the application share one origin (LIB-TEST-004, BFF-SESS-006,
 AUTH-SESS-012).
 
@@ -682,7 +682,45 @@ AUTH-SESS-012).
   sentence in the plan's row or LIB-TEST-004.
 - Parks: the sample host's sign-on and back only.
 
+**Q15 (Tier 3).** The provider's routes are answered before the browser and machine
+profiles in a host built on `WebApplication` (BFF-ORDER-001, AUTH-SESS-012,
+BFF-SESS-006, LIB-TEST-004).
+
+- What the code needs: LIB-TEST-004 AC2's clause of D-229, a person sent from the
+  second application's sign-on to the sign-in at the first and back to the second's
+  route, the sample host built from the packages alone.
+- What the spec says: BFF-ORDER-001 places the authorization endpoint at stage 8, after
+  the stages that establish what the browser carries; the browser profile mounts
+  ASP.NET Core's authentication middleware, which runs the provider, inside its own
+  stages, and the machine profile does likewise for the protocol routes. No chapter
+  says how a host composes its pipeline beyond the mounting calls of `17` section 2a.
+- What the code holds: `WebApplication` adds the authentication middleware at the
+  start of the host's pipeline where the host itself has not called
+  `UseAuthentication` on it. The library's calls are made on the branches the host
+  mounts, which do not mark the host's own pipeline, so the sample host has the
+  middleware added at its start, and the provider answers there, before any stage of
+  either profile.
+- Verified on the sample host, built from this branch's packages, with a second
+  application at its own origin as D-229 has it (the test kept in `tmp/`, not
+  committed): the second's sign-on, the silent `login_required` and the non-silent
+  request all hold; the non-silent request reaches the provider with the browser's
+  pre-authentication and CSRF cookies but no pre-authentication session resolved
+  (`PathBase` empty, the path the full `/api/oidc/authorize`), so no authorization is
+  kept, and the completed sign-in carries no `continueTo`. The library's own tests build
+  their pipeline without `WebApplication`, so they do not meet it.
+- Verified as well: with the host's own `UseAuthentication` called after the library's
+  mount, the same test passes end to end, the person shown the second's route with its
+  session theirs.
+- Not verified: the pushed-request and token endpoints, which the provider answers
+  itself, are answered at the same place by the same cause, ahead of the machine
+  profile's stages (source rate limiting among them).
+- Parks: the sample host's sign-on and back between two origins only.
+
 ## 5. Gate result
+
+- This turn (D-229): the sample host's sign-on and back was built and run against this
+  branch's packages, met Q15, and was taken out again; nothing of it is committed. The
+  checks before the push were run again on the branch as it stands.
 
 - This turn, before the push: every unit and contract test passes (5146 in eleven
   projects); the commit-message, changelog, acceptance-test-names and forbidden-marker
