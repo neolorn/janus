@@ -17,7 +17,7 @@ marked "at base".
   - `AuthenticationServiceTests.AUTH_FACT_016_AC8_AnEmailCodeToAnotherEmailIsHeldWithItsCodeToThePrimaryAsync`;
   - `AuthenticationServiceTests.AUTH_FACT_016_AC8_APhoneLinkIsHeldWithItsCodeToThePrimaryAsync`;
   - the sample host: `FrontendTests.AUTH_FACT_016_AC8_ALinkPressedInANewBrowserSignsInWithNoSecondMailAsync`.
-  - AC9 (the resend after a restriction) is not built, with item 18 (section 2).
+  - AC9, the resend once the restriction allows it: under D-226 item 3 below.
 - Item 3, the registration stream's first bytes (FE-VER-001, REG-SESS-003):
   `RegistrationWizardTests.FE_VER_001_TheStreamSpeaksAtOnceAndAfterThirtySecondsOfSilenceAsync`.
 - Item 4, parallel first requests: by design (BFF-CSRF-005a as D-224 amends it); no code.
@@ -45,6 +45,7 @@ marked "at base".
   - `OidcFlowTests.AUTH_OIDC_001_TheIssuerIsTheProviderAddressAndEachRouteIsUnderItAsync`;
   - `OidcFlowTests.AUTH_OIDC_001_AProviderRouteAtAnotherAddressIsNotTheProvidersAsync`
     (a theory over the six routes).
+- Item 13, a session restored in place: under D-226 item 5 below.
 - Item 14, an enrolment session's password and screen (FE-SEC-001, AUTH-RECOV-002,
   FE-PM-002):
   - `CredentialServiceTests.FE_SEC_001_APasswordThePolicyDoesNotAdmitIsRefusedOnEverySessionAsync`;
@@ -61,6 +62,8 @@ marked "at base".
   - the sample host: `FrontendTests.REG_IDENT_001_ABrowserWithNoSessionReadsTheSettingsAsync`.
 - Item 16, registration steps 7 to 10: held by the frontend (FE-REG-005); no code.
   Verified by reading: the server state of a registration session is unchanged.
+- Items 17 and 18, a link and a resend bound to the browser's sign-in: under D-226 item 3
+  below.
 - Item 19, a link-borne call's `{id}` (FE-VER-001 AC8), the loss-report cancel under
   D-226 item 2 below:
   - `RegistrationWizardTests.FE_VER_001_AC8_ARegistrationLinkPressedUnderTheNilIdentifierVerifiesAsync`;
@@ -79,8 +82,7 @@ marked "at base".
   CONV-DESIGN-008), against Stalwart 1.0.1 pinned by digest
   (`stalwartlabs/stalwart@sha256:b9da4df8b4efc06bc926dd6e990bdeb0ad7b9261a7c3893d74b0461a00bb389b`),
   configured without its setup wizard, through Testcontainers 4.15.0; INT-MAIL-010's calls
-  under D-226 item 1 below; INT-MAIL-004 criteria 1 to 3 at the server are not built
-  (section 2):
+  and INT-MAIL-004 at the server under D-226 item 1 below:
   - `JmapMailServerAgainstStalwartTests.INT_MAIL_001_AC3_EveryProvisioningOperationIsAJmapRequestTheServerAppliesAsync`;
   - `JmapMailServerAgainstStalwartTests.INT_MAIL_001_AC4_AReplayedPushConvergesOnTheAccountItCreatedAsync`;
   - `JmapMailServerAgainstStalwartTests.INT_MAIL_001_AC4_AnAccountNotCarryingTheIdentifierIsNeverAdoptedAsync`;
@@ -98,7 +100,7 @@ marked "at base".
 - The sample host (LIB-TEST-004), of the plan's row: an email-link sign-in from a new
   browser with no second mail; the settings, the enrolment document and whether a
   password is set (the three `FrontendTests` above). The sign-on and back to the
-  application's route and the restore in place wait with items 12 and 13 (section 2).
+  application's route wait with item 12 (Q12), the restore in place on Q13 (section 2).
 
 
 D-225, by item:
@@ -124,7 +126,13 @@ D-225, by item:
   - `INT_SMS_005_AC1_AReportOfDeliveryMarksNothingAndReleasesNothingAsync`;
   - `INT_SMS_005_AC2_ADeliveredSecondFactorTextReleasesOnlyItsResendCountAsync`;
   - `INT_SMS_005_AC2_AFailureReportReleasesEveryCountAsync`;
-  - `INT_SMS_005_AC3_ARepeatedReportChangesNothingAsync`;
+  - `INT_SMS_005_AC3_ARepeatedReportChangesNothingAsync`, asserting the answer as D-227
+    reads INT-SMS-005: true for a repeated report of a message handed over, false for a
+    reference never issued;
+  - `SendLedgerTests.INT_SMS_005_AC3_AReportOfAReleasedMessageIsAnsweredAndChangesNothingAsync`,
+    on PostgreSQL: the released message's row kept, marked released, until it would have
+    left the ledger, through the migration
+    `20261031062110_KeepAReleasedMessageUntilItsSendSettles`;
   - `INT_SMS_005_AC3_AReportNamingNoMessageChangesNothingAsync`;
   - `OutcomeRouteTests.INT_SMS_005_AC4_NoRouteOfTheLibraryTakesAGatewaysReport`;
   - `SendingGovernanceTests.AUTH_ABUSE_004_AC2_AFailureReportReleasesEveryCountOfATextInEveryLanguageAsync`;
@@ -199,7 +207,30 @@ D-226, by item:
   - a client receives the scopes it is registered with (AUTH-OIDC-001 AC5):
     `OidcFlowTests.AUTH_OIDC_001_AC5_AClientReceivesAScopeItIsRegisteredWithAsync` and
     `OidcFlowTests.AUTH_OIDC_001_AC5_AScopeTheClientIsNotRegisteredWithIsRefusedAsync`;
-    the four scopes as Q11 says;
+    the four keep their own rules as D-227 states them, with no code change:
+    `OidcFlowTests.AUTH_OIDC_001_AC5_TheFourScopesKeepTheirOwnRulesAsync` (five cases);
+  - `IAppPasswords.ListAsync` no longer takes the session it never read; the endpoint and
+    the fakes with it (`AppPasswordsTests`);
+  - INT-MAIL-004 at the pinned server (criterion 4), configured as the item states against
+    the provider of a test host listening on a real port:
+    - `MailServerTokensAgainstStalwartTests.INT_MAIL_004_AC1_TheServerAcceptsATokenOfTheClientItAcceptsCarryingTheMailScopeAsync`
+      (HTTP 200 on `/jmap/session`; the server read the key set and nothing that
+      introspects);
+    - `MailServerTokensAgainstStalwartTests.INT_MAIL_004_AC2_TheDocumentTheServerReadsAdvertisesNoIntrospectionAsync`
+      (read over the real port at the issuer);
+    - `MailServerTokensAgainstStalwartTests.INT_MAIL_004_AC3_ATokenIssuedToAnotherClientIsRefusedByTheServerAsync`
+      (HTTP 401; the server's log: the audience matches neither a resource identifier of
+      its own nor `acceptedAudiences`);
+    - `MailServerTokensAgainstStalwartTests.INT_MAIL_004_AC4_TheCriteriaAreDecidedByTheReleaseConfiguredAsTheItemStates`
+      (the release, the digest, the directory as the server reads it back, and the server
+      authenticating by it);
+    - the test host: a TLS listener on every address of the machine, on a port it is
+      given, handing each request to the deployment, whose provider address is that host
+      and port; the server trusts the authority of the listener's certificate alone and
+      finds the provider's host at the containers' host. Stalwart 1.0 makes its roles at
+      its first start and reads the directory it authenticates by as it starts, so the
+      directory is loaded with the management key after the first start and the server
+      is started again over the same data.
   - AUTH-OIDC-006 AC3, a verifier configured as the mail server is:
     `ProviderConformanceTests.AUTH_OIDC_006_AC3_TheAdapterRefusesATokenForAnotherAudienceAsync`,
     at base.
@@ -210,30 +241,85 @@ D-226, by item:
   - the column, not null and unique, and the migration
     `20261031044442_FindALossReportByItsCancelToken`, which gives each row present a
     random value: `ModelTests` and `schema.txt`, and the migrations run twice in the
-    pipeline. No test reads a report back by its fingerprint from the real store.
+    pipeline;
+  - on PostgreSQL, through that migration:
+    `LossReportStoreTests.FE_VER_001_AC8_ALinksTokenFindsItsReportByItsFingerprintAndCancelsItAsync`.
+- Item 3, a challenge's browser, with D-224 items 17 and 18 and item 2's resend clause
+  (AUTH-FACT-003 AC4, AUTH-FACT-016 AC9, FE-VER-001 AC8), the migration
+  `20261031065905_BindASignInToItsBrowser`:
+  - `AuthenticationServiceTests.AUTH_FACT_003_AC4_ALinkIsIssuedOnTheAskingBrowsersLatestSignInAsync`;
+  - `AuthenticationServiceTests.AUTH_FACT_003_AC4_ASignInAFactorAnsweredIsNotOneALinkIsIssuedOnAsync`;
+  - `AuthenticationServiceTests.AUTH_FACT_003_AC4_ALinkAskedWithoutASignInOpensOneBoundToTheBrowserAsync`;
+  - `AuthenticationServiceTests.AUTH_FACT_003_AC4_TheSignInALinkIsIssuedOnLivesAsLongAsTheLinkAsync`;
+  - `AuthenticationServiceTests.AUTH_FACT_016_AC9_ARefusedCheckCodeIsSentByAResendOnceTheRestrictionAllowsItAsync`;
+  - `AuthenticationServiceTests.AUTH_FACT_016_AC9_AResendIsRefusedWhereNoSignInIsHeldAtTheCheckAsync`;
+  - `AuthenticationServiceTests.AUTH_FACT_016_AC9_AResendWaitsOutTheDelayAsync`;
+  - `SignInFlowTests.FE_VER_001_AC8_ASignInLinksPressCarriesNoChallengeIdAsync`;
+  - `SignInFlowTests.AUTH_FACT_016_AC9_AResendSendsANewCodeToTheBrowserTheSignInIsBoundToAsync`;
+  - `ChallengeStoreTests.AUTH_FACT_003_AC4_ABrowsersLatestUnansweredSignInIsFoundByItsBindingAsync`;
+  - `signin_links.browser` is kept: by construction it is the binding of the link's
+    challenge.
+- Item 4 with D-224 item 12, back to the application after sign-in: not built (Q12,
+  section 2).
+- Item 5 with D-224 item 13, a session restored in place (AUTH-SESS-005, BFF-STEP-001,
+  BFF-ORDER-001 stage 5), `signin_challenges.identifier` nullable through the migration
+  `20261031072820_OpenARestoreWithoutAnIdentifier`, a restore challenge carrying none:
+  - `AuthenticationServiceTests.AUTH_SESS_005_AC4_ARestoreBeginsWithTheFactorsTheAccountHoldsAndThePolicyPermitsAsync`;
+  - `AuthenticationServiceTests.AUTH_SESS_005_AC4_ThePasswordRestoresTheLapsedSessionInPlaceAsync`;
+  - `AuthenticationServiceTests.AUTH_SESS_005_AC4_APasskeyTheBeginNamedRestoresTheSessionAsync`;
+  - `AuthenticationServiceTests.AUTH_SESS_005_AC2a_ARestoreTakesOnlyAFactorTheBeginNamedAsync`;
+  - `AuthenticationServiceTests.AUTH_SESS_005_AC4_AChallengeOfAnotherRestoreRestoresNothingAsync`;
+  - `AuthenticationServiceTests.AUTH_SESS_005_AC4_ASessionTheRestoreDoesNotAdmitAsksForAFullAuthenticationAsync`;
+  - `AuthenticationServiceTests.AUTH_SESS_005_AC4_ARestoreWaitsOutTheDelayAsync`;
+  - `SessionServiceTests.AUTH_SESS_005_AC4_ARestoreOnAnApplicationRestoresTheRecordAndEverySessionOnItAsync`;
+  - `RestoreInPlaceTests.BFF_STEP_001_AC4_AnIdleSessionIsRestoredInPlaceAndTheRequestRetriedAsync`;
+  - `RestoreInPlaceTests.BFF_STEP_001_AC4_NoOtherRouteAcceptsTheCookieTheRestoreAdmitsAsync`;
+  - `RestoreInPlaceTests.BFF_ORDER_001_ACookieTheRestoreNoLongerAdmitsIsClearedAsync`;
+  - `RestoreInPlaceTests.AUTH_SESS_005_AC3a_ACustomersIdleExpiryIsRestoredByNoRouteAsync`;
+  - `ChallengeStoreTests.AUTH_SESS_005_AC4_ARestoreOpensAChallengeForNoIdentifierAsync`;
+  - `SessionStoreTests.AUTH_SESS_005_AC4_WhatStandsOnARecordIsEverySessionOfItNotEndedAsync`;
+  - the synchronizer-token stage takes the pre-authentication session's token where no
+    live session resolved, so the restore routes are carried by it while the expired
+    session's own token still answers 401, not 403, after an expiry.
+
+Public surface changed (`PublicAPI.Unshipped.txt` of `Janus.Core`, nothing released):
+`IAuthentication.BeginAsync` gains `browser`; `IAuthentication.LandAsync` drops
+`challenge`; `IAuthentication.ResendDeviceCodeAsync` is added;
+`IAppPasswords.ListAsync` drops `session`. Nothing of item 5 is public.
+
+Tests changed in what they assert:
+
+- `ChallengeStoreTests.OPS_SEC_003_AnIdentifierIsHeldOnlyBesideItsVersionAsync`: a null
+  identifier beside a version is now written, not refused, since a restore opens a
+  challenge for no identifier (D-226 item 5); a hash without its version, and one of
+  another length, are still refused.
+- `AuthenticationServiceTests.CONV_LOG_005_AC1_ALinkThatDoesNotLandIsRecordedAgainstItsAccountAsync`
+  and `AuthenticationServiceTests.AUTH_ABUSE_004_AC20_ASignInLinkWhosePressIsRefusedReleasesNothingAsync`
+  (its `locked` false case): the link lands on a sign-in completed since, a link now
+  naming its sign-in (D-226 item 3).
+- `RequestLoggingTests.CONV_LOG_005_AC1_EveryRefusedWayInIsRecordedWithTheLogSilentAsync`
+  presses a token nothing issued: a press landing on no sign-in in the bound browser is
+  not reachable over HTTP, the pre-authentication cookie rotating at completion.
+- `BrowserProfileTests` construct the synchronizer-token stage with the request's
+  session, which it now reads.
 
 Verified by a run on this machine, besides the fast checks: the three
 `RegistrationSessionStoreTests` above (integration, run once while written); the
-`JmapMailServerAgainstStalwartTests` (run while written, as the round's instruction
-allows); the sample host's solution packed, restored, built and checked by
-`dotnet format --verify-no-changes`, its tests not run. Every other test of the round
-runs first in the pipeline.
+`JmapMailServerAgainstStalwartTests` and `MailServerTokensAgainstStalwartTests` (20
+passed, run while written, as the round's instruction allows); the PostgreSQL tests of
+the challenge, session, send-ledger and loss-report stores, the schema, the model and
+the migrations (103 passed, on the last code commit); the sample host's solution
+packed, restored, built and checked by `dotnet format --verify-no-changes`, its tests
+not run. Every other test of the round runs first in the pipeline.
 
 ## 2. Items not implemented
 
-Not built in this turn, for want of time; nothing of them is in the code:
+Each waits on a question; nothing of them is in the code:
 
-- D-226 item 3, a challenge's browser, with D-224 items 17 and 18 and item 2's resend
-  clause (AUTH-FACT-016 AC9).
 - D-226 item 4 with D-224 item 12, back to the application after sign-in
-  (AUTH-SESS-012 AC10, `continueTo`, `GET /oidc/authorize/continue`).
-- D-226 item 5 with D-224 item 13, restoring a session in place
-  (`POST /auth/restore/begin`, `POST /auth/restore`, BFF-STEP-001, BFF-ORDER-001
-  stage 5).
-- INT-MAIL-004 criteria 1 to 3 against the real server (criterion 4): Stalwart
-  configured as INT-MAIL-004 states against the provider of a test host listening on a
-  real port.
-- The sample host's sign-on and back and restore in place, with items 12 and 13.
+  (AUTH-SESS-012 AC10, `continueTo`, `GET /oidc/authorize/continue`): Q12.
+- The sample host's sign-on and back to the application's route: Q12.
+- The sample host's restore of a staff session in place: Q13.
 
 ## 3. Resolved by rule
 
@@ -275,6 +361,21 @@ Not built in this turn, for want of time; nothing of them is in the code:
     answers.
   - Rule: the harness declares its addresses as `tests/Janus.Hosting.Tests/Deployment.cs`
     does.
+- `IdentityEndpointsTests.LIB_API_005_AC3_EveryEndpointResolvesExactlyOneServiceOfTheContractAsync`
+  (a gate):
+  - What was out of step: its list of the routes no operation maps lacked
+    `POST /auth/restore/begin` and `POST /auth/restore`.
+  - Governing item: `07`, the endpoints that are not mappings of an operation name both
+    (D-224).
+  - Rule: the gate lists both routes beside the other routes that are not operations.
+- `tests/Janus.Hosting.Tests/Browser.cs` (test infrastructure):
+  - What was out of step: the browser could address no host but the authentication
+    application's, which INT-MAIL-004 AC4's provider on a real port needs, its address
+    carrying the port.
+  - Governing item: INT-MAIL-004 AC4 (D-224), the provider of a test host listening on a
+    real port.
+  - Rule: the browser takes the host it sends to, defaulting to the authentication
+    application's, as the machine client does.
 - `AlertCondition` (`src/Janus.Core`):
   - What was out of step: once D-225 removed two conditions, the members' values no
     longer ran in the order of `10`'s table.
@@ -418,7 +519,7 @@ that reports its expiry (item 13).
   D-224 amends the stage 8 row and not stage 5's.
 - Parks: item 13 and the sample host's restore in place.
 
-**Q10 (Tier 2).** What `ISendOutcomes.ReportAsync` answers to a repeated failure report
+**Q10 (Tier 2), answered by D-227 item 1 (reading A).** What `ISendOutcomes.ReportAsync` answers to a repeated failure report
 (INT-SMS-005, D-225 item 2).
 
 - What the spec says: it answers true where the reference names a message the library
@@ -431,7 +532,7 @@ that reports its expiry (item 13).
 - Reading B: false, as built. Smallest fix: a sentence in INT-SMS-005.
 - Parks: only the answer's value.
 
-**Q11 (Tier 2).** Whether `invalid_scope` covers the four scopes (AUTH-OIDC-001 AC5,
+**Q11 (Tier 2), answered by D-227 item 2 (reading A, as built).** Whether `invalid_scope` covers the four scopes (AUTH-OIDC-001 AC5,
 D-226 item 1).
 
 - What the spec says: besides `openid`, `email`, `profile` and `offline_access`, a client
@@ -447,8 +548,59 @@ D-226 item 1).
 - Reading B: it covers every scope. Smallest fix: the four judged by the same check.
 - Parks: only the four's refusal.
 
+**Q12 (Tier 2).** What the continuation answers with no authorization pending where
+`redirect.defaultclient` is empty (D-226 item 4, D-224 item 12).
+
+- What the code needs: the answer of `GET /oidc/authorize/continue` when no
+  authorization is pending.
+- What the spec says: `02` AUTH-SESS-012 and `09` section 9: a 302 to the origin of the
+  registered address of `redirect.defaultclient`. `10` section 4 gives
+  `redirect.defaultclient` the default empty, under which no fallback destination is
+  carried and the frontend chooses its own.
+- No chapter says what the continuation, which renders no page, answers where it is
+  empty.
+- Reading A: a 302 to the authentication application's root `/`, as API-REDIR-001
+  replaces a destination. Smallest fix: one sentence in AUTH-SESS-012.
+- Reading B: a 302 to the sign-in screen (`AuthenticationAddresses.SignIn`). Smallest
+  fix: one sentence in AUTH-SESS-012.
+- Reading C: an API-CONV-002 error body, under a code `10` would name. Smallest fix: the
+  code's row and a sentence.
+- Reading D: a deployment registering browser applications without
+  `redirect.defaultclient` does not start. Smallest fix: a startup check and its `10`
+  row.
+- Parks: D-226 item 4 with D-224 item 12, and the sample host's sign-on and back.
+
+**Q13 (Tier 2).** How the sample host's test restores a staff session in place through
+`Janus.Testing` (LIB-TEST-003, LIB-TEST-004).
+
+- What the code needs: the plan's row has the sample host restore a staff session in
+  place after an idle expiry, through `POST /auth/restore/begin` and `POST /auth/restore`
+  with the staff member's passkey, built from the packages alone.
+- What the spec says: LIB-TEST-003 gives each `TestSession` a step-up with the person's
+  passkey or password, and nothing that restores; `TestPeople` makes a staff member's
+  software passkey and keeps it inside the `TestSession`, which hands it to no test.
+- What the code holds: the sample host's test reaches both routes with the staff
+  member's `TestSession`, but cannot answer the restore's assertion. A change to
+  `Janus.Testing` is never Tier 1 (AGENTS section 3).
+- Reading A: `TestSession.RestoreAsync(CancellationToken)`, the two restore calls with
+  the person's passkey or password, as `StepUpAsync` makes the step-up's. Smallest fix:
+  the member in LIB-TEST-003's list.
+- Reading B: `TestPeople` hands the staff member's passkey to the test beside the
+  session. Smallest fix: a member in LIB-TEST-003's list.
+- Reading C: the sample host's test invites and enrols a staff member of its own through
+  the public routes with a `SoftwarePasskey` it holds, repeating `TestPeople`'s steps,
+  and restores with it. Smallest fix: none in the documents.
+- Parks: the sample host's restore in place only.
+
 ## 5. Gate result
 
+- This turn, before the push: every unit and contract test passes (5139 in eleven
+  projects); the commit-message, changelog, acceptance-test-names and forbidden-marker
+  gates pass over the commits since `78a9c0c3`; the full-history secret scan finds
+  nothing. The first run of the tests found the model snapshot written back with a block
+  namespace by the restore's migration (`CONV_LAYOUT_003_AC1_EveryNamespaceMatchesItsFolder`);
+  b929d43c restores it file-scoped, and the snapshot differs from the one before the
+  restore by the restore's change alone.
 - Fast checks on every commit: green. These are the build with warnings as errors, the
   analysers, `dotnet format --verify-no-changes`, and the unit tests of the projects
   changed.
