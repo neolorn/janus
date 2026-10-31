@@ -460,6 +460,19 @@ D-226 item 1).
   `JmapMailServerAgainstStalwartTests` against the pinned server, INT-MAIL-010's two
   among them (16 passed). Every other test of the round's integration suites runs first
   in the pipeline.
+- Pipeline on 968502cf (runs 41171816838 and 41171813171): red in the contract and
+  truth-table jobs; every other job green.
+  - Contract: the contract lists still held what D-225 retired (thirteen configuration
+    keys, the three codes, the step-up action `alerting:destinations`, the message kind
+    `alert`, eight bootstrap and configure arguments), `IAlertHandler` was not among
+    the contracts a host implements, and `integration.callback.rejected` had lost its
+    remediation sentence. cf892f8d and 388da180; every key, code and name dropped is
+    retired in `10`, and the contract tests of Core, Hosting and Cli pass on this
+    machine.
+  - Truth-table: the reserved principals of IDN-PRIN-001 and a remark of
+    `IAccessAlerts` changed with no change to the table. d2902b23 adds a job case that
+    restates the decision unchanged (CONV-VCS-004, D-206); the jobs' theory passes on
+    this machine (15 cases).
 - Pipeline on 6f21aa88: red in the contract, truth-table and integration jobs.
   - Contract: `GET /settings` was missing from the gate's list; 060a18a4 (section 3).
   - Truth-table and integration: 4a388b52 required the provider address to build the
