@@ -25,8 +25,10 @@ namespace HostSample.Tests;
 /// <summary>
 /// A deployment of the kite workshop as its tests stand one up: an empty database
 /// prepared by the library's own commands, the workshop's tables beside the library's,
-/// the application started on a web server in memory with mail and SMS taken in memory,
-/// and its people signed in through the library's own endpoints: the first
+/// the application started on a web server in memory with the messages and alerts it
+/// owes taken in memory, in place of the workshop's post room and duty board, so the
+/// tests read the codes and links the messages carry, and its people signed in through
+/// the library's own endpoints: the first
 /// administrator, who publishes the notice and the terms, opens the organization that
 /// runs the workshop and gives it its first grant, and a technician of that
 /// organization, who opens it.
@@ -326,50 +328,13 @@ public sealed class WorkshopHost : IAsyncLifetime
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {
-        await _container.StartAsync(CancellationToken.None);
+        _connectionString = await DatabaseAsync(_container);
 
-        // OPS-DB-001: the database is created under ICU before the first migration runs.
-        await using (var server = new NpgsqlConnection(_container.GetConnectionString()))
-        {
-            await server.OpenAsync(CancellationToken.None);
-
-            await using NpgsqlCommand created = server.CreateCommand();
-
-            created.CommandText = "CREATE DATABASE workshop TEMPLATE template0 "
-                + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'";
-
-            _ = await created.ExecuteNonQueryAsync(CancellationToken.None);
-        }
-
-        _connectionString = new NpgsqlConnectionStringBuilder(_container.GetConnectionString()) { Database = "workshop" }
-            .ConnectionString;
-
-        // OPS-MIG-003a: the scheduled maintenance runs under the maintenance role.
-        var secrets = new FixedSecretSource(_randomness)
-        {
-            MaintenanceCredential = Encoding.UTF8.GetBytes(
-                new NpgsqlConnectionStringBuilder(_connectionString) { Options = "-c role=identity_maintenance" }.ConnectionString),
-        };
+        FixedSecretSource secrets = Secrets(_connectionString, _randomness);
 
         _secrets = secrets;
 
-        TestDeployment deployment = await TestDeployment.PrepareAsync(
-            WorkshopApplication.Address(Origin),
-            new SignOnClient(WorkshopApplication.Client),
-            secrets,
-            _connectionString,
-            _connectionString,
-            Bootstrapped(),
-            CancellationToken.None);
-
-        await using (DbConnection connection = await ConnectAsync(CancellationToken.None))
-        {
-            await using DbCommand created = connection.CreateCommand();
-
-            created.CommandText = WorkshopSchema.Creation;
-
-            _ = await created.ExecuteNonQueryAsync(CancellationToken.None);
-        }
+        TestDeployment deployment = await PreparedAsync(_connectionString, secrets);
 
         _application = Built(_server, WorkshopApplication.Client, secrets);
 
@@ -460,28 +425,124 @@ public sealed class WorkshopHost : IAsyncLifetime
         _randomness.Dispose();
     }
 
-    // The application as the workshop composes it, as the client of the provider it is,
-    // with what this deployment supplies of its own: the web server, the clock, the
-    // secret source, the transports and the stand-ins for the optional environment seams
-    // (LIB-TEST-003). Its back channel reaches the authentication application, this
-    // deployment's first.
-    private WebApplication Built(ServerInMemory serving, string client, FixedSecretSource secrets)
+    /// <summary>
+    /// Starts a deployment's database: an empty one, created under ICU, as OPS-DB-001
+    /// asks before the first migration runs.
+    /// </summary>
+    /// <param name="container">The database server.</param>
+    /// <returns>How the deployment reaches its database.</returns>
+    internal static async Task<string> DatabaseAsync(PostgreSqlContainer container)
+    {
+        await container.StartAsync(CancellationToken.None);
+
+        await using (var server = new NpgsqlConnection(container.GetConnectionString()))
+        {
+            await server.OpenAsync(CancellationToken.None);
+
+            await using NpgsqlCommand created = server.CreateCommand();
+
+            created.CommandText = "CREATE DATABASE workshop TEMPLATE template0 "
+                + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'";
+
+            _ = await created.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        return new NpgsqlConnectionStringBuilder(container.GetConnectionString()) { Database = "workshop" }
+            .ConnectionString;
+    }
+
+    /// <summary>
+    /// The deployment's secret source, whose maintenance credential runs the scheduled
+    /// maintenance under the maintenance role (OPS-MIG-003a).
+    /// </summary>
+    /// <param name="connectionString">How the deployment reaches its database.</param>
+    /// <param name="randomness">Where the keys are drawn from.</param>
+    /// <returns>The secret source.</returns>
+    internal static FixedSecretSource Secrets(string connectionString, RandomNumberGenerator randomness) =>
+        new(randomness)
+        {
+            MaintenanceCredential = Encoding.UTF8.GetBytes(
+                new NpgsqlConnectionStringBuilder(connectionString) { Options = "-c role=identity_maintenance" }.ConnectionString),
+        };
+
+    /// <summary>
+    /// Prepares the deployment's database by the library's own commands, then creates the
+    /// workshop's tables beside the library's.
+    /// </summary>
+    /// <param name="connectionString">How the deployment reaches its database.</param>
+    /// <param name="secrets">The deployment's secret source.</param>
+    /// <returns>The prepared deployment.</returns>
+    internal static async Task<TestDeployment> PreparedAsync(string connectionString, FixedSecretSource secrets)
+    {
+        TestDeployment deployment = await TestDeployment.PrepareAsync(
+            WorkshopApplication.Address(Origin),
+            new SignOnClient(WorkshopApplication.Client),
+            secrets,
+            connectionString,
+            connectionString,
+            Bootstrapped(),
+            CancellationToken.None);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+
+        await connection.OpenAsync(CancellationToken.None);
+
+        await using NpgsqlCommand created = connection.CreateCommand();
+
+        created.CommandText = WorkshopSchema.Creation;
+
+        _ = await created.ExecuteNonQueryAsync(CancellationToken.None);
+
+        return deployment;
+    }
+
+    /// <summary>
+    /// The application as the workshop composes it, as a client of the provider, with what
+    /// a deployment supplies of its own: the web server, the clock, the secret source and
+    /// the stand-ins for the optional environment seams (LIB-TEST-003). Its back channel
+    /// reaches the authentication application, the deployment's first.
+    /// </summary>
+    /// <param name="serving">The web server it is served on.</param>
+    /// <param name="channel">What reaches the authentication application.</param>
+    /// <param name="clock">The deployment's clock.</param>
+    /// <param name="secrets">The deployment's secret source.</param>
+    /// <param name="client">Which client of the provider it is.</param>
+    /// <param name="connectionString">How the deployment reaches its database.</param>
+    /// <returns>The application's builder, composed and not yet built.</returns>
+    internal static WebApplicationBuilder Composed(
+        ServerInMemory serving,
+        Func<HttpMessageHandler> channel,
+        TimeProvider clock,
+        FixedSecretSource secrets,
+        string client,
+        string connectionString)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
 
         _ = builder.Services.AddSingleton<IServer>(serving);
-        _ = builder.Services.AddSingleton<TimeProvider>(Clock);
+        _ = builder.Services.AddSingleton(clock);
         _ = builder.Services.AddSingleton<ISecretSource>(secrets);
+        _ = builder.Services.AddSingleton<ILocationSource>(new EmptyLocationSource(clock));
+        _ = builder.Services.AddSingleton<IDatacenterRangeSource>(new EmptyDatacenterRangeSource(clock));
+
+        WorkshopApplication.Register(builder.Services, Origin, client, connectionString);
+
+        _ = builder.Services.AddHttpClient(SignOnChannel).ConfigurePrimaryHttpMessageHandler(channel);
+
+        return builder;
+    }
+
+    // The application as the workshop composes it, as the client of the provider it is,
+    // its post room and duty board given way to the testing package's handlers, which
+    // take what the deployment owes in memory, as a host's tests do (LIB-TEST-003).
+    private WebApplication Built(ServerInMemory serving, string client, FixedSecretSource secrets)
+    {
+        WebApplicationBuilder builder = Composed(serving, _server.Channel, Clock, secrets, client, _connectionString);
+
         _ = builder.Services.AddSingleton<INotificationHandler>(Notifications);
         _ = builder.Services.AddSingleton<IAlertHandler>(Alerts);
-        _ = builder.Services.AddSingleton<ILocationSource>(new EmptyLocationSource(Clock));
-        _ = builder.Services.AddSingleton<IDatacenterRangeSource>(new EmptyDatacenterRangeSource(Clock));
-
-        WorkshopApplication.Register(builder.Services, Origin, client, _connectionString);
-
-        _ = builder.Services.AddHttpClient(SignOnChannel).ConfigurePrimaryHttpMessageHandler(_server.Channel);
 
         WebApplication application = builder.Build();
 
