@@ -1191,7 +1191,7 @@ in its own memory, so a deployment of several instances sets both keys to its sh
 the limit it wants. A source or /48 already over its limit is refused without reading
 configuration or any store, and without a log line for each refused request.
 
-*Source: D-052, D-053, D-162, D-166, D-188, D-189, D-202, D-209, D-210*
+*Source: D-052, D-053, D-162, D-166, D-188, D-189, D-202, D-209, D-210, D-230*
 
 **Routing before the profile (D-210).** Stage 8 holds whatever the order of the host's
 routing (BFF-HOST-002). Stage 5 reads the endpoint before the request goes on, so where
@@ -1201,6 +1201,13 @@ before the profile, as the sample host does (`07` LIB-TEST-004), for an enrolmen
 session to reach the library's enrolment routes. The refusal of a request the framework
 cannot bind is made on the way out, after routing has run, so it is answered as
 API-CONV-002 gives, whatever the order.
+
+**The framework's own authentication (D-230).** ASP.NET Core's `WebApplication` adds an
+authentication middleware ahead of the host's middleware wherever the host calls none of
+its own. The provider, and every handler the library gives the framework's
+authentication, acts only on a request its profile has passed inside the branch the host
+mounted the library in, and passes any other request on, so no middleware of the
+framework's answers a library route ahead of its stages.
 
 **Throttling is two stages, not one.** Source-based limiting must precede session
 lookup to protect against resource exhaustion; account-based limiting cannot, because
@@ -1229,6 +1236,10 @@ which would have let an unauthenticated flood reach session resolution.
 6. Addresses within one IPv6 /64 are counted as one source, and an IPv4-mapped address
    as its IPv4 address.
 7. Requests from different /64s of one /48 are refused past `abuse.source.sitelimit`.
+8. In a host built on `WebApplication` that calls no `UseAuthentication` of its own,
+   each of the provider's routes is answered only after its profile's stages: a request
+   a stage refuses reaches no provider endpoint, and an authorization request that finds
+   no session is kept for its browser (AUTH-SESS-012, D-230).
 
 ---
 

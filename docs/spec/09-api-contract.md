@@ -466,26 +466,33 @@ lives `link.magic.lifetime`.
 { "identifier": "..." }
 ```
 
-**202** · **429**: `auth.throttled` with `retryAt`, or, where a restriction refuses
-the send, `auth.restriction.exceeded` with `retryAt`, identical for a registered and an
+**202**: `{ "challengeId": "..." }` where the request opened the sign-in the link is
+issued on, `{}` where the link is issued on one the browser holds (D-230) · **429**:
+`auth.throttled` with `retryAt`, or, where a restriction refuses the send,
+`auth.restriction.exceeded` with `retryAt`, identical for a registered and an
 unregistered identifier (AUTH-ABUSE-002, AUTH-ABUSE-004)
 
 *Source: D-146; AUTH-FACT-002, AUTH-FACT-003, AUTH-ABUSE-003, AUTH-ABUSE-004, D-162, D-166,
-D-183, D-224, D-226*
+D-183, D-224, D-226, D-230*
 
 The link completes **only in the browser that requested it and only on a press**
 (REG-SESS-003). It is issued on a challenge (D-226): the browser's latest live challenge
 opened with that identifier on which no factor has been accepted, or, where the browser
 holds none, one opened for the identifier as `/auth/begin` opens one, bound to the
-browser; the challenge lives at least as long as its link. The landing route
-(API-LAND-001) calls `POST /auth/factor` with `factor: "emailLink"` or `"phoneLink"` and
-the link token, and the server completes the link's challenge only where the request
-carries the pre-authentication cookie that challenge is bound to. The call carries no
-`challengeId`: the token names its pending link and the challenge it belongs to, and a
-`challengeId` sent beside it is not read (D-224). Opened anywhere else, or where the
-challenge is bound to none, the same call returns the code to type where the sign-in
-began, presented at `/auth/factor` on that challenge, and signs nothing in. That code is
-an authentication code, not a verification code: it lives as long as its link
+browser; the challenge lives at least as long as its link. Where the request opens the
+challenge, its answer carries the `challengeId`, so the code to type is presented on it;
+whether an answer carries one turns on the browser's challenges alone, the request
+opening one wherever the browser holds none, for an identifier that resolves to nothing,
+an address a domain lock refuses, a number reported as `risk` and a channel the policy
+has not enabled alike (AUTH-ABUSE-002, D-230). The landing route (API-LAND-001) calls
+`POST /auth/factor` with `factor: "emailLink"` or `"phoneLink"` and the link token, and
+the server completes the link's challenge only where the request carries the
+pre-authentication cookie that challenge is bound to. The call carries no `challengeId`:
+the token names its pending link and the challenge it belongs to, and a `challengeId`
+sent beside it is not read (D-224). Opened anywhere else, or where the challenge is
+bound to none, the same call returns the code to type where the sign-in began, presented
+at `/auth/factor` on that challenge, and signs nothing in. That code is an
+authentication code, not a verification code: it lives as long as its link
 (`link.magic.lifetime`) and is capped by `code.signin.attempts` wrong tries, after which
 it is refused `auth.code.expired`, a correct one included (AUTH-FACT-004). A session
 established by a link alone records AAL1 and a link is never a second step

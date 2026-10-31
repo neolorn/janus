@@ -19313,6 +19313,73 @@ second time, on the same deployment, as an application at an origin of its own.
 
 ---
 
+## D-230 — Round H3 question 15 and review: the provider inside its branch, a link's own sign-in, and public values
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-225, D-226, D-229
+
+**TL;DR.** The provider, and every handler the library gives the framework's
+authentication, acts only on a request its profile has passed inside the library's
+branch, so the authentication middleware ASP.NET Core adds by itself answers no library
+route ahead of its stages (1). Where `POST /auth/link` opens the sign-in its link is
+issued on, its answer carries that sign-in's `challengeId` (2). Until the first final
+release the values of a public enumeration carry no promise, so the round's
+renumbering stands (3).
+
+1. **The provider inside its branch (question 15).** BFF-ORDER-001 makes the order of
+   the stages part of the public contract, and its AC1 lets no host insert middleware
+   between them. ASP.NET Core's `WebApplication` adds the authentication middleware
+   itself, right after routing and ahead of every middleware the host adds, wherever
+   the host has not called `UseAuthentication` on the application; the library's own
+   call, inside the branch the host mounts it in, does not count. The provider answers
+   its routes from that middleware, so in such a host `/oidc/authorize`, `/oidc/par`
+   and `/oidc/token` were answered before any stage of their profile ran: no
+   pre-authentication session for the first, no source-based rate limiting for any.
+   The provider, and every handler the library gives the framework's authentication,
+   now acts only on a request its profile has passed inside that branch, and passes any
+   other request on untouched, so the order holds whatever the host's pipeline holds.
+
+   *Rejected:* requiring the host to call `UseAuthentication` (a host that omits it is
+   open and nothing tells it, which P-003's secure-by-default test forbids); the
+   library's mount calling it on the host's own pipeline (a change made where the host
+   did not choose, LIB-HOST-003); provider routes relative to the branch (every
+   application that mounts the library would answer them, which the absolute addresses
+   prevent).
+
+2. **A link's own sign-in (review).** D-226 issues a sign-in link on the browser's
+   latest live sign-in opened with the identifier, or on one the request opens as
+   `/auth/begin` opens one. In the second case the sign-in's handle reached no one, so
+   the code shown where the link is opened could be typed nowhere, which AUTH-FACT-003
+   AC4 forbids. Where the request opens the sign-in, its answer carries the
+   `challengeId`, as `/auth/begin`'s does; where the link is issued on a sign-in the
+   browser holds, the answer carries none, the frontend holding it already.
+   `/auth/begin` opens a sign-in for every identifier, one that resolves to nothing
+   included, so whether an answer carries a `challengeId` turns on the browser's
+   sign-ins alone, provided the request opens one wherever the browser holds none: for
+   an identifier that resolves to nothing, an address a domain lock refuses, a number
+   reported as `risk` and a channel the policy has not enabled alike (AUTH-ABUSE-002).
+
+   *Rejected:* `POST /auth/factor` taking the code without a `challengeId` and
+   finding the sign-in by the browser's cookie (a second way to name a sign-in, beside
+   the handle every other step uses); a new handle drawn for a held sign-in so that
+   every answer carries one (the frontend's handle would change under it, and the store
+   keeps fingerprints only).
+
+3. **Public values before the first final release (review).** D-225 retired members of
+   three public enumerations, and the round renumbered the members left in `10`'s
+   order. D-166 entry 291 placed `BreakGlassGenerated` at the next free value when it
+   was added, and set no rule for a later removal. No release has been cut, and the
+   library stores these as their vocabulary strings or not at all, so no stored value
+   moves. Until the first final release a value lives in `PublicAPI.Unshipped.txt`
+   and carries no promise; from it, the shipped file holds it and the compatibility
+   gate keeps it, as it keeps the rest of the surface. A change of the public surface
+   is never Tier 1, so the renumbering is recorded as a question this review answered.
+
+   *Rejected:* restoring the earlier values with gaps (a promise no release has made).
+
+**Propagated to:** `02` AUTH-FACT-003; `09` `POST /auth/link`; `17` BFF-ORDER-001.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -19552,6 +19619,7 @@ second time, on the same deployment, as an application at an origin of its own.
 | Round H3 questions 10 and 11: a repeated failure report, and the four scopes | D-227 |
 | Round H3 questions 12 and 13: the continuation with nowhere to go, and a test's restore | D-228 |
 | Round H3 question 14: the sign-on at the authentication application's origin | D-229 |
+| Round H3 question 15 and review: the provider inside its branch, a link's own sign-in, and public values | D-230 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -483,7 +483,7 @@ the authentication application; the cancel link of a loss notification, `loss-re
 token travels in the fragment, so it never reaches a server in an address. Every link
 acts only on a press, never on load, so a mail scanner's prefetch changes nothing.
 
-*Source: D-009, D-146, D-166*
+*Source: D-009, D-146, D-166, D-230*
 
 Password plus email OTP, where email is also the recovery channel, is single-factor
 wearing an MFA badge: one mailbox compromise yields both the reset link and the
@@ -501,6 +501,10 @@ second step (AUTH-FACT-002, `phoneCode`).
    code typed where the sign-in began completes it.
 5. `POST /auth/link` refuses a channel whose link factor the policy has not enabled,
    with the response of AUTH-ABUSE-003.
+6. A browser holding no sign-in opened with the identifier is answered with the
+   `challengeId` of the one its request opened, and the code shown where the link is
+   opened, typed on it, completes it; whether an answer carries a `challengeId` turns
+   on the browser's sign-ins alone, never on the account (AUTH-ABUSE-002, D-230).
 
 ---
 
