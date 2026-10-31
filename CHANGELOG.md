@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A `GET /settings` whose governing policy cannot be read names that policy in its
+  fault: the account's, the invitation's organization's, or `policy.default`, rather
+  than `policy.default` whichever it was.
 - Raised alerts are handed to the host's `IAlertHandler`, which a deployment must
   register: one that registers none does not start (`model.startup.declarationmissing`,
   `details.key` `alertHandler`). `alert-dispatch` hands each alert over once its

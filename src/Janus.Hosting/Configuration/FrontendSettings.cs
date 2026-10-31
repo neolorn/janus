@@ -72,10 +72,11 @@ internal sealed class FrontendSettings(
         return default!;
     }
 
-    private static TValue Readable<TValue>(ConfigurationKey key, TValue value, Error? failure) =>
+    // The fault names what could not be read: a key, or the policy that governs.
+    private static TValue Readable<TValue>(string unreadable, TValue value, Error? failure) =>
         failure is null
             ? value
-            : throw new InvalidOperationException("The key " + key.ToString() + " is unreadable: " + failure.Code.ToString() + ".");
+            : throw new InvalidOperationException(unreadable + " is unreadable: " + failure.Code.ToString() + ".");
 
     // AUTH-PRIN-002, REG-INV-001: the account's policy where the request carries its
     // session, the policy of the organization whose invitation a registration carries,
@@ -91,10 +92,16 @@ internal sealed class FrontendSettings(
             ? await policies.ForAsync(live.Subject, cancellationToken).ConfigureAwait(false)
             : governing ?? await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false);
 
+        string source = browser.Live is not null
+            ? "The policy of the account"
+            : governing is not null
+                ? "The policy of the invitation's organization"
+                : "The key " + Settings.PolicyDefault.Key.ToString();
+
         Error? failure = null;
         Policy policy = resolved.Match(value => value, error => Held<Policy>(error, ref failure));
 
-        return Readable(Settings.PolicyDefault.Key, policy, failure);
+        return Readable(source, policy, failure);
     }
 
     private async ValueTask<TValue> ValueAsync<TValue>(Setting<TValue> setting, CancellationToken cancellationToken)
@@ -104,6 +111,6 @@ internal sealed class FrontendSettings(
         TValue value = (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
             .Match(read => read, error => Held<TValue>(error, ref failure));
 
-        return Readable(setting.Key, value, failure);
+        return Readable("The key " + setting.Key.ToString(), value, failure);
     }
 }
