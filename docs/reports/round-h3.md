@@ -95,12 +95,13 @@ marked "at base".
   - `LibraryStructureTests.ContainerPackage_InThePackageVersions_StandsAtTheVersionThePostgreSqlPackageBrings`.
 - `10` section 4.9 `oidc.continuation.lifetime`: declared as its row states (default
   30 minutes, R, ceiling 1 hour), proven by the reference gate
-  (`SettingsCatalogueTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource`). No
-  code reads it while item 12 is not built (section 2).
+  (`SettingsCatalogueTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource`), and
+  read when a pending authorization is kept (item 12, under D-226 item 4 below).
 - The sample host (LIB-TEST-004), of the plan's row: an email-link sign-in from a new
   browser with no second mail; the settings, the enrolment document and whether a
-  password is set (the three `FrontendTests` above). The sign-on and back to the
-  application's route wait with item 12 (Q12), the restore in place on Q13 (section 2).
+  password is set (the three `FrontendTests` above); a staff session restored in place
+  (under D-228 below). The sign-on and back to the application's route waits on Q14
+  (section 2).
 
 
 D-225, by item:
@@ -259,8 +260,40 @@ D-226, by item:
   - `ChallengeStoreTests.AUTH_FACT_003_AC4_ABrowsersLatestUnansweredSignInIsFoundByItsBindingAsync`;
   - `signin_links.browser` is kept: by construction it is the binding of the link's
     challenge.
-- Item 4 with D-224 item 12, back to the application after sign-in: not built (Q12,
-  section 2).
+- Item 4 with D-224 item 12, back to the application after sign-in (AUTH-SESS-012 AC10,
+  `09` `continueTo` and `GET /oidc/authorize/continue`), the pending authorization held
+  in `pending_authorizations` through the migration
+  `20261031092033_WaitAnAuthorizationForItsSignIn`, its parameters wrapped under the
+  deployment's data key since they may name the person (`login_hint`):
+  - `ContinuationTests.AUTH_SESS_012_AC10_TheSignInThatCompletesIsSentBackWithTheCodeOnceAsync`;
+  - `ContinuationTests.AUTH_SESS_012_AC10_AFollowPastTheContinuationLifetimeIssuesNothingAsync`;
+  - `ContinuationTests.AUTH_SESS_012_AC10_ALaterRequestReplacesTheOneWaitingAsync`;
+  - `ContinuationTests.AUTH_SESS_012_AC10_TheSessionSaysWhereItsAuthorizationWaitsAsync`;
+  - `ContinuationTests.AUTH_SESS_012_AC10_ASignInPastTheContinuationLifetimeCarriesNothingAsync`;
+  - `ContinuationTests.AUTH_SESS_012_AC10_WithNothingWaitingTheBrowserGoesToTheDefaultClientAsync`;
+  - `BreakGlassEndpointTests.AUTH_SESS_012_AC10_PresentingTheCredentialSaysWhereTheAuthorizationWaitsAsync`;
+  - `PendingAuthorizationStoreTests.AUTH_SESS_012_AC10_AKeptRequestIsCarriedAndSpentOnceAsync`;
+  - `PendingAuthorizationStoreTests.AUTH_SESS_012_AC10_ALaterRequestReplacesTheEarlierAndALapsedOneIsNotCarriedAsync`;
+  - `PendingAuthorizationStoreTests.AUTH_SESS_012_AC10_WhatWaitsEndsWithItsBrowserAndAtItsLifetimeAsync`;
+  - the schema and model gates with the new table (`SchemaContractTests`,
+    `ModelTests.REG_ACCT_001_AC2`), and the endpoint contract regenerated: `continueTo`
+    in the shape of `/auth/factor` and of the routes that answer as it does, and in
+    `GET /auth/session`; `POST /auth/break-glass` now answers a JSON body, `{}` or
+    `{ continueTo }`, since `09` has it carry the member.
+  - The continuation is answered by the provider's own authorization handlers, the kept
+    request put in place of the empty one before validation; the server's
+    pushed-request requirements, global and per client, admit it without a
+    `request_uri`, the reference having been spent when the request was kept
+    (AUTH-OIDC-006). Every other request is held to them as before.
+  - The pending authorization is carried by the rotations at a completed sign-in: the
+    password and passkey answers, the device verification, the break-glass credential
+    and a social provider's return. The registration's terms step, the sign-on's derived
+    session and a restore carry none, `02` naming the sign-in's rotation alone. It ends
+    with the pre-authentication session or the session record it is bound to, and at
+    its lifetime by the background sweep.
+  - `GET /auth/session` reads it through `ISessions.ReadAsync`, whose `SessionDetail`
+    gains `AuthorizationWaiting`, so the endpoint resolves the one service of the
+    contract (LIB-API-005).
 - Item 5 with D-224 item 13, a session restored in place (AUTH-SESS-005, BFF-STEP-001,
   BFF-ORDER-001 stage 5), `signin_challenges.identifier` nullable through the migration
   `20261031072820_OpenARestoreWithoutAnIdentifier`, a restore challenge carrying none:
@@ -285,7 +318,28 @@ D-226, by item:
 Public surface changed (`PublicAPI.Unshipped.txt` of `Janus.Core`, nothing released):
 `IAuthentication.BeginAsync` gains `browser`; `IAuthentication.LandAsync` drops
 `challenge`; `IAuthentication.ResendDeviceCodeAsync` is added;
-`IAppPasswords.ListAsync` drops `session`. Nothing of item 5 is public.
+`IAppPasswords.ListAsync` drops `session`; `SessionDetail.AuthorizationWaiting` is
+added (item 4). Nothing of item 5 is public. `Janus.Testing` gains
+`TestSession.RestoreAsync` (D-228 item 2).
+
+D-228, by item:
+
+- Item 1, the continuation with nowhere to go (AUTH-SESS-012, API-REDIR-001): with no
+  authorization pending, a 302 to `/` while `redirect.defaultclient` is empty, and to
+  the origin of its client's registered address once set:
+  - `ContinuationTests.AUTH_SESS_012_AC10_TheSignInThatCompletesIsSentBackWithTheCodeOnceAsync`;
+  - `ContinuationTests.AUTH_SESS_012_AC10_AFollowPastTheContinuationLifetimeIssuesNothingAsync`;
+  - `ContinuationTests.AUTH_SESS_012_AC10_ASignInPastTheContinuationLifetimeCarriesNothingAsync`;
+  - `ContinuationTests.AUTH_SESS_012_AC10_WithNothingWaitingTheBrowserGoesToTheDefaultClientAsync`.
+- Item 2, a test's restore (LIB-TEST-003), `TestSession.RestoreAsync`:
+  - `PeopleTests.LIB_TEST_003_ALapsedSessionIsRestoredInPlaceWithThePersonsPasskeyAsync`;
+  - `PeopleTests.LIB_TEST_003_ASessionTheRestoreDoesNotAdmitIsNotRestoredAsync`;
+  - the sample host, from the packages alone, restoring the first administrator's
+    session, held to AAL2 by the administrative organization (AUTH-SESS-005b), after an
+    idle expiry, and retrying the staff page:
+    `RestoreTests.AUTH_SESS_005_AC4_AStaffSessionIsRestoredInPlaceAfterAnIdleExpiryAsync`.
+    The workshop's own organization keeps the system policy, under which a technician's
+    session is offered no single-factor restore (AUTH-SESS-005 AC3a).
 
 Tests changed in what they assert:
 
@@ -308,18 +362,18 @@ Verified by a run on this machine, besides the fast checks: the three
 `JmapMailServerAgainstStalwartTests` and `MailServerTokensAgainstStalwartTests` (20
 passed, run while written, as the round's instruction allows); the PostgreSQL tests of
 the challenge, session, send-ledger and loss-report stores, the schema, the model and
-the migrations (103 passed, on the last code commit); the sample host's solution
-packed, restored, built and checked by `dotnet format --verify-no-changes`, its tests
-not run. Every other test of the round runs first in the pipeline.
+the migrations (103 passed, on the last code commit); the PostgreSQL tests of the
+pending authorizations, the schema and the model, and `Janus.Testing`'s `PeopleTests`
+against its sample deployment, on this turn's code; the sample host's solution packed,
+restored, built, checked by `dotnet format --verify-no-changes`, and its tests run (22
+passed, the restore among them). Every other test of the round runs first in the
+pipeline.
 
 ## 2. Items not implemented
 
 Each waits on a question; nothing of them is in the code:
 
-- D-226 item 4 with D-224 item 12, back to the application after sign-in
-  (AUTH-SESS-012 AC10, `continueTo`, `GET /oidc/authorize/continue`): Q12.
-- The sample host's sign-on and back to the application's route: Q12.
-- The sample host's restore of a staff session in place: Q13.
+- The sample host's sign-on and back to the application's route: Q14.
 
 ## 3. Resolved by rule
 
@@ -548,7 +602,7 @@ D-226 item 1).
 - Reading B: it covers every scope. Smallest fix: the four judged by the same check.
 - Parks: only the four's refusal.
 
-**Q12 (Tier 2).** What the continuation answers with no authorization pending where
+**Q12 (Tier 2), answered by D-228 item 1 (reading A).** What the continuation answers with no authorization pending where
 `redirect.defaultclient` is empty (D-226 item 4, D-224 item 12).
 
 - What the code needs: the answer of `GET /oidc/authorize/continue` when no
@@ -570,7 +624,7 @@ D-226 item 1).
   row.
 - Parks: D-226 item 4 with D-224 item 12, and the sample host's sign-on and back.
 
-**Q13 (Tier 2).** How the sample host's test restores a staff session in place through
+**Q13 (Tier 2), answered by D-228 item 2 (reading A).** How the sample host's test restores a staff session in place through
 `Janus.Testing` (LIB-TEST-003, LIB-TEST-004).
 
 - What the code needs: the plan's row has the sample host restore a staff session in
@@ -592,8 +646,53 @@ D-226 item 1).
   and restores with it. Smallest fix: none in the documents.
 - Parks: the sample host's restore in place only.
 
+**Q14 (Tier 2).** How the sample host's sign-on comes back to the application's route
+when the provider and the application share one origin (LIB-TEST-004, BFF-SESS-006,
+AUTH-SESS-012).
+
+- What the code needs: the plan's row has the sample host send a person from its
+  application's sign-on to the sign-in and back to that application's route, built from
+  the packages alone.
+- What the spec says: BFF-SESS-006 keeps the sign-on's attempt (its `state` and
+  verifier) on the pre-authentication session, and `GET /auth/signon/return` refuses a
+  `state` that is unbound with `auth.session.csrfinvalid` and sends the browser
+  nowhere. AUTH-SESS-006 and AUTH-SESS-012 end the pre-authentication session at the
+  completed sign-in, carrying the pending authorization alone.
+- What the code holds: the sample host is one origin, both the provider and the
+  application (`AuthenticationAddresses` and `SignOnClient` on the same site), so the
+  browser holds one pre-authentication cookie for both. Followed on the library's test
+  deployment with one cookie jar: the sign-on's start, the silent `login_required`, the
+  authorization kept, the password sign-in answering `continueTo`, and the
+  continuation's 302 to `/auth/signon/return` with `code` and `state` all hold; the
+  return answers 403 `auth.session.csrfinvalid`, the attempt having ended with the
+  pre-authentication session at the sign-in. The library's `SignOnTests` keep the
+  application and the authentication application in two browsers' cookie jars, so they
+  do not meet it.
+- Reading A: the rotation at the completed sign-in carries the sign-on's attempt as it
+  carries the pending authorization. Smallest fix: a sentence in AUTH-SESS-012 or
+  BFF-SESS-006, and the attempt carried by the same rotation.
+- Reading B: a return that finds no attempt on a browser whose session is already live
+  sends it to `/` of the application, as BFF-SESS-006 AC1 leaves nothing to establish.
+  Smallest fix: a sentence in BFF-SESS-006.
+- Reading C: the sample host serves its application at an origin apart from the
+  provider's, as two applications. Smallest fix: none in the documents; a second origin
+  in the sample's declarations and its tests.
+- Reading D: an application served at the provider's own origin needs no sign-on, and
+  the plan's row is met by the sign-in and the continuation alone. Smallest fix: a
+  sentence in the plan's row or LIB-TEST-004.
+- Parks: the sample host's sign-on and back only.
+
 ## 5. Gate result
 
+- This turn, before the push: every unit and contract test passes (5146 in eleven projects); the
+  commit-message, changelog, acceptance-test-names and forbidden-marker gates pass
+  over the commits since `bf97d066`; the full-history secret scan finds nothing. The
+  first full run of the Hosting tests found `GET /auth/session` resolving the pending
+  authorizations beside `ISessions`
+  (`IdentityEndpointsTests.LIB_API_005_AC1_NoEndpointCarriesLogicItsServiceDoesNotAsync`
+  and `LIB_API_005_AC3`); the read moved into `ISessions.ReadAsync` before the commit.
+- d310a60b breaks two changelog entries that a script of ours under `tmp/`, which
+  inserts changelog lines, had written on one line each.
 - This turn, before the push: every unit and contract test passes (5139 in eleven
   projects); the commit-message, changelog, acceptance-test-names and forbidden-marker
   gates pass over the commits since `78a9c0c3`; the full-history secret scan finds
