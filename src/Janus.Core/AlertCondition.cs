@@ -53,78 +53,70 @@ public enum AlertCondition
     [JsonStringEnumMemberName("denial-spike")]
     DenialSpike = 9,
 
-    /// <summary>The gateway balance is draining or has breached its floor.</summary>
-    [JsonStringEnumMemberName("sms-balance")]
-    SmsBalance = 10,
-
     /// <summary>A background job failed.</summary>
     [JsonStringEnumMemberName("background-job-failed")]
-    BackgroundJobFailed = 11,
+    BackgroundJobFailed = 10,
 
     /// <summary>An erasure or takedown delivery exhausted its retries.</summary>
     [JsonStringEnumMemberName("erasure-delivery-exhausted")]
-    ErasureDeliveryExhausted = 12,
+    ErasureDeliveryExhausted = 11,
 
     /// <summary>
     /// A degradation: blocklist fallback, a failed provider push, an undelivered
     /// notification or reconciliation drift.
     /// </summary>
     [JsonStringEnumMemberName("degradation")]
-    Degradation = 13,
+    Degradation = 12,
 
     /// <summary>Repeated callback verification failure from one source.</summary>
     [JsonStringEnumMemberName("callback-verification-failed")]
-    CallbackVerificationFailed = 14,
+    CallbackVerificationFailed = 13,
 
     /// <summary>An unusual rate of duplicate-identifier notices: an enumeration probe.</summary>
     [JsonStringEnumMemberName("nonexistent-notice-rate")]
-    NonexistentNoticeRate = 15,
+    NonexistentNoticeRate = 14,
 
     /// <summary>A privacy-request decision deadline is approaching.</summary>
     [JsonStringEnumMemberName("privacy-deadline-approaching")]
-    PrivacyDeadlineApproaching = 16,
+    PrivacyDeadlineApproaching = 15,
 
     /// <summary>A privacy-request decision deadline was reached undecided.</summary>
     [JsonStringEnumMemberName("privacy-deadline-reached")]
-    PrivacyDeadlineReached = 17,
+    PrivacyDeadlineReached = 16,
 
     /// <summary>The key-encryption key's cryptoperiod is approaching its end.</summary>
     [JsonStringEnumMemberName("expiry-approaching")]
-    ExpiryApproaching = 18,
+    ExpiryApproaching = 17,
 
     /// <summary>The public-holiday list is running out.</summary>
     [JsonStringEnumMemberName("holiday-list-exhausted")]
-    HolidayListExhausted = 19,
+    HolidayListExhausted = 18,
 
     /// <summary>No emergency credential exists.</summary>
     [JsonStringEnumMemberName("no-emergency-credential")]
-    NoEmergencyCredential = 20,
+    NoEmergencyCredential = 19,
 
     /// <summary>A restriction was loosened.</summary>
     [JsonStringEnumMemberName("restriction-loosened")]
-    RestrictionLoosened = 21,
+    RestrictionLoosened = 20,
 
     /// <summary>A restriction grant was issued.</summary>
     [JsonStringEnumMemberName("restriction-granted")]
-    RestrictionGranted = 22,
+    RestrictionGranted = 21,
 
     /// <summary>A locked domain's record no longer verifies.</summary>
     [JsonStringEnumMemberName("domain-reverification-failed")]
-    DomainReverificationFailed = 23,
+    DomainReverificationFailed = 22,
 
     /// <summary>A domain was removed from a lock.</summary>
     [JsonStringEnumMemberName("domain-removed")]
-    DomainRemoved = 24,
+    DomainRemoved = 23,
 
     /// <summary>The governing language of legal documents changed.</summary>
     [JsonStringEnumMemberName("governing-language-changed")]
-    GoverningLanguageChanged = 25,
+    GoverningLanguageChanged = 24,
 
     /// <summary>A document has no text in the governing language.</summary>
     [JsonStringEnumMemberName("governing-text-missing")]
-    GoverningTextMissing = 26,
-
-    /// <summary>The sending domain is not registered with the private relay.</summary>
-    [JsonStringEnumMemberName("relay-domain-unregistered")]
-    RelayDomainUnregistered = 27,
+    GoverningTextMissing = 25,
 }

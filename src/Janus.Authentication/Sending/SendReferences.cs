@@ -7,12 +7,11 @@ namespace Janus.Authentication.Sending;
 
 /// <summary>
 /// What a correlation reference is kept as: its hash and never itself, so that a dump
-/// of the ledger yields no reference a callback could be forged with.
+/// of the ledger yields no reference a report could be forged with.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-ABUSE-007, INT-GEN-003 and INT-SMS-005. A callback is hostile
-/// input; what arrives is hashed and looked up, and what is looked up is a row that
-/// names no destination.
+/// Implements INT-SMS-005 and INT-GEN-003. What a report names is hashed and looked up,
+/// and what is looked up is a row that names no destination.
 /// </remarks>
 internal static class SendReferences
 {

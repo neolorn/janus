@@ -22,13 +22,12 @@ public sealed class SignInFlowTests : IAsyncDisposable
 {
     private const string Session = "__Host-identity-session";
     private const string Browsers = "__Host-identity-browser";
-    private const string Language = "en";
 
     private readonly Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment that can send, whose messages carry the code and the token as the
-    /// shipped templates do, and whose policy admits the link a test asks for.
+    /// A deployment that can send, whose messages carry the code and the token among
+    /// their values, and whose policy admits the link a test asks for.
     /// </summary>
     public SignInFlowTests()
     {
@@ -41,15 +40,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
                 LoginFactors = new HashSet<Factor>(
                     [.. Policies.SystemDefault.LoginFactors, Factor.EmailLink]),
             });
-
-        foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-        {
-            _deployment.Templates.Set(
-                MessageKind.SignInLink,
-                kind,
-                Language,
-                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {link}"));
-        }
     }
 
     /// <inheritdoc/>
@@ -249,11 +239,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
             });
-        _deployment.Templates.Set(
-            MessageKind.SecondStepCode,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code}"));
 
         await RegisteredAsync();
 
@@ -294,7 +279,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
             "/auth/factor",
             ("challengeId", challenge),
             ("factor", "phoneCode"),
-            ("value", _deployment.Sms.Taken[^1].Text));
+            ("value", _deployment.Sms.Taken[^1].Values["code"]));
 
         Assert.Equal("factorRequired", first.Text("status"));
         Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
@@ -324,11 +309,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
             });
-        _deployment.Templates.Set(
-            MessageKind.SecondStepCode,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code}"));
 
         await RegisteredAsync();
 
@@ -365,7 +345,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
 
         Answer first = await AskedAsync();
         Answer paced = await AskedAsync();
-        string code = _deployment.Sms.Taken[^1].Text;
+        string code = _deployment.Sms.Taken[^1].Values["code"];
 
         held.Suspend(_deployment.Clock.GetUtcNow() + TimeSpan.FromDays(7));
 
@@ -622,11 +602,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
             });
-        clear.Templates.Set(
-            MessageKind.SecondStepCode,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code}"));
 
         _ = await Flow.SignedInAsync(clear);
 
@@ -934,11 +909,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.EmailCode]),
             });
-        _deployment.Templates.Set(
-            MessageKind.SignInCode,
-            SendKind.Email,
-            Language,
-            new MessageTemplate("code", "{code}"));
         Browser owner = await Flow.SignedInAsync(_deployment);
         _deployment.Clock.Advance(TimeSpan.FromMinutes(5));
         Answer began = await owner.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
@@ -987,11 +957,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneLink]),
             });
-        risky.Templates.Set(
-            MessageKind.SignInLink,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code} {token}"));
 
         _ = await Flow.SignedInAsync(risky);
 
@@ -1047,7 +1012,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     // The code the last message carried, which is the one the step under test sent.
-    private string Emailed() => _deployment.Mail.Taken[^1].Body.Split(' ')[0];
+    private string Emailed() => _deployment.Mail.Taken[^1].Values["code"];
 
     // The account a sign-in is against, and the interval its registration messages
     // opened left behind (AUTH-ABUSE-004).

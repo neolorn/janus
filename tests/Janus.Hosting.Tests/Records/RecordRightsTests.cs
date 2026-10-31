@@ -25,8 +25,6 @@ public sealed class RecordRightsTests : IAsyncDisposable
 
     private const string Language = "en";
 
-    private const string DeletionNotice = "deleting";
-
     private const string Marketing = "marketing";
 
     private const string Security = "security";
@@ -49,16 +47,6 @@ public sealed class RecordRightsTests : IAsyncDisposable
         _deployment.Configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
         _deployment.Configuration.Set(Settings.PrivacyCalendarTimeZone, "Africa/Cairo");
         _deployment.Documents.Hold(new DocumentVersion("privacy-notice", "1", "ar", "النص", [], _deployment.Clock.GetUtcNow()));
-
-        _deployment.Templates.Set(MessageKind.RecordAccessCode, SendKind.Email, Language, new MessageTemplate("code", "{code}"));
-        foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-        {
-            _deployment.Templates.Set(
-                MessageKind.RecordDeletionNotice,
-                kind,
-                Language,
-                new MessageTemplate(kind is SendKind.Email ? "deleting" : null, DeletionNotice));
-        }
 
         _shop = OrganizationId.New(_deployment.Clock);
         _deployment.Organizations.Seed(_shop, name: "Seaside Rentals");
@@ -197,7 +185,7 @@ public sealed class RecordRightsTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, deleted.Status);
         Assert.Equal((PersonRecordState.Deleting, DeletionOrigin.Self), (deleting.State, deleting.DeletingBy));
-        Assert.Equal(DeletionNotice, Assert.Single(_deployment.Mail.Taken, mail => mail.Body == DeletionNotice).Body);
+        _ = Assert.Single(_deployment.Mail.Taken, mail => mail.Kind is MessageKind.RecordDeletionNotice);
         Assert.Equal(
             _deployment.Clock.GetUtcNow() + TimeSpan.FromDays(30),
             Assert.Single(_deployment.Events.Of<RecordDeletionRequested>()).ErasesAt);
@@ -237,7 +225,7 @@ public sealed class RecordRightsTests : IAsyncDisposable
 
         _ = await _deployment.CarrySendsAsync();
 
-        _ = Assert.Single(_deployment.Mail.Taken, mail => mail.Body == DeletionNotice);
+        _ = Assert.Single(_deployment.Mail.Taken, mail => mail.Kind is MessageKind.RecordDeletionNotice);
     }
 
     /// <summary>

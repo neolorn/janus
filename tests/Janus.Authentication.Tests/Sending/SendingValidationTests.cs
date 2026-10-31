@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests.Alerting;
@@ -11,289 +9,62 @@ using Xunit;
 namespace Janus.Authentication.Tests.Sending;
 
 /// <summary>
-/// What is checked once, before anything is served: every message in every
-/// configured language, every text message inside its budget, every host key
-/// supplied, and no endpoint reached over plain HTTP (AUTH-ABUSE-005, INT-SMS-003,
-/// INT-GEN-001, LIB-HOST-001).
+/// What is checked once, before anything is served: a handler for the messages and one
+/// for the alerts, every host key supplied, and no endpoint reached over plain HTTP
+/// (INT-SMS-006, OPS-ALERT-003, INT-GEN-001, LIB-HOST-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class SendingValidationTests
 {
-    private static readonly string[] Languages = ["en", "ar"];
-
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mailTransport = new();
-    private readonly SmsTransportInMemory _smsTransport = new();
+    private readonly NotificationHandlerInMemory _notificationHandler = new();
     private readonly AlertHandlerInMemory _alertHandler = new();
 
     private RestrictionKeySuppliers _suppliers = RestrictionKeySuppliers.None;
 
-    private MessagePlaceholders _places = new([], [], [], Landing.Origins);
+    private SendingValidation Validation => new(_configuration, _suppliers, _notificationHandler, _alertHandler);
 
     /// <summary>
-    /// A deployment answering in two languages.
+    /// INT-SMS-006 AC2: a deployment that registered no notification handler does not
+    /// start, the refusal naming the handler.
     /// </summary>
-    public SendingValidationTests() =>
-        _configuration.Set(Settings.NotificationLanguages, Languages);
-
-    private SendingValidation Validation =>
-        new(_configuration, _templates, _suppliers, _places, _mailTransport, _smsTransport, _alertHandler);
-
-    /// <summary>
-    /// AUTH-ABUSE-005 AC3 and INT-SMS-003 AC1: a text message over its language's
-    /// budget stops the deployment, naming the key it is over on.
-    /// </summary>
+    /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_005_AC3_AnOverBudgetTextMessageStopsStartupAsync()
+    public async Task INT_SMS_006_AC2_ADeploymentWithNoNotificationHandlerIsRefusedByTheSendingCheckAsync()
     {
-        _templates.Set(
-            MessageKind.VerificationCode,
-            SendKind.Sms,
-            "ar",
-            new MessageTemplate(null, new string('م', 71)));
-
-        Error refusal = await RefusedAsync();
-
-        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
-        Assert.Equal("verification-code.sms.ar", refusal.Details["key"].GetString());
-        Assert.Equal(70, refusal.Details["allowed"].GetInt32());
-    }
-
-    /// <summary>
-    /// AUTH-ABUSE-005 AC2 and INT-SMS-003 AC2: the check covers every message on
-    /// every channel it goes out on, in every configured language.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_ABUSE_005_AC2_EveryMessageIsCheckedInEveryLanguageAsync()
-    {
-        await PassedAsync();
-
-        IEnumerable<(MessageKind Message, SendKind Kind, string Language)> wanted =
-            from message in MessageChannels.Messages
-            from kind in MessageChannels.Of(message)
-            from language in Languages
-            select (message, kind, language);
-
-        Assert.Equal([.. wanted.Order()], [.. _templates.Asked.Order()]);
-    }
-
-    /// <summary>
-    /// INT-SMS-003 AC1: the Latin budget is enforced as the Arabic one is, so a
-    /// message one character over 160 stops the deployment rather than costing two
-    /// messages for every send.
-    /// </summary>
-    [Fact]
-    public async Task INT_SMS_003_AC1_ALatinMessageOverItsBudgetStopsStartupAsync()
-    {
-        _templates.Set(
-            MessageKind.VerificationCode,
-            SendKind.Sms,
-            "en",
-            new MessageTemplate(null, new string('a', 161)));
-
-        Error refusal = await RefusedAsync();
-
-        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
-        Assert.Equal("verification-code.sms.en", refusal.Details["key"].GetString());
-        Assert.Equal(160, refusal.Details["allowed"].GetInt32());
-    }
-
-    /// <summary>
-    /// INT-SMS-003 AC1: a template is measured with every place it names at its
-    /// widest, so one that fits as the catalogue holds it and not once the library
-    /// has filled it is refused at startup rather than costing two messages at every
-    /// send.
-    /// </summary>
-    [Fact]
-    public async Task INT_SMS_003_AC1_ATemplateIsMeasuredWithItsPlacesAtTheirWidestAsync()
-    {
-        string written = new string('a', 148) + "{raisedAt}";
-
-        Assert.False(MessageBudget.Exceeds(written));
-        Assert.True(MessageBudget.Exceeds(_places.Widest(written)));
-
-        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "en", new MessageTemplate(null, written));
-
-        Error refusal = await RefusedAsync();
-
-        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
-        Assert.Equal("verification-code.sms.en", refusal.Details["key"].GetString());
-        Assert.Equal(160, refusal.Details["allowed"].GetInt32());
-    }
-
-    /// <summary>
-    /// LIB-HOST-001, API-LAND-001: no link is measured without the origins it lands on,
-    /// so a deployment that declared none is refused here, as the declaration check
-    /// would name it.
-    /// </summary>
-    [Fact]
-    public async Task LIB_HOST_001_NoLinkIsMeasuredWithoutTheLandingOriginsAsync()
-    {
-        Error refusal = (await new SendingValidation(
-                    _configuration,
-                    _templates,
-                    _suppliers,
-                    places: null,
-                    _mailTransport,
-                    _smsTransport,
-                    _alertHandler)
+        Error refusal = (await new SendingValidation(_configuration, _suppliers, notificationHandler: null, _alertHandler)
                 .ValidateAsync(TestContext.Current.CancellationToken))
             .Match(() => throw new Xunit.Sdk.XunitException("Startup was not refused."), error => error);
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refusal.Code);
-        Assert.Equal("landingOrigins.authentication", refusal.Details["key"].GetString());
+        Assert.Equal("notificationHandler", refusal.Details["key"].GetString());
     }
 
     /// <summary>
-    /// INT-SMS-003 AC4, D-166: a text that carries a link is budgeted at two segments of its
-    /// alphabet, 306 units of the default alphabet and 134 outside it, with the link at
-    /// its composed width; a text that does not carry one keeps its one segment.
+    /// OPS-ALERT-003 AC4: a deployment that registered no alert handler does not start,
+    /// the refusal naming the handler.
     /// </summary>
+    /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_SMS_003_AC4_ATextCarryingALinkIsBudgetedAtTwoSegmentsAsync()
+    public async Task OPS_ALERT_003_AC4_ADeploymentWithNoAlertHandlerIsRefusedByTheSendingCheckAsync()
     {
-        int link = _places.Widths["link"];
-
-        _templates.Set(
-            MessageKind.SignInLink,
-            SendKind.Sms,
-            "en",
-            new MessageTemplate(null, new string('a', 306 - link) + "{link}"));
-        _templates.Set(
-            MessageKind.SignInLink,
-            SendKind.Sms,
-            "ar",
-            new MessageTemplate(null, new string('م', 134 - link) + "{link}"));
-
-        await PassedAsync();
-
-        _templates.Set(
-            MessageKind.SignInLink,
-            SendKind.Sms,
-            "en",
-            new MessageTemplate(null, new string('a', 307 - link) + "{link}"));
-
-        Error refusal = await RefusedAsync();
-
-        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
-        Assert.Equal("signin-link.sms.en", refusal.Details["key"].GetString());
-        Assert.Equal(306, refusal.Details["allowed"].GetInt32());
-
-        _templates.Set(
-            MessageKind.SignInLink,
-            SendKind.Sms,
-            "en",
-            new MessageTemplate(null, new string('a', 306 - link) + "{link}"));
-        _templates.Set(
-            MessageKind.SignInLink,
-            SendKind.Sms,
-            "ar",
-            new MessageTemplate(null, new string('م', 135 - link) + "{link}"));
-
-        refusal = await RefusedAsync();
-
-        Assert.Equal("signin-link.sms.ar", refusal.Details["key"].GetString());
-        Assert.Equal(134, refusal.Details["allowed"].GetInt32());
-    }
-
-    /// <summary>
-    /// INT-SMS-003 AC4: the places are a closed set, so a text-message template naming one
-    /// the library does not fill has no width to be measured at and stops startup,
-    /// naming the message and the place.
-    /// </summary>
-    [Fact]
-    public async Task INT_SMS_003_AC4_ATemplateNamingAPlaceWithNoWidthStopsStartupAsync()
-    {
-        Assert.DoesNotContain("offsetSeconds", _places.Widths.Keys, StringComparer.Ordinal);
-
-        _templates.Set(
-            MessageKind.SecondStepCode,
-            SendKind.Sms,
-            "en",
-            new MessageTemplate(null, "{code}, valid for {offsetSeconds} seconds"));
-
-        Error refusal = await RefusedAsync();
-
-        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refusal.Code);
-        Assert.Equal("secondstep-code", refusal.Details["declaration"].GetString());
-        Assert.Equal("offsetSeconds", refusal.Details["field"].GetString());
-    }
-
-    /// <summary>
-    /// INT-SMS-003 AC4: the retired <c>token</c> place is one with no width, so a
-    /// text-message template still naming it stops startup rather than sending a bare
-    /// token.
-    /// </summary>
-    [Fact]
-    public async Task INT_SMS_003_AC4_ATemplateNamingTheRetiredTokenPlaceStopsStartupAsync()
-    {
-        _templates.Set(MessageKind.SignInLink, SendKind.Sms, "ar", new MessageTemplate(null, "{token}"));
-
-        Error refusal = await RefusedAsync();
-
-        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refusal.Code);
-        Assert.Equal("signin-link", refusal.Details["declaration"].GetString());
-        Assert.Equal("token", refusal.Details["field"].GetString());
-    }
-
-    /// <summary>
-    /// INT-SMS-003 AC2: every message that goes out by text is measured in every
-    /// configured language, so no language is budgeted by the one it was written in.
-    /// </summary>
-    [Fact]
-    public async Task INT_SMS_003_AC2_EveryTextMessageIsMeasuredInEveryLanguageAsync()
-    {
-        await PassedAsync();
-
-        IEnumerable<(MessageKind Message, SendKind Kind, string Language)> texted =
-            from message in MessageChannels.Messages
-            where MessageChannels.Of(message).Contains(SendKind.Sms)
-            from language in Languages
-            select (message, SendKind.Sms, language);
-
-        Assert.Equal(
-            [.. texted.Order()],
-            [.. _templates.Asked.Where(asked => asked.Kind is SendKind.Sms).Order()]);
-    }
-
-    /// <summary>
-    /// AUTH-ABUSE-005 AC3: a language the catalogue cannot answer in stops the
-    /// deployment, rather than the send a person is waiting for.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_ABUSE_005_AC3_ALanguageTheCatalogueCannotAnswerInStopsStartupAsync()
-    {
-        _templates.Complete = false;
-
-        foreach (MessageKind message in MessageChannels.Messages)
-        {
-            foreach (SendKind kind in MessageChannels.Of(message))
-            {
-                _templates.Set(message, kind, "en", new MessageTemplate("subject", "text"));
-                _templates.Set(message, kind, "ar", new MessageTemplate("subject", "text"));
-            }
-        }
-
-        await PassedAsync();
-
-        _configuration.Set(Settings.NotificationLanguages, ["en", "ar", "fr"]);
-
-        Error refusal = await RefusedAsync();
+        Error refusal = (await new SendingValidation(_configuration, _suppliers, _notificationHandler, alertHandler: null)
+                .ValidateAsync(TestContext.Current.CancellationToken))
+            .Match(() => throw new Xunit.Sdk.XunitException("Startup was not refused."), error => error);
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refusal.Code);
-        Assert.EndsWith(".fr", refusal.Details["key"].GetString()!, StringComparison.Ordinal);
+        Assert.Equal("alertHandler", refusal.Details["key"].GetString());
     }
 
     /// <summary>
-    /// INT-GEN-001 AC1: an endpoint reached over plain HTTP stops the deployment with
-    /// the error the chapter names for it.
+    /// INT-GEN-001 AC1: an endpoint the library calls reached over plain HTTP stops the
+    /// deployment with the error the chapter names for it.
     /// </summary>
     /// <param name="key">The endpoint that is not over TLS.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
-    [InlineData("integration.mail.endpoint")]
-    [InlineData("integration.sms.endpoint")]
+    [InlineData("integration.mailserver.endpoint")]
+    [InlineData("password.blocklist.selfhosted.address")]
     public async Task INT_GEN_001_AC1_APlaintextEndpointStopsStartupAsync(string key)
     {
         Error refusal = await PlaintextAsync(key);
@@ -309,8 +80,8 @@ public sealed class SendingValidationTests
     /// <param name="key">The endpoint that is not over TLS.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
-    [InlineData("integration.mail.endpoint")]
-    [InlineData("integration.sms.endpoint")]
+    [InlineData("integration.mailserver.endpoint")]
+    [InlineData("password.blocklist.selfhosted.address")]
     public async Task INT_GEN_001_AC2_TheFailureNamesTheIntegrationAndTheSettingAsync(string key)
     {
         Error refusal = await PlaintextAsync(key);
@@ -360,7 +131,7 @@ public sealed class SendingValidationTests
 
     /// <summary>
     /// INT-GEN-001 AC1: a deployment whose endpoints use TLS starts, and so does one
-    /// that names neither because it supplies transports of its own.
+    /// that names neither because it uses integrations of its own.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -368,8 +139,8 @@ public sealed class SendingValidationTests
     {
         await PassedAsync();
 
-        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test");
-        _configuration.Set(Settings.IntegrationSmsEndpoint, "https://sms.example.test");
+        _configuration.Set(Settings.IntegrationMailServerEndpoint, "https://mailserver.example.test");
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, "https://corpus.example.test/range");
 
         await PassedAsync();
     }
@@ -409,12 +180,12 @@ public sealed class SendingValidationTests
     // the refusal can only be about that one.
     private async Task<Error> PlaintextAsync(string key)
     {
-        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test");
-        _configuration.Set(Settings.IntegrationSmsEndpoint, "https://sms.example.test");
+        _configuration.Set(Settings.IntegrationMailServerEndpoint, "https://mailserver.example.test");
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, "https://corpus.example.test/range");
         _configuration.Set(
-            key.Contains("mail", StringComparison.Ordinal)
-                ? Settings.IntegrationMailEndpoint
-                : Settings.IntegrationSmsEndpoint,
+            key.Contains("mailserver", StringComparison.Ordinal)
+                ? Settings.IntegrationMailServerEndpoint
+                : Settings.PasswordBlocklistSelfHostedAddress,
             "http://plain.example.test");
 
         return await RefusedAsync();

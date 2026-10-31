@@ -44,7 +44,6 @@ internal static class FactorCatalogue
             [Factor.Apple] = Primary(
                 AssuranceLevel.Delegated,
                 phishingResistant: false,
-                relaysAddress: true,
                 operatedDomains: FrozenSet.Create(
                     StringComparer.Ordinal,
                     "privaterelay.appleid.com",
@@ -113,7 +112,6 @@ internal static class FactorCatalogue
         bool phishingResistant,
         bool webAuthn = false,
         bool discoverable = false,
-        bool relaysAddress = false,
         FrozenSet<string>? operatedDomains = null,
         bool operatesHostedDomain = false) =>
         new(
@@ -128,7 +126,6 @@ internal static class FactorCatalogue
             Channel: null,
             Restricted: false,
             SingleUse: false,
-            relaysAddress,
             operatedDomains ?? FrozenSet<string>.Empty,
             operatesHostedDomain);
 
@@ -151,7 +148,6 @@ internal static class FactorCatalogue
             channel,
             restricted,
             SingleUse: false,
-            RelaysAddress: false,
             OperatedDomains: FrozenSet<string>.Empty,
             OperatesHostedDomain: false);
 
@@ -173,7 +169,6 @@ internal static class FactorCatalogue
             Channel: null,
             restricted,
             singleUse,
-            RelaysAddress: false,
             OperatedDomains: FrozenSet<string>.Empty,
             OperatesHostedDomain: false);
 }

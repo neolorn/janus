@@ -1973,11 +1973,6 @@ GET /callbacks/providers/google/return
   303
 POST /callbacks/providers/google/return
   303
-GET /callbacks/sms/dlr
-  200
-  409 integration.callback.inprogress
-  422 integration.callback.rejected
-  429 integration.callback.rejected
 GET /enrol
   200
     application/json

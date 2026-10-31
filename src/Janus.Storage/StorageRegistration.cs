@@ -376,7 +376,6 @@ internal static class StorageRegistration
         services.AddScoped<IRegistrationSources>(provider => new RegistrationSourceLedger(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>()));
-        services.AddScoped<ISmsBalanceLedger, SmsBalanceLedger>();
         services.AddScoped<IAlertLedger, AlertLedger>();
         services.AddScoped<IRaisedAlerts, RaisedAlerts>();
         services.AddScoped<IPendingEvents, PendingEvents>();

@@ -84,12 +84,9 @@ public sealed class PublicSurfaceTests
         typeof(IExportContributor), // LIB-API-001 and LIB-HOST-001: an export contributor (PRIV-RIGHT-003).
         typeof(ILocationSource), // LIB-HOST-001, optional: an environment seam (INT-GEN-006).
         typeof(IMailServer), // LIB-HOST-001, optional: an environment seam (INT-MAIL-001).
-        typeof(IMailTransport), // LIB-EXT-001 and LIB-HOST-001: mail delivery.
-        typeof(IMessageTemplates), // LIB-EXT-001: message and content templates.
-        typeof(INotificationHandler), // LIB-EXT-001: notification handling.
+        typeof(INotificationHandler), // LIB-EXT-001 and LIB-HOST-001: notification handling (INT-SMS-006).
         typeof(IPurposeHandler), // LIB-HOST-001: a purpose handler.
         typeof(ISecretSource), // LIB-EXT-001 and LIB-HOST-001: the secret source.
-        typeof(ISmsTransport), // LIB-EXT-001 and LIB-HOST-001: SMS delivery.
         typeof(ISubjectEventSubscriber), // LIB-HOST-001: a subject-event handler.
     ];
 

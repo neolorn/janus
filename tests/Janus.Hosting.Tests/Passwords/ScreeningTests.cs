@@ -93,8 +93,7 @@ public sealed class ScreeningTests : IDisposable
     public async Task INT_PWD_001_AC3_EveryRangeRequestNamesTheLibraryAndItsVersionAsync()
     {
         await using ServiceProvider deployed = new ServiceCollection()
-            .AddSingleton<IMailTransport>(new MailTransportInMemory())
-            .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
+            .AddSingleton<INotificationHandler>(new Janus.Testing.InMemoryNotifications())
             .AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",

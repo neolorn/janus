@@ -114,7 +114,6 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     {
         _notifications.Work = _work;
         _restrictions.Work = _work;
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.ServiceName, "Example");
         _configuration.Set(Settings.NotificationLanguages, [Language]);
         _configuration.Set(

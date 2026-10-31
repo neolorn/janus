@@ -12,10 +12,10 @@ namespace Janus.Core;
 /// </summary>
 /// <remarks>
 /// Implements INT-MAIL-001, INT-MAIL-003, INT-MAIL-006, INT-MAIL-007, INT-MAIL-008,
-/// INT-MAIL-009, INT-MAIL-010 and LIB-EXT-001. Optional: a deployment that registers
-/// none hosts no mailbox, and an organization's addresses are then addresses like any
-/// other. Outbound delivery is a separate registration, so either can be replaced
-/// without the other. The app-password calls carry the person's token and act on the
+/// INT-MAIL-010 and LIB-EXT-001. Optional: a deployment that registers none hosts no
+/// mailbox, and an organization's addresses are then addresses like any other. Mail the
+/// library owes never goes through it: every message leaves through the host's
+/// notification handler (INT-SMS-006). The app-password calls carry the person's token and act on the
 /// account the server finds in it, never on one the library names.
 /// </remarks>
 public interface IMailServer

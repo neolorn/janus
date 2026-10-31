@@ -38,32 +38,15 @@ internal static class Flow
     private const string Language = "en";
 
     /// <summary>
-    /// Makes a deployment able to send: the templates carry the code and the link,
-    /// and the balance floor is out of the way.
+    /// Makes a deployment able to send: it declares the one language every message
+    /// goes out in.
     /// </summary>
     /// <param name="deployment">What to prepare.</param>
     public static void Prepare(Deployment deployment)
     {
         ArgumentNullException.ThrowIfNull(deployment);
 
-        deployment.Configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         deployment.Configuration.Set(Settings.NotificationLanguages, [Language]);
-
-        foreach (MessageKind message in new[] { MessageKind.VerificationCode, MessageKind.VerificationLink, MessageKind.AccountExists })
-        {
-            // The new-device check sends a code alone, and a template names only what
-            // its message carries.
-            string text = message is MessageKind.VerificationCode ? "{code}" : "{code} {link}";
-
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                deployment.Templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "code" : null, text));
-            }
-        }
     }
 
     /// <summary>
@@ -232,7 +215,7 @@ internal static class Flow
     {
         ArgumentNullException.ThrowIfNull(deployment);
 
-        return Sent(deployment, kind, linked: false).Split(' ')[0];
+        return Sent(deployment, kind, linked: false).Values["code"];
     }
 
     /// <summary>
@@ -246,7 +229,7 @@ internal static class Flow
     {
         ArgumentNullException.ThrowIfNull(deployment);
 
-        return Landing.Token(Sent(deployment, kind, linked: true).Split(' ')[1]);
+        return Landing.Token(Sent(deployment, kind, linked: true).Values["link"]);
     }
 
     /// <summary>
@@ -273,23 +256,19 @@ internal static class Flow
 
     private static string Named(IdentifierKind kind) => kind is IdentifierKind.Email ? "email" : "phone";
 
-    // The last message written from a verification template, which is the one
-    // carrying a code, and a token where it is linked; the notices that follow a change
-    // carry neither.
-    private static string Sent(Deployment deployment, IdentifierKind kind, bool linked)
+    // The last message handed over carrying a code, and a link where it is linked; the
+    // notices that follow a change carry neither.
+    private static SendRequest Sent(Deployment deployment, IdentifierKind kind, bool linked)
     {
-        IEnumerable<string> written = kind is IdentifierKind.Email
-            ? deployment.Mail.Taken.Select(sent => sent.Body)
-            : deployment.Sms.Taken.Select(sent => sent.Text);
+        IEnumerable<SendRequest> handed = kind is IdentifierKind.Email
+            ? deployment.Mail.Taken
+            : deployment.Sms.Taken;
 
-        foreach (string body in written.Reverse())
+        foreach (SendRequest request in handed.Reverse())
         {
-            string[] parts = body.Split(' ');
-
-            if (parts is [{ Length: 6 } code, ..] && code.All(char.IsAsciiDigit)
-                && (parts is [_, { Length: > 0 }] || (!linked && parts is [_])))
+            if (request.Values.ContainsKey("code") && (!linked || request.Values.ContainsKey("link")))
             {
-                return body;
+                return request;
             }
         }
 

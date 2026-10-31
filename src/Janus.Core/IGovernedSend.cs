@@ -5,7 +5,7 @@ namespace Janus.Core;
 
 /// <summary>
 /// The one way an area undertakes a send: the message is judged against the named
-/// restrictions and the gateway floor in the caller's transaction, counted from its
+/// restrictions in the caller's transaction, counted from its
 /// admission and written to the library's outbox there, and carried after the commit.
 /// </summary>
 /// <remarks>
@@ -23,10 +23,10 @@ public interface IGovernedSend
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The reference the admitted message is carried under, or the refusal:
-    /// <c>auth.restriction.exceeded</c> with <c>retryAt</c>, or the gateway floor for a
-    /// text message. It answers the admission and never the delivery. A text message
-    /// owed in every declared language is one message per language, each under a
-    /// reference of its own, and the reference answered is the first language's.
+    /// <c>auth.restriction.exceeded</c> with <c>retryAt</c>. It answers the admission and
+    /// never the delivery. A message owed in every declared language is one message
+    /// carrying them all, under one reference, which a text counts as many times as it
+    /// carries languages (INT-SMS-006, D-225).
     /// </returns>
     ValueTask<Result<SendReference>> UndertakeAsync(
         OutboundMessage message,

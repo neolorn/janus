@@ -71,7 +71,6 @@ public sealed class LossReportsTests : IAsyncDisposable
     public LossReportsTests()
     {
         _notifications.Work = _work;
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
     }
 

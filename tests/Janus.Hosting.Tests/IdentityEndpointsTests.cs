@@ -81,9 +81,8 @@ public sealed class IdentityEndpointsTests
         "PUT /records/collection/email",
         "PUT /records/collection/phone",
 
-        // What a gateway or a provider sends, which no person and no host calls
-        // (chapter 09 section 10, IDN-LIFE-012a AC3, entry 282).
-        "GET /callbacks/sms/dlr",
+        // What a provider sends, which no person and no host calls (chapter 09
+        // section 10, IDN-LIFE-012a AC3, entry 282).
         "POST /callbacks/providers/apple",
         "POST /callbacks/providers/google",
 

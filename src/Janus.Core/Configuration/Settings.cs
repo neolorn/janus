@@ -331,21 +331,6 @@ public static class Settings
         new("abuse.botdefence.repeatedattempts", SettingScope.Runtime, 3, loosening: SettingDirection.Increase);
 
     /// <summary>
-    /// Where the shipped default mail transport is called. Empty while the deployment
-    /// supplies a transport of its own, which is called wherever it decides
-    /// (LIB-EXT-001, INT-MAIL-008).
-    /// </summary>
-    public static TextSetting IntegrationMailEndpoint { get; } =
-        new("integration.mail.endpoint", SettingScope.Protected, string.Empty);
-
-    /// <summary>
-    /// Where the shipped default SMS transport is called. Empty while the deployment
-    /// supplies a transport of its own (LIB-EXT-001, INT-SMS-001).
-    /// </summary>
-    public static TextSetting IntegrationSmsEndpoint { get; } =
-        new("integration.sms.endpoint", SettingScope.Protected, string.Empty);
-
-    /// <summary>
     /// Where the library's mail-server adapter reaches the mail server. Empty while the
     /// deployment uses a mail server integration of its own (INT-MAIL-001, LIB-EXT-001).
     /// </summary>
@@ -410,26 +395,6 @@ public static class Settings
     /// </summary>
     public static IntegerSetting PhotoMaxDimension { get; } =
         new("photo.maxdimension", SettingScope.Runtime, 1024);
-
-    /// <summary>The prepaid balance below which sends are hard-stopped. The deployment names it.</summary>
-    public static DecimalSetting AbuseSmsBalanceFloor { get; } =
-        new("abuse.sms.balancefloor", SettingScope.Runtime);
-
-    /// <summary>How often the gateway balance is read.</summary>
-    public static DurationSetting AbuseSmsPollInterval { get; } =
-        new("abuse.sms.pollinterval", SettingScope.Runtime, "PT15M");
-
-    /// <summary>
-    /// How far the last hour's messaging spend may exceed the trailing seven-day
-    /// hourly mean before the balance alert fires.
-    /// </summary>
-    public static DecimalSetting AbuseSmsDrainFactor { get; } =
-        new(
-            "abuse.sms.drainfactor",
-            SettingScope.Runtime,
-            3.0m,
-            floor: 1.0m,
-            loosening: SettingDirection.Increase);
 
     /// <summary>
     /// The signals bot defence counts. The set is closed until a decision adds a
@@ -754,19 +719,11 @@ public static class Settings
         new("sweep.interval", SettingScope.Runtime, "PT5M", ceiling: "PT15M");
 
     /// <summary>
-    /// The deployment's message languages, in which every template is validated at
-    /// startup. The deployment names at least one.
+    /// The deployment's message languages, in the order a message owed in every one of
+    /// them carries them. The deployment names at least one.
     /// </summary>
     public static TextListSetting NotificationLanguages { get; } =
         new("notification.languages", SettingScope.Runtime, minimum: 1);
-
-    /// <summary>The domain outbound mail is sent from. The deployment names it.</summary>
-    public static TextSetting NotificationEmailSendingDomain { get; } =
-        new("notification.email.sendingdomain", SettingScope.Runtime);
-
-    /// <summary>The domains registered with the private relay.</summary>
-    public static TextSetSetting NotificationEmailRelayRegistered { get; } =
-        new("notification.email.relayregistered", SettingScope.Runtime, FrozenSet<string>.Empty);
 
     /// <summary>How often the location database is refreshed.</summary>
     public static DurationSetting LocationDatabaseRefresh { get; } =
@@ -1009,8 +966,6 @@ public static class Settings
         AbuseBotDefenceRepeatedAttempts,
         IntegrationCallbackRateLimit,
         IntegrationCallbackClaimTimeout,
-        IntegrationMailEndpoint,
-        IntegrationSmsEndpoint,
         IntegrationMailServerEndpoint,
         Restrictions,
         CodeVerificationLifetime,
@@ -1021,9 +976,6 @@ public static class Settings
         LinkInvitationLifetime,
         PhotoMaxBytes,
         PhotoMaxDimension,
-        AbuseSmsBalanceFloor,
-        AbuseSmsPollInterval,
-        AbuseSmsDrainFactor,
         AbuseBotDefenceSignals,
         AbuseBotDefenceRangesRefresh,
         AbuseBotDefenceRangesMaxAge,
@@ -1074,8 +1026,6 @@ public static class Settings
         OutboxClaimTimeout,
         SweepInterval,
         NotificationLanguages,
-        NotificationEmailSendingDomain,
-        NotificationEmailRelayRegistered,
         LocationDatabaseRefresh,
         LocationDatabaseMaxAge,
         ServiceName,

@@ -28,12 +28,12 @@ namespace Janus.Hosting.Tests.Sending;
 
 /// <summary>
 /// The one path every message takes: what the named restrictions decide, what a
-/// refusal says, what a send counts against, and what a transport that would not
-/// take it leaves behind (AUTH-ABUSE-002, AUTH-ABUSE-004, AUTH-ABUSE-006,
-/// INT-SMS-001, INT-SMS-004, INT-GEN-005, OPS-ALERT-003), what is considered about
-/// a number before a restricted factor goes to it (AUTH-FACT-002b), the languages a
-/// message goes out in (IDN-ATTR-001), and how a message no transport took is carried
-/// again (D-022, INF-BG-001).
+/// refusal says, what a send counts against, and what a handler that would not take
+/// it leaves behind (AUTH-ABUSE-002, AUTH-ABUSE-004, INT-SMS-001, INT-SMS-005,
+/// INT-SMS-006, INT-GEN-005, OPS-ALERT-003), what is considered about a number before
+/// a restricted factor goes to it (AUTH-FACT-002b), the languages a message goes out
+/// in (IDN-ATTR-001), and how a message the host did not take is handed over again
+/// (D-022, D-225, INF-BG-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class SendingGovernanceTests : IAsyncDisposable
@@ -87,10 +87,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     private readonly SendLedgerInMemory _ledger = new();
     private readonly SendOutboxInMemory _outbox = new();
     private readonly SendAuditInMemory _audit = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
+    private readonly NotificationsInMemory _notifications = new();
     private readonly PhoneSignalAuditInMemory _signals = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
@@ -112,14 +109,12 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     private ILogger<SendPublisher> _log = NullLogger<SendPublisher>.Instance;
 
     /// <summary>
-    /// A deployment that has named the one key with no default, administered by
-    /// whoever edits it here.
+    /// A deployment administered by whoever edits it here.
     /// </summary>
     public SendingGovernanceTests()
     {
         _ledger.Work = _work;
         _outbox.Work = _work;
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
 
         var administrative = OrganizationId.New(_clock);
         _administrative.Organization = administrative;
@@ -129,7 +124,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     private SendingPath Path =>
-        new(_configuration, _ledger, _outbox, _templates, _mail, _sms, _balances, _work, _events, _clock, _randomness)
+        new(_configuration, _ledger, _outbox, _notifications, _work, _events, _clock, _randomness)
         {
             Suppliers = _suppliers,
             Signals = _considering ??= new PhoneSignals(_provider, _signals, _work, _clock),
@@ -147,7 +142,6 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
                 new ConfigurationAuditInMemory(),
                 new AdministrativeScope(_gate, _administrative),
                 new PolicyResolution(new MembershipLookupInMemory(), _configuration, new PolicyRaiseStoreInMemory()),
-                new RelayRegistration(_configuration, _events, _clock),
                 _events,
                 _work,
                 _clock),
@@ -186,7 +180,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(fourth));
         Assert.Equal(Noon + TimeSpan.FromHours(24), RetryAt(fourth));
-        Assert.Equal(3, _sms.Taken.Count);
+        Assert.Equal(3, _notifications.Sms.Taken.Count);
     }
 
     /// <summary>
@@ -211,7 +205,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         _ = await SentAsync(Texted());
 
-        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal(2, _notifications.Sms.Taken.Count);
     }
 
     /// <summary>
@@ -230,13 +224,13 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(second));
         Assert.Equal(Noon + TimeSpan.FromMinutes(3), RetryAt(second));
-        Assert.Single(_sms.Taken);
+        Assert.Single(_notifications.Sms.Taken);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
 
         _ = await SentAsync(Texted());
 
-        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal(2, _notifications.Sms.Taken.Count);
     }
 
     /// <summary>
@@ -252,11 +246,11 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             ErrorCodes.RestrictionExceeded,
             Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
 
-        await ReportedAsync(first.Value, delivered: false);
+        await ReportedAsync(first, delivered: false);
 
         _ = await SentAsync(Texted());
 
-        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal(2, _notifications.Sms.Taken.Count);
     }
 
     /// <summary>
@@ -282,7 +276,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         OutboundMessage text = Texted() with { Message = message, Purpose = purpose };
         SendReference first = await SentAsync(text);
 
-        await ReportedAsync(first.Value, delivered: true);
+        await ReportedAsync(first, delivered: true);
 
         Result<SendReference> second = await SendAsync(text, TestContext.Current.CancellationToken);
 
@@ -321,13 +315,14 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         _ = await SentAsync(Texted());
 
-        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal(2, _notifications.Sms.Taken.Count);
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC20, AC1: under the restrictions as shipped, a text message owed
-    /// in two declared languages counts each against <c>sms.destination</c> and the send
-    /// once against <c>sms.resend</c>, which does not refuse the send its second text.
+    /// AUTH-ABUSE-004 AC20, AC1, D-225: under the restrictions as shipped, a text message
+    /// owed in two declared languages is one message counted once for each language
+    /// against <c>sms.destination</c> and once against <c>sms.resend</c>, which does not
+    /// refuse it.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC20_ASendInTwoLanguagesCountsOnceAgainstTheShippedResendRestrictionAsync()
@@ -336,7 +331,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         _ = await SentAsync(Texted() with { Language = null });
 
-        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal(Declared, Assert.Single(_notifications.Sms.Taken).Languages);
         Assert.Equal([Noon, Noon], _ledger.Sends(Each));
         Assert.Equal([Noon], _ledger.Sends(Once));
     }
@@ -358,7 +353,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(second));
         Assert.Equal(Noon + TimeSpan.FromSeconds(60), RetryAt(second));
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
     }
 
     /// <summary>
@@ -409,8 +404,8 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _ = await SentAsync(Mailed());
         _ = await SentAsync(Texted());
 
-        Assert.Single(_mail.Taken);
-        Assert.Single(_sms.Taken);
+        Assert.Single(_notifications.Mail.Taken);
+        Assert.Single(_notifications.Sms.Taken);
         Assert.Equal(3, _ledger.Sends(textedMailbox).Count);
         Assert.Single(_ledger.Sends(mailedPhone));
         Assert.Single(_ledger.Sends(new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value)));
@@ -435,7 +430,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         _ = await SentAsync(TextedNotice(subject));
 
-        Assert.Single(_sms.Taken);
+        Assert.Single(_notifications.Sms.Taken);
         Assert.Equal(10, _ledger.Sends(source).Count);
         Assert.Single(_ledger.Sends(new RestrictionKey("notification.destination", RestrictionKeyKind.Destination, Phone.Value)));
     }
@@ -451,7 +446,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     {
         _ = await SentAsync(Texted() with { Source = null });
 
-        Assert.Single(_sms.Taken);
+        Assert.Single(_notifications.Sms.Taken);
         Assert.DoesNotContain(_ledger.Keys, key => key.Restriction == "sms.source");
         Assert.Equal([Each, Once], _ledger.Keys.OrderBy(key => key.Restriction, StringComparer.Ordinal));
     }
@@ -474,7 +469,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             asked.Add(number);
 
             Assert.False(_work.Open);
-            Assert.Empty(_sms.Taken);
+            Assert.Empty(_notifications.Sms.Taken);
 
             return ValueTask.FromResult(PhoneSignal.Clear);
         });
@@ -510,7 +505,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Empty(_signals.Records);
         Assert.Empty(_outbox.Waiting);
-        Assert.Empty(_sms.Taken);
+        Assert.Empty(_notifications.Sms.Taken);
     }
 
     /// <summary>
@@ -631,7 +626,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _ = await SentAsync(Link());
 
         Assert.Equal(1, await RetriedAsync());
-        Assert.Single(_sms.Taken);
+        Assert.Single(_notifications.Sms.Taken);
         Assert.Equal([(Factor.PhoneLink, (PhoneSignal?)null, (SubjectId?)null)], _signals.Records);
     }
 
@@ -672,7 +667,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
     /// <summary>
     /// D-022: the message is written to the outbox in the transaction that undertook
-    /// it, carried from there, and removed once a transport has taken it, so nothing
+    /// it, carried from there, and removed once the host has taken it, so nothing
     /// outstanding is lost and nothing taken is kept (IDN-PRIN-003).
     /// </summary>
     [Fact]
@@ -686,7 +681,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Equal(Mailbox.Value, written.Requested.Destination.Canonical);
         Assert.Equal(MessageKind.VerificationCode, written.Requested.Message);
         Assert.Empty(_outbox.Waiting);
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
     }
 
     /// <summary>
@@ -696,9 +691,9 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     /// admission, whatever became of the attempt.
     /// </summary>
     [Fact]
-    public async Task D_022_ATransportRefusalLeavesTheMessageRecordedAsync()
+    public async Task D_022_AHandlerRefusalLeavesTheMessageRecordedAsync()
     {
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         SendReference reference = await SentAsync(Mailed());
 
@@ -718,15 +713,15 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     [Fact]
     public async Task D_022_ARefusedMessageIsCarriedOnceItsRetryIsDueAsync()
     {
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         _ = await SendAsync(Mailed(), TestContext.Current.CancellationToken);
 
-        _mail.Accepts = true;
+        _notifications.Mail.Accepts = true;
         _clock.Advance(TimeSpan.FromSeconds(30));
 
         Assert.Equal(1, await RetriedAsync());
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
         Assert.Empty(_outbox.Waiting);
         Assert.Equal(
             [Noon + TimeSpan.FromSeconds(30)],
@@ -744,7 +739,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     {
         var key = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value);
 
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         _ = await SentAsync(Mailed());
 
@@ -764,12 +759,12 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
                     Channel = RestrictionChannel.Email,
                 },
             ]);
-        _mail.Accepts = true;
+        _notifications.Mail.Accepts = true;
         _clock.Advance(TimeSpan.FromSeconds(30));
         _ledger.Given(key, Noon + TimeSpan.FromSeconds(20));
 
         Assert.Equal(0, await RetriedAsync());
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.Empty(_outbox.Waiting);
         Assert.Equal([Noon + TimeSpan.FromSeconds(20)], _ledger.Sends(key));
         Assert.Empty(_events.Of<AlertRaised>());
@@ -777,34 +772,40 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _clock.Advance(TimeSpan.FromHours(2));
 
         Assert.Equal(0, await RetriedAsync());
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
     }
 
     /// <summary>
-    /// IDN-ATTR-001, D-022: a text message owed in every declared language is one
-    /// message for each of them, each with a row of its own, so a retry carries only the
-    /// languages no transport has taken and the recipient is not sent again the one they
-    /// already have.
+    /// INT-SMS-006 AC3, IDN-ATTR-001, D-225: a text message owed in every declared
+    /// language is one message carrying them all, with one row, so a retry hands the same
+    /// message over again under the same reference, counted as two texts as at its
+    /// admission.
     /// </summary>
     [Fact]
-    public async Task IDN_ATTR_001_ARetryCarriesOnlyTheLanguagesStillOwedAsync()
+    public async Task INT_SMS_006_AC3_ARetryHandsTheSameMessageOverUnderItsReferenceAsync()
     {
         _configuration.Set(Settings.NotificationLanguages, Declared);
-        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "en", new MessageTemplate(null, "english"));
-        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "ar", new MessageTemplate(null, "arabic"));
-        _sms.Takes = 1;
+        _notifications.Sms.Accepts = false;
 
-        _ = await SendAsync(Texted() with { Language = null }, TestContext.Current.CancellationToken);
+        SendReference reference = (await SendAsync(Texted() with { Language = null }, TestContext.Current.CancellationToken))
+            .Match(value => value, error => throw new Xunit.Sdk.XunitException("The send was refused: " + error.Code + "."));
 
-        Assert.Equal("ar", Assert.Single(_outbox.Waiting).Requested.Language);
+        SendDelivery waiting = Assert.Single(_outbox.Waiting);
 
-        _sms.Takes = int.MaxValue;
+        Assert.Equal(Declared, waiting.Languages);
+        Assert.Equal(reference, waiting.Reference);
+
+        _notifications.Sms.Accepts = true;
         _clock.Advance(TimeSpan.FromMinutes(1));
 
         Assert.Equal(1, await RetriedAsync());
-        Assert.Equal(["english", "arabic"], _sms.Taken.Select(message => message.Text));
+
+        SendRequest handed = Assert.Single(_notifications.Sms.Taken);
+
+        Assert.Equal(reference, handed.Reference);
+        Assert.Equal(Declared, handed.Languages);
         Assert.Empty(_outbox.Waiting);
-        Assert.Equal(2, _ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)).Count);
+        Assert.Equal(2, _ledger.Sends(Each).Count);
     }
 
     /// <summary>
@@ -816,7 +817,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     public async Task D_022_AMessageWhoseBudgetIsSpentIsRemovedAndRaisesDegradationAsync()
     {
         _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         _ = await SendAsync(Mailed(), TestContext.Current.CancellationToken);
 
@@ -853,7 +854,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     public async Task CONV_DESIGN_003_AC5_ASpentBudgetWhoseAlertCannotBeRaisedRollsBackAsync()
     {
         _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         _ = await SendAsync(Mailed(), TestContext.Current.CancellationToken);
 
@@ -911,7 +912,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         await SentAsync(Notice(subject));
 
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
 
         _ledger.Given(
             new RestrictionKey("notification.destination", RestrictionKeyKind.Destination, Mailbox.Value),
@@ -940,7 +941,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         await SentAsync(TextedNotice(subject));
 
-        Assert.Single(_sms.Taken);
+        Assert.Single(_notifications.Sms.Taken);
 
         _ledger.Given(
             new RestrictionKey("notification.destination", RestrictionKeyKind.Destination, Phone.Value),
@@ -1072,7 +1073,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     /// AUTH-ABUSE-002 AC3, AUTH-ABUSE-004 AC14: an ask that sends nothing counts as the
     /// message it stands for would, once for each message that would have been (one mail
     /// in every declared language, one text message for each of them), and is carried by
-    /// no transport and written to no outbox; the next send inside the minute is refused
+    /// no handler and written to no outbox; the next send inside the minute is refused
     /// as it would be after the message, and a draw the restrictions refuse is refused in
     /// the same bytes as the send.
     /// </summary>
@@ -1090,8 +1091,8 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.True(texted.Match(() => true, _ => false));
         Assert.Equal([Noon], _ledger.Sends(destination));
         Assert.Equal([Noon, Noon], _ledger.Sends(number));
-        Assert.Empty(_mail.Taken);
-        Assert.Empty(_sms.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
+        Assert.Empty(_notifications.Sms.Taken);
         Assert.Empty(_outbox.Written);
 
         _clock.Advance(TimeSpan.FromSeconds(10));
@@ -1105,192 +1106,88 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             refused.Match(
                 () => throw new Xunit.Sdk.XunitException("The draw was not refused."),
                 error => error.Code + JsonSerializer.Serialize(error.Details)));
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
     }
 
     /// <summary>
-    /// INT-SMS-004 AC2, AUTH-ABUSE-002 AC3: below the floor a draw for a text message
-    /// is refused as the text message would be.
+    /// INT-GEN-005 AC1, INT-SMS-006: the field set of a message handed to the host by
+    /// mail is its reference, its kind, its channel, its subject, the address, its
+    /// languages and its kind's values, and nothing else.
     /// </summary>
     [Fact]
-    public async Task INT_SMS_004_AC2_ADrawIsRefusedBelowTheFloorAsTheTextWouldBeAsync()
+    public async Task INT_GEN_005_AC1_AMailHandedOverCarriesItsExactFieldSetAsync()
     {
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
-        _balances.Given(new BalanceReading(Noon, 40m));
-
-        Result drawn = await DrawAsync(Texted(), TestContext.Current.CancellationToken);
-
-        Assert.Equal(
-            ErrorCodes.SmsBalanceFloor,
-            drawn.Match(() => (ErrorCode?)null, error => error.Code));
-        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
-    }
-
-    /// <summary>
-    /// INT-SMS-004 AC2 and AUTH-ABUSE-006 AC2: an ordinary text message is refused
-    /// below the floor, and the refusal names the condition.
-    /// </summary>
-    [Fact]
-    public async Task INT_SMS_004_AC2_AnOrdinarySendIsRefusedBelowTheFloorAsync()
-    {
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
-        _balances.Given(new BalanceReading(Noon, 40m));
-
-        Assert.Equal(
-            ErrorCodes.SmsBalanceFloor,
-            Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
-
-        Assert.Empty(_sms.Taken);
-    }
-
-    /// <summary>
-    /// AUTH-ABUSE-004 AC17: with no balance yet recorded a text message is not refused
-    /// by the floor; with a recorded balance below it, a text message is refused; and
-    /// the gateway is never asked for its balance by the send.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_ABUSE_004_AC17_TheFloorIsJudgedOnTheRecordedBalanceAndNeverOnTheGatewayAsync()
-    {
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
-        _sms.Balance = 0m;
-
-        _ = await SentAsync(Texted());
-
-        _balances.Given(new BalanceReading(Noon, 40m));
-        _clock.Advance(TimeSpan.FromMinutes(1));
-
-        Result<SendReference> ordinary = await SendAsync(Texted(), TestContext.Current.CancellationToken);
-
-        Assert.Equal(ErrorCodes.SmsBalanceFloor, Refusal(ordinary));
-        _ = Assert.Single(_sms.Taken);
-        Assert.Equal(0, _sms.Reads);
-        Assert.Single(_balances.Readings);
-    }
-
-    /// <summary>
-    /// INT-SMS-004 AC2, AUTH-ABUSE-004 AC9: a text message carried again is refused
-    /// below the floor as any ordinary send is, and fails for good: its row is removed
-    /// uncarried, its count is released and nothing is raised.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_ABUSE_004_AC9_ARetryTheFloorRefusesFailsForGoodAsync()
-    {
-        _sms.Accepts = false;
-
-        _ = await SendAsync(Texted(), TestContext.Current.CancellationToken);
-
-        _sms.Accepts = true;
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
-        _balances.Given(new BalanceReading(Noon, 40m));
-        _clock.Advance(TimeSpan.FromHours(1));
-
-        Assert.Equal(0, await RetriedAsync());
-        Assert.Empty(_sms.Taken);
-        Assert.Empty(_outbox.Waiting);
-        Assert.Empty(_ledger.Keys);
-        Assert.Empty(_events.Of<AlertRaised>());
-    }
-
-    /// <summary>
-    /// INT-GEN-005 AC1: the field set of an outbound mail is the destination, the
-    /// subject, the body and the correlation reference, and nothing else.
-    /// </summary>
-    [Fact]
-    public async Task INT_GEN_005_AC1_AnOutboundMailCarriesItsExactFieldSetAsync()
-    {
-        _templates.Set(
-            MessageKind.VerificationCode,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("your code", "the code is {code}"));
+        var subject = SubjectId.New(_randomness);
 
         SendReference reference = await SentAsync(Mailed() with
         {
+            Subject = subject,
             Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "429184" },
         });
 
-        MailMessage carried = Assert.Single(_mail.Taken);
+        SendRequest carried = Assert.Single(_notifications.Mail.Taken);
 
+        Assert.Equal(reference, carried.Reference);
+        Assert.Equal(MessageKind.VerificationCode, carried.Kind);
+        Assert.Equal(SendKind.Email, carried.Channel);
+        Assert.Equal(subject, carried.Subject);
+        Assert.Equal(Mailbox.Value, carried.Destination);
+        Assert.Equal(["en"], carried.Languages);
+        Assert.Equal("429184", Assert.Single(carried.Values, value => value.Key == "code").Value);
+        Assert.Single(carried.Values);
         Assert.Equal(
-            new MailMessage(Mailbox, "your code", "the code is 429184", reference.Value),
-            carried);
+            ["Reference", "Kind", "Channel", "Subject", "Destination", "Languages", "Values"],
+            typeof(SendRequest).GetProperties().Select(property => property.Name));
     }
 
     /// <summary>
-    /// INT-GEN-005 AC1: the field set of an outbound text message is the
-    /// destination, the text and the correlation reference, and nothing else.
+    /// INT-GEN-005 AC1, INT-SMS-006: a text handed to the host carries the number, its
+    /// reference, its kind's values and no subject where the send names none.
     /// </summary>
     [Fact]
-    public async Task INT_GEN_005_AC1_AnOutboundTextMessageCarriesItsExactFieldSetAsync()
+    public async Task INT_GEN_005_AC1_ATextHandedOverCarriesItsExactFieldSetAsync()
     {
-        _templates.Set(
-            MessageKind.VerificationCode,
-            SendKind.Sms,
-            "en",
-            new MessageTemplate(null, "code {code}"));
-
         SendReference reference = await SentAsync(Texted() with
         {
             Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "429184" },
         });
 
-        SmsMessage carried = Assert.Single(_sms.Taken);
+        SendRequest carried = Assert.Single(_notifications.Sms.Taken);
 
-        Assert.Equal(new SmsMessage(Phone, "code 429184", reference.Value), carried);
+        Assert.Equal(reference, carried.Reference);
+        Assert.Equal(MessageKind.VerificationCode, carried.Kind);
+        Assert.Equal(SendKind.Sms, carried.Channel);
+        Assert.Null(carried.Subject);
+        Assert.Equal(Phone.Value, carried.Destination);
+        Assert.Equal(["en"], carried.Languages);
+        Assert.Equal("429184", Assert.Single(carried.Values, value => value.Key == "code").Value);
+        Assert.Single(carried.Values);
     }
 
     /// <summary>
-    /// IDN-ATTR-001 AC3: a message to someone whose language nothing names goes out in
-    /// every language the deployment declares, each in the deployment's own template for
-    /// it. By text it is a message for each language, each under a reference of its own
-    /// and each counted, so a report of one failed delivery releases that one alone, and
-    /// the reference answered is the first language's (AUTH-ABUSE-004 AC1).
+    /// IDN-ATTR-001 AC3, INT-SMS-006: a message to someone whose language nothing names
+    /// goes out in every language the deployment declares, in their declared order, as
+    /// one message under one reference for the host to compose. By text it counts as a
+    /// text for each language, and a report that it failed releases them all
+    /// (AUTH-ABUSE-004 AC1, D-225).
     /// </summary>
     [Fact]
     public async Task IDN_ATTR_001_AC3_NoKnownLanguageGoesOutInEveryDeclaredOneAsync()
     {
         _configuration.Set(Settings.NotificationLanguages, Declared);
-        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "en", new MessageTemplate(null, "english"));
-        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "ar", new MessageTemplate(null, "arabic"));
-        var destination = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value);
 
         SendReference reference = await SentAsync(Texted() with { Language = null });
 
-        Assert.Equal(["english", "arabic"], _sms.Taken.Select(message => message.Text));
-        Assert.Equal(reference.Value, _sms.Taken[0].Reference);
-        Assert.NotEqual(_sms.Taken[0].Reference, _sms.Taken[1].Reference);
-        Assert.Equal([Noon, Noon], _ledger.Sends(destination));
+        SendRequest handed = Assert.Single(_notifications.Sms.Taken);
+
+        Assert.Equal(Declared, handed.Languages);
+        Assert.Equal(reference, handed.Reference);
+        Assert.Equal([Noon, Noon], _ledger.Sends(Each));
         Assert.Empty(_outbox.Waiting);
 
         Assert.True(
-            await _ledger.ReleaseAsync(
-                SendReferences.Of(_sms.Taken[1].Reference),
-                TestContext.Current.CancellationToken));
-        Assert.Single(_ledger.Sends(destination));
-    }
-
-    /// <summary>
-    /// IDN-ATTR-001, AUTH-ABUSE-004: where a transport takes one language of a text
-    /// message and refuses the next, each was admitted and counts, and the one refused
-    /// stays recorded for the retry with its attempt counted.
-    /// </summary>
-    [Fact]
-    public async Task IDN_ATTR_001_ALanguageTheTransportRefusedLeavesTheMessageRecordedAsync()
-    {
-        _configuration.Set(Settings.NotificationLanguages, Declared);
-        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "en", new MessageTemplate(null, "english"));
-        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "ar", new MessageTemplate(null, "arabic"));
-        _sms.Takes = 1;
-
-        _ = await SentAsync(Texted() with { Language = null });
-
-        Assert.Equal("english", Assert.Single(_sms.Taken).Text);
-
-        SendDelivery waiting = Assert.Single(_outbox.Waiting);
-
-        Assert.Equal("ar", waiting.Requested.Language);
-        Assert.Equal(1, waiting.Attempts);
-        Assert.Equal(2, _ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)).Count);
+            await _ledger.ReleaseAsync(SendReferences.Of(reference), TestContext.Current.CancellationToken));
+        Assert.Empty(_ledger.Sends(Each));
     }
 
     /// <summary>
@@ -1301,11 +1198,10 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     public async Task IDN_ATTR_001_AKnownLanguageIsTheOnlyOneSentAsync()
     {
         _configuration.Set(Settings.NotificationLanguages, Declared);
-        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "ar", new MessageTemplate("code", "arabic"));
 
         _ = await SentAsync(Mailed() with { Language = "ar" });
 
-        Assert.Equal("arabic", Assert.Single(_mail.Taken).Body);
+        Assert.Equal(["ar"], Assert.Single(_notifications.Mail.Taken).Languages);
     }
 
     /// <summary>
@@ -1330,7 +1226,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             ErrorCodes.StartupDeclarationMissing,
             Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
 
-        Assert.Empty(_sms.Taken);
+        Assert.Empty(_notifications.Sms.Taken);
     }
 
     // What one member takes and gives: the types a send could be told a preference
@@ -1387,8 +1283,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     /// AUTH-ABUSE-004, LIB-EXT-001 AC4: a deployment that registers its own handler is
     /// still governed. With one that takes everything, the fourth text message to one
     /// number inside a day is refused with <c>retryAt</c> and the handler saw three, each
-    /// an admitted message carrying its reference and none of the restrictions' inputs;
-    /// below the gateway floor it is asked to carry nothing.
+    /// an admitted message carrying its reference and none of the restrictions' inputs.
     /// </summary>
     [Fact]
     public async Task LIB_EXT_001_AC4_AReplacedHandlerIsStillGovernedAsync()
@@ -1409,22 +1304,13 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Equal(Noon + TimeSpan.FromMinutes(3) + TimeSpan.FromHours(24), RetryAt(fourth));
         Assert.Equal(3, replaced.Asked);
         Assert.Equal(3, replaced.Taken.Select(taken => taken.Reference.Value).Distinct(StringComparer.Ordinal).Count());
-        Assert.All(replaced.Taken, taken => Assert.Equal(Phone.Value, taken.Destination.Canonical));
-        Assert.Empty(_sms.Taken);
-
-        _balances.Given(new BalanceReading(Noon, 1000m));
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 5000m);
-        _clock.Advance(TimeSpan.FromHours(25));
-
-        Assert.Equal(
-            ErrorCodes.SmsBalanceFloor,
-            Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
-        Assert.Equal(3, replaced.Asked);
+        Assert.All(replaced.Taken, taken => Assert.Equal(Phone.Value, taken.Destination));
+        Assert.Empty(_notifications.Sms.Taken);
     }
 
     /// <summary>
     /// AUTH-ABUSE-004 AC8, CONV-DESIGN-002 AC5: a send undertaken inside an operation
-    /// that then rolls back reaches no transport and leaves no row and no count.
+    /// that then rolls back reaches no handler and leaves no row and no count.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC8_AMessageUndertakenInARolledBackOperationIsNeverCarriedAsync()
@@ -1438,7 +1324,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         await _work.RollbackAsync();
 
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.Empty(_outbox.Waiting);
         Assert.Empty(_ledger.Keys);
         Assert.Equal(1, _work.Discarded);
@@ -1446,12 +1332,12 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _clock.Advance(TimeSpan.FromMinutes(5));
 
         Assert.Equal(0, await RetriedAsync());
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
     }
 
     /// <summary>
     /// AUTH-ABUSE-004 AC8, CONV-DESIGN-002 AC5: a send undertaken inside an operation
-    /// that commits is carried after the commit, and no transport is called while its
+    /// that commits is carried after the commit, and no handler is called while its
     /// transaction is open, however many levels of it are.
     /// </summary>
     [Fact]
@@ -1459,7 +1345,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     {
         var open = new List<bool>();
 
-        _mail.Handed = () => open.Add(_work.Open);
+        _notifications.Mail.Handed = () => open.Add(_work.Open);
 
         Begun(await _work.BeginAsync(TestContext.Current.CancellationToken));
         Begun(await _work.BeginAsync(TestContext.Current.CancellationToken));
@@ -1469,13 +1355,13 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Begun(await _work.CommitAsync(TestContext.Current.CancellationToken));
 
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.Single(_outbox.Waiting);
         Assert.Single(_ledger.Sends(new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value)));
 
         Begun(await _work.CommitAsync(TestContext.Current.CancellationToken));
 
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
         Assert.Equal([false], open);
         Assert.Empty(_outbox.Waiting);
     }
@@ -1492,7 +1378,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
         _ledger.Given(key, Noon.AddMinutes(-6), Noon.AddMinutes(-5), Noon.AddMinutes(-4), Noon.AddMinutes(-3), Noon.AddMinutes(-2));
         await _ledger.GrantAsync(key, 1, TestContext.Current.CancellationToken);
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         _ = await SentAsync(Mailed());
 
@@ -1512,9 +1398,9 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-ABUSE-004 AC1, AC16: a send in every declared language is judged once. By
-    /// email it is one message, composed from each language's text in the declared
-    /// order, and counts once. By SMS, with two declared languages and two of the three
-    /// sends of a day spent, it is refused whole; with room for both, each counts.
+    /// email it is one message carrying the languages in the declared order, and counts
+    /// once. By SMS, with two declared languages and two of the three sends of a day
+    /// spent, it is refused whole; with room for both, it is one message counted twice.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC1_ASendInEveryDeclaredLanguageIsJudgedOnceAsync()
@@ -1523,21 +1409,10 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         var texted = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value);
 
         _configuration.Set(Settings.NotificationLanguages, Declared);
-        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "en", new MessageTemplate("first", "english"));
-        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "ar", new MessageTemplate("second", "arabic"));
 
         _ = await SentAsync(Mailed() with { Language = null });
 
-        MailMessage composed = Assert.Single(_mail.Taken);
-
-        Assert.True(
-            composed.Body.IndexOf("english", StringComparison.Ordinal)
-            < composed.Body.IndexOf("arabic", StringComparison.Ordinal));
-        Assert.True(
-            composed.Subject.IndexOf("first", StringComparison.Ordinal)
-            < composed.Subject.IndexOf("second", StringComparison.Ordinal));
-        Assert.Contains("english", composed.Body, StringComparison.Ordinal);
-        Assert.Contains("first", composed.Subject, StringComparison.Ordinal);
+        Assert.Equal(Declared, Assert.Single(_notifications.Mail.Taken).Languages);
         Assert.Single(_ledger.Sends(mailed));
 
         _ledger.Given(texted, Noon.AddHours(-2), Noon.AddHours(-1));
@@ -1548,15 +1423,14 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(refused));
         Assert.Equal(Noon.AddHours(-2) + TimeSpan.FromHours(24), RetryAt(refused));
-        Assert.Empty(_sms.Taken);
+        Assert.Empty(_notifications.Sms.Taken);
         Assert.Equal(2, _ledger.Sends(texted).Count);
 
         _ledger.Given(texted, Noon.AddHours(-1));
 
         _ = await SentAsync(Texted() with { Language = null });
 
-        Assert.Equal(2, _sms.Taken.Count);
-        Assert.Equal(2, _sms.Taken.Select(message => message.Reference).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(Declared, Assert.Single(_notifications.Sms.Taken).Languages);
         Assert.Equal(3, _ledger.Sends(texted).Count);
     }
 
@@ -1594,7 +1468,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     /// AUTH-ABUSE-003 AC7, AUTH-ABUSE-004: the message of an ask of a sign-in link, an
     /// email code or a recovery, and the notice to an address no account holds, is
     /// written and counted in the request and carried by the publisher, so the ask is
-    /// answered before any transport is called.
+    /// answered before the host's handler is called.
     /// </summary>
     /// <param name="message">The message of the ask.</param>
     /// <returns>The work of the test.</returns>
@@ -1603,7 +1477,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     [InlineData(MessageKind.SignInCode)]
     [InlineData(MessageKind.RecoveryLink)]
     [InlineData(MessageKind.NoAccount)]
-    public async Task AUTH_ABUSE_003_AC7_AnAskIsAnsweredBeforeAnyTransportIsCalledAsync(MessageKind message)
+    public async Task AUTH_ABUSE_003_AC7_AnAskIsAnsweredBeforeTheHandlerIsCalledAsync(MessageKind message)
     {
         _ = await SentAsync(new OutboundMessage(
             SendDestination.Of(Mailbox),
@@ -1612,12 +1486,12 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             "198.51.100.7",
             "en"));
 
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.Single(_outbox.Waiting);
         Assert.Single(_ledger.Sends(new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value)));
 
         Assert.Equal(1, await RetriedAsync());
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
         Assert.Empty(_outbox.Waiting);
     }
 
@@ -1634,7 +1508,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             _outbox.Claiming = null;
             _outbox.TakeOver(claim.Delivery, claim.Until + TimeSpan.FromMinutes(2));
         };
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         _ = await SentAsync(Mailed());
 
@@ -1642,11 +1516,11 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Equal(0, held.Attempts);
 
-        _mail.Accepts = true;
+        _notifications.Mail.Accepts = true;
         _clock.Advance(TimeSpan.FromSeconds(30));
 
         Assert.Equal(0, await RetriedAsync());
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.Single(_outbox.Claimed);
     }
 
@@ -1659,7 +1533,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     [Fact]
     public async Task CONV_DESIGN_003_AC9_ARowReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync()
     {
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         _ = await SentAsync(Mailed());
 
@@ -1668,14 +1542,14 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Equal(1, rescheduled.Attempts);
         Assert.True(rescheduled.NextAttemptAt > Noon);
 
-        _mail.Accepts = true;
+        _notifications.Mail.Accepts = true;
         _clock.Advance(TimeSpan.FromMinutes(3));
         _outbox.Reschedule(rescheduled.Id, _clock.GetUtcNow() + TimeSpan.FromSeconds(1));
 
         await Path.Publisher.AttemptAsync(rescheduled.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, await RetriedAsync());
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.Single(_outbox.Claimed);
         Assert.Equal(1, Assert.Single(_outbox.Waiting).Attempts);
 
@@ -1683,7 +1557,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         await Path.Publisher.AttemptAsync(rescheduled.Id, TestContext.Current.CancellationToken);
 
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
         Assert.Empty(_outbox.Waiting);
     }
 
@@ -1714,7 +1588,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Equal(Noon.AddSeconds(40), Assert.Single(_outbox.Written).NextAttemptAt);
         Assert.Equal((0, 1), (early, claims));
         Assert.Equal(1, due);
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
     }
 
     /// <summary>
@@ -1728,7 +1602,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         GovernedSend send = Path.Send;
 
         IReadOnlyList<SendDeliveryId> taken = await FollowedAsync(send, Mailed());
-        _sms.Accepts = false;
+        _notifications.Sms.Accepts = false;
         IReadOnlyList<SendDeliveryId> left = await FollowedAsync(send, Texted());
 
         Assert.True(await send.CarriedAsync(taken, TestContext.Current.CancellationToken));
@@ -1746,14 +1620,14 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     public async Task AUTH_ABUSE_004_AC19_ASendNotTakenCountsAsNotCarriedWhateverBecomesOfItsRowAsync()
     {
         GovernedSend send = Path.Send;
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         IReadOnlyList<SendDeliveryId> later = await FollowedAsync(send, Mailed());
-        _mail.Accepts = true;
+        _notifications.Mail.Accepts = true;
         _clock.Advance(TimeSpan.FromMinutes(3));
         int passed = await RetriedAsync();
         _configuration.Set(Settings.OutboxRetryMaxAttempts, 1);
-        _sms.Accepts = false;
+        _notifications.Sms.Accepts = false;
         IReadOnlyList<SendDeliveryId> exhausted = await FollowedAsync(send, Texted());
 
         Assert.Equal(1, passed);
@@ -1792,7 +1666,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Equal(answered, held.Reference);
         Assert.Equal(0, held.Attempts);
         Assert.Single(_ledger.Sends(key));
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.False(_work.Open);
 
         string line = Assert.Single(logs.Lines, written => written.Contains(typeof(SendPublisher).FullName!, StringComparison.Ordinal));
@@ -1803,7 +1677,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _clock.Advance(TimeSpan.FromSeconds(30));
 
         Assert.Equal(1, await RetriedAsync());
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
         Assert.Empty(_outbox.Waiting);
     }
 
@@ -1829,7 +1703,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Equal(answered, held.Reference);
         Assert.Equal(0, held.Attempts);
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.False(_work.Open);
         _ = Assert.Single(logs.Lines, written => written.Contains(typeof(SendPublisher).FullName!, StringComparison.Ordinal));
 
@@ -1837,13 +1711,13 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         _ = await Assert.ThrowsAsync<InvalidOperationException>(RetriedAsync);
 
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.Equal(0, Assert.Single(_outbox.Waiting).Attempts);
 
         _configuration.Unreachable = null;
 
         Assert.Equal(1, await RetriedAsync());
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
         Assert.Empty(_outbox.Waiting);
     }
     /// <summary>
@@ -1856,18 +1730,18 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     {
         var key = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value);
 
-        _mail.Accepts = false;
+        _notifications.Mail.Accepts = false;
 
         _ = await SentAsync(Mailed());
 
         Assert.Single(_ledger.Sends(key));
 
         _outbox.Erase(Assert.Single(_outbox.Waiting).Id);
-        _mail.Accepts = true;
+        _notifications.Mail.Accepts = true;
         _clock.Advance(TimeSpan.FromSeconds(30));
 
         Assert.Equal(0, await RetriedAsync());
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail.Taken);
         Assert.Empty(_outbox.Waiting);
         Assert.Empty(_ledger.Sends(key));
     }
@@ -1892,15 +1766,15 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _clock.Advance(TimeSpan.FromMinutes(2));
 
         Assert.Equal(1, await RetriedAsync());
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail.Taken);
         Assert.Equal([Noon + TimeSpan.FromMinutes(2)], _ledger.Sends(key));
     }
 
     /// <summary>
     /// AUTH-ABUSE-004 AC1 and chapter 10 section 5.16a: a text message owed in two
-    /// declared languages counts each language against a restriction not marked
-    /// <c>resend</c> and the send once against one that is, which judges it as one: its
-    /// bucket of one has room for both texts, and none for the send that follows.
+    /// declared languages counts once for each language against a restriction not marked
+    /// <c>resend</c> and once against one that is, which judges it as one: its bucket of
+    /// one has room for it, and none for the send that follows.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC1_ASendInTwoLanguagesCountsOnceAgainstAResendRestrictionAsync()
@@ -1910,7 +1784,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         _ = await SentAsync(Texted() with { Language = null });
 
-        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal(Declared, Assert.Single(_notifications.Sms.Taken).Languages);
         Assert.Equal([Noon, Noon], _ledger.Sends(Each));
         Assert.Equal([Noon], _ledger.Sends(Once));
 
@@ -1926,36 +1800,33 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC2, INT-SMS-005 AC3: a failure report of one text of a send in
-    /// two languages releases that text's count from the restriction not marked
-    /// <c>resend</c> and leaves the send's one count against the one that is, so the
-    /// next send is still refused; the failure report of the other releases it, and the
-    /// next send is admitted at once.
+    /// AUTH-ABUSE-004 AC2, INT-SMS-005 AC2, D-225: a send in two languages is one text
+    /// counted twice against the restriction not marked <c>resend</c> and once against
+    /// the one that is, so the next send is refused; a failure report of its reference
+    /// releases every count, and the next send is admitted at once.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_004_AC2_AFailureReportReleasesTheResendCountOnceEveryTextHasFailedAsync()
+    public async Task AUTH_ABUSE_004_AC2_AFailureReportReleasesEveryCountOfATextInEveryLanguageAsync()
     {
         _configuration.Set(Settings.Restrictions, Paced);
         _configuration.Set(Settings.NotificationLanguages, Declared);
 
-        _ = await SentAsync(Texted() with { Language = null });
+        SendReference reference = await SentAsync(Texted() with { Language = null });
 
-        await ReportedAsync(_sms.Taken[0].Reference, delivered: false);
-
-        Assert.Equal([Noon], _ledger.Sends(Each));
+        Assert.Equal([Noon, Noon], _ledger.Sends(Each));
         Assert.Equal([Noon], _ledger.Sends(Once));
         Assert.Equal(
             ErrorCodes.RestrictionExceeded,
             Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
 
-        await ReportedAsync(_sms.Taken[1].Reference, delivered: false);
+        await ReportedAsync(reference, delivered: false);
 
         Assert.Empty(_ledger.Sends(Each));
         Assert.Empty(_ledger.Sends(Once));
 
         _ = await SentAsync(Texted());
 
-        Assert.Equal(3, _sms.Taken.Count);
+        Assert.Equal(2, _notifications.Sms.Taken.Count);
     }
 
     /// <summary>
@@ -1983,7 +1854,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         SendReference reference = await SentAsync(Texted() with { Message = message, Purpose = purpose });
 
-        await ReportedAsync(reference.Value, delivered: true);
+        await ReportedAsync(reference, delivered: true);
 
         DateTimeOffset[] standing = released ? [] : [Noon];
 
@@ -2007,7 +1878,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _configuration.Set(Settings.Restrictions, Paced);
         _configuration.Set(Settings.NotificationLanguages, Declared);
         _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
-        _sms.Accepts = false;
+        _notifications.Sms.Accepts = false;
 
         _ = await SentAsync(Texted() with { Language = null });
 
@@ -2032,33 +1903,36 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     public async Task AUTH_ABUSE_004_AC16_ARetriedTextIsJudgedWithItsSendsOneCountSetAsideAsync()
     {
         _configuration.Set(Settings.Restrictions, Paced);
-        _sms.Accepts = false;
+        _notifications.Sms.Accepts = false;
 
         _ = await SentAsync(Texted());
 
-        _sms.Accepts = true;
+        _notifications.Sms.Accepts = true;
         _clock.Advance(TimeSpan.FromSeconds(30));
 
         Assert.Equal(1, await RetriedAsync());
-        Assert.Single(_sms.Taken);
+        Assert.Single(_notifications.Sms.Taken);
         Assert.Equal([Noon + TimeSpan.FromSeconds(30)], _ledger.Sends(Each));
         Assert.Equal([Noon + TimeSpan.FromSeconds(30)], _ledger.Sends(Once));
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC9, AC16: a text that could not be judged at its retry holds no
-    /// count of its own while it waits and has not failed for good, so it stays of its
-    /// send and the send's one count stands; judged at its next attempt, it counts at
-    /// that instant and the send once, in place of the earlier count.
+    /// AUTH-ABUSE-004 AC9, AC16: a text in two languages that could not be judged at its
+    /// retry holds no count against the restriction not marked <c>resend</c> while it
+    /// waits and has not failed for good, so the send's one count against the one marked
+    /// <c>resend</c> stands; judged at its next attempt, it counts at that instant, once
+    /// for each language and the send once, in place of the earlier counts.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC9_ATextNotJudgedAtItsRetryStaysOfItsSendAsync()
     {
         _configuration.Set(Settings.Restrictions, Paced);
         _configuration.Set(Settings.NotificationLanguages, Declared);
-        _sms.Takes = 1;
+        _notifications.Sms.Accepts = false;
 
         _ = await SentAsync(Texted() with { Language = null });
+
+        Assert.Equal([Noon, Noon], _ledger.Sends(Each));
 
         // A restriction whose key no supplier answers for: the retry cannot be judged.
         _configuration.Set<IReadOnlyList<Restriction>>(
@@ -2072,28 +1946,28 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
                     RestrictionPurpose.Any,
                     [new Bucket(1, TimeSpan.FromHours(1), BucketWindow.Sliding)]),
             ]);
-        _sms.Takes = int.MaxValue;
+        _notifications.Sms.Accepts = true;
         _clock.Advance(TimeSpan.FromSeconds(30));
 
         Assert.Equal(0, await RetriedAsync());
         Assert.Single(_outbox.Waiting);
-        Assert.Equal([Noon], _ledger.Sends(Each));
+        Assert.Empty(_ledger.Sends(Each));
         Assert.Equal([Noon], _ledger.Sends(Once));
 
         _configuration.Set(Settings.Restrictions, Paced);
         _clock.Advance(TimeSpan.FromMinutes(1));
 
         Assert.Equal(1, await RetriedAsync());
-        Assert.Equal(2, _sms.Taken.Count);
-        Assert.Equal([Noon, Noon + TimeSpan.FromSeconds(90)], _ledger.Sends(Each));
+        Assert.Equal(Declared, Assert.Single(_notifications.Sms.Taken).Languages);
+        Assert.Equal([Noon + TimeSpan.FromSeconds(90), Noon + TimeSpan.FromSeconds(90)], _ledger.Sends(Each));
         Assert.Equal([Noon + TimeSpan.FromSeconds(90)], _ledger.Sends(Once));
     }
 
     /// <summary>
     /// AUTH-ABUSE-004 AC20, AC2: a send named by the code or the link it carries is
     /// released from the restriction marked <c>resend</c> once that code is presented
-    /// right or that link pressed, and from nothing else: each text's count against the
-    /// restriction not marked stands, an answer no send was named by releases nothing,
+    /// right or that link pressed, and from nothing else: the text's counts against the
+    /// restriction not marked stand, an answer no send was named by releases nothing,
     /// and the next send is admitted at once.
     /// </summary>
     [Fact]
@@ -2129,7 +2003,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         _ = await SentAsync(Texted());
 
-        Assert.Equal(3, _sms.Taken.Count);
+        Assert.Equal(2, _notifications.Sms.Taken.Count);
     }
 
     /// <summary>
@@ -2149,7 +2023,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             error => throw new Xunit.Sdk.XunitException($"The ask was refused: {error.Code}."));
 
         Assert.Empty(_outbox.Waiting);
-        Assert.Empty(_sms.Taken);
+        Assert.Empty(_notifications.Sms.Taken);
         Assert.Equal([Noon, Noon], _ledger.Sends(Each));
         Assert.Equal([Noon], _ledger.Sends(Once));
 
@@ -2255,15 +2129,12 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             CultureInfo.InvariantCulture,
             DateTimeStyles.RoundtripKind);
 
-    // One delivery report taken as the callback takes it.
-    private async Task ReportedAsync(string reference, bool delivered) =>
-        (await new DeliveryReports(
-                new CallbackAdmission(_configuration, new CallbackLedgerInMemory(), new CallbackEventsInMemory(), _events, _clock),
-                _ledger,
-                _work)
-            .ReportAsync("203.0.113.9", reference, delivered, TestContext.Current.CancellationToken)).Switch(
-            () => { },
-            error => throw new Xunit.Sdk.XunitException($"The report was refused: {error.Code}."));
+    // One outcome reported as a host reports it.
+    private async Task ReportedAsync(SendReference reference, bool delivered) =>
+        _ = (await new SendOutcomes(_ledger, _work)
+            .ReportAsync(reference, delivered, TestContext.Current.CancellationToken)).Match(
+            named => named,
+            error => throw new Xunit.Sdk.XunitException("The report was refused: " + error.Code + "."));
 
     // A code presented right or a link pressed, in a unit of work of its own.
     private async Task AnsweredAsync(byte[] answer)

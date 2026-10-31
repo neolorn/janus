@@ -519,7 +519,6 @@ public sealed class AuthorizationModelTests
     [InlineData("emergency-credential")]
     [InlineData("audit-partitions")]
     [InlineData("kek-cryptoperiod")]
-    [InlineData("sms-balance")]
     [InlineData("bootstrap")]
     [InlineData("configure")]
     [InlineData("register-client")]

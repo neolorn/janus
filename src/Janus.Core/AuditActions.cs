@@ -394,7 +394,7 @@ public static class AuditActions
     /// <summary>
     /// A phone signal was consulted before a send, recorded without the number it was consulted for.
     /// </summary>
-    /// <remarks>Implements AUTH-ABUSE-006, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-FACT-002b, chapter 10 section 5.</remarks>
     public static AuditAction PhoneSignalConsidered { get; } = AuditAction.Parse("auth.phonesignal.considered");
 
     /// <summary>
@@ -508,7 +508,7 @@ public static class AuditActions
     /// <summary>
     /// A sending restriction was edited.
     /// </summary>
-    /// <remarks>Implements AUTH-ABUSE-005, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-ABUSE-004, chapter 10 section 5.</remarks>
     public static AuditAction RestrictionEdited { get; } = AuditAction.Parse("auth.restriction.edited");
 
     /// <summary>
@@ -521,7 +521,7 @@ public static class AuditActions
     /// <summary>
     /// A sending restriction was granted against an address or a number.
     /// </summary>
-    /// <remarks>Implements AUTH-ABUSE-005, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-ABUSE-004, chapter 10 section 5.</remarks>
     public static AuditAction RestrictionGranted { get; } = AuditAction.Parse("auth.restriction.granted");
 
     /// <summary>

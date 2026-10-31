@@ -22,7 +22,6 @@ namespace Janus.Hosting.Tests.Recovery;
 [Trait("kind", "unit")]
 public sealed class RecoveryFlowTests : IAsyncDisposable
 {
-    private const string Language = "en";
     private const string Elsewhere = "nobody@example.test";
     private const string NewPassword = "lemoncurdandbutter";
     private const string Recorded = "recovered@example.test";
@@ -35,25 +34,13 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
 
     /// <summary>
     /// A deployment that can send, whose recovery message and suspension notice carry
-    /// the token as the shipped templates do.
+    /// the token among their values.
     /// </summary>
     public RecoveryFlowTests()
     {
         Flow.Prepare(_deployment);
         _deployment.RecoveryApprovals.Work = _deployment.Work;
         _deployment.RecoveryAudit.Work = _deployment.Work;
-
-        foreach (MessageKind message in new[] { MessageKind.RecoveryLink, MessageKind.SecurityNotice, MessageKind.CredentialSuspended })
-        {
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                _deployment.Templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "recovery" : null, "{link}"));
-            }
-        }
     }
 
     /// <inheritdoc/>
@@ -156,7 +143,7 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         string token = Token();
 
         Assert.NotEmpty(token);
-        Assert.Equal("https://identity.example.test/link#recovery." + token, _deployment.Mail.Taken[^1].Body);
+        Assert.Equal("https://identity.example.test/link#recovery." + token, _deployment.Mail.Taken[^1].Values["link"]);
         Assert.Same(held, await HashAsync(subject));
 
         Answer completed = await browser.SendAsync(
@@ -382,7 +369,7 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         Answer cancelled = await elsewhere.SendAsync(
             "POST",
             "/recovery/report-loss/" + credential + "/cancel",
-            ("token", Landing.Token(_deployment.Mail.Taken[^1].Body)));
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Values["link"])));
 
         Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
     }
@@ -417,7 +404,7 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
             "POST",
             "/recovery/report-loss",
             ("credentialId", bound.Id.ToString()));
-        string link = Landing.Token(_deployment.Mail.Taken[^1].Body);
+        string link = Landing.Token(_deployment.Mail.Taken[^1].Values["link"]);
         Answer suspended = await browser.SendAsync("GET", "/account/credentials");
 
         Assert.Equal(StatusCodes.Status202Accepted, reported.Status);
@@ -720,5 +707,5 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
             : throw new InvalidOperationException("The label is not one.");
 
     // The token the recovery message carried, which never touches any answer.
-    private string Token() => Landing.Token(_deployment.Mail.Taken[^1].Body);
+    private string Token() => Landing.Token(_deployment.Mail.Taken[^1].Values["link"]);
 }

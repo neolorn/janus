@@ -16,7 +16,7 @@ namespace Janus.Core.Tests.Configuration;
 public sealed class RestrictionSetSettingTests
 {
     /// <summary>
-    /// INT-SMS-003 AC3: a restriction whose name breaks the rule is refused where it is
+    /// INT-SMS-003 AC1: a restriction whose name breaks the rule is refused where it is
     /// written, with <c>config.value.notallowed</c> naming the key.
     /// </summary>
     /// <param name="name">A name outside the rule.</param>
@@ -43,7 +43,7 @@ public sealed class RestrictionSetSettingTests
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3: a name longer than 64 characters is refused, and one of 64 is
+    /// INT-SMS-003 AC1: a name longer than 64 characters is refused, and one of 64 is
     /// admitted.
     /// </summary>
     [Fact]

@@ -168,7 +168,8 @@ public static class HostingRegistration
         // probes, as the same client and on the same connection.
         services.AddScoped<IProviderProbes, ProviderProbes>();
 
-        // INT-MAIL-009: outbound delivery is registered apart from mailbox hosting.
+        // INT-SMS-006: what hands each message to the host's notification handler,
+        // registered apart from mailbox hosting.
         services.AddOutboundDelivery();
 
         // IDN-LIFE-012a: a provider's events are verified against the keys it publishes,
@@ -362,29 +363,28 @@ public static class HostingRegistration
         // keys once the ring is filled, making one current where none is held, and then
         // builds the provider's options.
         services.Insert(9, ServiceDescriptor.Singleton<IHostedService, ProviderStartService>());
-        services.Insert(10, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
 
         // PRIV-BASIS-001 (D-183): the declared lawful bases are written into their table
         // once the model and the schema have been checked, and before the server serves.
-        services.Insert(11, ServiceDescriptor.Singleton<IHostedService, LawfulBasisStartService>());
+        services.Insert(10, ServiceDescriptor.Singleton<IHostedService, LawfulBasisStartService>());
 
         // PRIV-CONS-007 AC5 (D-183): a consent recorded against a document its purpose no
         // longer names is stamped superseded once the declaration has been checked, and
         // before the server serves.
-        services.Insert(12, ServiceDescriptor.Singleton<IHostedService, DocumentSupersessionStartService>());
+        services.Insert(11, ServiceDescriptor.Singleton<IHostedService, DocumentSupersessionStartService>());
 
         // PRIV-CONS-006a AC4 (D-203): the cookies the deployment now sets are compared with
         // those the current privacy notice lists once the declaration has been checked.
-        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, NoticeCookiesStartService>());
+        services.Insert(12, ServiceDescriptor.Singleton<IHostedService, NoticeCookiesStartService>());
 
         // AUTHZ-GRANT-004 (D-204): each declared role not yet seeded is defined once the
         // model and the stored roles have been checked, and before the server serves.
-        services.Insert(14, ServiceDescriptor.Singleton<IHostedService, DeclaredRoleStartService>());
+        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, DeclaredRoleStartService>());
 
         // BFF-LOG-002 (D-197): what the host's logging makes of the server's per-request
         // entries is read once the host has written every rule it will, and before the
         // server serves.
-        services.Insert(15, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
+        services.Insert(14, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(

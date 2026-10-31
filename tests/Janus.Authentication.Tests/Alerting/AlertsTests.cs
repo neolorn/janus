@@ -31,7 +31,6 @@ public sealed class AlertsTests
         "stepup-policy-weakened",
         "concurrent-sessions-implausible",
         "denial-spike",
-        "sms-balance",
         "background-job-failed",
         "erasure-delivery-exhausted",
         "degradation",
@@ -48,7 +47,6 @@ public sealed class AlertsTests
         "domain-removed",
         "governing-language-changed",
         "governing-text-missing",
-        "relay-domain-unregistered",
     ];
 
     private static readonly AlertCondition[] High =
@@ -156,10 +154,10 @@ public sealed class AlertsTests
     [Fact]
     public void Deduplication_AConditionNamingNoOne_IsTheIdentifierAlone()
     {
-        AlertRaised raised = Alerts.Of(AlertCondition.SmsBalance, null, Noon);
-        AlertRaised later = Alerts.Of(AlertCondition.SmsBalance, null, Noon + TimeSpan.FromHours(2));
+        AlertRaised raised = Alerts.Of(AlertCondition.HolidayListExhausted, null, Noon);
+        AlertRaised later = Alerts.Of(AlertCondition.HolidayListExhausted, null, Noon + TimeSpan.FromHours(2));
 
-        Assert.Equal("sms-balance", Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.Equal("holiday-list-exhausted", Alerts.Deduplication(raised.IdempotencyKey));
         Assert.Equal(
             Alerts.Deduplication(raised.IdempotencyKey),
             Alerts.Deduplication(later.IdempotencyKey));

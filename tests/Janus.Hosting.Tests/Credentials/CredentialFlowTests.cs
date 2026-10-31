@@ -28,7 +28,6 @@ namespace Janus.Hosting.Tests.Credentials;
 [Trait("kind", "unit")]
 public sealed class CredentialFlowTests : IAsyncDisposable
 {
-    private const string Language = "en";
     private const string Label = "This phone";
     private const string Replacement = "quincejellyonasaucer";
     private const string Link = "the-approver-sent-this-one";
@@ -45,19 +44,6 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         Flow.Prepare(_deployment);
 
         _deployment.Configuration.Set(Settings.ServiceName, "Example");
-
-        foreach (MessageKind message in new[]
-            { MessageKind.SecurityNotice, MessageKind.CredentialEnrolled })
-        {
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                _deployment.Templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "notice" : null, "body"));
-            }
-        }
     }
 
     /// <inheritdoc/>
@@ -322,12 +308,12 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status202Accepted, begun.Status);
         Assert.Equal(sent + 1, _deployment.Sms.Taken.Count);
-        Assert.Equal(Flow.Number, _deployment.Sms.Taken[^1].Destination.Value);
+        Assert.Equal(Flow.Number, _deployment.Sms.Taken[^1].Destination);
 
         Answer confirmed = await browser.SendAsync(
             "POST",
             "/account/factors/phonecode/confirm",
-            ("code", _deployment.Sms.Taken[^1].Text));
+            ("code", _deployment.Sms.Taken[^1].Values["code"]));
 
         Assert.Equal(StatusCodes.Status200OK, confirmed.Status);
         Assert.Equal(
@@ -406,7 +392,7 @@ public sealed class CredentialFlowTests : IAsyncDisposable
             ("identifier", number),
             ("label", Label));
 
-        string code = _deployment.Sms.Taken[^1].Text;
+        string code = _deployment.Sms.Taken[^1].Values["code"];
 
         Answer wrong = await browser.SendAsync(
             "POST",
@@ -996,7 +982,7 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         Assert.Contains(
             standing.All,
             identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
-        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Subject is "confirm");
+        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Kind is MessageKind.IdentifierChangeConfirm);
     }
 
     /// <summary>
@@ -1027,11 +1013,12 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status204NoContent, pressed.Status);
         Assert.Contains(
             _deployment.Mail.Taken,
-            sent => sent.Body.Contains(" https://identity.example.test/link#identifier.", StringComparison.Ordinal));
+            sent => sent.Values.TryGetValue("link", out string? link)
+                && link.StartsWith("https://identity.example.test/link#identifier.", StringComparison.Ordinal));
         Assert.Contains(
             (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All,
             identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
-        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Subject is "confirm");
+        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Kind is MessageKind.IdentifierChangeConfirm);
     }
 
     /// <summary>
@@ -1111,8 +1098,8 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         Assert.False(Assert.Single(await _deployment.Authenticators.OfAsync(subject, cancellationToken)).Confirmed);
     }
 
-    // AUTH-FACT-002: the policy in force permits the text code and its message has a
-    // template; the answer is the id of the number the signed-in account holds.
+    // AUTH-FACT-002: the policy in force permits the text code; the answer is the id of
+    // the number the signed-in account holds.
     private async Task<string> TextableAsync()
     {
         _deployment.Configuration.Set(
@@ -1121,11 +1108,6 @@ public sealed class CredentialFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
             });
-        _deployment.Templates.Set(
-            MessageKind.SecondStepCode,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code}"));
 
         HeldIdentifiers held = await _deployment.Identifiers
             .HeldAsync(_deployment.Directory.Created[^1].Subject, TestContext.Current.CancellationToken);

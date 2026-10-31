@@ -32,7 +32,7 @@ internal sealed class ServedRequests : IAsyncDisposable
     /// <summary>
     /// A path the machine profile governs.
     /// </summary>
-    public const string Machine = "/callbacks/sms/dlr";
+    public const string Machine = "/callbacks/providers/google";
 
     /// <summary>
     /// A path the host serves outside both profiles.
@@ -113,13 +113,12 @@ internal sealed class ServedRequests : IAsyncDisposable
         // options are built from.
         builder.Services.AddSingleton(new AuthenticationAddresses("https://identity.example.test/signin", "https://identity.example.test"));
 
-        // LIB-HOST-001: the library's endpoints send through the transports a host
-        // registers, and a link they send lands where the deployment declares its
-        // applications are.
+        // LIB-HOST-001: the library's endpoints hand what they send to the notification
+        // handler a host registers, and a link they send lands where the deployment
+        // declares its applications are.
         if (mountsLibrary)
         {
-            builder.Services.AddSingleton<IMailTransport>(new MailTransportInMemory());
-            builder.Services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+            builder.Services.AddSingleton<INotificationHandler>(new Janus.Testing.InMemoryNotifications());
             builder.Services.AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts());
             builder.Services.AddSingleton(new LandingOrigins("https://identity.example.test", "https://accounts.example.test"));
         }

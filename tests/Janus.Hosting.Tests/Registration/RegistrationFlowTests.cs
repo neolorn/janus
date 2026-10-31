@@ -47,8 +47,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     private readonly Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment whose messages carry the code and the link token, as the
-    /// shipped templates do.
+    /// A deployment whose messages carry the code and the link token among their
+    /// values.
     /// </summary>
     public RegistrationFlowTests() => Flow.Prepare(_deployment);
 
@@ -111,12 +111,6 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     {
         const string second = "second@example.test";
 
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
-
         Browser owner = await Flow.SignedInAsync(_deployment);
         SubjectId subject = _deployment.Directory.Created[^1].Subject;
         Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, second).Value;
@@ -126,8 +120,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
             (await owner.SendAsync("DELETE", "/account/identifiers/" + going)).Status);
 
         string undo = Landing.Token(_deployment.Mail.Taken
-            .Last(sent => string.Equals(sent.Subject, "removed", StringComparison.Ordinal))
-            .Body);
+            .Last(sent => sent.Kind is MessageKind.IdentifierRemoved)
+            .Values["link"]);
         int sent = _deployment.Mail.Taken.Count;
 
         Browser other = await Flow.BegunAsync(_deployment);

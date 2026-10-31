@@ -89,7 +89,7 @@ internal static class AccountEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
                     ErrorCodes.IdentifierMaximum, ErrorCodes.IdentifierMixedScript,
                     ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.IdentifierInvalid,
-                    ErrorCodes.SmsBalanceFloor, ErrorCodes.RestrictionExceeded))
+                    ErrorCodes.RestrictionExceeded))
             .Accepts<AddIdentifierToAccountRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status202Accepted);
         _ = EnrolmentRoute.On(group.MapPost("/identifiers/{id}/verify", VerifyIdentifierAsync))
@@ -130,7 +130,7 @@ internal static class AccountEndpoints
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.ChangePending, ErrorCodes.IdentifierMixedScript,
-                    ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.SmsBalanceFloor,
+                    ErrorCodes.IdentifierDomainNotAllowed,
                     ErrorCodes.RestrictionExceeded, ErrorCodes.IdentifierInvalid, ErrorCodes.IdentifierLocked)
                 .Binding<IdentifierId>("id"))
             .Accepts<ReplaceIdentifierRequest>(MediaTypeNames.Application.Json)

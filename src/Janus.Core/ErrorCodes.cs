@@ -1099,10 +1099,9 @@ public static class ErrorCodes
     public static ErrorCode TruthTableDisagreement { get; } = ErrorCode.Parse("authz.truthtable.disagreement");
 
     /// <summary>
-    /// A callback carried an unknown correlation reference, or arrived faster than the
-    /// callback rate allows. Call again with the reference the send returned.
+    /// A callback was refused, or arrived faster than the callback rate allows.
     /// </summary>
-    /// <remarks>Implements INT-GEN-003, AUTH-ABUSE-007, chapter 10 section 1.6.</remarks>
+    /// <remarks>Implements INT-GEN-003, BFF-MACH-001, chapter 10 section 1.6.</remarks>
     public static ErrorCode CallbackRejected { get; } = ErrorCode.Parse("integration.callback.rejected");
 
     /// <summary>
@@ -1133,13 +1132,6 @@ public static class ErrorCodes
     /// <c>degradation</c> scoped <c>mailbox.conflict:&lt;mailbox id&gt;</c>.
     /// </remarks>
     public static ErrorCode MailServerConflict { get; } = ErrorCode.Parse("integration.mailserver.conflict");
-
-    /// <summary>
-    /// The gateway balance is below the configured floor, so ordinary sends are
-    /// refused. Top the account up; alert-class messages continue meanwhile.
-    /// </summary>
-    /// <remarks>Implements INT-SMS-004, AUTH-ABUSE-006, chapter 10 section 1.6.</remarks>
-    public static ErrorCode SmsBalanceFloor { get; } = ErrorCode.Parse("integration.sms.balancefloor");
 
     /// <summary>
     /// The processing needs a consent the subject has not given. Ask for it on the

@@ -29,7 +29,7 @@ public enum SettingDirection
 
     /// <summary>
     /// The setting has no direction, so every change is treated as a loosening:
-    /// related origins, approver counts, template content.
+    /// related origins, approver counts.
     /// </summary>
     [JsonStringEnumMemberName("any-change")]
     AnyChange = 2,

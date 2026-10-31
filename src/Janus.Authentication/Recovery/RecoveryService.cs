@@ -719,10 +719,7 @@ internal sealed class RecoveryService(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            // AUTH-ABUSE-006: the gateway floor's refusal answers the ask as it would
-            // have been answered, as it does for a number no account holds, so the
-            // floor tells nothing of an account. Nothing else was written.
-            return failure.Code == ErrorCodes.SmsBalanceFloor ? Result.Success() : Result.Failure(failure);
+            return Result.Failure(failure);
         }
 
         // AUTH-ABUSE-004: the send is named by the link it carries, which is what
@@ -1007,7 +1004,7 @@ internal sealed class RecoveryService(
 
         // AUTH-RECOV-002, AUTHZ-GATE-006, D-186: the link's send is undertaken in the
         // unit of work that writes the approval and its record, so the gate's second ask
-        // covers both, and a send a restriction or the gateway floor refuses leaves no
+        // covers both, and a send a restriction refuses leaves no
         // approval, no record of it and no send.
         if (linked
             && await LinkedAsync(approver, subject, channel, source, now, lifetime, cancellationToken)

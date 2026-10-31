@@ -171,10 +171,7 @@ internal sealed class NonExistenceNotice(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            // AUTH-ABUSE-006: the gateway floor's refusal of the message an ask stands
-            // for answers the ask as it would have been answered, whoever holds the
-            // number, so the floor tells nothing of an account.
-            return refused.Code == ErrorCodes.SmsBalanceFloor ? Result.Success() : Result.Failure(refused);
+            return Result.Failure(refused);
         }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -201,7 +198,7 @@ internal sealed class NonExistenceNotice(
     // The notice is the ask's message, so it counts as the message would have and a
     // refusal is the refusal the message would have met; one refused leaves the window
     // unmarked, so the next ask tells the address. The message carries no value at
-    // all: a template that named the asker would turn the notice itself into the
+    // all: a message that named the asker would turn the notice itself into the
     // disclosure it exists to prevent.
     private async ValueTask<Result> ToldAsync(
         OutboundMessage asked,

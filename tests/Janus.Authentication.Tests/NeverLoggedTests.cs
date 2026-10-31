@@ -74,17 +74,15 @@ public sealed class NeverLoggedTests
         ]));
 
     /// <summary>
-    /// CONV-LOG-003 AC3: the correlation reference authenticates an unsigned callback,
-    /// so it is a token: its type, the member a delivery report carries it in, and
-    /// every parameter it passes through before it is hashed are marked.
+    /// CONV-LOG-003 AC3: the correlation reference names a send to the host's outcome
+    /// report, so it is a token: its type and every parameter it passes through before
+    /// it is hashed are marked.
     /// </summary>
     [Fact]
     public void CONV_LOG_003_AC3_EveryCorrelationReferenceIsMarked() =>
         Assert.Empty(UnmarkedCarriers(
         [
             typeof(SendReference),
-            Member<SmsDeliveryReport>(nameof(SmsDeliveryReport.Reference)),
-            Parameter(typeof(DeliveryReports), nameof(DeliveryReports.ReportAsync), "reference"),
             Parameter(typeof(SendReferences), nameof(SendReferences.Of), "presented"),
             Parameter(typeof(CallbackReferences), nameof(CallbackReferences.RecognisesAsync), "presented"),
             Parameter(typeof(CallbackReferences), "Hashed", "reference"),

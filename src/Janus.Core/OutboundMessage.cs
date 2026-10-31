@@ -40,7 +40,7 @@ public sealed record OutboundMessage(
     public SubjectId? Subject { get; init; }
 
     /// <summary>
-    /// What the library puts in the template's places, by name.
+    /// What the library puts in the message's places, by name.
     /// </summary>
     public IReadOnlyDictionary<string, string> Values { get; init; } = Nothing;
 

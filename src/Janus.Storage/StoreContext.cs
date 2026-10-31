@@ -324,11 +324,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<ThrottleRecord> ThrottleCounters => Set<ThrottleRecord>();
 
     /// <summary>
-    /// What the messaging gateway said its account stood at.
-    /// </summary>
-    public DbSet<BalanceReadingRecord> SmsBalanceReadings => Set<BalanceReadingRecord>();
-
-    /// <summary>
     /// The addresses told that no account holds them.
     /// </summary>
     public DbSet<NoticeRecord> NonexistenceNotices => Set<NoticeRecord>();
@@ -608,7 +603,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new SendGrantConfiguration());
         modelBuilder.ApplyConfiguration(new SendConfiguration());
         modelBuilder.ApplyConfiguration(new ThrottleConfiguration());
-        modelBuilder.ApplyConfiguration(new BalanceReadingConfiguration());
         modelBuilder.ApplyConfiguration(new NoticeConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackEventConfiguration());

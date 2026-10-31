@@ -298,12 +298,6 @@ internal static class BackgroundJobs
                 await services.GetRequiredService<CryptoperiodWatch>()
                     .WatchAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
-        BackgroundJob.Every(
-            "sms-balance",
-            "INT-SMS-004",
-            SystemOperation.Monitoring,
-            Settings.AbuseSmsPollInterval,
-            (services, context, cancellationToken) => PollBalanceAsync(services, context, cancellationToken)),
     ];
 
     // AUTH-KEY-003, OPS-OBS-003, IDN-PRIN-003 AC4: what has expired or been delivered
@@ -414,27 +408,6 @@ internal static class BackgroundJobs
 
         return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error);
-    }
-
-    // INT-SMS-004: no poll succeeds without a balance read, so a deployment that
-    // registered no transport fails the poll, and its lapse raises
-    // background-job-failed, naming the declaration the balance needs (LIB-HOST-001).
-    private static async ValueTask<Result> PollBalanceAsync(
-        IServiceProvider services,
-        AccessContext context,
-        CancellationToken cancellationToken)
-    {
-        if (services.GetService<ISmsTransport>() is null)
-        {
-            return Result.Failure(Error.From(
-                ErrorCodes.StartupDeclarationMissing,
-                "key",
-                JsonSerializer.SerializeToElement("smsTransport")));
-        }
-
-        return Done(await services.GetRequiredService<SmsBalance>()
-            .PollAsync(context, cancellationToken)
-            .ConfigureAwait(false));
     }
 
     // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the sweep, which reaches the stores

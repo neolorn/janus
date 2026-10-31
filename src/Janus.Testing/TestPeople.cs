@@ -44,9 +44,7 @@ public sealed class TestPeople
 
     private readonly Func<HttpMessageHandler> _channel;
 
-    private readonly InMemoryMailTransport _mail;
-
-    private readonly InMemorySmsTransport _sms;
+    private readonly InMemoryNotifications _notifications;
 
     private readonly RandomNumberGenerator _randomness;
 
@@ -63,8 +61,7 @@ public sealed class TestPeople
     /// Makes what carries a browser's requests to the application, one for each person;
     /// it keeps no cookies of its own.
     /// </param>
-    /// <param name="mail">The mail transport the host registered.</param>
-    /// <param name="sms">The SMS transport the host registered.</param>
+    /// <param name="notifications">The notification handler the host registered.</param>
     /// <param name="randomness">Where each software passkey's credential is drawn from.</param>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public TestPeople(
@@ -72,23 +69,20 @@ public sealed class TestPeople
         SignOnClient client,
         DocumentName terms,
         Func<HttpMessageHandler> channel,
-        InMemoryMailTransport mail,
-        InMemorySmsTransport sms,
+        InMemoryNotifications notifications,
         RandomNumberGenerator randomness)
     {
         ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(channel);
-        ArgumentNullException.ThrowIfNull(mail);
-        ArgumentNullException.ThrowIfNull(sms);
+        ArgumentNullException.ThrowIfNull(notifications);
         ArgumentNullException.ThrowIfNull(randomness);
 
         _address = TestSession.Mounted(address);
         _client = client;
         _terms = terms;
         _channel = channel;
-        _mail = mail;
-        _sms = sms;
+        _notifications = notifications;
         _randomness = randomness;
     }
 
@@ -487,7 +481,11 @@ public sealed class TestPeople
 
     private HttpClient Client(Browser browser) => new(browser, disposeHandler: false) { BaseAddress = _address };
 
-    private IEnumerable<string> Mailed(EmailAddress email) => _mail.SentTo(email).Select(mail => mail.Body);
+    // LIB-TEST-003: a link is read as the value its message carries.
+    private IEnumerable<string> Mailed(EmailAddress email) => Linked(_notifications.SentTo(email));
 
-    private IEnumerable<string> Texted(PhoneNumber number) => _sms.SentTo(number).Select(message => message.Text);
+    private IEnumerable<string> Texted(PhoneNumber number) => Linked(_notifications.SentTo(number));
+
+    private static IEnumerable<string> Linked(IEnumerable<SendRequest> sent) =>
+        sent.Where(request => request.Values.ContainsKey("link")).Select(request => request.Values["link"]);
 }

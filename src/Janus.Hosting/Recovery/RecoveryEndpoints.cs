@@ -79,7 +79,7 @@ internal static class RecoveryEndpoints
                 .Answering(
                     ErrorCodes.Denied, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.RecoveryReasonRequired, ErrorCodes.RecoveryChannelNotOnAccount,
-                    ErrorCodes.RecoverySelfApproval, ErrorCodes.SmsBalanceFloor, ErrorCodes.Throttled,
+                    ErrorCodes.RecoverySelfApproval, ErrorCodes.Throttled,
                     ErrorCodes.RestrictionExceeded))
             .Accepts<ApproveRecoveryRequest>(MediaTypeNames.Application.Json)
             .Produces<ApprovedRecoveryView>();

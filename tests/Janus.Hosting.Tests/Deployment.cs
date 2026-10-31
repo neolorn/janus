@@ -257,14 +257,9 @@ internal sealed class Deployment : IAsyncDisposable
         Secrets = new SecretSourceInMemory(SocialProviders.Credentials);
 
         // Two of the keys a deployment names or does not start, which a ceremony and
-        // the challenge every sign-in carries are read from (OPS-CFG-001), and the
-        // domain it sends from, declared as registered with the relay (INT-MAIL-011).
+        // the challenge every sign-in carries are read from (OPS-CFG-001).
         Configuration.Set(Settings.WebAuthnRelyingPartyId, "identity.example.test");
         Configuration.Set(Settings.WebAuthnOrigins, ["https://identity.example.test"]);
-        Configuration.Set(Settings.NotificationEmailSendingDomain, "mail.example.test");
-        Configuration.Set<IReadOnlySet<string>>(
-            Settings.NotificationEmailRelayRegistered,
-            new HashSet<string>(["mail.example.test"], StringComparer.Ordinal));
 
         Register(
             builder.Services,
@@ -385,9 +380,14 @@ internal sealed class Deployment : IAsyncDisposable
     public ImageCodecInMemory Codec { get; } = new();
 
     /// <summary>
+    /// What the library handed to the host's notification handler.
+    /// </summary>
+    public NotificationsInMemory Notifications { get; } = new();
+
+    /// <summary>
     /// What went out by mail.
     /// </summary>
-    public MailTransportInMemory Mail { get; } = new();
+    public ChannelInMemory Mail => Notifications.Mail;
 
     /// <summary>
     /// Whether the publisher's pass over the admitted messages follows each request, as
@@ -399,7 +399,7 @@ internal sealed class Deployment : IAsyncDisposable
     /// <summary>
     /// What went out by SMS.
     /// </summary>
-    public SmsTransportInMemory Sms { get; } = new();
+    public ChannelInMemory Sms => Notifications.Sms;
 
     /// <summary>
     /// The registration sessions as they stand.
@@ -492,11 +492,6 @@ internal sealed class Deployment : IAsyncDisposable
     /// The preference keys the host declared.
     /// </summary>
     public PreferenceDeclarations Declared { get; }
-
-    /// <summary>
-    /// The templates every message is written from.
-    /// </summary>
-    public MessageTemplatesInMemory Templates { get; } = new();
 
     /// <summary>
     /// The credentials the accounts hold.
@@ -742,7 +737,8 @@ internal sealed class Deployment : IAsyncDisposable
     public LeakedPasswordCorpusInMemory Corpus { get; } = new();
 
     /// <summary>
-    /// The sends counted against the restrictions, which a delivery report can release.
+    /// The sends counted against the restrictions, which the host's report of an
+    /// outcome can release.
     /// </summary>
     public SendLedgerInMemory SendLedger { get; } = new();
 
@@ -1042,16 +1038,12 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IIdentifierDirectory>(Identifiers);
         _ = services.AddSingleton<IPendingVerificationStore>(Pending);
         _ = services.AddSingleton<IAccountDirectory>(Accounts);
-        _ = services.AddSingleton<IMessageTemplates>(Templates);
-        _ = services.AddSingleton<IMailTransport>(Mail);
-        _ = services.AddSingleton<ISmsTransport>(Sms);
         _ = services.AddSingleton<IAuthenticatorStore>(Authenticators);
         _ = services.AddSingleton<IPasswordStore>(Passwords);
 
         _ = services.AddSingleton<ISendLedger>(SendLedger);
         _ = services.AddSingleton<ISendOutbox, SendOutboxInMemory>();
         _ = services.AddSingleton<INoticeLedger, NoticeLedgerInMemory>();
-        _ = services.AddSingleton<ISmsBalanceLedger, SmsBalanceLedgerInMemory>();
         _ = services.AddSingleton<ILeakedPasswordCorpus>(Corpus);
         _ = services.AddSingleton<IWordList, WordListInMemory>();
         _ = services.AddSingleton<IScreeningLog, ScreeningLogInMemory>();
@@ -1125,11 +1117,10 @@ internal sealed class Deployment : IAsyncDisposable
         // probes.
         _ = services.AddScoped<IProviderProbes, ProviderProbes>();
 
-        _ = services.AddScoped<SmsBalance>();
         _ = services.AddSingleton<ICallbackLedger, CallbackLedgerInMemory>();
         _ = services.AddSingleton<ICallbackEvents, CallbackEventsInMemory>();
         _ = services.AddScoped<CallbackAdmission>();
-        _ = services.AddScoped<DeliveryReports>();
+        _ = services.AddScoped<ISendOutcomes, SendOutcomes>();
 
         // CONV-CODE-007, CONV-DESIGN-007: the one key ring, filled from the host's
         // secret source, and the mail server in use, the host's own.
@@ -1158,7 +1149,6 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<ProviderAttempts>();
         _ = services.AddScoped<ProviderSignIn>();
         _ = services.AddSingleton<ILogger<ProviderSignIn>>(ProviderLog);
-        _ = services.AddScoped<RelayRegistration>();
         _ = services.AddScoped<SendAdmission>();
         _ = services.AddScoped<GovernedSend>();
         _ = services.AddScoped<IGovernedSend>(
@@ -1170,7 +1160,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider => provider.GetRequiredService<GovernedSend>());
         _ = services.AddScoped<ISendCarrier>(
             provider => provider.GetRequiredService<SendPublisher>());
-        _ = services.AddScoped<INotificationHandler, NotificationHandler>();
+        _ = services.AddSingleton<INotificationHandler>(Notifications);
         _ = services.AddSingleton<IPhoneSignalAudit>(Considered);
         _ = services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),

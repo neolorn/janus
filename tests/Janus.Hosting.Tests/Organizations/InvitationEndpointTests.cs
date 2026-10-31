@@ -43,11 +43,6 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Flow.Prepare(_deployment);
         _deployment.Administers(Administration);
         _deployment.Organizations.Seed(Branch);
-        _deployment.Templates.Set(
-            MessageKind.InvitationLink,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("invitation", "{link}"));
     }
 
     /// <inheritdoc/>
@@ -98,7 +93,7 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(System.Text.Json.JsonValueKind.Null, bound.Json().GetProperty("token").ValueKind);
         Assert.Equal(
             _deployment.Invitations.Held[0].Token,
-            OpaqueToken.Of(Landing.Token(_deployment.Mail.Taken[^1].Body)).Fingerprint());
+            OpaqueToken.Of(Landing.Token(_deployment.Mail.Taken[^1].Values["link"])).Fingerprint());
 
         Assert.Equal(StatusCodes.Status201Created, open.Status);
         Assert.Equal(
@@ -206,8 +201,8 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status201Created, issued.Status);
         Assert.Equal("invited@example.test", Assert.Single(_deployment.Mailboxes.Held).Address.Value);
-        Assert.Equal("invited@elsewhere.test", _deployment.Mail.Taken[^1].Destination.Value);
-        Assert.DoesNotContain(_deployment.Mail.Taken, mail => mail.Destination.Value == "invited@example.test");
+        Assert.Equal("invited@elsewhere.test", _deployment.Mail.Taken[^1].Destination);
+        Assert.DoesNotContain(_deployment.Mail.Taken, mail => mail.Destination == "invited@example.test");
     }
 
     /// <summary>

@@ -74,7 +74,6 @@ public static class IdentityEndpoints
         _ = library.MapPublication();
         _ = library.MapConfiguration();
         _ = library.MapRestrictions();
-        _ = library.MapDeliveryReports();
         _ = library.MapProviderEvents();
         _ = library.MapProviderSignIn();
         _ = library.MapGrants();

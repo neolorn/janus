@@ -10,16 +10,14 @@ using Janus.Core.Configuration;
 namespace Janus.Authentication.Sending;
 
 /// <summary>
-/// The judgement of a send: the gateway floor and every named restriction that applies
-/// to it, decided with the counter of each of its keys held in the transaction in
+/// The judgement of a send: every named restriction that applies to it, decided with the counter of each of its keys held in the transaction in
 /// progress, and the count it holds from its admission.
 /// </summary>
 /// <param name="configuration">Where the restrictions come from.</param>
 /// <param name="ledger">Where what has been admitted is counted.</param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
-/// <param name="balance">What the gateway account stands at.</param>
 /// <remarks>
-/// Implements AUTH-ABUSE-004, AUTH-ABUSE-006, LIB-HOST-001 and CONV-DESIGN-003. The
+/// Implements AUTH-ABUSE-004, LIB-HOST-001 and CONV-DESIGN-003. The
 /// refusal a restriction produces is the same whether or not the destination belongs to
 /// an account: nothing here reads the account to decide it. A refusal returns before
 /// any count is written; a counter created for the judgement is the only write before
@@ -28,16 +26,15 @@ namespace Janus.Authentication.Sending;
 internal sealed class SendAdmission(
     IConfigurationStore configuration,
     ISendLedger ledger,
-    RestrictionKeySuppliers suppliers,
-    SmsBalance balance)
+    RestrictionKeySuppliers suppliers)
 {
     /// <summary>
     /// Judges one send of one or several messages, all admitted or none.
     /// </summary>
     /// <param name="message">What is undertaken.</param>
     /// <param name="weight">
-    /// How many messages the send is: one, or one per declared language for a text
-    /// message owed in every one of them. A restriction marked <c>resend</c> judges the
+    /// How many messages the send counts as: one, or one per language for a text message
+    /// carrying several. A restriction marked <c>resend</c> judges the
     /// send as one whatever this is.
     /// </param>
     /// <param name="setAside">
@@ -49,8 +46,8 @@ internal sealed class SendAdmission(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// What each message counts against and spends, in the order they are admitted, and
-    /// what the send counts against and spends once, or the refusal: the gateway floor, or <c>auth.restriction.exceeded</c> with
-    /// <c>retryAt</c>.
+    /// what the send counts against and spends once, or the refusal,
+    /// <c>auth.restriction.exceeded</c> with <c>retryAt</c>.
     /// </returns>
     /// <exception cref="ArgumentNullException">The message is absent.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The weight is not positive.</exception>
@@ -63,15 +60,6 @@ internal sealed class SendAdmission(
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(weight);
-
-        // AUTH-ABUSE-006: a text message is held to the gateway floor.
-        if (message.Kind is SendKind.Sms
-            && (await balance.BelowFloorAsync(cancellationToken).ConfigureAwait(false))
-                .Match(below => below ? Error.From(ErrorCodes.SmsBalanceFloor) : null, error => error)
-                is Error floored)
-        {
-            return Result.Failure<SendJudgement>(floored);
-        }
 
         Error? failure = null;
 
@@ -187,36 +175,33 @@ internal sealed class SendAdmission(
     }
 
     /// <summary>
-    /// Counts the messages of an admitted send from their admission, and the send once
-    /// against the restrictions marked <c>resend</c>.
+    /// Counts an admitted send from its admission, and once against the restrictions
+    /// marked <c>resend</c>.
     /// </summary>
-    /// <param name="references">
-    /// The reference each message is counted under, in the order they were judged: every
-    /// message of the send at its first admission, or the one message judged again.
+    /// <param name="reference">
+    /// The reference the send is counted and handed over under. A text message carrying
+    /// several languages counts as many texts against every restriction not marked
+    /// <c>resend</c>, under its one reference (AUTH-ABUSE-004, D-197, D-225).
     /// </param>
     /// <param name="judged">What the send counts against and spends.</param>
     /// <param name="now">The instant of the admission.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
-    /// <returns>The work of counting them.</returns>
-    /// <exception cref="ArgumentNullException">The references or the judgement are absent.</exception>
-    /// <exception cref="ArgumentException">The references are not one for each message judged.</exception>
+    /// <returns>The work of counting it.</returns>
+    /// <exception cref="ArgumentNullException">The judgement is absent.</exception>
     public ValueTask CountAsync(
-        IReadOnlyList<SendReference> references,
+        SendReference reference,
         SendJudgement judged,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(references);
         ArgumentNullException.ThrowIfNull(judged);
 
-        if (references.Count != judged.Messages.Count)
-        {
-            throw new ArgumentException("One reference is drawn for each message judged.", nameof(references));
-        }
+        var counted = new SendPlan(
+            [.. judged.Messages.SelectMany(message => message.Counted)],
+            [.. judged.Messages.SelectMany(message => message.Spent)]);
 
         return ledger.RecordAsync(
-            [.. references.Select((reference, index) =>
-                new CountedMessage(SendReferences.Of(reference), judged.Messages[index]))],
+            [new CountedMessage(SendReferences.Of(reference), counted)],
             judged.Once,
             judged.SecondFactor,
             now,

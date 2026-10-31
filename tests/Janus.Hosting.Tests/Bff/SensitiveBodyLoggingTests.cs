@@ -153,10 +153,6 @@ public sealed class SensitiveBodyLoggingTests : IDisposable
 
         _ = builder.Services.AddJanus("Host=unused", HostFixture.Declaration(), ApplicationKind.Public);
 
-        // The transport every host registers, which the delivery report reads the
-        // gateway's parameters through.
-        _ = builder.Services.AddSingleton<ISmsTransport, SmsTransportInMemory>();
-
         return builder.Build();
     }
 

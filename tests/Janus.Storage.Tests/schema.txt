@@ -1289,10 +1289,6 @@ table signing_keys
   index ix_signing_keys_retires_at using btree (retires_at)
   index ux_signing_keys_current unique using btree (is_current) WHERE is_current
   index ux_signing_keys_next unique using btree (is_next) WHERE is_next
-table sms_balance_readings
-  column read_at timestamp with time zone not null
-  column balance numeric(18,4) not null
-  constraint pk_sms_balance_readings PRIMARY KEY (read_at)
 table subject_keys
   column subject uuid not null
   column format_marker smallint not null

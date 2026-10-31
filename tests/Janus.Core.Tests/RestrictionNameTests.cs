@@ -11,7 +11,7 @@ namespace Janus.Core.Tests;
 public sealed class RestrictionNameTests
 {
     /// <summary>
-    /// INT-SMS-003 AC3: a name of 1 to 64 lower-case letters and digits separated by
+    /// INT-SMS-003 AC1: a name of 1 to 64 lower-case letters and digits separated by
     /// single full stops, hyphens or underscores is read as it is written.
     /// </summary>
     /// <param name="name">A name inside the rule.</param>
@@ -20,7 +20,7 @@ public sealed class RestrictionNameTests
     [InlineData("sms.destination")]
     [InlineData("email.account_2-day")]
     [InlineData("a123456789a123456789a123456789a123456789a123456789a123456789a123")]
-    public void INT_SMS_003_AC3_ARestrictionNameInsideTheRuleIsRead(string name)
+    public void INT_SMS_003_AC1_ARestrictionNameInsideTheRuleIsRead(string name)
     {
         Assert.True(RestrictionName.TryParse(name, out RestrictionName read));
         Assert.Equal(name, read.ToString());
@@ -28,7 +28,7 @@ public sealed class RestrictionNameTests
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3: a name outside the rule makes no restriction name, so no contract
+    /// INT-SMS-003 AC1: a name outside the rule makes no restriction name, so no contract
     /// that takes one can be handed it.
     /// </summary>
     /// <param name="name">A name outside the rule.</param>
@@ -42,7 +42,7 @@ public sealed class RestrictionNameTests
     [InlineData("sms.")]
     [InlineData("sms.déstination")]
     [InlineData("a123456789a123456789a123456789a123456789a123456789a123456789a1234")]
-    public void INT_SMS_003_AC3_ARestrictionNameOutsideTheRuleIsNotRead(string name)
+    public void INT_SMS_003_AC1_ARestrictionNameOutsideTheRuleIsNotRead(string name)
     {
         Assert.False(RestrictionName.TryParse(name, out _));
         Assert.False(RestrictionName.TryParse(null, out _));

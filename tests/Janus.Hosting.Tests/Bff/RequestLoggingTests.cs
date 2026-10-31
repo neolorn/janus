@@ -28,7 +28,6 @@ namespace Janus.Hosting.Tests.Bff;
 [Trait("kind", "unit")]
 public sealed class RequestLoggingTests : IAsyncDisposable
 {
-    private const string Language = "en";
     private const string Erasures = "/admin/erasures";
     private const string Wrong = "notthepasswordatall";
     private const string Renewed = "lemoncurdandbutter";
@@ -53,30 +52,9 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
     /// <summary>
     /// A deployment that can send every message a registration, a sign-in and a
-    /// recovery write, the links carrying their token as the shipped templates do.
+    /// recovery write, the links carrying their token.
     /// </summary>
-    public RequestLoggingTests()
-    {
-        Flow.Prepare(_deployment);
-
-        foreach (MessageKind message in new[]
-                 {
-                     MessageKind.SignInLink,
-                     MessageKind.RecoveryLink,
-                     MessageKind.SecurityNotice,
-                     MessageKind.NoAccount,
-                 })
-        {
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                _deployment.Templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{link}"));
-            }
-        }
-    }
+    public RequestLoggingTests() => Flow.Prepare(_deployment);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
@@ -280,11 +258,6 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.EmailLink]),
             });
-        quiet.Templates.Set(
-            MessageKind.SignInLink,
-            SendKind.Email,
-            Language,
-            new MessageTemplate("link", "{code} {link}"));
 
         _ = await Flow.SignedInAsync(quiet);
 
@@ -312,7 +285,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             ("factor", "password"),
             ("value", Flow.Password));
 
-        string code = quiet.Mail.Taken[^1].Body.Split(' ')[0];
+        string code = quiet.Mail.Taken[^1].Values["code"];
 
         Answer wrongCode = await signing.SendAsync(
             "POST",
@@ -467,7 +440,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Answer recovered = await recovering.SendAsync(
             "POST",
             "/recovery/complete",
-            ("token", Landing.Token(_deployment.Mail.Taken[^1].Body)),
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Values["link"])),
             ("password", Renewed));
 
         Assert.Equal(ErrorCodes.FactorRejected.ToString(), refused.Text("code"));

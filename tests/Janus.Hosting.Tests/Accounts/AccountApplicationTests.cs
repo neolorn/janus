@@ -255,12 +255,6 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     [Fact]
     public async Task FE_ACCT_001_AC3_AnIdentifierIsRemovedAndTheUndoRestoresItAsync()
     {
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
-
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
         Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
@@ -297,12 +291,6 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     [Fact]
     public async Task FE_VER_001_AC8_AnUndoUnderTheNilIdentifierRestoresWhatItsTokenNamesAsync()
     {
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
-
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
         Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
@@ -334,11 +322,6 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     [Fact]
     public async Task IDN_LIFE_008_AC4_AnUndoEndsEverySessionOfTheAccountAsync()
     {
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
         Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
@@ -554,11 +537,6 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         const string third = "third@example.test";
 
         _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 2);
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
 
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
@@ -604,11 +582,6 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         const string third = "third@example.test";
 
         _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 2);
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
 
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
@@ -885,7 +858,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
             [(several.Status, several.Text("code")), (unheld.Status, unheld.Text("code")), (locked.Status, locked.Text("code"))]);
         _ = await _deployment.CarrySendsAsync();
 
-        Assert.DoesNotContain(_deployment.Mail.Taken, mail => mail.Destination.Value == "replaced@example.test");
+        Assert.DoesNotContain(_deployment.Mail.Taken, mail => mail.Destination == "replaced@example.test");
     }
 
     /// <summary>
@@ -1021,11 +994,11 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     // the address that went (REG-IDENT-006).
     private string Undo()
     {
-        foreach (MailMessage sent in _deployment.Mail.Taken)
+        foreach (SendRequest sent in _deployment.Mail.Taken)
         {
-            if (string.Equals(sent.Subject, "removed", StringComparison.Ordinal))
+            if (sent.Kind is MessageKind.IdentifierRemoved)
             {
-                return Landing.Token(sent.Body);
+                return Landing.Token(sent.Values["link"]);
             }
         }
 

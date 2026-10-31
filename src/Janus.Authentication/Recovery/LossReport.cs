@@ -57,7 +57,7 @@ internal sealed class LossReport
     public DateTimeOffset NotifiedAt { get; private set; }
 
     /// <summary>
-    /// Whether any notice has been taken by a transport, which is what invalidation
+    /// Whether the host has taken any notice to send, which is what invalidation
     /// waits for: a report nobody was told of completes nothing.
     /// </summary>
     public bool AnyDelivered { get; private set; }
@@ -94,7 +94,7 @@ internal sealed class LossReport
     /// <param name="reportedAt">When it was reported.</param>
     /// <param name="invalidatesAt">When the window ends.</param>
     /// <param name="notifiedAt">When the last notice went out.</param>
-    /// <param name="anyDelivered">Whether any notice was taken by a transport.</param>
+    /// <param name="anyDelivered">Whether the host has taken any notice to send.</param>
     /// <param name="heldAt">When invalidation fell due undelivered, or nothing.</param>
     /// <returns>The report.</returns>
     /// <exception cref="ArgumentNullException">The token is absent.</exception>
@@ -141,7 +141,7 @@ internal sealed class LossReport
     /// <summary>
     /// A round of notices went out.
     /// </summary>
-    /// <param name="delivered">Whether any of them was taken by a transport.</param>
+    /// <param name="delivered">Whether the host took any of them to send.</param>
     /// <param name="at">When.</param>
     public void Notified(bool delivered, DateTimeOffset at)
     {

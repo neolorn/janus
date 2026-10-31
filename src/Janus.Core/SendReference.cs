@@ -6,13 +6,14 @@ using System.Security.Cryptography;
 namespace Janus.Core;
 
 /// <summary>
-/// The correlation reference one send carries to the gateway and back: 128 random
+/// The correlation reference one send carries to the host and back: 128 random
 /// bits in base64url, which the library keeps as its hash, and in the encrypted content
 /// of the outbox row of the message it was drawn for until that row is removed.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-ABUSE-007, INT-GEN-003 and INT-SMS-005. A callback is hostile
-/// input, so the reference is unguessable and a dump of the table yields none.
+/// Implements INT-SMS-005, INT-SMS-006 and INT-GEN-003. It is the same at every
+/// attempt, so it is the host's idempotency key, and the host's report of an outcome
+/// names it, so the reference is unguessable and a dump of the table yields none.
 /// </remarks>
 [NeverLogged]
 public readonly record struct SendReference
@@ -24,7 +25,7 @@ public readonly record struct SendReference
     private SendReference(string value) => _value = value;
 
     /// <summary>
-    /// The reference as the gateway sees it.
+    /// The reference as the host sees it.
     /// </summary>
     public string Value => _value ?? throw new InvalidOperationException("The reference was never drawn.");
 

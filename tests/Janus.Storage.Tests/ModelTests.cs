@@ -915,9 +915,9 @@ public sealed class ModelTests
             "send_outbox.subject",
             "send_outbox.wrapped_key",
 
-            // Not an account field: the message a transport took (AUTH-ABUSE-004,
-            // INT-SMS-005), held by the hash of its correlation reference so that a
-            // delivery report can take its counts back out, with the send it is of, what
+            // Not an account field: the message the host took (AUTH-ABUSE-004,
+            // INT-SMS-005), held by the hash of its correlation reference so that the
+            // host's report of its outcome can take its counts back out, with the send it is of, what
             // that send counts once against the restrictions marked resend, and what
             // names the code or the link whose answer releases it (10 section 5.16a).
             "sends.admitted",
@@ -1017,11 +1017,6 @@ public sealed class ModelTests
             "signing_keys.retires_at",
             "signing_keys.signing_from",
             "signing_keys.superseded_at",
-
-            // Not an account field: what the gateway last said its prepaid account stood
-            // at (INT-SMS-004, AUTH-ABUSE-006).
-            "sms_balance_readings.balance",
-            "sms_balance_readings.read_at",
 
             // Not an account field: the wrapped key of PRIV-RIGHT-005a, which every
             // column marked Key is written under.

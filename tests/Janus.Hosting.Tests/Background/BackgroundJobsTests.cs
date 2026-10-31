@@ -423,41 +423,6 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
         Assert.Equal(BackgroundJobs.All.Select(job => job.Name), refused);
     }
 
-    /// <summary>
-    /// INT-SMS-004: no poll succeeds without a balance read, so in a deployment that
-    /// registered no SMS transport the balance poll fails, naming the transport, and no
-    /// success is recorded for it; its lapse then raises <c>background-job-failed</c>.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task INT_SMS_004_TheBalancePollFailsWithoutATransportAsync()
-    {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-
-        await ForgetEarlierRunsAsync();
-
-        BackgroundJob poll = BackgroundJobs.All.Single(job => job.Name == "sms-balance");
-
-        await using ServiceProvider services = Deployed(host, Authorization.Deployment.Noon, sms: false);
-        await using AsyncServiceScope scope = services.CreateAsyncScope();
-
-        Error refusal = (await poll.RunAsync(scope.ServiceProvider, AccessContext.Of(poll.Principal), cancellationToken)).Match(
-            () => throw new Xunit.Sdk.XunitException("The poll succeeded."),
-            error => error);
-
-        BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
-
-        _ = await worker.RunDueAsync(cancellationToken);
-        await worker.SettledAsync(TestContext.Current.CancellationToken);
-
-        await using NpgsqlConnection connection = await host.OpenAsync();
-
-        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refusal.Code);
-        Assert.Equal("smsTransport", refusal.Details["key"].GetString());
-        Assert.Null(await connection.ExecuteScalarAsync<DateTimeOffset?>(
-            "SELECT succeeded_at FROM identity.background_jobs WHERE name = 'sms-balance'"));
-    }
-
     // Each case owns its job state: the runs another case recorded, at its own clock, are
     // removed first, so every job is due at this case's clock and no case reads another's
     // run, whatever order the class runs in.
@@ -555,26 +520,18 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
 
     /// <summary>
     /// A deployment over the fixture's database at one instant, with what a host
-    /// declares for itself: where the events go, the two transports (the text one only
-    /// where the case keeps it), its sign-in screen and its client.
+    /// declares for itself: where the events go, its notification and alert handlers,
+    /// its sign-in screen and its client.
     /// </summary>
     /// <param name="host">The database.</param>
     /// <param name="now">The instant.</param>
-    /// <param name="sms">Whether the text transport is registered.</param>
     /// <returns>The deployment, its key ring filled.</returns>
-    internal static ServiceProvider Deployed(HostFixture host, DateTimeOffset now, bool sms = true)
+    internal static ServiceProvider Deployed(HostFixture host, DateTimeOffset now)
     {
-        var services = new ServiceCollection();
-
-        if (sms)
-        {
-            services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
-            services.AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts());
-        }
-
-        ServiceProvider deployed = services
+        ServiceProvider deployed = new ServiceCollection()
             .AddSingleton<TimeProvider>(new FixedTime(now))
-            .AddSingleton<IMailTransport>(new MailTransportInMemory())
+            .AddSingleton<INotificationHandler>(new Janus.Testing.InMemoryNotifications())
+            .AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))

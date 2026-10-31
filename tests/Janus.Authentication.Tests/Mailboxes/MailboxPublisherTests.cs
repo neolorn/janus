@@ -13,8 +13,8 @@ namespace Janus.Authentication.Tests.Mailboxes;
 
 /// <summary>
 /// The outbox publisher's pass over the mailboxes: what it pushes, under which key,
-/// and what it does when the mail server does not answer (INT-MAIL-006, INT-MAIL-006a,
-/// INT-MAIL-007, INT-MAIL-009).
+/// and what it does when the mail server does not answer (INT-MAIL-001, INT-MAIL-006,
+/// INT-MAIL-006a, INT-MAIL-007).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class MailboxPublisherTests : IAsyncDisposable
@@ -472,12 +472,12 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-MAIL-009 AC1 and INT-MAIL-008 AC2: mailbox hosting is a registration of its
-    /// own, and a deployment that makes none pushes nothing.
+    /// INT-MAIL-001 and LIB-HOST-001: mailbox hosting is a registration of its own, and
+    /// a deployment that makes none pushes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task INT_MAIL_009_AC1_MailboxHostingIsARegistrationOfItsOwnAsync()
+    public async Task INT_MAIL_001_MailboxHostingIsARegistrationOfItsOwnAsync()
     {
         Mailbox reserved = await ReservedAsync();
 
@@ -490,12 +490,13 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-MAIL-008 AC2: another mail server is another registration of the same port,
-    /// and the publisher pushes to whichever the deployment registered, unchanged.
+    /// INT-MAIL-001: another mail server is another registration of the same port, a
+    /// host's registration replacing the shipped adapter, and the publisher pushes to
+    /// whichever the deployment registered, unchanged.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task INT_MAIL_008_AC2_AnotherMailServerIsARegistrationAndNoCodeChangeAsync()
+    public async Task INT_MAIL_001_AnotherMailServerIsARegistrationAndNoCodeChangeAsync()
     {
         var another = new MailServerInMemory();
         Mailbox reserved = await ReservedAsync();

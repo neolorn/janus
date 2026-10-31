@@ -249,6 +249,7 @@ internal sealed class SendDeliveryStore(
 
         return new SendDelivery(record.Id, record.RecordedAt, message, reference)
         {
+            Languages = document.Languages ?? (document.Language is string language ? [language] : []),
             Attempts = record.Attempts,
             NextAttemptAt = record.NextAttemptAt,
         };
@@ -267,7 +268,8 @@ internal sealed class SendDeliveryStore(
             message.Language,
             message.Subject?.Value,
             message.Values,
-            delivery.Reference.Value);
+            delivery.Reference.Value,
+            delivery.Languages);
 
         return PersonalFieldCipher.Encrypt(
             dataKey,

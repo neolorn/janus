@@ -51,7 +51,7 @@ public sealed class ProviderEventTests : IAsyncDisposable
     /// A deployment that takes both providers' events and can send the notice a
     /// removed credential or a suspended account carries.
     /// </summary>
-    public ProviderEventTests() => Prepared(_deployment);
+    public ProviderEventTests() => Flow.Prepare(_deployment);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -353,7 +353,7 @@ public sealed class ProviderEventTests : IAsyncDisposable
     {
         await using var undeclared = new Deployment(providers: []);
 
-        Prepared(undeclared);
+        Flow.Prepare(undeclared);
 
         Answer unknown = await new Machine(undeclared).DeliverAsync(
             Google,
@@ -547,7 +547,7 @@ public sealed class ProviderEventTests : IAsyncDisposable
         Assert.Equal(AccountState.Active, await StateAsync(subject));
         Assert.Contains(
             _deployment.Mail.Taken.Skip(before),
-            mail => string.Equals(mail.Destination.Value, Flow.Address, StringComparison.Ordinal));
+            mail => string.Equals(mail.Destination, Flow.Address, StringComparison.Ordinal));
         Assert.Equal(
             (AuditActions.ProviderEventTaken, linked.Id, type, ProviderEventOutcome.CredentialUnlinked),
             Assert.Single(_deployment.CredentialAudit.ProviderEvents));
@@ -612,7 +612,7 @@ public sealed class ProviderEventTests : IAsyncDisposable
             Assert.Single(_deployment.Events.Of<AccountSuspended>()).By);
         Assert.Contains(
             _deployment.Mail.Taken,
-            mail => string.Equals(mail.Destination.Value, address, StringComparison.Ordinal));
+            mail => string.Equals(mail.Destination, address, StringComparison.Ordinal));
         Assert.Equal(
             (AuditActions.ProviderEventTaken, linked.Id, "consent-revoked", ProviderEventOutcome.AccountSuspended),
             Assert.Single(_deployment.CredentialAudit.ProviderEvents));
@@ -1013,7 +1013,7 @@ public sealed class ProviderEventTests : IAsyncDisposable
     {
         await using var undeclared = new Deployment(providers: []);
 
-        Prepared(undeclared);
+        Flow.Prepare(undeclared);
 
         Answer unknown = await new Machine(undeclared).DeliverAsync(
             Apple,
@@ -1026,22 +1026,6 @@ public sealed class ProviderEventTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, unknown.Status);
         Assert.Equal(ErrorCodes.CallbackRejected.ToString(), unknown.Text("code"));
         Assert.Null(unknown.Header(HeaderNames.RetryAfter));
-    }
-
-    // A deployment that can send the notice a removed credential or a suspended account
-    // carries.
-    private static void Prepared(Deployment deployment)
-    {
-        Flow.Prepare(deployment);
-
-        foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-        {
-            deployment.Templates.Set(
-                MessageKind.SecurityNotice,
-                kind,
-                Language,
-                new MessageTemplate(kind is SendKind.Email ? "notice" : null, "body"));
-        }
     }
 
     // RISC: one event keyed by its type, naming the identity by issuer and subject.

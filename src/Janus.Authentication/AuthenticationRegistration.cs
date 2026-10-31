@@ -62,8 +62,6 @@ internal static class AuthenticationRegistration
         services.AddScoped<IAlertRaising, AlertRaising>();
 
         // AUTH-ABUSE-004, OPS-ALERT-001: what decides whether a message goes.
-        services.AddScoped<SmsBalance>();
-        services.AddScoped<RelayRegistration>();
         services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),
             provider.GetRequiredService<IPhoneSignalAudit>(),
@@ -91,7 +89,7 @@ internal static class AuthenticationRegistration
         services.AddScoped<CallbackReferences>();
         services.AddScoped<ICallbackReferences>(
             provider => provider.GetRequiredService<CallbackReferences>());
-        services.AddScoped<DeliveryReports>();
+        services.AddScoped<ISendOutcomes, SendOutcomes>();
 
         // IDN-LIFE-012a, IDN-LIFE-012, REG-IDENT-008: what a provider's verified events
         // do, and the attempts this application makes as the providers' client.

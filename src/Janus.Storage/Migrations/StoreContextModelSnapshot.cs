@@ -1920,23 +1920,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
-        modelBuilder.Entity("Janus.Storage.Authentication.Sending.BalanceReadingRecord", b =>
-            {
-                b.Property<DateTimeOffset>("ReadAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("read_at");
-
-                b.Property<decimal>("Balance")
-                    .HasPrecision(18, 4)
-                    .HasColumnType("numeric(18,4)")
-                    .HasColumnName("balance");
-
-                b.HasKey("ReadAt")
-                    .HasName("pk_sms_balance_readings");
-
-                b.ToTable("sms_balance_readings", "identity");
-            });
-
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.NoticeRecord", b =>
             {
                 b.Property<Guid>("Id")

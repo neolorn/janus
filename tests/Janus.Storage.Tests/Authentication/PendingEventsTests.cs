@@ -78,7 +78,7 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
                 AlertRaised heldAlert = Assert.IsType<AlertRaised>(held);
 
                 Assert.Equal(alert with { Details = heldAlert.Details }, heldAlert);
-                Assert.Equal("sms", heldAlert.Details["gateway"].GetString());
+                Assert.Equal(2027, heldAlert.Details["year"].GetInt32());
             }
             else
             {
@@ -323,11 +323,11 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
         new AlertRaised(
             Noon,
             "alert",
-            AlertCondition.SmsBalance,
+            AlertCondition.HolidayListExhausted,
             AlertSeverity.High,
             new Dictionary<string, JsonElement>(StringComparer.Ordinal)
             {
-                ["gateway"] = JsonSerializer.SerializeToElement("sms"),
+                ["year"] = JsonSerializer.SerializeToElement(2027),
             }),
         new ConsentChanged(Noon, "consent", "newsletter", ConsentChange.Withdrawn) { Subject = Subject },
         new CredentialEnrolled(Noon, "enrolled", new AuthenticatorId(Guid.CreateVersion7(Noon)), Factor.Passkey),

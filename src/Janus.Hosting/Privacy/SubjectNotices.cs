@@ -22,7 +22,7 @@ namespace Janus.Hosting.Privacy;
 /// <param name="sending">The one path every message the library sends takes.</param>
 /// <param name="configuration">Where the fallback language is read.</param>
 /// <remarks>
-/// Implements CONV-CONTENT-001, CONV-DESIGN-003, AUTH-ABUSE-005 and REC-ACC-002. A
+/// Implements CONV-CONTENT-001, CONV-DESIGN-003, AUTH-ABUSE-004 and REC-ACC-002. A
 /// message one destination refuses still reaches the rest: the set exists so that no one
 /// channel can silence it.
 /// </remarks>

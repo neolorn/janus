@@ -75,14 +75,9 @@ public sealed class WorkshopHost : IAsyncLifetime
     internal ShiftedClock Clock { get; } = new();
 
     /// <summary>
-    /// What went out by mail.
+    /// What the deployment handed over to be sent, as its notification handler took it.
     /// </summary>
-    public InMemoryMailTransport Mail { get; } = new();
-
-    /// <summary>
-    /// What went out by SMS.
-    /// </summary>
-    public InMemorySmsTransport Sms { get; } = new();
+    public InMemoryNotifications Notifications { get; } = new();
 
     /// <summary>
     /// What the deployment raised, as its alert handler took it.
@@ -317,8 +312,7 @@ public sealed class WorkshopHost : IAsyncLifetime
             new SignOnClient(WorkshopApplication.Client),
             Terms,
             _server.Channel,
-            Mail,
-            Sms,
+            Notifications,
             _randomness);
         _administrator = await _people.AdministratorAsync(deployment.EnrolmentLink, administrator, CancellationToken.None);
 
@@ -405,8 +399,7 @@ public sealed class WorkshopHost : IAsyncLifetime
         _ = builder.Services.AddSingleton<IServer>(_server);
         _ = builder.Services.AddSingleton<TimeProvider>(Clock);
         _ = builder.Services.AddSingleton<ISecretSource>(secrets);
-        _ = builder.Services.AddSingleton<IMailTransport>(Mail);
-        _ = builder.Services.AddSingleton<ISmsTransport>(Sms);
+        _ = builder.Services.AddSingleton<INotificationHandler>(Notifications);
         _ = builder.Services.AddSingleton<IAlertHandler>(Alerts);
         _ = builder.Services.AddSingleton<ILocationSource>(new EmptyLocationSource(Clock));
         _ = builder.Services.AddSingleton<IDatacenterRangeSource>(new EmptyDatacenterRangeSource(Clock));
@@ -445,11 +438,9 @@ public sealed class WorkshopHost : IAsyncLifetime
             [Settings.WebAuthnOrigins.Key] = Settings.WebAuthnOrigins.Write([Origin.GetLeftPart(UriPartial.Authority)]),
             [Settings.HostingLocation.Key] = Settings.HostingLocation.Write(HostingLocation.Inside),
             [Settings.HostingEnvironment.Key] = Settings.HostingEnvironment.Write("a rented virtual machine"),
-            [Settings.AbuseSmsBalanceFloor.Key] = Settings.AbuseSmsBalanceFloor.Write(100m),
             [Settings.LegalGoverningLanguage.Key] = Settings.LegalGoverningLanguage.Write("en"),
             [Settings.PrivacyCalendarTimeZone.Key] = Settings.PrivacyCalendarTimeZone.Write("UTC"),
             [Settings.NotificationLanguages.Key] = Settings.NotificationLanguages.Write(["en"]),
-            [Settings.NotificationEmailSendingDomain.Key] = Settings.NotificationEmailSendingDomain.Write("mail.kites.example.test"),
         })
         {
             arguments.AddRange(["--" + key, value]);

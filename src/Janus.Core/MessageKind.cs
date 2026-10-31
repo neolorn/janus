@@ -3,11 +3,11 @@ using System.Text.Json.Serialization;
 namespace Janus.Core;
 
 /// <summary>
-/// What a message the library sends is for. The words are never the library's: a
-/// deployment's catalogue holds the text for each of these in each of its languages,
-/// and the library states only which message it needs delivered.
+/// What a message the library sends is for. The words are never the library's: the
+/// host renders each of these in each of its languages, and the library states only
+/// which message is owed and the values it carries.
 /// </summary>
-/// <remarks>Implements CONV-CONTENT-001, LIB-EXT-001, INT-SMS-001, INT-SMS-005a.</remarks>
+/// <remarks>Implements CONV-CONTENT-001, LIB-EXT-001, INT-SMS-001, INT-SMS-006.</remarks>
 public enum MessageKind
 {
     /// <summary>

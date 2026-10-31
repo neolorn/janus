@@ -31,7 +31,7 @@ internal interface ISendingRestrictions
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Nothing, or the refusal the message would have met: <c>auth.restriction.exceeded</c>
-    /// with <c>retryAt</c>, or the gateway floor for a text message.
+    /// with <c>retryAt</c>.
     /// </returns>
     ValueTask<Result> DrawAsync(OutboundMessage message, CancellationToken cancellationToken);
 

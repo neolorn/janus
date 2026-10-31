@@ -52,12 +52,12 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, ID
 
     /// <summary>
     /// LIB-TEST-003, REG-SESS-003: a customer's address and number are each verified by a
-    /// press of the registration link the in-memory transport holds for it, and no code is
-    /// typed.
+    /// press of the registration link the in-memory notification handler holds for it, and
+    /// no code is typed.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task LIB_TEST_003_EachVerificationLinkTheTransportsHoldIsPressedAsync()
+    public async Task LIB_TEST_003_EachVerificationLinkTheHandlerHoldsIsPressedAsync()
     {
         await PublishedAsync();
         var requests = new RequestsInMemory();
@@ -84,11 +84,13 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, ID
             Assert.False(verification.TryGetProperty("code", out _));
         });
         Assert.Contains(
-            host.Mail.SentTo(email),
-            mail => mail.Body.Contains("#registration." + Token(verifications[0]), StringComparison.Ordinal));
+            host.Notifications.SentTo(email),
+            mail => mail.Values.TryGetValue("link", out string? link)
+                && link.EndsWith("#registration." + Token(verifications[0]), StringComparison.Ordinal));
         Assert.Contains(
-            host.Sms.SentTo(phone),
-            message => message.Text.Contains("#registration." + Token(verifications[1]), StringComparison.Ordinal));
+            host.Notifications.SentTo(phone),
+            text => text.Values.TryGetValue("link", out string? link)
+                && link.EndsWith("#registration." + Token(verifications[1]), StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -307,8 +309,7 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, ID
             SampleHost.Client,
             SampleHost.Terms,
             () => requests.Over(host.Channel()),
-            host.Mail,
-            host.Sms,
+            host.Notifications,
             _randomness);
 
     // The notice and the terms a registration accepts, published by the administrator.

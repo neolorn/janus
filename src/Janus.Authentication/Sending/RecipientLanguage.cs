@@ -11,7 +11,7 @@ namespace Janus.Authentication.Sending;
 /// <remarks>
 /// Implements IDN-ATTR-001 and D-055. A value names a declared language by the lookup
 /// of RFC 4647 section 3.4, so <c>en-GB</c> finds <c>en</c>; a value that finds none is
-/// taken as unset, since no template is written in it (AUTH-ABUSE-005).
+/// taken as unset, since the deployment sends in no such language.
 /// </remarks>
 internal static class RecipientLanguage
 {

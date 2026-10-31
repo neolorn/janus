@@ -10,6 +10,35 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Every message the library owes is handed to the host's `INotificationHandler`, which a
+  deployment must register: one that registers none does not start
+  (`model.startup.declarationmissing`, `details.key` `notificationHandler`), and one
+  that registers no mail or text transport is no longer refused for it. The handler is
+  given a `SendRequest`: the send's reference, the same at every attempt, the message
+  kind, the channel, the subject, the address or number, the languages and the kind's
+  values. A message it does not take is handed over again under `outbox.retry.*`. The
+  library renders and sends nothing: `IMailTransport`, `ISmsTransport`,
+  `IMessageTemplates`, the shipped message texts, `integration.mail.endpoint` and
+  `integration.sms.endpoint` are gone.
+- A message owed in every declared language is one `SendRequest` carrying them all, in
+  `notification.languages` order, for the host to compose. By text it still counts
+  once for each language, and a report that it failed releases every count.
+- The host reports what became of a message with `ISendOutcomes.ReportAsync(reference,
+  delivered)`: a failure releases its counts, a delivered `secondfactor` text releases
+  its count from each restriction marked `resend`, and a reference naming no message of
+  the library's changes nothing and is answered false. `GET /callbacks/sms/dlr` is gone.
+- The library reads no SMS gateway's balance: the `sms-balance` job, the keys
+  `abuse.sms.balancefloor`, `abuse.sms.pollinterval` and `abuse.sms.drainfactor`, the
+  code `integration.sms.balancefloor`, the condition `sms-balance` and the
+  `sms_balance_readings` table are gone.
+- The library no longer warns of a sending domain a private relay has not registered:
+  `notification.email.sendingdomain`, `notification.email.relayregistered` and the
+  condition `relay-domain-unregistered` are gone.
+- The shipped register of processing and of providers no longer carries an SMS gateway
+  row, since the library sends through none.
+- `Janus.Testing` ships `InMemoryNotifications`, which holds every message handed to it,
+  readable by address or number with each kind's values, in place of
+  `InMemoryMailTransport` and `InMemorySmsTransport`.
 - The library no longer tests backups or prints keys: the `restore-test` job,
   `IRestoreTestInstance`, the `backup.*` keys, the condition `restore-test-failed`, the
   audit action `ops.restoretest.completed` and the canary account bootstrap seeded are

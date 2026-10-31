@@ -8,7 +8,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// How a message a transport took is stored until its delivery report can no longer
 /// change anything.
 /// </summary>
-/// <remarks>Implements AUTH-ABUSE-004, AUTH-ABUSE-007 and INT-SMS-005.</remarks>
+/// <remarks>Implements AUTH-ABUSE-004 and INT-SMS-005.</remarks>
 internal sealed class SendConfiguration : IEntityTypeConfiguration<SendRecord>
 {
     /// <inheritdoc/>

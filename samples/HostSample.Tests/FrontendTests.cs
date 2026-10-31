@@ -47,7 +47,7 @@ public sealed partial class FrontendTests(WorkshopHost host) : IClassFixture<Wor
 
         host.Clock.Advance(PastTheRestriction);
 
-        int held = host.Mail.SentTo(email).Count;
+        int held = host.Notifications.SentTo(email).Count;
         Answered begun = await Exchanges.SendAsync(
             browser,
             HttpMethod.Post,
@@ -61,7 +61,7 @@ public sealed partial class FrontendTests(WorkshopHost host) : IClassFixture<Wor
             new { identifier = email.Value },
             Cancellation);
 
-        await Exchanges.UntilAsync(() => host.Mail.SentTo(email).Count > held, Cancellation);
+        await Exchanges.UntilAsync(() => host.Notifications.SentTo(email).Count > held, Cancellation);
 
         Answered pressed = await Exchanges.SendAsync(
             browser,
@@ -126,7 +126,7 @@ public sealed partial class FrontendTests(WorkshopHost host) : IClassFixture<Wor
 
         host.Clock.Advance(PastTheRestriction);
 
-        int held = host.Mail.SentTo(email).Count;
+        int held = host.Notifications.SentTo(email).Count;
         Answered approved = await Exchanges.SteppedAsync(
             host.Administrator,
             HttpMethod.Post,
@@ -134,7 +134,7 @@ public sealed partial class FrontendTests(WorkshopHost host) : IClassFixture<Wor
             new { subject = customer.Subject.Value, reason = "The customer lost every factor.", channelUsed = email.Value },
             Cancellation);
 
-        await Exchanges.UntilAsync(() => host.Mail.SentTo(email).Count > held, Cancellation);
+        await Exchanges.UntilAsync(() => host.Notifications.SentTo(email).Count > held, Cancellation);
 
         using TestVisitor enrolling = host.Guest();
         Answered begun = await Exchanges.SendAsync(
@@ -163,12 +163,12 @@ public sealed partial class FrontendTests(WorkshopHost host) : IClassFixture<Wor
             ? email
             : throw new InvalidOperationException("The address " + local + " does not read as one.");
 
-    // The token of the last link of a kind the texts carry, in the form chapter 10
+    // The token of the last link of a kind among the links sent, in the form chapter 10
     // section 5.43 gives every link the library sends: the landing route, the kind, a
     // dot and the token, in the fragment.
-    private static string Token(string[] texts, string kind) =>
-        texts
-            .SelectMany(text => Landed().Matches(text))
+    private static string Token(string[] links, string kind) =>
+        links
+            .SelectMany(link => Landed().Matches(link))
             .LastOrDefault(link => link.Groups["kind"].Value == kind)?
             .Groups["token"].Value
             ?? throw new InvalidOperationException("No message carried a link of the kind " + kind + ".");
@@ -176,9 +176,12 @@ public sealed partial class FrontendTests(WorkshopHost host) : IClassFixture<Wor
     [GeneratedRegex("/link#(?<kind>[a-z-]+)\\.(?<token>[A-Za-z0-9_-]+)")]
     private static partial Regex Landed();
 
-    // The texts of the messages the address received after the count given.
+    // The links the messages the address received after the count given carry.
     private string[] Sent(EmailAddress email, int after) =>
-        [.. host.Mail.SentTo(email).Skip(after).Select(mail => mail.Body)];
+        [.. host.Notifications.SentTo(email)
+            .Skip(after)
+            .Where(message => message.Values.ContainsKey("link"))
+            .Select(message => message.Values["link"])];
 
     // AUTH-FACT-002, D-146: sign-in links are off by default and a host enables them in
     // the system policy, which the first administrator writes, stepped up, as an

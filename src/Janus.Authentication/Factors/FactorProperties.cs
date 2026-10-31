@@ -45,11 +45,6 @@ namespace Janus.Authentication.Factors;
 /// a dwindling set of one-use secrets would be spent at every gate that read it as
 /// a factor the account holds (AUTH-STEP-006).
 /// </param>
-/// <param name="RelaysAddress">
-/// Whether the identity it asserts may carry an address at a private relay the
-/// provider operates, which mail reaches only from a sending domain registered with
-/// the relay (INT-MAIL-011, REG-IDENT-008).
-/// </param>
 /// <param name="OperatedDomains">
 /// The mail domains whose mailboxes the provider behind the entry operates, so that
 /// an address it asserts there and calls verified is verified by the sign-in itself
@@ -60,7 +55,7 @@ namespace Janus.Authentication.Factors;
 /// asserts, as Google does for the domain of an organization it hosts (REG-IDENT-008).
 /// </param>
 /// <remarks>
-/// Implements AUTH-FACT-001, AUTH-FACT-003, INT-MAIL-011 and chapter 10 section 5.3. How strong a
+/// Implements AUTH-FACT-001, AUTH-FACT-003 and chapter 10 section 5.3. How strong a
 /// factor is has one axis, the tier beside phishing-resistance, so no second axis can
 /// let two rules disagree about the same factor; what the tier cannot say is when a
 /// contribution counts, which is what <paramref name="SignInOnly"/> carries.
@@ -77,6 +72,5 @@ internal sealed record FactorProperties(
     IdentifierKind? Channel,
     bool Restricted,
     bool SingleUse,
-    bool RelaysAddress,
     FrozenSet<string> OperatedDomains,
     bool OperatesHostedDomain);

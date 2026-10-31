@@ -92,7 +92,6 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         _approvals.Work = _work;
         _recorded.Work = _work;
         _links.Work = _work;
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
     }
 
@@ -1119,35 +1118,6 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Same(refusal, nobodys.Match(() => (Error?)null, error => error));
     }
 
-    /// <summary>
-    /// AUTH-ABUSE-006 AC4: a recovery asked for at a number whose link the gateway
-    /// floor refuses is answered as it would have been, for the number's holder and
-    /// for a number no account holds alike, and leaves no link behind it.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task AUTH_ABUSE_006_AC4_ARecoveryTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync()
-    {
-        SubjectId subject = await AccountAsync();
-
-        var floor = Error.From(ErrorCodes.SmsBalanceFloor);
-        _notifications.Refusal = floor;
-        _restrictions.Refusal = floor;
-
-        int committed = _work.Committed;
-
-        Result held = await AskedAsync(Number);
-        Result nobodys = await AskedAsync("+441632960099");
-
-        Assert.True(Succeeded(held));
-        Assert.True(Succeeded(nobodys));
-        Assert.Empty(_notifications.Texts);
-        Assert.Empty(_links.Held);
-        Assert.NotEqual(default, subject);
-        Assert.False(_work.Open);
-        Assert.Equal(committed, _work.Committed);
-    }
-
     private RecoveryService Service =>
         new(
             _links,
@@ -1306,9 +1276,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-RECOV-002 AC7: an approval whose link's send a sending restriction refuses
-    /// is refused with <c>auth.restriction.exceeded</c>, and one whose text message the
-    /// gateway floor refuses with <c>integration.sms.balancefloor</c>; each leaves no
+    /// AUTH-RECOV-002 AC7: an approval whose link's send a sending restriction refuses,
+    /// by mail or by text, is refused with <c>auth.restriction.exceeded</c> and leaves no
     /// approval, no record of it, no link and no send, its unit of work rolled back.
     /// </summary>
     /// <param name="refusal">The code the send is refused with.</param>
@@ -1317,7 +1286,6 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     [Theory]
     [InlineData("auth.restriction.exceeded", false)]
     [InlineData("auth.restriction.exceeded", true)]
-    [InlineData("integration.sms.balancefloor", true)]
     public async Task AUTH_RECOV_002_AC7_AnApprovalWhoseLinkIsRefusedLeavesNoApprovalAsync(string refusal, bool texted)
     {
         SubjectId subject = await AccountAsync();

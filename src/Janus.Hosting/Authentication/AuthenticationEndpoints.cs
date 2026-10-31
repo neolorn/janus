@@ -58,7 +58,7 @@ internal static class AuthenticationEndpoints
                     ErrorCodes.CodeExpired, ErrorCodes.CodeReplayed, ErrorCodes.CredentialSuspended,
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnCounterMismatch,
                     ErrorCodes.WebAuthnRelyingPartyChanged, ErrorCodes.WebAuthnUserVerificationRequired,
-                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
             .Accepts<PresentFactorRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>()
             .Produces<SignInLandingView>()
@@ -78,7 +78,7 @@ internal static class AuthenticationEndpoints
                     ErrorCodes.WebAuthnAlgorithmNotAllowed,
                     ErrorCodes.WebAuthnCounterMismatch, ErrorCodes.WebAuthnRelyingPartyChanged,
                     ErrorCodes.WebAuthnUserVerificationRequired, ErrorCodes.Throttled,
-                    ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+                    ErrorCodes.RestrictionExceeded))
             .Accepts<PresentFactorRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>()
             .Produces(StatusCodes.Status202Accepted);

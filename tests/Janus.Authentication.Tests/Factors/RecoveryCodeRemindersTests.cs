@@ -267,17 +267,9 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
         var ledger = new SendLedgerInMemory { Work = _work };
         var outbox = new SendOutboxInMemory { Work = _work };
         var carrier = new SendCarrierInMemory();
-        var events = new EventsInMemory();
-        var gateway = new SmsTransportInMemory();
-
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
 
         var send = new GovernedSend(
-            new SendAdmission(
-                _configuration,
-                ledger,
-                RestrictionKeySuppliers.None,
-                new SmsBalance(_configuration, gateway, new SmsBalanceLedgerInMemory(), _work, events, _clock)),
+            new SendAdmission(_configuration, ledger, RestrictionKeySuppliers.None),
             outbox,
             carrier,
             Considered.Nothing(_work, _clock),

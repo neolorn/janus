@@ -91,7 +91,6 @@ public sealed class VocabularyContractTests
         "stepup-policy-weakened",
         "concurrent-sessions-implausible",
         "denial-spike",
-        "sms-balance",
         "background-job-failed",
         "erasure-delivery-exhausted",
         "degradation",
@@ -108,7 +107,6 @@ public sealed class VocabularyContractTests
         "domain-removed",
         "governing-language-changed",
         "governing-text-missing",
-        "relay-domain-unregistered",
     ];
 
     /// <summary>

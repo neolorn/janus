@@ -142,8 +142,7 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
     private ServiceProvider Deployed(DateTimeOffset at, string maintenance) =>
         HostFixture.Started(new ServiceCollection()
             .AddSingleton<TimeProvider>(new FixedTime(at))
-            .AddSingleton<IMailTransport>(new MailTransportInMemory())
-            .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
+            .AddSingleton<INotificationHandler>(new Janus.Testing.InMemoryNotifications())
             .AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",

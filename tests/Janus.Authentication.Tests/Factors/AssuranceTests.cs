@@ -87,7 +87,6 @@ public sealed class AssuranceTests
             Channel: null,
             Restricted: false,
             SingleUse: false,
-            RelaysAddress: false,
             OperatedDomains: FrozenSet<string>.Empty,
             OperatesHostedDomain: false);
 
@@ -200,7 +199,6 @@ public sealed class AssuranceTests
             Channel: null,
             Restricted: false,
             SingleUse: false,
-            RelaysAddress: false,
             OperatedDomains: FrozenSet<string>.Empty,
             OperatesHostedDomain: false);
 

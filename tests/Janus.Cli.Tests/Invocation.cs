@@ -71,11 +71,9 @@ public sealed record Invocation(int ExitCode, string Output, string Error)
             [Settings.WebAuthnOrigins.Key] = Settings.WebAuthnOrigins.Write([Origin]),
             [Settings.HostingLocation.Key] = Settings.HostingLocation.Write(HostingLocation.Inside),
             [Settings.HostingEnvironment.Key] = Settings.HostingEnvironment.Write("a rented virtual machine"),
-            [Settings.AbuseSmsBalanceFloor.Key] = Settings.AbuseSmsBalanceFloor.Write(100m),
             [Settings.LegalGoverningLanguage.Key] = Settings.LegalGoverningLanguage.Write("ar"),
             [Settings.PrivacyCalendarTimeZone.Key] = Settings.PrivacyCalendarTimeZone.Write("Africa/Cairo"),
             [Settings.NotificationLanguages.Key] = Settings.NotificationLanguages.Write(["en"]),
-            [Settings.NotificationEmailSendingDomain.Key] = Settings.NotificationEmailSendingDomain.Write("mail.example.test"),
         };
 
     /// <summary>

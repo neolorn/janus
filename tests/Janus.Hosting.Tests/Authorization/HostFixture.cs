@@ -97,11 +97,9 @@ public sealed class HostFixture : IAsyncLifetime
         Row(Settings.WebAuthnOrigins.Key, Settings.WebAuthnOrigins.Write(["https://accounts.example.test"])),
         Row(Settings.HostingLocation.Key, Settings.HostingLocation.Write(HostingLocation.Inside)),
         Row(Settings.HostingEnvironment.Key, Settings.HostingEnvironment.Write("a rented virtual machine")),
-        Row(Settings.AbuseSmsBalanceFloor.Key, Settings.AbuseSmsBalanceFloor.Write(100m)),
         Row(Settings.LegalGoverningLanguage.Key, Settings.LegalGoverningLanguage.Write("ar")),
         Row(Settings.PrivacyCalendarTimeZone.Key, Settings.PrivacyCalendarTimeZone.Write("Africa/Cairo")),
         Row(Settings.NotificationLanguages.Key, Settings.NotificationLanguages.Write(["en"])),
-        Row(Settings.NotificationEmailSendingDomain.Key, Settings.NotificationEmailSendingDomain.Write("mail.example.test")),
     ];
 
     private static object Row(ConfigurationKey key, string value) => new { Key = key.ToString(), Value = value };
@@ -160,10 +158,9 @@ public sealed class HostFixture : IAsyncLifetime
             MaintenanceCredential = Encoding.UTF8.GetBytes(MaintenanceConnectionString),
         });
 
-        // An operation that tells somebody, the end of a membership among them, sends
-        // through the transports a host registers.
-        services.AddSingleton<IMailTransport>(new MailTransportInMemory());
-        services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+        // An operation that tells somebody, the end of a membership among them, hands
+        // the message to the notification handler a host registers.
+        services.AddSingleton<INotificationHandler>(new Janus.Testing.InMemoryNotifications());
 
         // OPS-ALERT-003: and what it raises goes to the alert handler it registers.
         services.AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts());
