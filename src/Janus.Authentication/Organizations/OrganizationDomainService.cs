@@ -48,7 +48,7 @@ internal sealed class OrganizationDomainService(
     ConfigurationAdministration administration,
     IDnsResolver? dns,
     IOrganizationAudit audit,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : IOrganizationDomains

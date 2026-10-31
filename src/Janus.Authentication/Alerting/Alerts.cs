@@ -21,8 +21,8 @@ internal static class Alerts
         new Dictionary<string, JsonElement>(capacity: 0, StringComparer.Ordinal);
 
     /// <summary>
-    /// How much one condition matters, which decides whether SMS carries it as well
-    /// as email (OPS-ALERT-003).
+    /// How much one condition matters, which the alert carries to the host's handler
+    /// (OPS-ALERT-001, OPS-ALERT-003).
     /// </summary>
     /// <param name="condition">The condition.</param>
     /// <returns>Its severity.</returns>
@@ -36,14 +36,11 @@ internal static class Alerts
             AlertCondition.BreakGlassUsed => AlertSeverity.High,
             AlertCondition.BreakGlassGenerated => AlertSeverity.High,
             AlertCondition.ProtectedSettingChanged => AlertSeverity.High,
-            AlertCondition.AlertDestinationChanged => AlertSeverity.High,
             AlertCondition.StepUpPolicyWeakened => AlertSeverity.High,
             AlertCondition.ConcurrentSessionsImplausible => AlertSeverity.High,
             AlertCondition.ErasureDeliveryExhausted => AlertSeverity.High,
-            AlertCondition.CertificateRenewalFailed => AlertSeverity.High,
             AlertCondition.PrivacyDeadlineReached => AlertSeverity.High,
             AlertCondition.NoEmergencyCredential => AlertSeverity.High,
-            AlertCondition.RestoreTestFailed => AlertSeverity.High,
             _ => AlertSeverity.Normal,
         };
 

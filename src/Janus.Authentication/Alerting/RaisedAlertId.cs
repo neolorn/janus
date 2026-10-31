@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Janus.Authentication.Alerting;
 
 /// <summary>
-/// The identifier of one raised condition waiting for the alert channels.
+/// The identifier of one raised condition waiting to be handed to the host's alert handler.
 /// </summary>
 /// <param name="Value">The identifier as the database carries it.</param>
 /// <remarks>

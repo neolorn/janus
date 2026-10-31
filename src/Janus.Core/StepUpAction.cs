@@ -171,46 +171,39 @@ public enum StepUpAction
     ConfigLoosen = 22,
 
     /// <summary>
-    /// Change alert destinations.
-    /// </summary>
-    /// <remarks>Named <c>alerting:destinations</c>.</remarks>
-    [JsonStringEnumMemberName("alerting:destinations")]
-    AlertingDestinations = 23,
-
-    /// <summary>
     /// Change an organization's policy.
     /// </summary>
     /// <remarks>Named <c>policy:change</c>.</remarks>
     [JsonStringEnumMemberName("policy:change")]
-    PolicyChange = 24,
+    PolicyChange = 23,
 
     /// <summary>
     /// Add, verify or remove a locked domain.
     /// </summary>
     /// <remarks>Named <c>domain:manage</c>.</remarks>
     [JsonStringEnumMemberName("domain:manage")]
-    DomainManage = 25,
+    DomainManage = 24,
 
     /// <summary>
     /// Edit a sending restriction. A loosening also needs a reason.
     /// </summary>
     /// <remarks>Named <c>restriction:edit</c>.</remarks>
     [JsonStringEnumMemberName("restriction:edit")]
-    RestrictionEdit = 26,
+    RestrictionEdit = 25,
 
     /// <summary>
     /// Grant sends to a key, with a reason.
     /// </summary>
     /// <remarks>Named <c>restriction:grant</c>.</remarks>
     [JsonStringEnumMemberName("restriction:grant")]
-    RestrictionGrant = 27,
+    RestrictionGrant = 26,
 
     /// <summary>
     /// Generate a replacement break-glass credential.
     /// </summary>
     /// <remarks>Named <c>breakglass:replace</c>.</remarks>
     [JsonStringEnumMemberName("breakglass:replace")]
-    BreakGlassReplace = 28,
+    BreakGlassReplace = 27,
 
     /// <summary>
     /// Request an organization's deletion, which suspends it and ends the sessions of
@@ -218,7 +211,7 @@ public enum StepUpAction
     /// </summary>
     /// <remarks>Named <c>organization:delete</c>.</remarks>
     [JsonStringEnumMemberName("organization:delete")]
-    OrganizationDelete = 29,
+    OrganizationDelete = 28,
 
     /// <summary>
     /// Fulfil a privacy request of any type: an erasure's fulfilment starts a grace
@@ -227,75 +220,75 @@ public enum StepUpAction
     /// </summary>
     /// <remarks>Named <c>privacyrequest:fulfil</c>.</remarks>
     [JsonStringEnumMemberName("privacyrequest:fulfil")]
-    PrivacyRequestFulfil = 30,
+    PrivacyRequestFulfil = 29,
 
     /// <summary>
     /// End a membership, which retires the corporate address and the mailbox it gave.
     /// </summary>
     /// <remarks>Named <c>membership:end</c>.</remarks>
     [JsonStringEnumMemberName("membership:end")]
-    MembershipEnd = 31,
+    MembershipEnd = 30,
 
     /// <summary>
     /// Lift a processing restriction.
     /// </summary>
     /// <remarks>Named <c>account:restrictionlift</c>.</remarks>
     [JsonStringEnumMemberName("account:restrictionlift")]
-    AccountRestrictionLift = 32,
+    AccountRestrictionLift = 31,
 
     /// <summary>
     /// Cancel a deletion on the subject's behalf.
     /// </summary>
     /// <remarks>Named <c>account:deletioncancel</c>.</remarks>
     [JsonStringEnumMemberName("account:deletioncancel")]
-    AccountDeletionCancel = 33,
+    AccountDeletionCancel = 32,
 
     /// <summary>
     /// End another person's sessions.
     /// </summary>
     /// <remarks>Named <c>account:sessionsrevoke</c>.</remarks>
     [JsonStringEnumMemberName("account:sessionsrevoke")]
-    AccountSessionsRevoke = 34,
+    AccountSessionsRevoke = 33,
 
     /// <summary>
     /// End every session.
     /// </summary>
     /// <remarks>Named <c>session:revokeall</c>.</remarks>
     [JsonStringEnumMemberName("session:revokeall")]
-    SessionRevokeAll = 35,
+    SessionRevokeAll = 34,
 
     /// <summary>
     /// Export a person record for the person.
     /// </summary>
     /// <remarks>Named <c>record:export</c>.</remarks>
     [JsonStringEnumMemberName("record:export")]
-    RecordExport = 36,
+    RecordExport = 35,
 
     /// <summary>
     /// Lift a person record's restriction.
     /// </summary>
     /// <remarks>Named <c>record:restrictionlift</c>.</remarks>
     [JsonStringEnumMemberName("record:restrictionlift")]
-    RecordRestrictionLift = 37,
+    RecordRestrictionLift = 36,
 
     /// <summary>
     /// Cancel a person record's deletion on the person's behalf.
     /// </summary>
     /// <remarks>Named <c>record:deletioncancel</c>.</remarks>
     [JsonStringEnumMemberName("record:deletioncancel")]
-    RecordDeletionCancel = 38,
+    RecordDeletionCancel = 37,
 
     /// <summary>
     /// Execute a takedown of a person record.
     /// </summary>
     /// <remarks>Named <c>record:takedown</c>.</remarks>
     [JsonStringEnumMemberName("record:takedown")]
-    RecordTakedown = 39,
+    RecordTakedown = 38,
 
     /// <summary>
     /// Reverse a takedown of a person record.
     /// </summary>
     /// <remarks>Named <c>record:takedownreverse</c>.</remarks>
     [JsonStringEnumMemberName("record:takedownreverse")]
-    RecordTakedownReverse = 40,
+    RecordTakedownReverse = 39,
 }

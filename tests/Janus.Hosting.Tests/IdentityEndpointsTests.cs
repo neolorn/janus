@@ -50,6 +50,8 @@ public sealed class IdentityEndpointsTests
         "POST /auth/break-glass",
         "POST /auth/device/verify",
         "POST /auth/factor",
+        "POST /auth/restore",
+        "POST /auth/restore/begin",
         "POST /auth/step-up",
         "POST /register/terms",
 
@@ -81,9 +83,8 @@ public sealed class IdentityEndpointsTests
         "PUT /records/collection/email",
         "PUT /records/collection/phone",
 
-        // What a gateway or a provider sends, which no person and no host calls
-        // (chapter 09 section 10, IDN-LIFE-012a AC3, entry 282).
-        "GET /callbacks/sms/dlr",
+        // What a provider sends, which no person and no host calls (chapter 09
+        // section 10, IDN-LIFE-012a AC3, entry 282).
         "POST /callbacks/providers/apple",
         "POST /callbacks/providers/google",
 
@@ -92,6 +93,9 @@ public sealed class IdentityEndpointsTests
         "GET /.well-known/change-password",
         "GET /.well-known/passkey-endpoints",
         "GET /.well-known/webauthn",
+        // The settings a frontend draws its screens from, which read the deployment's
+        // settings and no record (chapter 07, D-224).
+        "GET /settings",
     ];
 
     // A public interface of Janus.Core an endpoint may read that is not an operation:

@@ -44,11 +44,9 @@ internal sealed class ProcessingRecordsService(
     IUnitOfWork work,
     TimeProvider time) : IProcessingRecords
 {
-    // The four rows of the shipped register, named as ProviderRegister ships them
+    // The three rows of the shipped register, named as ProviderRegister ships them
     // (PRIV-ROPA-002, chapter 05 section 6).
     private const string MailServer = "mail server";
-
-    private const string SmsGateway = "sms gateway";
 
     private const string HostingProvider = "hosting provider";
 
@@ -127,7 +125,7 @@ internal sealed class ProcessingRecordsService(
         // and the screening service, which is what makes those two rows of the shipped
         // register true of this deployment. A mail server is integrated where the host
         // registered one or the adapter's endpoint was set at the start; the library
-        // ships no mail transport of its own, so no default transport is in use.
+        // sends no mail itself, so no sender of its own is in use (D-225).
         bool hosted = mail.Chosen().Match(_ => true, _ => false);
 
         bool screening = await ReadAsync(Settings.PasswordBlocklistSource, cancellationToken)
@@ -319,9 +317,6 @@ internal sealed class ProcessingRecordsService(
     private static bool Made(string row, bool mail, bool screening) => row switch
     {
         HostingProvider => true,
-
-        // Every deployment registers the transport its text messages leave through.
-        SmsGateway => true,
         MailServer => mail,
         PasswordScreening => screening,
         _ => false,

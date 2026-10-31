@@ -48,9 +48,15 @@ internal static class RecoveryEndpoints
         _ = group.MapPost("/complete", CompleteAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired))
+                    ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired, ErrorCodes.PasswordTooShort,
+                    ErrorCodes.PasswordTooLong, ErrorCodes.PasswordBlocklisted))
             .Accepts<CompleteRecoveryRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
+        _ = group.MapPost("/username", UsernameAsync)
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired, ErrorCodes.Throttled))
+            .Accepts<UsernameRequest>(MediaTypeNames.Application.Json)
+            .Produces<UsernameView>();
         _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -73,7 +79,7 @@ internal static class RecoveryEndpoints
                 .Answering(
                     ErrorCodes.Denied, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.RecoveryReasonRequired, ErrorCodes.RecoveryChannelNotOnAccount,
-                    ErrorCodes.RecoverySelfApproval, ErrorCodes.SmsBalanceFloor, ErrorCodes.Throttled,
+                    ErrorCodes.RecoverySelfApproval, ErrorCodes.Throttled,
                     ErrorCodes.RestrictionExceeded))
             .Accepts<ApproveRecoveryRequest>(MediaTypeNames.Application.Json)
             .Produces<ApprovedRecoveryView>();
@@ -82,6 +88,9 @@ internal static class RecoveryEndpoints
                 .Answering(
                     ErrorCodes.RecoveryTokenExpired, ErrorCodes.EnrolmentTokenInvalid))
             .Accepts<EnrolmentRequest>(MediaTypeNames.Application.Json)
+            .Produces<EnrolmentSessionView>();
+        _ = EnrolmentRoute.On(endpoints.MapGet("/enrol", ReadEnrolmentAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired))
             .Produces<EnrolmentSessionView>();
 
         return endpoints;
@@ -147,6 +156,33 @@ internal static class RecoveryEndpoints
                         cancellationToken)
                     .ConfigureAwait(false),
                 Nothing);
+    }
+
+    // FE-PM-002 (D-224): the reset form's username is read from the link's token and
+    // the read spends nothing, so the token stays for the completion.
+    private static async Task<IResult> UsernameAsync(
+        IRecovery recovery,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(recovery);
+        ArgumentNullException.ThrowIfNull(context);
+
+        UsernameRequest request = await JsonBody
+            .ReadAsync<UsernameRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        return request.Token is not { Length: > 0 } token
+            ? Answers.Malformed("token")
+            : Answers.Of(
+                await recovery
+                    .UsernameAsync(token, RequestOrigin.Source(context.Request), cancellationToken)
+                    .ConfigureAwait(false),
+                username => TypedResults.Json(
+                    new UsernameView(username),
+                    RecoveryJson.Default.UsernameView,
+                    contentType: null,
+                    StatusCodes.Status200OK));
     }
 
     // AUTH-RECOV-007: a session that has presented one usable factor is enough and no
@@ -319,12 +355,35 @@ internal static class RecoveryEndpoints
             .CarryAsync(contact, session.Id, session.ExpiresAt, cancellationToken)
             .ConfigureAwait(false);
 
-        return TypedResults.Json(
-            EnrolmentSessionView.Of(session),
+        // D-224: the opening carries the document GET /enrol answers.
+        return Answers.Of(
+            await recovery.ReadEnrolmentAsync(session.Id, cancellationToken).ConfigureAwait(false),
+            Enrolment);
+    }
+
+    // 09 GET /enrol (D-224): the enrolment screen reads its document on the enrolment
+    // session the browser carries, and a browser carrying none is asked nothing.
+    private static async Task<IResult> ReadEnrolmentAsync(
+        IRecovery recovery,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(recovery);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return browser.Enrolment is not EnrolmentSessionId opened
+            ? Nobody()
+            : Answers.Of(
+                await recovery.ReadEnrolmentAsync(opened, cancellationToken).ConfigureAwait(false),
+                Enrolment);
+    }
+
+    private static IResult Enrolment(EnrolmentDocument document) =>
+        TypedResults.Json(
+            EnrolmentSessionView.Of(document),
             RecoveryJson.Default.EnrolmentSessionView,
             contentType: null,
             StatusCodes.Status200OK);
-    }
 
     // BFF-STEP-001: the endpoints that read this are mounted as ones that need a
     // session, so the stage that requires one has already answered a request that

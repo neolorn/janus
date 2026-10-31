@@ -23,8 +23,6 @@ public sealed class RecordTakedownTests : IAsyncDisposable
 
     private const string Language = "en";
 
-    private const string NoneSent = "none";
-
     private static readonly RandomNumberGenerator Randomness = RandomNumberGenerator.Create();
 
     private readonly Deployment _deployment = new();
@@ -38,8 +36,6 @@ public sealed class RecordTakedownTests : IAsyncDisposable
     public RecordTakedownTests()
     {
         Flow.Prepare(_deployment);
-        _deployment.Templates.Set(MessageKind.RecordAccessCode, SendKind.Email, Language, new MessageTemplate("code", "{code}"));
-        _deployment.Templates.Set(MessageKind.RecordAccessNone, SendKind.Email, Language, new MessageTemplate("none", NoneSent));
 
         _shop = OrganizationId.New(_deployment.Clock);
         _deployment.Organizations.Seed(_shop, name: "Seaside Rentals");
@@ -83,7 +79,7 @@ public sealed class RecordTakedownTests : IAsyncDisposable
         _ = await AskedAsync(new Browser(_deployment));
         _ = await _deployment.CarrySendsAsync();
 
-        Assert.Equal(NoneSent, _deployment.Mail.Taken[^1].Body);
+        Assert.Equal(MessageKind.RecordAccessNone, _deployment.Mail.Taken[^1].Kind);
     }
 
     /// <summary>

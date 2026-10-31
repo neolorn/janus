@@ -57,7 +57,7 @@ public sealed class LocationDatabaseTests
             .GetParameters();
 
         Assert.Equal(
-            [typeof(LocationCopy), typeof(ILocationSource), typeof(IConfigurationStore), typeof(IAlertChannels), typeof(TimeProvider)],
+            [typeof(LocationCopy), typeof(ILocationSource), typeof(IConfigurationStore), typeof(IAlertRaising), typeof(TimeProvider)],
             held.Select(parameter => parameter.ParameterType));
     }
 
@@ -111,7 +111,7 @@ public sealed class LocationDatabaseTests
 
     /// <summary>
     /// INT-GEN-006 AC2: the missing file surfaces as the degradation condition, under
-    /// a scope of its own so that the router carries it once a window and not once a
+    /// a scope of its own so that it is handed over once a window and not once a
     /// sign-in, and not under another degradation's key.
     /// </summary>
     /// <returns>The work of the test.</returns>

@@ -331,21 +331,6 @@ public static class Settings
         new("abuse.botdefence.repeatedattempts", SettingScope.Runtime, 3, loosening: SettingDirection.Increase);
 
     /// <summary>
-    /// Where the shipped default mail transport is called. Empty while the deployment
-    /// supplies a transport of its own, which is called wherever it decides
-    /// (LIB-EXT-001, INT-MAIL-008).
-    /// </summary>
-    public static TextSetting IntegrationMailEndpoint { get; } =
-        new("integration.mail.endpoint", SettingScope.Protected, string.Empty);
-
-    /// <summary>
-    /// Where the shipped default SMS transport is called. Empty while the deployment
-    /// supplies a transport of its own (LIB-EXT-001, INT-SMS-001).
-    /// </summary>
-    public static TextSetting IntegrationSmsEndpoint { get; } =
-        new("integration.sms.endpoint", SettingScope.Protected, string.Empty);
-
-    /// <summary>
     /// Where the library's mail-server adapter reaches the mail server. Empty while the
     /// deployment uses a mail server integration of its own (INT-MAIL-001, LIB-EXT-001).
     /// </summary>
@@ -411,26 +396,6 @@ public static class Settings
     public static IntegerSetting PhotoMaxDimension { get; } =
         new("photo.maxdimension", SettingScope.Runtime, 1024);
 
-    /// <summary>The prepaid balance below which sends are hard-stopped. The deployment names it.</summary>
-    public static DecimalSetting AbuseSmsBalanceFloor { get; } =
-        new("abuse.sms.balancefloor", SettingScope.Runtime);
-
-    /// <summary>How often the gateway balance is read.</summary>
-    public static DurationSetting AbuseSmsPollInterval { get; } =
-        new("abuse.sms.pollinterval", SettingScope.Runtime, "PT15M");
-
-    /// <summary>
-    /// How far the last hour's messaging spend may exceed the trailing seven-day
-    /// hourly mean before the balance alert fires.
-    /// </summary>
-    public static DecimalSetting AbuseSmsDrainFactor { get; } =
-        new(
-            "abuse.sms.drainfactor",
-            SettingScope.Runtime,
-            3.0m,
-            floor: 1.0m,
-            loosening: SettingDirection.Increase);
-
     /// <summary>
     /// The signals bot defence counts. The set is closed until a decision adds a
     /// member.
@@ -473,29 +438,6 @@ public static class Settings
     /// <summary>Whether every export is recorded.</summary>
     public static FlagSetting ExfiltrationExportAuditing { get; } =
         new("exfiltration.export.auditing", SettingScope.Protected, true);
-
-    /// <summary>Where alerts are emailed. The deployment names at least one.</summary>
-    public static TextListSetting AlertingEmailDestinations { get; } =
-        new("alerting.email.destinations", SettingScope.Runtime, minimum: 1);
-
-    /// <summary>Where high-severity alerts are texted. The deployment names at least one.</summary>
-    public static TextListSetting AlertingSmsDestinations { get; } =
-        new("alerting.sms.destinations", SettingScope.Runtime, minimum: 1);
-
-    /// <summary>
-    /// Whether routine alerts reach the owner. Break-glass events reach them either
-    /// way.
-    /// </summary>
-    public static FlagSetting AlertingOwnerEnabled { get; } =
-        new("alerting.owner.enabled", SettingScope.Runtime, false);
-
-    /// <summary>The owner's email destination. The deployment names it.</summary>
-    public static TextSetting AlertingOwnerEmail { get; } =
-        new("alerting.owner.email", SettingScope.Runtime);
-
-    /// <summary>The owner's SMS destination. The deployment names it.</summary>
-    public static TextSetting AlertingOwnerSms { get; } =
-        new("alerting.owner.sms", SettingScope.Runtime);
 
     /// <summary>The window a read-volume baseline is drawn from.</summary>
     public static DurationSetting ExfiltrationReadVolumeBaselineWindow { get; } =
@@ -568,15 +510,10 @@ public static class Settings
     public static DurationSetting AlertingDedupeWindow { get; } =
         new("alerting.dedupe.window", SettingScope.Runtime, "PT1H");
 
-    /// <summary>The severity at which an alert is also texted.</summary>
-    public static ChoiceSetting<AlertSeverity> AlertingSmsSeverityThreshold { get; } =
-        new(
-            "alerting.sms.severitythreshold",
-            SettingScope.Runtime,
-            AlertSeverity.High,
-            Enum.GetValues<AlertSeverity>().ToFrozenSet());
-
-    /// <summary>How far ahead an expiry on the maintenance log is warned about.</summary>
+    /// <summary>
+    /// How far ahead the end of the key-encryption key's cryptoperiod and of the holiday
+    /// list is warned about.
+    /// </summary>
     public static DurationSetting MaintenanceExpiryWarningLead { get; } =
         new("maintenance.expiry.warninglead", SettingScope.Runtime, "P30D");
 
@@ -782,19 +719,11 @@ public static class Settings
         new("sweep.interval", SettingScope.Runtime, "PT5M", ceiling: "PT15M");
 
     /// <summary>
-    /// The deployment's message languages, in which every template is validated at
-    /// startup. The deployment names at least one.
+    /// The deployment's message languages, in the order a message owed in every one of
+    /// them carries them. The deployment names at least one.
     /// </summary>
     public static TextListSetting NotificationLanguages { get; } =
         new("notification.languages", SettingScope.Runtime, minimum: 1);
-
-    /// <summary>The domain outbound mail is sent from. The deployment names it.</summary>
-    public static TextSetting NotificationEmailSendingDomain { get; } =
-        new("notification.email.sendingdomain", SettingScope.Runtime);
-
-    /// <summary>The domains registered with the private relay.</summary>
-    public static TextSetSetting NotificationEmailRelayRegistered { get; } =
-        new("notification.email.relayregistered", SettingScope.Runtime, FrozenSet<string>.Empty);
 
     /// <summary>How often the location database is refreshed.</summary>
     public static DurationSetting LocationDatabaseRefresh { get; } =
@@ -884,34 +813,6 @@ public static class Settings
         new("hosting.environment", SettingScope.Runtime);
 
     /// <summary>
-    /// The recovery-time objective the automatic restore test is measured against,
-    /// and the upper bound of the accepted objective.
-    /// </summary>
-    public static DurationSetting BackupRestoreTestObjective { get; } =
-        new("backup.restoretest.objective", SettingScope.Runtime, "PT8H", ceiling: "PT8H");
-
-    /// <summary>
-    /// How often the restore test runs: a count of days, so the interval never exceeds
-    /// the shortest calendar quarter, where months would be held at 31 days each.
-    /// </summary>
-    public static DurationSetting BackupRestoreTestInterval { get; } =
-        new("backup.restoretest.interval", SettingScope.Runtime, "P90D", ceiling: "P90D");
-
-    /// <summary>
-    /// The canary subject the restore test decrypts a field of and resolves the
-    /// fingerprint of. Bootstrap seeds it.
-    /// </summary>
-    public static TextSetting BackupRestoreTestCanary { get; } =
-        new("backup.restoretest.canary", SettingScope.Runtime, string.Empty);
-
-    /// <summary>
-    /// How long a backup is kept, which also bounds how long a pre-erasure backup
-    /// survives.
-    /// </summary>
-    public static DurationSetting BackupRetention { get; } =
-        new("backup.retention", SettingScope.Runtime, "P35D", floor: "P14D");
-
-    /// <summary>
     /// Whether the deployment is hosted inside or outside Egypt. The deployment names
     /// it, and an outside value makes the cross-border basis required.
     /// </summary>
@@ -947,6 +848,12 @@ public static class Settings
     /// <summary>How long an authorization code lives.</summary>
     public static DurationSetting OidcCodeLifetime { get; } =
         new("oidc.code.lifetime", SettingScope.Runtime, "PT60S", ceiling: "PT10M");
+
+    /// <summary>
+    /// How long a browser's pending authorization waits for the sign-in that completes it.
+    /// </summary>
+    public static DurationSetting OidcContinuationLifetime { get; } =
+        new("oidc.continuation.lifetime", SettingScope.Runtime, "PT30M", ceiling: "PT1H");
 
     /// <summary>
     /// The registered client a browser falls back to where the one a request named is
@@ -1059,8 +966,6 @@ public static class Settings
         AbuseBotDefenceRepeatedAttempts,
         IntegrationCallbackRateLimit,
         IntegrationCallbackClaimTimeout,
-        IntegrationMailEndpoint,
-        IntegrationSmsEndpoint,
         IntegrationMailServerEndpoint,
         Restrictions,
         CodeVerificationLifetime,
@@ -1071,9 +976,6 @@ public static class Settings
         LinkInvitationLifetime,
         PhotoMaxBytes,
         PhotoMaxDimension,
-        AbuseSmsBalanceFloor,
-        AbuseSmsPollInterval,
-        AbuseSmsDrainFactor,
         AbuseBotDefenceSignals,
         AbuseBotDefenceRangesRefresh,
         AbuseBotDefenceRangesMaxAge,
@@ -1081,11 +983,6 @@ public static class Settings
         ExfiltrationExportStepUpRequired,
         ExfiltrationExportRateLimit,
         ExfiltrationExportAuditing,
-        AlertingEmailDestinations,
-        AlertingSmsDestinations,
-        AlertingOwnerEnabled,
-        AlertingOwnerEmail,
-        AlertingOwnerSms,
         ExfiltrationReadVolumeBaselineWindow,
         ExfiltrationReadVolumeFactor,
         ExfiltrationReadVolumeMinimum,
@@ -1098,7 +995,6 @@ public static class Settings
         AlertingNonexistentThreshold,
         AlertingCallbackThreshold,
         AlertingDedupeWindow,
-        AlertingSmsSeverityThreshold,
         MaintenanceExpiryWarningLead,
         AuthzReverseLookupBudget,
         AuthzHandoutByHolding,
@@ -1130,8 +1026,6 @@ public static class Settings
         OutboxClaimTimeout,
         SweepInterval,
         NotificationLanguages,
-        NotificationEmailSendingDomain,
-        NotificationEmailRelayRegistered,
         LocationDatabaseRefresh,
         LocationDatabaseMaxAge,
         ServiceName,
@@ -1145,15 +1039,12 @@ public static class Settings
         RetentionAuditRoutine,
         RetentionConsent,
         HostingEnvironment,
-        BackupRestoreTestObjective,
-        BackupRestoreTestInterval,
-        BackupRestoreTestCanary,
-        BackupRetention,
         HostingLocation,
         HostingCrossBorderBasis,
         LegalGoverningLanguage,
         OidcAccessTokenLifetime,
         OidcCodeLifetime,
+        OidcContinuationLifetime,
         RedirectDefaultClient,
         TokenSigningAlgorithm,
         TokenSigningRotation,

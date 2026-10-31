@@ -11,28 +11,22 @@ namespace Janus.Storage.Tests;
 /// <summary>
 /// What a deployment's restore does, over containers: a new PostgreSQL instance of the
 /// version the deployment runs, with a backup of the fixture's instance replayed into it,
-/// and torn down when asked.
+/// and torn down when disposed.
 /// </summary>
 /// <param name="backup">The backup, taken from the running instance before the test.</param>
 /// <param name="database">The database the library's tables live in.</param>
 /// <remarks>Implements CONV-TEST-007: a fake, written by hand, never a mock.</remarks>
-public sealed class ContainerRestore(byte[] backup, string database) : IRestoreTestInstance, IAsyncDisposable
+public sealed class ContainerRestore(byte[] backup, string database) : IAsyncDisposable
 {
     private const string Script = "/tmp/backup.sql";
 
     private PostgreSqlContainer? _instance;
 
     /// <summary>
-    /// How the restored database was reached, once a restore has run.
+    /// Builds a new instance and replays the backup into it.
     /// </summary>
-    public string? Restored { get; private set; }
-
-    /// <summary>
-    /// How many times a teardown was asked for.
-    /// </summary>
-    public int TornDown { get; private set; }
-
-    /// <inheritdoc/>
+    /// <param name="cancellationToken">Abandons the restore.</param>
+    /// <returns>How to reach the restored database, or the failure where nothing was restored.</returns>
     public async ValueTask<Result<string>> RestoreAsync(CancellationToken cancellationToken)
     {
         _instance = new PostgreSqlBuilder("postgres:17-alpine").Build();
@@ -52,22 +46,10 @@ public sealed class ContainerRestore(byte[] backup, string database) : IRestoreT
             return Result.Failure<string>(Error.From(ErrorCodes.SystemFault));
         }
 
-        Restored = new NpgsqlConnectionStringBuilder(_instance.GetConnectionString())
+        return Result.Success(new NpgsqlConnectionStringBuilder(_instance.GetConnectionString())
         {
             Database = database,
-        }.ConnectionString;
-
-        return Result.Success(Restored);
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask<Result> TearDownAsync(CancellationToken cancellationToken)
-    {
-        TornDown++;
-
-        await DisposeAsync();
-
-        return Result.Success();
+        }.ConnectionString);
     }
 
     /// <inheritdoc/>

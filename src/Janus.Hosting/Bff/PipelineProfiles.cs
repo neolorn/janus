@@ -1,6 +1,8 @@
 using System;
 using System.Security.Cryptography;
+using Janus.Core;
 using Janus.Hosting.Callbacks;
+using Janus.Hosting.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,7 +95,9 @@ public static class PipelineProfiles
         // still hold a stale session for the domain, so there the cookie is ignored
         // rather than refused. A callback carrying the cookie is refused by the profile
         // as a rejected callback is; a protocol endpoint of the provider carrying it is
-        // refused by the provider, in its protocol's shape.
+        // refused by the provider, in its protocol's shape. A protocol endpoint's path
+        // at any address but the provider's is not the provider's (09 section 9, D-224),
+        // so neither branch takes it and it goes on as any other request does.
         return application
             .UseWhen(
                 context => MachineRoutes.Governs(context.Request.Path)
@@ -101,11 +105,13 @@ public static class PipelineProfiles
                     && !MachineRoutes.AnswersByProtocol(context.Request.Path),
                 Machine)
             .UseWhen(
-                context => MachineRoutes.AnswersByProtocol(context.Request.Path),
+                context => MachineRoutes.AnswersByProtocol(context.Request.Path) && AtProvider(context),
                 branch =>
                 {
                     Marked(branch);
+                    PassedMarked(branch);
                     _ = branch.UseAuthentication();
+                    PassedUnmarked(branch);
                 })
             .UseWhen(
                 context => MachineRoutes.IgnoresCookie(context.Request.Path),
@@ -240,8 +246,12 @@ public static class PipelineProfiles
 
         // AUTH-SESS-012: the authorization endpoint is answered here, after the layers
         // that established what the browser carries, because what it issues a code
-        // against is the session it found.
+        // against is the session it found. The provider acts only on a request that
+        // carries the mark, whichever authentication middleware hands it on, so the
+        // framework's own, ahead of the host's, passes it on (BFF-ORDER-001 AC8, D-230).
+        PassedMarked(application);
         _ = application.UseAuthentication();
+        PassedUnmarked(application);
 
         // Where the endpoints begin. A concealed refusal is answered with what the
         // response carries here and nothing an endpoint adds to it (BFF-ERR-003).
@@ -252,6 +262,12 @@ public static class PipelineProfiles
             return next(context);
         });
     }
+
+    // 09 section 9 (D-224): whether the request arrived at the provider address the
+    // host declares, the one address the provider's routes are served at.
+    private static bool AtProvider(HttpContext context) =>
+        context.RequestServices.GetService<AuthenticationAddresses>() is AuthenticationAddresses addresses
+        && OidcRegistration.Serves(context.Request, addresses);
 
     // The stages every callback on the machine profile passes.
     private static void Machine(IApplicationBuilder branch)
@@ -274,6 +290,34 @@ public static class PipelineProfiles
         _ = branch.UseMiddleware<ErrorTranslation>();
         _ = branch.UseMiddleware<MalformedRequest>();
     }
+
+    // The mark the provider acts on, set once the profile's stages have passed the
+    // request and taken off again once the authentication inside the profile has run, so
+    // nothing after it hands the provider the request (BFF-ORDER-001 AC8, D-230). It is
+    // taken off where the authentication hands the request on, and in any case once the
+    // authentication has ended, where the provider answered the request or threw at it.
+    private static void PassedMarked(IApplicationBuilder branch) =>
+        _ = branch.Use(async (context, next) =>
+        {
+            context.Features.Set(ProfilePassed.Mark);
+
+            try
+            {
+                await next(context).ConfigureAwait(false);
+            }
+            finally
+            {
+                context.Features.Set<ProfilePassed>(null);
+            }
+        });
+
+    private static void PassedUnmarked(IApplicationBuilder branch) =>
+        _ = branch.Use((context, next) =>
+        {
+            context.Features.Set<ProfilePassed>(null);
+
+            return next(context);
+        });
 
     private static void Mountable(PathString path, string name)
     {

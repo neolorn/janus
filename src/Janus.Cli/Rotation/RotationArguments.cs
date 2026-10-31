@@ -2,43 +2,29 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using Janus.Core;
-using Janus.Core.Configuration;
 
 namespace Janus.Cli.Rotation;
 
 /// <summary>
 /// Reads what <c>rotate-kek</c> and <c>rotate-fingerprint-key</c> are given: nothing, to
-/// rotate; or <c>--sealed</c>, to confirm the escrow copy sealed, with
-/// <c>--retention duration</c> where the deployment keeps its backups longer than
-/// <c>backup.retention</c>'s default.
+/// rotate; or <c>--retire</c>, to retire the versions before a completed rotation's.
 /// </summary>
 /// <remarks>
-/// Implements OPS-SEC-003 and D-166 (317). The commands run without the
-/// application, so the retention they report from is the default unless the operator
-/// names one, and a retention shorter than the default is read as the default: the date
-/// a retired version is kept until is never earlier than the default gives.
+/// Implements OPS-SEC-003 AC4 (D-225).
 /// </remarks>
 internal static class RotationArguments
 {
     /// <summary>
-    /// The argument that confirms the escrow copy sealed.
+    /// The argument that retires the versions before a completed rotation's.
     /// </summary>
-    public const string Sealed = "--sealed";
+    public const string Retire = "--retire";
 
     /// <summary>
-    /// The argument that names the deployment's backup retention, as an ISO 8601
-    /// duration.
-    /// </summary>
-    public const string Retention = "--retention";
-
-    /// <summary>
-    /// The arguments both commands take (LIB-API-001): none to rotate, or the seal, with
-    /// the retention only beside it.
+    /// The arguments both commands take (LIB-API-001): none to rotate, or the retirement.
     /// </summary>
     public static IReadOnlyList<CommandArgument> Declared { get; } =
     [
-        new(Sealed, Required: false, "flag"),
-        new(Retention, Required: false, "duration requires=" + Sealed),
+        new(Retire, Required: false, "flag"),
     ];
 
     /// <summary>
@@ -46,49 +32,27 @@ internal static class RotationArguments
     /// </summary>
     /// <param name="arguments">The arguments.</param>
     /// <returns>
-    /// What they ask for, or the failure naming the argument that is unknown, repeated,
-    /// without its value, not a duration, or a retention given without the seal.
+    /// Whether the retirement is asked for, or the failure naming the argument that is
+    /// unknown or repeated.
     /// </returns>
     /// <exception cref="ArgumentNullException">The arguments are absent.</exception>
-    public static Result<RotationRequest> Read(IReadOnlyList<string> arguments)
+    public static Result<bool> Read(IReadOnlyList<string> arguments)
     {
         ArgumentNullException.ThrowIfNull(arguments);
 
-        bool sealedCopy = false;
-        TimeSpan? named = null;
+        bool retire = false;
 
-        for (int at = 0; at < arguments.Count; at++)
+        foreach (string argument in arguments)
         {
-            string argument = arguments[at];
+            if (argument != Retire || retire)
+            {
+                return Result.Failure<bool>(Malformed(argument));
+            }
 
-            if (argument == Sealed && !sealedCopy)
-            {
-                sealedCopy = true;
-            }
-            else if (argument == Retention
-                && named is null
-                && at + 1 < arguments.Count
-                && Duration.TryParse(arguments[at + 1], out TimeSpan retention))
-            {
-                named = retention;
-                at++;
-            }
-            else
-            {
-                return Result.Failure<RotationRequest>(Malformed(argument));
-            }
+            retire = true;
         }
 
-        if (named is not null && !sealedCopy)
-        {
-            return Result.Failure<RotationRequest>(Malformed(Retention));
-        }
-
-        TimeSpan fallback = Settings.BackupRetention.Default;
-
-        return Result.Success(new RotationRequest(
-            sealedCopy,
-            named is TimeSpan longer && longer > fallback ? longer : fallback));
+        return Result.Success(retire);
     }
 
     private static Error Malformed(string member) =>

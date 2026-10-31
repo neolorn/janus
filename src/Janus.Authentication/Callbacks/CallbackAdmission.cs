@@ -29,7 +29,7 @@ internal sealed class CallbackAdmission(
     IConfigurationStore configuration,
     ICallbackLedger callbacks,
     ICallbackEvents events,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);

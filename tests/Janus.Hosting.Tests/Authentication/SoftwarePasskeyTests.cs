@@ -27,8 +27,8 @@ public sealed class SoftwarePasskeyTests : IAsyncDisposable
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     /// <summary>
-    /// A deployment whose messages carry the code and the link token, as the shipped
-    /// templates do.
+    /// A deployment whose messages carry the code and the link token among their
+    /// values.
     /// </summary>
     public SoftwarePasskeyTests() => Flow.Prepare(_deployment);
 

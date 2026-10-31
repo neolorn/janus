@@ -160,19 +160,23 @@ tool does, none of the model's checks, which need the host's declaration
 (AUTHZ-MODEL-004). It exits 0 with nothing on standard output; a migration the database
 refuses exits 1 with one JSON line `system.fault` on standard error, nothing applied
 beyond the migrations before it. `migrate --report` writes to standard output the
-destructive-operation report (OPS-DEP-002) of the migrations pending on its target and
-applies nothing: one JSON line per statement of those migrations that `08`
-CONV-DESIGN-003's scan matches, in the order they apply, an object whose `migration` is
-the migration's identifier, `statement` the matched statement itself, never the block
-that guards it in the script, and `destructive` `true` where OPS-DEP-001 names the
-statement destructive and `false` otherwise; it writes nothing where nothing matches,
+destructive-operation report of the migrations pending on its target, read from its
+migration history table, and applies nothing: one JSON line per statement of those
+migrations that `08` CONV-DESIGN-003's scan matches, in the order they apply, an object
+whose `migration` is the migration's identifier, `statement` the matched statement
+itself, never the block that guards it in the script, and `destructive` `true` where the
+statement is destructive and `false` otherwise; it writes nothing where nothing matches,
 and exits 0 whatever it found, since whether a destructive statement stops a deploy is
-the pipeline's gate (OPS-DEP-001, D-206), so a host's pipeline reports what a library
-upgrade would do before it does it. A host's pipeline runs `migrate` before its own
-migrations (OPS-MIG-004); the library's own pipeline applies its migrations the same
-way, the double run of OPS-MIG-007 included, so there is one way to apply them.
+the host's pipeline's (D-206, D-225), so a host's pipeline reports what a library
+upgrade would do before it does it. A destructive statement is `DROP TABLE`,
+`DROP COLUMN`, `DROP SCHEMA`, any `ALTER ... TYPE`, `TRUNCATE`, `DELETE FROM`, and an
+added constraint, `SET NOT NULL`, unique index or column added `NOT NULL` without a
+default on a table the same migrations did not create or have filled. A host's pipeline
+runs `migrate` before its own migrations (OPS-MIG-004); the library's own pipeline
+applies its migrations the same way, the double run of OPS-MIG-007 included, so there is
+one way to apply them.
 
-*Source: D-018, D-204, D-206, D-209*
+*Source: D-018, D-204, D-206, D-209, D-225*
 
 Startup migration means instances racing each other on deploy, failures surfacing as
 crash loops rather than failed pipelines, and the running application holding
@@ -191,7 +195,7 @@ permission to alter the tables that authorize it.
 5. `migrate --report` applies nothing, writes one JSON line for each statement of the
    pending migrations the scan matches, its `statement` the matched statement itself and
    never the block that guards it in the script, marking as destructive exactly those
-   OPS-DEP-001 names, writes nothing where none matches, and exits 0 either way.
+   the Values name, writes nothing where none matches, and exits 0 either way.
 
 ---
 
@@ -336,69 +340,17 @@ The second catches migrations that work on a fresh database and break on a real 
 
 ## 4. Deployment
 
-**OPS-DEP-001** — Additive schema changes SHALL deploy without a gate. **Destructive**
-changes — dropping a column or table, narrowing a type, adding a constraint that
-could fail against existing rows — SHALL be gated by a **pipeline split**:
-
-- When the gate is enabled and destructive operations are present, the automatic
-  deploy **fails with a message**
-- A **separate, manually dispatched workflow** applies destructive migrations
-- The toggle is a **repository variable**, `DESTRUCTIVE_DDL_GATE`, set to `enabled` or
-  `disabled`; a run that finds it unset, empty or holding another value prints its
-  report and fails, naming the variable; the manual workflow is
-  `.github/workflows/deploy-destructive.yml` (D-153)
-
-A destructive operation is `DROP TABLE`, `DROP COLUMN`, `DROP SCHEMA`, any
-`ALTER ... TYPE`, `TRUNCATE`, `DELETE FROM`, and an added constraint, `SET NOT NULL`,
-unique index or column added `NOT NULL` without a default on a table the same
-migrations did not create or have filled. Any other match of `08` section 1b is
-reported and does not stop the deploy. The migrations judged are those pending on the
-target database, read from its migration history table; a pull request reports the
-migrations its range adds.
-
-The gate is **currently disabled**; the pipeline is written with it wired in.
-
-*Source: D-019, D-042.1, D-166*
-
-Environment protection rules with required reviewers are unavailable on the current
-plan for private repositories, so the gate is implemented as a pipeline split rather
-than a deployment approval.
-
-Every other migration failure is fixable in minutes with another migration; a
-dropped column is data that no longer exists.
-
-**Acceptance criteria**
-1. Enabling the gate requires changing a repository variable, not a pipeline edit.
-2. With the gate enabled, a destructive migration fails the automatic deploy and
-   names the manual workflow to run.
-3. Additive migrations are unaffected either way.
-4. The manual workflow applies the same migrations the automatic one would have.
-5. A run with `DESTRUCTIVE_DDL_GATE` unset, empty or holding a value other than
-   `enabled` or `disabled` prints its report and fails, naming the variable.
-6. A migration an earlier deploy left pending is reported, and gated, by the next
-   deploy.
+**OPS-DEP-001** — *Retired by D-225. A deployment's gate on destructive schema changes
+is the deployment's; the library's migrations stay expand-and-contract (OPS-MIG-005).*
 
 ---
 
-**OPS-DEP-002** — Destructive-operation detection SHALL run on every deploy and
-report, regardless of whether the gate is enabled.
-
-*Source: D-019, D-166*
-
-**Acceptance criteria**
-1. Every deploy reports which destructive operations the migrations pending on its
-   target contain.
-2. The report appears whether or not the deploy pauses.
+**OPS-DEP-002** — *Retired by D-225. Gating a deploy on the report is the deployment's;
+the report itself is `migrate --report` (OPS-MIG-001).*
 
 ---
 
-**OPS-DEP-003** — When additional people gain deploy access, the gate toggle SHALL be
-protected from pull-request modification.
-
-*Source: D-019, D-010, D-042.1*
-
-**Acceptance criteria**
-1. The toggle is not modifiable by a pull request.
+**OPS-DEP-003** — *Retired by D-225. The deployment's gate is its own.*
 
 ---
 
@@ -451,18 +403,15 @@ is added.
 **OPS-DEP-005** — Full integration suites SHALL NOT run on every push to every
 branch.
 
-*Source: D-042.4, D-147*
+*Source: D-042.4, D-147, D-225*
 
-The plan includes 3,000 Actions minutes per month. The double migration run plus
-containerised integration tests consume these quickly.
+The double migration run and the containerised integration tests are slow; the fast
+checks give each push its answer (D-225).
 
 **Acceptance criteria**
 1. Unit and analyzer checks run on every push.
 2. Full integration and migration suites run on pull request and on the default
    branch.
-3. Minute consumption is measured and reviewed against the allowance by the operator,
-   monthly, and the review is recorded in the maintenance log of OPS-MAINT-001
-   (CONV-GATE-002).
 
 ---
 
@@ -492,15 +441,13 @@ reason is refused with `config.change.reasonrequired`, `details.key` naming the 
 
 *Source: D-010, D-166*
 
-**Settings with no direction** — alert destinations, approver counts, template
-content — are classified **as loosening**, requiring step-up, a reason and an audit
-entry.
+**Settings with no direction**, approver counts among them, are classified **as
+loosening**, requiring step-up, a reason and an audit entry (D-225).
 
 *Source: D-079b*
 
-Previously unclassified. Removing an alert destination or reducing an approver count
-weakens the system as surely as lengthening a timeout, and neither is obviously a
-tightening or a loosening on its face.
+Previously unclassified. Reducing an approver count weakens the system as surely as
+lengthening a timeout, and is not obviously a tightening or a loosening on its face.
 
 **Acceptance criteria**
 1. Shortening a session timeout requires no step-up.
@@ -551,8 +498,7 @@ declaration is absent with `model.startup.declarationmissing` naming the declara
   Normal alert as well as the protected-setting alert (OPS-ALERT-001)
 - The facts the deployment declares about itself: the WebAuthn origins
   (`webauthn.origins`) and algorithms (`webauthn.algorithms`), the hosting location
-  (`hosting.location`) and cross-border basis (`hosting.crossborderbasis`), the shipped
-  transports' endpoints (`integration.mail.endpoint`, `integration.sms.endpoint`), the
+  (`hosting.location`) and cross-border basis (`hosting.crossborderbasis`), the
   mail server adapter's endpoint (`integration.mailserver.endpoint`, which decides at
   the start which mail server is in use, so a change takes effect at the next start,
   CONV-DESIGN-007) and the default client (`redirect.defaultclient`)
@@ -704,7 +650,7 @@ alerted (`SendingRestrictionGranted`).
 configuration operation, which takes the access context and the reason, classifies the
 change's direction by `10` section 4 on the value in force (OPS-CFG-002 AC6),
 applies OPS-CFG-002, and writes the value and the audit record of OPS-CFG-005 in one
-transaction. The named restriction set, the alert destinations and an organization's
+transaction. The named restriction set and an organization's
 policy are changed through it; nothing else in the application writes a runtime
 setting. From the server, bootstrap and `configure` write through the one writer of
 protected keys (OPS-CFG-005).
@@ -736,26 +682,21 @@ protected keys (OPS-CFG-005).
 | One approver handling unusual recovery volume | High | D-008 |
 | Read-volume or export anomaly per actor | High | D-045 |
 | Break-glass credential used | High | OPS-BOOT-002 |
-| **Break-glass credential generated**, a first issue or a replacement; delivered to the owner's destinations whatever `alerting.owner.enabled` holds | High | OPS-BOOT-004 |
+| **Break-glass credential generated**, a first issue or a replacement; for the owner as well as the operator (OPS-BOOT-002) | High | OPS-BOOT-004 |
 | **Configuration change to a protected setting** | High | OPS-CFG-004 |
-| **Alert destination changed** — delivered to the *previous* destinations | High | OPS-ALERT-004a |
-| **Step-up policy weakened** (a policy's gates, or `exfiltration.export.stepuprequired` turned off) | High — the same lever as an alert destination, under a different name | D-083, OPS-ALERT-006 |
+| **Step-up policy weakened** (a policy's gates, or `exfiltration.export.stepuprequired` turned off) | High | D-083, OPS-ALERT-006 |
 | **Implausible concurrent sessions for one account** | High | D-051 |
 | Spike in permission denials | Normal | AUTHZ-GATE-004 |
-| Gateway balance drain or floor breach | Normal | INT-SMS-004 |
 | **Background job failure** | Normal | INF-BG-001 |
 | **A delivery of host-side work exhausted its retries**: an erasure's, a takedown's, a restriction's, a consent's or an objection's (`10` section 5.50) | High | IDN-LIFE-003a, D-203 |
-| **Certificate renewal failure** | High — a total-outage precursor | INF-TLS-003 |
-| **Host clock drift beyond tolerance** | Normal | INF-HOST-001 |
-| **Degradation: blocklist fallback, failed provider push, undelivered notification (attempts exhausted), reconciliation drift, registration channel lost, a watch the environment does not supply, a failed refresh of the location or range file** | Normal | OPS-OBS-002, D-190 |
+| **Degradation: blocklist fallback, failed provider push, a message the host's handler never took (attempts exhausted), reconciliation drift, registration channel lost, a missing or stale location or range file, a failed refresh of either** | Normal | OPS-OBS-002, D-190 |
 | **Repeated callback verification failure** | Normal | BFF-MACH-003 |
 | **Unusual rate of duplicate-identifier notifications** — an enumeration probe | Normal | AUTH-ABUSE-003, D-121 |
 | **Privacy-request decision deadline approaching** — `privacy.request.warninglead` before it | Normal | PRIV-RIGHT-002, D-126 |
 | **Privacy-request decision deadline reached** — undecided on the day | High | PRIV-RIGHT-002, D-126 |
-| **Licence, permit, key-encryption-key cryptoperiod or annual envelope operation approaching** — within `maintenance.expiry.warninglead` | Normal | OPS-MAINT-001, DR-009a, D-121 |
+| **Key-encryption-key cryptoperiod approaching** — within `maintenance.expiry.warninglead` | Normal | DR-009a, D-121, D-225 |
 | **Holiday list running out** — no `privacy.holidays` date lies beyond `maintenance.expiry.warninglead`; deadlines after the last date are counted without holidays (compliant, earlier) | Normal | PRIV-RIGHT-002, D-142 |
 | **No emergency credential exists** — non-dismissable until one is generated | High | OPS-BOOT-001, D-133, D-140 |
-| **Restore test failed or exceeded the recovery-time objective** | High | DR-007, D-140 |
 | **Restriction loosened**: any change to the named restriction set that `10` section 4.5 does not classify as a tightening | Normal | AUTH-ABUSE-004, OPS-CFG-008, D-146 |
 | **Restriction grant issued**: credit added to a key by support | Normal | AUTH-ABUSE-004, D-146 |
 | **Domain re-verification failed**: a locked domain's DNS record no longer verifies; nothing is revoked | Normal | REG-DOM-001, D-146 |
@@ -763,7 +704,7 @@ protected keys (OPS-CFG-005).
 | **`legal.governinglanguage` changed**, raised beside `protected-setting-changed` | Normal | PRIV-CONS-005, OPS-CFG-004, D-146 |
 | **Governing-language text missing**: a document version cannot publish, or a document that must be shown has no governing-language text | Normal | PRIV-CONS-006, D-146 |
 
-*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166, D-177, D-186, D-190*
+*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166, D-177, D-186, D-190, D-225*
 
 **Identifiers and thresholds (D-153, D-177).** Every row carries the identifier `10`
 section 5.23 lists, in table order; `AlertRaised` carries it, with the scope where the
@@ -775,44 +716,27 @@ condition is a rate, the number is a key in `10` section 4.5: sustained failures
 `.minimum` (OPS-ALERT-005); implausible sessions `alerting.sessions.distance` and
 `.window` (OPS-ALERT-007); denial spike `alerting.denials.threshold`, per actor;
 duplicate-identifier notices `alerting.nonexistent.threshold`; callback failures
-`alerting.callback.threshold`; balance drain `abuse.sms.drainfactor`; restore test
-`backup.restoretest.objective`. A job that has not run raises `background-job-failed`
-when its last success is older than twice its interval (INF-BG-001). The condition
-`relay-domain-unregistered` (INT-MAIL-011, Normal) is also on the list.
+`alerting.callback.threshold`. A job that has not run raises `background-job-failed`
+when its last success is older than twice its interval (INF-BG-001).
 
-**Carrying (D-166).** A raised condition SHALL be written, with the structured details
-of its row, in the transaction that raised it, together with its `AlertRaised` event
-row (`10` section 5b); failing to write either fails the raise, and every raise site
-goes through the alert channels, bootstrap and `configure` included. The alert
-channels SHALL carry it to the destinations after that transaction commits, oldest
-first, on the job `alert-dispatch` every `outbox.poll.interval` (ceiling `PT1M`), each
-removed in the transaction that records its delivery. A transaction that rolls back
-raises nothing. The notice of OPS-ALERT-004a is delivered before its change takes
-effect, and the lapse of `alert-dispatch` itself (`background-job-failed`) is delivered
-by the alert channels directly from the worker, so a stalled carrier still reports
-itself.
+**Carrying (D-166, D-225).** A raised condition SHALL be written, with the structured
+details of its row, in the transaction that raised it, together with its `AlertRaised`
+event row (`10` section 5b); failing to write either fails the raise, and every raise
+site goes through it, bootstrap and `configure` included. The job `alert-dispatch` hands
+it to the host's alert handler after that transaction commits (OPS-ALERT-003). A
+transaction that rolls back raises nothing.
 
-The seven conditions from the duplicate-identifier probe to the restore test were
-required elsewhere to "raise an alert", "be surfaced" or
-"produce a monitored signal" with no condition defined to consume them. The six after
-them are the conditions D-146 introduced.
-
-**The named exception (D-147).** The off-host reachability check of INF-OBS-003
-cannot run on the host and therefore cannot be a condition of this table: the
-condition it detects is the host being gone. It alerts the same destination lists
-(OPS-ALERT-004) and, because the operator may be the unreachable person, the owner
-destinations as well (`alerting.owner.email`, `alerting.owner.sms`), regardless of
-`alerting.owner.enabled`.
+The six conditions from the duplicate-identifier probe to the missing emergency
+credential were required elsewhere to "raise an alert", "be surfaced" or "produce a
+monitored signal" with no condition defined to consume them. The six after them are the
+conditions D-146 introduced.
 
 **Acceptance criteria**
 1. Each condition produces an alert without anyone watching.
-2. No requirement elsewhere references alerting with no corresponding condition here,
-   with INF-OBS-003 as the one named exception: it runs off-host, alerts the same
-   destination lists and the owner destinations, and is verified by its own criteria.
-3. A condition raised in a transaction that rolls back reaches no destination; one
-   raised in a transaction that commits reaches them on the next pass of the alert
-   channels, once, and writes one `AlertRaised`.
-4. With `alert-dispatch` stalled, its lapse still reaches the destinations.
+2. No requirement elsewhere references alerting with no corresponding condition here.
+3. A condition raised in a transaction that rolls back reaches no handler; one raised
+   in a transaction that commits reaches the host's alert handler on the next pass of
+   `alert-dispatch`, once, and writes one `AlertRaised`.
 
 ---
 
@@ -827,122 +751,53 @@ An alert under one scope therefore folds only with another under the same scope:
 
 *Source: D-048, D-166, D-177*
 
-One alert per sustained attack, never one per attempt. Without this an attacker
-triggers alerts to drain the prepaid SMS balance — turning the alerting into the
-attack.
+One alert per sustained attack, never one per attempt. Without this an attacker raises
+alerts to flood the host's delivery of them, turning the alerting into the attack.
 
 **Acceptance criteria**
 1. A thousand failed attempts against one account produce one alert.
-2. Two overlapping passes of the alert channels that reach one condition inside one
-   window deliver it once: the deduplication key is claimed by one conditional write.
+2. Two overlapping passes of `alert-dispatch` that reach one condition inside one
+   window hand it over once: the deduplication key is claimed by one conditional write.
 3. Two alerts of one condition under different scopes inside one window are both
    delivered.
 
 ---
 
-**OPS-ALERT-003** — Email SHALL carry all conditions; SMS SHALL additionally carry high
-severity. Both SHALL support delivery confirmation: the alert channels undertake their
-sends in the unit of work they begin as the outermost, commit, and learn from each
-send's immediate attempt whether it was taken; a row gone is not a send taken
-(AUTH-ABUSE-004, D-186).
+**OPS-ALERT-003** — The library SHALL hand every raised alert to the host's alert
+handler (`IAlertHandler`) and SHALL deliver none itself; the host delivers it.
 
-**Two routing exemptions:**
-- **All alert-class sends are exempt from the send hard-stop**, not balance alerts
-  alone. Otherwise a low balance silently disables the mail-system alerts that are
-  deliberately SMS-first, and break-glass's every-channel alerting — so **SMS
-  exhaustion plus a mail outage becomes a total alerting blackout**, which is the
-  compound failure two independent channels exist to prevent. Deduplication
-  (OPS-ALERT-002) already bounds alert volume.
+**Values (D-225).** The job `alert-dispatch` hands each raised alert to the handler
+after the transaction that raised it commits, oldest first, every `outbox.poll.interval`
+(ceiling `PT1M`), and removes it in the transaction that records it taken; one the
+handler does not take is handed again at the next pass. The lapse of `alert-dispatch`
+itself (`background-job-failed`) is handed to the handler directly from the worker, so a
+stalled carrier still reports itself. A deployment with no handler does not start
+(`model.startup.declarationmissing`, `details.key` `alertHandler`).
 
-  *Corrected: an earlier draft narrowed this to balance alerts, against D-048.*
+**What the host's delivery keeps (D-048).** An alert reaches the operator; a High one by
+a channel that does not depend on the mail system, and an alert about the mail system
+never by mail alone; `breakglass-used` and `breakglass-generated` reach the owner as
+well (OPS-BOOT-002); and no limit an attacker can exhaust silences one. These are the
+host's to keep: the library raises and deduplicates.
 
-  Alert-class sends are likewise outside every named sending restriction
-  (AUTH-ABUSE-004): no restriction counts or refuses one, and deduplication
-  (OPS-ALERT-002) alone governs them, so nobody can silence an alert by exhausting a
-  limit. An alert carries no source address, so no `source` restriction could count it.
-- **Mail-system alerts are SMS-first.** An alert about the mail system arriving by
-  mail is a loop — out-of-band routing is the standard rule for exactly this
-
-*Source: D-048, D-071, D-166, D-186*
+*Source: D-048, D-071, D-166, D-186, D-225*
 
 **Acceptance criteria**
-1. A mail-system failure still produces a reachable alert.
-2. A balance-floor breach is reported despite sends being stopped.
-3. Alert-class sends continue below the floor while ordinary sends are refused.
-4. The residual case — balance actually at zero — is recorded as unreachable by SMS,
-   with email carrying alone.
-5. An alert is sent to a destination whose every named restriction is exhausted; only
-   deduplication folds it.
+1. The library sends no alert itself.
+2. A raised alert is handed to the handler once its transaction commits, and again until
+   it is taken; one raised in a transaction that rolls back is handed nothing.
+3. With `alert-dispatch` stalled, its lapse still reaches the handler.
+4. A deployment with no alert handler does not start.
 
 ---
 
-**OPS-ALERT-004a** — Changing an alert destination SHALL notify **every previous
-destination**, non-suppressibly, and SHALL raise a **High** alert to those previous
-destinations.
-
-The change SHALL be made through the configuration operation of OPS-CFG-008, as a
-change with no direction (OPS-CFG-002), and audited with its before and after values
-(D-162).
-
-**Concurrent changes (D-183).** The previous destinations are those in force when the
-change is read, and they are notified before its transaction begins, since no transport
-is called while one is open (CONV-DESIGN-002). The change SHALL then be written by one
-update conditional on that value still being in force (CONV-DESIGN-003); where a
-concurrent change committed meanwhile, nothing is written and the change is refused with
-409 `config.change.superseded`, so no destination is replaced without having been told.
-Where the gate, asked again inside the change's unit of work, refuses it
-(AUTHZ-GATE-006), nothing is written either, and the notice already given stands as the
-notice of a change requested and not made (D-186).
-
-*Source: D-083, D-166, D-183, D-186*
-
-**This closes a bypass of the entire alerting system.** An attacker holding one
-stepped-up administrative session could replace the destinations with their own — a
-"loosening" change their session already satisfied — and nothing would fire, because
-alerts trigger only on changes to protected settings. From that point every alert in
-the system reached the attacker instead of the operator: exfiltration anomalies,
-recovery clustering, break-glass use.
-
-The selection test for protection is *"does turning this off blind us to the person
-turning it off."* Redirecting alerts does exactly that. It was caught for audit
-logging and export auditing and missed here — the same lever under a different name.
-
-**The pattern is the one already used for identifier changes** (REG-IDENT-002,
-REG-IDENT-006): the existing security-notice set is always told, whatever the new one is.
-
-**Acceptance criteria**
-1. Every previous destination is notified before the change takes effect.
-2. The notification cannot be suppressed by any setting.
-3. Removing the last destination of a channel is refused.
-4. The change alert is delivered to the previous destinations, not the new ones.
-5. A change that would leave a channel's destination list empty is refused with `config.value.lastdestination` (D-153).
-6. A destination change produces an audit record with before and after values, as
-   every runtime change does.
-7. Of two changes of one destination list made at once from the same value, one applies;
-   the other is refused with `config.change.superseded`, writes nothing and raises no
-   `alert-destination-changed`, and the destinations the applied change replaced were
-   notified before it.
-8. A change the gate refuses when asked again inside its unit of work writes nothing and
-   raises no `alert-destination-changed`, and its previous destinations were notified of
-   the change requested.
+**OPS-ALERT-004a** — *Retired by D-225. Alert destinations are the host's
+(OPS-ALERT-003).*
 
 ---
 
-**OPS-ALERT-004** — Alert destinations SHALL be **lists, not single values**.
-
-*Source: D-071*
-
-**Owner notification of routine alerts is off by default and configurable**
-(`alerting.owner.enabled`), so the owner is not sent operational noise. The owner's
-destinations themselves are always configured (`alerting.owner.email`,
-`alerting.owner.sms` — required), and **break-glass use and replacement generation
-reach them regardless of the switch** (OPS-BOOT-002, D-129).
-
-**Acceptance criteria**
-1. More than one destination can be configured per channel.
-2. Enabling owner notification requires no deploy.
-3. With `alerting.owner.enabled` off, a break-glass use still reaches the owner's
-   email and phone.
+**OPS-ALERT-004** — *Retired by D-225. Alert destinations, the owner's among them, are
+the host's (OPS-ALERT-003).*
 
 ---
 
@@ -1028,13 +883,12 @@ records and offboarding verification. Shared credentials break all four silently
 
 ## 6. Bootstrap
 
-**OPS-BOOT-001** — A fresh deployment SHALL be initialised by a command-line
-operation run against the database, creating the first organization, the first
-system administrator, an enrolment link for that administrator, the reserved
-**`emergency`** account (OPS-BOOT-002) with no credential, and the restore-test canary
-subject of DR-007 (recorded in `backup.restoretest.canary`). **It SHALL NOT
-generate the break-glass credential**: that is issued from the management application
-(OPS-BOOT-004), so the secret never touches a terminal, a log or a file.
+**OPS-BOOT-001** — A fresh deployment SHALL be initialised by a command-line operation
+run against the database, creating the first organization, the first system
+administrator, an enrolment link for that administrator, the reserved **`emergency`**
+account (OPS-BOOT-002) with no credential. **It SHALL NOT generate the break-glass
+credential**: that is issued from the management application (OPS-BOOT-004), so the
+secret never touches a terminal, a log or a file.
 
 **Values (D-153, D-166).** The command is `bootstrap`, the first argument of the
 `Janus.Cli` tool, whose command is `identity` (LIB-PKG-001, `08` CONV-LAYOUT-001, D-204).
@@ -1082,15 +936,15 @@ administrator's mailbox is **queued** for provisioning through the outbox and cr
 when the mail server is reachable (INT-MAIL-006 AC1a); `emergency` gets none
 (INT-MAIL-006 AC1b, D-144).
 
-Bootstrap attaches its three memberships (the first administrator, `emergency` and the
-restore-test canary) directly and emits `MembershipChanged` for each. The grants it
-makes name no person as granter: the granter recorded is the nil subject and the
-reason is `OPS-BOOT-001`. The alert of AC3 is written to the raised-alerts outbox in the
-bootstrap transaction and carried by the delivery job (OPS-ALERT-001); the command
-sends nothing. Bootstrap never writes on a value whose feature needs a host
-declaration (OPS-CFG-003): the administrative organization's policy is written with
-`photos` false (`10` section 4.1a), and enabling photos is an administrator's policy
-change once an image codec is declared.
+Bootstrap attaches its two memberships (the first administrator and `emergency`)
+directly and emits `MembershipChanged` for each. The grants it makes name no person as
+granter: the granter recorded is the nil subject and the reason is `OPS-BOOT-001`. The
+alert of AC3 is written to the raised-alerts outbox in the bootstrap transaction and
+handed to the host's alert handler by `alert-dispatch` (OPS-ALERT-003); the command
+sends nothing. Bootstrap never writes on a value whose feature needs a host declaration
+(OPS-CFG-003): the administrative organization's policy is written with `photos` false
+(`10` section 4.1a), and enabling photos is an administrator's policy change once an
+image codec is declared.
 
 Bootstrap is audited under the deployment-scoped system principal `bootstrap` (reason
 `OPS-BOOT-001`, operation `bootstrap`): `identity.organization.created` for the
@@ -1173,36 +1027,32 @@ account's policy (`session.aal2.inactivity` under the administrative organizatio
 `aal2`), never longer than that lifetime. An inactivity expiry ends it for good: the
 reserved account holds no factor to restore it with.
 
-**Alerting SHALL reach the owner as well as the operator.** The scenario this exists
-for is one in which the operator is unreachable, so alerting only the operator means
-the alert reaches nobody present. The owner's destinations are **required
-configuration** (`alerting.owner.email`, `alerting.owner.sms`, `10` §4.5) — the
-deployment refuses to start without them — and break-glass use and replacement
-generation reach them **always**, independent of `alerting.owner.enabled`, which
-governs routine alerts only (OPS-ALERT-004).
+**Alerting SHALL reach the owner as well as the operator.** The scenario this exists for
+is one in which the operator is unreachable, so alerting only the operator means the
+alert reaches nobody present. The library raises `breakglass-used` and
+`breakglass-generated` as High, and the host's delivery of them reaches the owner always
+(OPS-ALERT-003, D-225).
 
 **The session SHALL be an auth session** (AUTH-SESS-004), so every application
 opens from it exactly as from an ordinary sign-in (BFF-SESS-006); the owner reaches
 the management application by navigating to it.
 
 **The credential SHALL be presented through a frontend route** (`/break-glass`,
-FE-BG-001), reached by the address printed on the envelope: one field for the
-credential, one field for the reason, one button. The endpoint
-(`POST /auth/break-glass`) sits behind it and takes both; the reason is required, a
-free-text member under API-CONV-002, and kept with the session. The owner is not technical
-(`12` §1); an API endpoint is not a procedure they can follow.
+FE-BG-001): one field for the credential, one field for the reason, one button. The
+endpoint (`POST /auth/break-glass`) sits behind it and takes both; the reason is
+required, a free-text member under API-CONV-002, and kept with the session. The holder
+may not be technical; an API endpoint is not a procedure they can follow.
 
-*Source: D-065, D-129, D-166, D-170, D-171, D-179, D-183, D-202*
+*Source: D-065, D-129, D-166, D-170, D-171, D-179, D-183, D-202, D-225*
 
 **Acceptance criteria**
 1. Use consumes it; a second attempt fails.
 2. The session expires automatically at a configured lifetime within the ceiling, and
    earlier after its inactivity window without use; either expiry is answered
    `auth.session.expired` with `details.reauthenticate` `full`.
-3. Use raises alerts immediately, on every channel, to both owner and operator —
-   the owner's destinations receive it with `alerting.owner.enabled` off.
+3. Use raises `breakglass-used` at once, handed to the host's alert handler.
 4. The session can approve a recovery and grant system administration.
-5. Bootstrap without `alerting.owner.email` and `alerting.owner.sms` is refused.
+5. *Retired by D-225: the owner's destinations are the host's.*
 6. From the break-glass session, opening the management application requires no
    further credential.
 7. A change that would take a library-owned permission out of the role the
@@ -1263,10 +1113,10 @@ scope where no reserved account exists yet, so an attack on a deployment not yet
 bootstrapped is loud too (D-170). With 128 bits behind it, the global limit exists to
 make the attack loud, not to make it infeasible.
 
-The four other envelope items (DR-009) live in both the envelope and the secrets
-manager because the system needs them daily. The break-glass code is needed by
-nobody on an ordinary day, and its whole purpose is to exist outside the operator's
-reach; a copy in the operator's vault would defeat it.
+The keys the library reads every day live in the secrets manager. The break-glass code
+is needed by nobody on an ordinary day, and its whole purpose is to exist outside the
+operator's reach; a copy in the operator's vault would defeat it. Where it is kept is
+the host's (D-225).
 
 The bootstrap command generates no credential (OPS-BOOT-001) and refuses on a
 deployment already stood up, so without this, one use exhausts the mechanism until the
@@ -1277,9 +1127,8 @@ They already hold full administrative access at that moment, so this grants noth
 new. Alerting and audit are the controls.
 
 **Acceptance criteria**
-1. A break-glass session can generate and seal a replacement.
-2. Generation is audited and alerted as `breakglass-generated`, to the owner
-   regardless of `alerting.owner.enabled` (OPS-BOOT-002).
+1. A break-glass session can generate a replacement.
+2. Generation is audited and alerted as `breakglass-generated` (OPS-BOOT-002).
 3. The rendered page cannot be reopened; a second request generates a new
    credential and invalidates the previous one.
 4. No plaintext break-glass credential exists in the database, the secrets manager,
@@ -1295,16 +1144,8 @@ new. Alerting and audit are the controls.
 
 ---
 
-**OPS-BOOT-003** — The sealed break-glass credential SHALL be held by the company
-owner, not by the developer.
-
-*Source: D-029*
-
-The developer is the sole administrator and therefore the single point of failure. A
-credential only they can reach is no recovery path for the company.
-
-**Acceptance criteria**
-1. The custody arrangement is recorded in the runbook.
+**OPS-BOOT-003** — *Retired by D-225. The custody of the sealed credential is the
+host's.*
 
 ---
 
@@ -1321,9 +1162,9 @@ No secret SHALL reside in configuration files or environment
 variables in production, **except the two deployment-injected bootstrap values**
 named in INF-HOST-003 — the database connection and the secrets-manager credential.
 
-**The key-encryption key, the fingerprint key and the backup private key SHALL
-additionally be escrowed** with the break-glass credential (DR-009), so a restore is
-possible when the operator is unreachable.
+Keeping a copy of the key-encryption key and of the fingerprint key apart from the
+secrets manager, so a restore is possible when the operator is unreachable, is the
+deployment's (D-225).
 
 **The secret path (D-166).** The library SHALL read every secret it needs through the
 host's secret source (`ISecretSource`, LIB-EXT-001), asynchronously, in its startup
@@ -1386,14 +1227,14 @@ code 1, its keys cleared (D-207).
 one lifecycle with automated rotation and overlap windows. No human step SHALL be
 required.
 
-**The key-encryption key and the backup key are rotated separately** (DR-009a, DR-010):
-annually, and immediately on suspicion of exposure. They require a human step because
-the escrowed copies must be replaced, which is why they belong to the maintenance
-exceptions rather than to this automated lifecycle. The key-encryption key's rotation is
-the command-line operation OPS-SEC-003 (D-147). Signing-key cadence and algorithm are
-the keys of `10` section 4.9; a signing key's overlap follows from the longest
-access-token lifetime it signed under, and how long its public key is kept after it from
-the ceiling of `session.default.absolute` (AUTH-KEY-001).
+**The key-encryption key is rotated separately** (DR-009a): annually, and immediately on
+suspicion of exposure. It needs a human step, since the operator adds its new version to
+the secrets manager, which is why it is the maintenance exception of section 9 rather
+than part of this automated lifecycle. Its rotation is the command-line operation
+OPS-SEC-003 (D-147, D-225). Signing-key cadence and algorithm are the keys of `10`
+section 4.9; a signing key's overlap follows from the longest access-token lifetime it
+signed under, and how long its public key is kept after it from the ceiling of
+`session.default.absolute` (AUTH-KEY-001).
 
 **Client secrets (D-166).** The library generates the secret of every client in the
 registry when the client is registered (32 random bytes, base64url), holds it wrapped
@@ -1439,37 +1280,32 @@ table processed (a row's key, not a subject identifier, PRIV-RIGHT-005a, D-174),
 instants.
 
 *Source: D-148; D-147; DR-009a, PRIV-RIGHT-005a, OPS-SEC-001, D-166, D-174, D-183,
-D-186, D-187*
+D-186, D-187, D-225*
 
-**The shape.** The operator adds the new key version to the secrets manager as
-current, keeping the previous one, and restarts the application on it; `rotate-kek`,
-handed the key document, records the rotation to that version and re-wraps. The
-command itself re-wraps every row of the subject-key table under the new version: every
-subject key, and the deployment's data key, under which every value that belongs to
-no subject is held (PRIV-RIGHT-005a), the signing keys and the registry's client
-secrets among them. A row is written back only where it still holds the value the
-command read. The re-wrap runs in the command's own process and under the maintenance
-credential, which holds the row read and write on the subject-key table and the
-progress table that this needs (OPS-MIG-003a, D-148); the old and new key versions are
-never in the database, so no database function can do the re-wrap. It runs
-independent of the worker (INF-BG-001) and of the application being up, tracking its progress in a table of its own so that
-a crash, a restart or a lost connection resumes where it stopped rather than starting
-over. The previous version stays usable for unwrapping until the job reports that
-every row has been re-wrapped. No stored ciphertext
-changes (PRIV-RIGHT-005a: the format marker carries no key version). The same command
-prints the escrow copy of the new version for the envelope (DR-009), and prints it
-again on a later run until the seal is confirmed.
+**The shape.** The operator adds the new key version to the secrets manager as current,
+keeping the previous one, and restarts the application on it; `rotate-kek`, handed the
+key document, records the rotation to that version and re-wraps. The command itself
+re-wraps every row of the subject-key table under the new version: every subject key,
+and the deployment's data key, under which every value that belongs to no subject is
+held (PRIV-RIGHT-005a), the signing keys and the registry's client secrets among them. A
+row is written back only where it still holds the value the command read. The re-wrap
+runs in the command's own process and under the maintenance credential, which holds the
+row read and write on the subject-key table and the progress table that this needs
+(OPS-MIG-003a, D-148); the old and new key versions are never in the database, so no
+database function can do the re-wrap. It runs independent of the worker (INF-BG-001) and
+of the application being up, tracking its progress in a table of its own so that a
+crash, a restart or a lost connection resumes where it stopped rather than starting
+over. The previous version stays usable for unwrapping until the job reports that every
+row has been re-wrapped. No stored ciphertext changes (PRIV-RIGHT-005a: the format
+marker carries no key version). The command prints no key (D-225).
 
-**Retirement.** Retirement is confirmed by `rotate-kek --sealed` once the escrow copy
-is sealed; it is refused with `model.rotation.notready` while no rotation awaits a
-seal, or while values stand under a previous version (`details.pending` counts them).
-It records the retirement and reports the versions retired and `keepUntil`, the
-rotation's completion plus `backup.retention` (the default, or a longer one the
-operator names with `--retention`). A retired version leaves the application's key
-document at once, and stays in the envelope and the secrets manager, outside the
-application's document, until every backup taken under it has expired, as a previous
-backup key does (D-103). The annual operation in section 9 is therefore the command,
-the physical act of sealing, and the confirmation.
+**Retirement.** The operator retires the previous version with `rotate-kek --retire`; it
+is refused with `model.rotation.notready` while no completed rotation awaits retirement,
+or while values stand under a previous version (`details.pending` counts them). It
+records the retirement and reports the versions retired. A retired version leaves the
+application's key document at once; keeping it outside that document, for a backup taken
+under it, is the deployment's (D-225). The annual operation of section 9 is therefore
+the new version, the command and the retirement.
 
 **Why the command line.** The operation needs the protected maintenance credential
 and must not depend on the application being healthy: the case that most needs a
@@ -1478,7 +1314,7 @@ may be compromised or down.
 
 **Fingerprint key.** Rotation of the fingerprint key (OPS-SEC-001) uses the same shape
 (new version, added as below, resumable batch job, previous version usable until
-retired, escrow copy) but re-computes every stored fingerprint rather than re-wrapping a
+retired) but re-computes every stored fingerprint rather than re-wrapping a
 key. The new version is first added as a version that is not current, and every process
 is restarted on it; only then is it made current, every process restarted again, and the
 command run, so that no process writes a fingerprint under a version another process
@@ -1513,10 +1349,9 @@ than an improvisation.
    fails its run, save inside work run after a commit, which logs it and leaves its row
    to the publisher (CONV-DESIGN-003), and a command exits 1 with the code. A start is
    refused with the same code where such a row stands (OPS-SEC-001 criterion 2).
-4. The escrow copy of the new version is produced by the same command, and the
-   previous version is not retired until the operator confirms with `--sealed` that
-   the copy is sealed (DR-009); `--sealed` before the rotation completes is refused
-   with `model.rotation.notready`.
+4. The previous version is not retired until the operator asks with `--retire`;
+   `--retire` before the rotation completes is refused with `model.rotation.notready`,
+   and no run of the command prints a key (D-225).
 5. Start, resume, completion and retirement are recorded as `ops.keyrotation.started`,
    `ops.keyrotation.resumed`, `ops.keyrotation.completed` and `ops.keyrotation.retired`
    under the system principal `rotate-kek` or `rotate-fingerprint-key` (reason
@@ -1552,30 +1387,29 @@ job's context `authz.denied` (`01` IDN-PRIN-001, D-207).
 ---
 
 **OPS-OBS-002** — Degradations SHALL be visible, never silent. Fallback to an offline
-blocklist, a failed provider push, a notification whose attempts are exhausted (a send
-the restrictions or the gateway floor refuse, at its admission or at its retry, is no
-degradation and raises nothing, AUTH-ABUSE-004), a reconciliation discrepancy, a lost
-database channel (the registration signal, REG-SESS-003) and a social provider's round
-trip that cannot reach or read the provider (IDN-LIFE-012, D-192) SHALL each surface.
-The absence or staleness of a watch the library needs from the environment (a clock
-reference, a certificate renewal outcome, the location file, the datacenter range file
-while `datacenterRange` is among `abuse.botdefence.signals`, AUTH-ABUSE-008) is a
-degradation too, and so is a refresh of either file that fails (D-190).
+blocklist, a failed provider push, a message the host's notification handler never took
+(its attempts exhausted; a send the restrictions refuse, at its admission or at its
+retry, is no degradation and raises nothing, AUTH-ABUSE-004), a reconciliation
+discrepancy, a lost database channel (the registration signal, REG-SESS-003) and a
+social provider's round trip that cannot reach or read the provider (IDN-LIFE-012,
+D-192) SHALL each surface. The absence or staleness of a file the library needs from the
+environment (the location file, the datacenter range file while `datacenterRange` is
+among `abuse.botdefence.signals`, AUTH-ABUSE-008) is a degradation too, and so is a
+refresh of either file that fails (D-190).
 
 **Values (D-166).** Each degradation raises `degradation` (OPS-ALERT-001) under a scope
-naming it; the scopes include `password.blocklist.fallback`, `clock.reference.absent`,
-`clock.reference.unread`, `certificate.renewal.absent`, `certificate.renewal.unread`,
-the location file's and the range file's (`10` section 5.23, D-190), and
-`provider.unavailable:<provider>` (D-192). A lost registration channel is raised with
-`details.component` `registration-channel` by the registration signal itself
-(REG-SESS-003), when a wait begins while its channel is not listening, in a scope and
-unit of work of its own, deduplicated by the window of OPS-ALERT-002; the event stream
-takes only the registration signal (LIB-API-005). A fall back to the offline blocklist
-is raised as `password.blocklist.fallback` with `details.configured` (the corpus
-configured) and `details.used` (`offline`) before the offline corpus is asked; a fall
-back that cannot be raised refuses the operation with what refused the raise.
+naming it; the scopes include `password.blocklist.fallback`, the location file's and the
+range file's (`10` section 5.23, D-190), and `provider.unavailable:<provider>` (D-192).
+A lost registration channel is raised with `details.component` `registration-channel` by
+the registration signal itself (REG-SESS-003), when a wait begins while its channel is
+not listening, in a scope and unit of work of its own, deduplicated by the window of
+OPS-ALERT-002; the event stream takes only the registration signal (LIB-API-005). A fall
+back to the offline blocklist is raised as `password.blocklist.fallback` with
+`details.configured` (the corpus configured) and `details.used` (`offline`) before the
+offline corpus is asked; a fall back that cannot be raised refuses the operation with
+what refused the raise.
 
-*Source: D-011, D-006, D-022, P-003, D-166, D-183, D-186, D-189, D-190, D-192*
+*Source: D-011, D-006, D-022, P-003, D-166, D-183, D-186, D-189, D-190, D-192, D-225*
 
 **Acceptance criteria**
 1. Each listed condition produces a monitored signal.
@@ -1608,52 +1442,22 @@ command of `Janus.Cli`.
 
 ## 9. Maintenance exceptions
 
-Two recurring human tasks exist. Both are named rather than discovered. The
-key-encryption key rotation inside the first is the operation OPS-SEC-003 (D-147).
-Beside the two tasks, which change the system, three named **reviews** only read
-reports and are recorded in the maintenance log (OPS-MAINT-001): the approver report
-weekly (`11` section 4), pipeline consumption monthly (OPS-DEP-005), and the
-accepted-risk triggers quarterly (`13` RISK-001). A review is not a task: nothing
-stops if one is missed, which is why they do not count against the two. Keeping the
-public-holiday list current is **not** a third: it is an as-announced edit from the
-management app, the system runs without it, and a stale list only makes privacy
-deadlines earlier (PRIV-RIGHT-002, D-142).
+One recurring human task exists, named rather than discovered: rotating the
+key-encryption key within its cryptoperiod (DR-009a), the operation OPS-SEC-003 (D-147),
+which the library warns of from `maintenance.expiry.warninglead` before it is due.
+Keeping the public-holiday list current is **not** a second: it is an as-announced edit
+from the management app, the system runs without it, and a stale list only makes privacy
+deadlines earlier (PRIV-RIGHT-002, D-142). A deployment's and a company's own recurring
+tasks (backups, certificates, licences, the keeping of copies of keys, the review of
+reports) are their own (D-225).
 
 | Task | Cadence | Source |
 |---|---|---|
-| Regenerate and reseal the break-glass credential, **rotate the key-encryption key (OPS-SEC-003) and the backup key, inspect the envelope for tampering, and test escrow recovery** | Annual, one operation | D-010, D-084, D-103, D-147 |
-| Renew regulatory licence and permits | Licence three years; permits shorter | D-041 |
+| Rotate the key-encryption key (OPS-SEC-003) | Annual | D-084, D-147, D-225 |
 
-**OPS-MAINT-001** — The system SHALL track licence and permit expiry dates and warn
-in advance. It SHALL keep a **maintenance log**: a dated record, in the management
-application, of each recurring human task above when performed and of the monthly
-pipeline-consumption review (OPS-DEP-005, CONV-GATE-002), the weekly approver-report
-review (`11` section 4) and the quarterly review of accepted-risk triggers (`13`
-RISK-001).
-
-**Values (D-153).** A licence record is `{ id, kind: licence · permit, name, expiresAt,
-renewedAt }`. A log entry is `{ task, performedAt, actor, note }` with `task` one of
-`envelope-rotation` · `licence-renewal` · `approver-review` ·
-`pipeline-consumption-review` · `risk-trigger-review`, the five section 9 tasks. `10`
-collects both vocabularies.
-
-The annual operation of section 9 is warned of the same way from the log: from
-`maintenance.expiry.warninglead` before a year after its latest `envelope-rotation`
-entry, `expiry-approaching` is raised under the scope `envelope-rotation`, and a log
-with no such entry has it due now. The key-encryption key's own cryptoperiod is
-watched from its rotation record, not from the log (DR-009a).
-
-*Source: D-148; D-041, D-147, D-166*
-
-**Acceptance criteria**
-1. Expiry dates are stored and surfaced before they lapse.
-2. Warning does not depend on anyone remembering: it is the OPS-ALERT-001 condition,
-   raised `maintenance.expiry.warninglead` (default 30 days) before expiry. A licence
-   past its expiry and not renewed stays raised.
-3. The maintenance log holds a dated entry, with the actor, for each performed task
-   and each review; entries cannot be deleted through the application. The
-   application's database role can read and append log entries and can neither update
-   nor delete one.
+**OPS-MAINT-001** — *Retired by D-225. A register of licences and a log of a company's
+chores are the company's; the key-encryption key's cryptoperiod is warned of by
+DR-009a.*
 
 ---
 
@@ -1670,14 +1474,14 @@ reaches production.
 **Values (D-166).** A development database is made ready as a production one is: the
 `migrate` command of `Janus.Cli`, then its `bootstrap` command, which seeds the
 administrative organization, the administrative roles and their permissions, the first
-administrator, `emergency` and the canary, then `register-client` for each browser
+administrator and `emergency`, then `register-client` for each browser
 application the host declares (AUTH-SESS-012, D-204). The library ships no seed of its
 own; every further principal and grant is made through the library's own operations, and
 a host seeds its own domain the same way: its declared roles at the first start
 (AUTHZ-GRANT-004), an organization of its own through `POST /admin/organizations` with
 its first grants written under `system:administer` (AUTHZ-SCOPE-001, D-207), and its
 people through the library's endpoints, which `Janus.Testing` drives for a test or a
-development setup with its stand-in transports and software passkey (LIB-TEST-003,
+development setup with its in-memory handlers and software passkey (LIB-TEST-003,
 D-204). No code path reads which environment it runs in, and no key of `10` section 4
 bypasses, skips or disables a check.
 

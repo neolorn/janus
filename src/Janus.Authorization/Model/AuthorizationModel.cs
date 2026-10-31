@@ -60,8 +60,8 @@ internal sealed class AuthorizationModel
         "domain-reverification", "membership-ends", "outbox", "events", "sends",
         "mailbox-provisioning", "alert-dispatch", "mail-reconciliation", "derivation-driftcheck",
         "location-database", "datacenter-ranges", "read-volume-baseline", "holiday-list",
-        "emergency-credential", "clock-drift", "certificate-renewal", "restore-test",
-        "audit-partitions", "licence-expiry", "envelope-rotation", "sms-balance", "bootstrap",
+        "emergency-credential",
+        "audit-partitions", "kek-cryptoperiod", "bootstrap",
         "configure", "register-client", "rotate-kek", "rotate-fingerprint-key",
         "replay-erasures", "role-declaration", "migrate",
     ];

@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Records;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -16,6 +17,7 @@ namespace Janus.Authentication.Sessions;
 /// <param name="work">The transaction the whole of one operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">The randomness the two tokens are drawn from.</param>
+/// <param name="pending">Where the authorization a browser has waiting is held.</param>
 /// <remarks>
 /// Implements BFF-CSRF-005a and BFF-CSRF-005b. It carries no identity and grants no
 /// access, so nothing here takes an access context: what it answers is whether this
@@ -26,7 +28,8 @@ internal sealed class PreAuthenticationService(
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time,
-    RandomNumberGenerator randomness)
+    RandomNumberGenerator randomness,
+    IPendingAuthorizationStore pending)
 {
     /// <summary>
     /// Issues one to a browser that carried nothing.
@@ -278,6 +281,36 @@ internal sealed class PreAuthenticationService(
         await store.RemoveAsync(secret.Fingerprint(), cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
+    /// Ends one at a completed sign-in, carrying the authorization the browser had
+    /// waiting over to the session record the sign-in established, in the same
+    /// transaction (AUTH-SESS-012, D-226).
+    /// </summary>
+    /// <param name="secret">The token the cookie carried.</param>
+    /// <param name="record">The session record the sign-in established.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether an authorization within its lifetime was carried.</returns>
+    public async ValueTask<bool> RotateAsync(
+        OpaqueToken secret,
+        SessionId record,
+        CancellationToken cancellationToken)
+    {
+        byte[] fingerprint = secret.Fingerprint();
+
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        bool carried = await pending
+            .CarryAsync(fingerprint, record, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        await store.RemoveAsync(fingerprint, cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        return carried;
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

@@ -17,7 +17,7 @@ namespace Janus.Authentication.Tests.Sending;
 /// </summary>
 internal sealed class GovernedSendInMemory : IGovernedSend, IFollowedSend
 {
-    // A reference stands for what a gateway would correlate by; one generator for
+    // A reference stands for what the host would correlate by; one generator for
     // the run is enough to keep two of them apart.
     private static readonly RandomNumberGenerator Randomness = RandomNumberGenerator.Create();
 
@@ -34,7 +34,7 @@ internal sealed class GovernedSendInMemory : IGovernedSend, IFollowedSend
     public List<OutboundMessage> Sent { get; } = [];
 
     /// <summary>
-    /// Those of them whose unit of work committed, which are the ones a transport would
+    /// Those of them whose unit of work committed, which are the ones the host's handler would
     /// be asked to carry.
     /// </summary>
     public List<OutboundMessage> Carried { get; } = [];
@@ -66,7 +66,7 @@ internal sealed class GovernedSendInMemory : IGovernedSend, IFollowedSend
 
     /// <summary>
     /// Whether the attempt that follows a commit carries what was admitted, which a
-    /// caller that follows its sends asks; false where a test stands in for a transport
+    /// caller that follows its sends asks; false where a test stands in for a handler
     /// that refuses.
     /// </summary>
     public bool Carries { get; set; } = true;

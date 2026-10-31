@@ -9,16 +9,16 @@ namespace Janus.Core.Tests;
 
 /// <summary>
 /// The line between the library and the systems it talks to: no gateway or mail
-/// server is named in the source, an outbound payload is built in one place, and the
-/// one database the library reaches is its own (INT-SMS-006, INT-GEN-005,
-/// CONV-DESIGN-002, INT-MAIL-001, INT-MAIL-003, INT-MAIL-008, INT-MAIL-009,
-/// LIB-EXT-001).
+/// server is named in the source and none is called to send, a message handed to the
+/// host is built in one place, and the one database the library reaches is its own
+/// (INT-SMS-006, INT-GEN-005, CONV-DESIGN-002, INT-MAIL-001, INT-MAIL-003,
+/// INT-MAIL-008, LIB-EXT-001).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class IntegrationBoundaryTests
 {
-    // The gateways a deployment might put behind the transport ports. None of them
-    // is the library's business: a host registers one, the library names none.
+    // The gateways a host's messaging might send through. None of them is the
+    // library's business: the host sends, the library names none.
     private static readonly string[] Gateways =
     [
         "Twilio",
@@ -104,11 +104,15 @@ public sealed class IntegrationBoundaryTests
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
 
-    // The payloads that cross an outbound boundary, each built at the one mapping
-    // site and nowhere else.
-    private static readonly string[] Payloads = ["new MailMessage(", "new SmsMessage("];
+    // The payload that crosses the boundary to the host's notification handler, built
+    // at the one mapping site and nowhere else.
+    private static readonly string[] Payloads = ["new SendRequest("];
 
-    private static readonly string[] Mapping = ["NotificationHandler.cs"];
+    private static readonly string[] Mapping = ["SendDelivery.cs"];
+
+    // What sending a message itself would take: the framework's mail client, or a
+    // client library of a mail or text provider.
+    private static readonly string[] Senders = ["System.Net.Mail", "SmtpClient", "MailKit", "MimeKit"];
 
     private static readonly string[] CoreProjects =
     [
@@ -120,22 +124,24 @@ public sealed class IntegrationBoundaryTests
     ];
 
     /// <summary>
-    /// INT-SMS-006 AC1: no provider name appears anywhere in the library, so the
-    /// gateway is the deployment's choice and replacing it is a registration.
+    /// INT-SMS-006 AC1 and INT-MAIL-008 AC2: no gateway or provider is named anywhere
+    /// in the library and nothing in it could send a message itself, so every message
+    /// leaves through the host's notification handler.
     /// </summary>
     [Fact]
-    public void INT_SMS_006_AC1_NoProviderNameAppearsInTheLibrary()
+    public void INT_SMS_006_AC1_NoGatewayOrSenderIsCalledByTheLibrary()
     {
         IEnumerable<string> naming = Sources()
             .Where(file => Gateways.Any(gateway =>
-                File.ReadAllText(file).Contains(gateway, StringComparison.OrdinalIgnoreCase)));
+                    File.ReadAllText(file).Contains(gateway, StringComparison.OrdinalIgnoreCase))
+                || Senders.Any(sender => File.ReadAllText(file).Contains(sender, StringComparison.Ordinal)));
 
         Assert.Empty(naming);
     }
 
     /// <summary>
     /// LIB-EXT-001 AC3: no product of any extension point is named in a core
-    /// namespace, <c>Janus.Core</c> or an area project: no gateway or mail transport,
+    /// namespace, <c>Janus.Core</c> or an area project: no gateway or mail sender,
     /// no mail server and no secrets manager, and no cache, which version 1 does not
     /// have (INF-CACHE-001). Google and Apple are not searched for, since they are factors of the
     /// catalogue chapter 02 fixes rather than a product behind an extension point, and
@@ -159,8 +165,8 @@ public sealed class IntegrationBoundaryTests
     }
 
     /// <summary>
-    /// INT-GEN-005 AC2: no call site builds an outbound payload, so the fields that
-    /// leave the deployment are decided in one place and can be tested there.
+    /// INT-GEN-005 AC2: no call site builds the message handed to the host, so the
+    /// fields that leave the library are decided in one place and can be tested there.
     /// </summary>
     [Fact]
     public void INT_GEN_005_AC2_NoCallSiteBuildsAnOutboundPayload()
@@ -226,21 +232,6 @@ public sealed class IntegrationBoundaryTests
 
         Assert.NotEmpty(schemas);
         Assert.All(schemas, schema => Assert.Contains(schema, OwnSchemas, StringComparer.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// INT-MAIL-009 AC2: no source reaches both mailbox hosting and outbound delivery,
-    /// so replacing the one leaves every user of the other as it was.
-    /// </summary>
-    [Fact]
-    public void INT_MAIL_009_AC2_NoSourceReachesBothMailboxHostingAndDelivery()
-    {
-        string[] hosting = Naming("IMailServer");
-        string[] delivery = Naming("IMailTransport");
-
-        Assert.NotEmpty(hosting);
-        Assert.NotEmpty(delivery);
-        Assert.Empty(hosting.Intersect(delivery, StringComparer.Ordinal));
     }
 
     private static string[] Naming(string text) =>

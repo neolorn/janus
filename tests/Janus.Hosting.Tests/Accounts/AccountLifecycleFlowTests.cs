@@ -20,28 +20,9 @@ public sealed class AccountLifecycleFlowTests : IAsyncDisposable
     private readonly Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment able to send, holding the two notices this exercises.
+    /// A deployment able to send the two notices this exercises.
     /// </summary>
-    public AccountLifecycleFlowTests()
-    {
-        Flow.Prepare(_deployment);
-
-        foreach (MessageKind message in new[]
-        {
-            MessageKind.DeactivationNotice,
-            MessageKind.DeletionNotice,
-        })
-        {
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                _deployment.Templates.Set(
-                    message,
-                    kind,
-                    "en",
-                    new MessageTemplate(kind is SendKind.Email ? "notice" : null, "{link}"));
-            }
-        }
-    }
+    public AccountLifecycleFlowTests() => Flow.Prepare(_deployment);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
@@ -189,8 +170,8 @@ public sealed class AccountLifecycleFlowTests : IAsyncDisposable
         return elsewhere;
     }
 
-    // The token the notice carried, read off the body the template put it in.
-    private string Link() => Landing.Token(_deployment.Mail.Taken[^1].Body);
+    // The token the notice carried, read off the link among its values.
+    private string Link() => Landing.Token(_deployment.Mail.Taken[^1].Values["link"]);
 
     private SubjectId Subject() => _deployment.Directory.Created[^1].Subject;
 

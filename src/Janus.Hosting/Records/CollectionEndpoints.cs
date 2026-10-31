@@ -68,7 +68,7 @@ internal static class CollectionEndpoints
                 .Answering(
                     ErrorCodes.RecordSignedIn, ErrorCodes.SessionExpired, ErrorCodes.CollectionIncomplete,
                     ErrorCodes.IdentifierInvalid,
-                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
             .Accepts<CollectionContactRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/verify", VerifyAsync)

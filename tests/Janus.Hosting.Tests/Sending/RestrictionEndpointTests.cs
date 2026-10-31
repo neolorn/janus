@@ -469,7 +469,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3, chapter 09 section 8 (D-187): the name is bound from the route as
+    /// INT-SMS-003 AC1, chapter 09 section 8 (D-187): the name is bound from the route as
     /// a restriction's name, so a name outside the rule is answered naming <c>name</c>
     /// before any body is read: a body that is no JSON, and one whose member does not
     /// read, are never named.
@@ -479,7 +479,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     [Theory]
     [InlineData("{")]
     [InlineData("""{ "key": 7, "buckets": "none", "credit": "three" }""")]
-    public async Task INT_SMS_003_AC3_ANameOutsideItsRuleIsAnsweredBeforeTheBodyIsReadAsync(string body)
+    public async Task INT_SMS_003_AC1_ANameOutsideItsRuleIsAnsweredBeforeTheBodyIsReadAsync(string body)
     {
         Browser administrator = await AuthorisedAsync(
             Permissions.RestrictionEdit,

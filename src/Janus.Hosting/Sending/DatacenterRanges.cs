@@ -25,8 +25,8 @@ namespace Janus.Hosting.Sending;
 /// held and never leaves the process. With no file held, or a file older than
 /// <c>abuse.botdefence.ranges.maxage</c> by its own date, the answer is that the
 /// address is in no range, so the signal does not fire, and the degradation is raised
-/// under the scope chapter 10 section 5.23 gives each, so that the router carries one
-/// alert a window rather than one a registration (OPS-ALERT-002). The bot defence asks
+/// under the scope chapter 10 section 5.23 gives each, so that one alert is handed
+/// over a window rather than one a registration (OPS-ALERT-002). The bot defence asks
 /// only while <c>datacenterRange</c> is among <c>abuse.botdefence.signals</c>, and each
 /// run of the job raises the absence or the staleness only while it is, so nothing of
 /// either is raised for a deployment that took the signal out of the set, and one that
@@ -37,7 +37,7 @@ internal sealed class DatacenterRanges(
     DatacenterRangeCopy copy,
     IDatacenterRangeSource? source,
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time) : IDatacenterRanges
 {
     private const string Absent = "botdefence.ranges.absent";

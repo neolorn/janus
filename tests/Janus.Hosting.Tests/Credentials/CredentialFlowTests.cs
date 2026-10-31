@@ -28,7 +28,6 @@ namespace Janus.Hosting.Tests.Credentials;
 [Trait("kind", "unit")]
 public sealed class CredentialFlowTests : IAsyncDisposable
 {
-    private const string Language = "en";
     private const string Label = "This phone";
     private const string Replacement = "quincejellyonasaucer";
     private const string Link = "the-approver-sent-this-one";
@@ -45,19 +44,6 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         Flow.Prepare(_deployment);
 
         _deployment.Configuration.Set(Settings.ServiceName, "Example");
-
-        foreach (MessageKind message in new[]
-            { MessageKind.SecurityNotice, MessageKind.CredentialEnrolled })
-        {
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                _deployment.Templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "notice" : null, "body"));
-            }
-        }
     }
 
     /// <inheritdoc/>
@@ -65,18 +51,13 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
     /// <summary>
     /// OPS-OBS-002 AC2: a blocklist fall back met while a password is changed is still
-    /// waiting for the alert channels once the corpus answers again, and is carried
+    /// waiting for <c>alert-dispatch</c> once the corpus answers again, and is carried
     /// once rather than forgotten with the outage.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task OPS_OBS_002_AC2_AFallbackOutlivesTheOutageUntilItIsCarriedAsync()
     {
-        _deployment.Configuration.Set(Settings.AlertingEmailDestinations, ["ops@example.test"]);
-        _deployment.Configuration.Set(Settings.AlertingSmsDestinations, ["+441632960098"]);
-        _deployment.Configuration.Set(Settings.AlertingOwnerEmail, "owner@example.test");
-        _deployment.Configuration.Set(Settings.AlertingOwnerSms, "+441632960099");
-
         Browser browser = await SignedInAsync();
 
         _deployment.Corpus.Unreachable.Add(BlocklistSource.RangeApi);
@@ -327,12 +308,12 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status202Accepted, begun.Status);
         Assert.Equal(sent + 1, _deployment.Sms.Taken.Count);
-        Assert.Equal(Flow.Number, _deployment.Sms.Taken[^1].Destination.Value);
+        Assert.Equal(Flow.Number, _deployment.Sms.Taken[^1].Destination);
 
         Answer confirmed = await browser.SendAsync(
             "POST",
             "/account/factors/phonecode/confirm",
-            ("code", _deployment.Sms.Taken[^1].Text));
+            ("code", _deployment.Sms.Taken[^1].Values["code"]));
 
         Assert.Equal(StatusCodes.Status200OK, confirmed.Status);
         Assert.Equal(
@@ -411,7 +392,7 @@ public sealed class CredentialFlowTests : IAsyncDisposable
             ("identifier", number),
             ("label", Label));
 
-        string code = _deployment.Sms.Taken[^1].Text;
+        string code = _deployment.Sms.Taken[^1].Values["code"];
 
         Answer wrong = await browser.SendAsync(
             "POST",
@@ -616,6 +597,109 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
         // The enrolment ended with the link it was opened from.
         Assert.Empty(_deployment.Links.Held);
+    }
+
+    /// <summary>
+    /// FE-SEC-001, FE-PM-002 (D-224): the opening of an enrolment session carries the
+    /// document <c>GET /enrol</c> answers on it: the username, whether a password is
+    /// set, the credentials the policy admits, and no emails while the mailbox stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_TheEnrolmentSessionsOpeningCarriesTheDocumentItsReadAnswersAsync()
+    {
+        _ = await SignedInAsync();
+
+        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+
+        Browser browser = await ArrivedAsync();
+
+        Answer opened = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+        Answer read = await browser.SendAsync("GET", "/enrol");
+        JsonElement document = read.Json();
+
+        Assert.Equal(StatusCodes.Status200OK, opened.Status);
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.True(JsonElement.DeepEquals(opened.Json(), document));
+        Assert.Equal(Flow.Address, read.Text("username"));
+        Assert.True(document.GetProperty("password").GetProperty("set").GetBoolean());
+        Assert.Equal(
+            [.. new (Factor Factor, string Named)[]
+                {
+                    (Factor.Password, "password"),
+                    (Factor.Passkey, "passkey"),
+                    (Factor.SecurityKey, "securityKey"),
+                    (Factor.Totp, "totp"),
+                }
+                .Where(offer => Janus.Core.Policies.SystemDefault.LoginFactors.Contains(offer.Factor))
+                .Select(offer => offer.Named)],
+            document.GetProperty("offers").EnumerateArray().Select(offer => offer.GetString()));
+        Assert.False(document.GetProperty("mailboxLost").GetBoolean());
+        Assert.Equal(0, document.GetProperty("identifiers").GetArrayLength());
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002 (D-224): where the approver recorded the mailbox as lost, the
+    /// enrolment document names the account's emails, so the replace names the one it
+    /// replaces; a browser carrying no enrolment session is asked nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheEnrolmentDocumentNamesTheEmailsWhereTheMailboxWasLostAsync()
+    {
+        _ = await SignedInAsync();
+
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        await LinkedAsync(subject, mailboxLost: true);
+
+        Browser browser = await ArrivedAsync();
+        Browser none = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        Answer read = await browser.SendAsync("GET", "/enrol");
+        Answer unheld = await none.SendAsync("GET", "/enrol");
+        JsonElement named = Assert.Single(read.Json().GetProperty("identifiers").EnumerateArray());
+
+        Assert.True(read.Json().GetProperty("mailboxLost").GetBoolean());
+        Assert.Equal((await EmailAsync(subject)).ToString(), named.GetProperty("id").GetString());
+        Assert.Equal(Flow.Address, named.GetProperty("value").GetString());
+        Assert.True(named.GetProperty("primary").GetBoolean());
+        Assert.Equal(StatusCodes.Status401Unauthorized, unheld.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), unheld.Text("code"));
+    }
+
+    /// <summary>
+    /// FE-SEC-001 (D-224): a password is refused 422 <c>auth.factor.notpermitted</c>
+    /// where the policy in force does not hold <c>password</c> in <c>loginFactors</c>,
+    /// an enrolment session's included, and the enrolment stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_APasswordThePolicyDoesNotAdmitIsRefusedOnTheEnrolmentSessionAsync()
+    {
+        _ = await SignedInAsync();
+
+        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>(
+                    Janus.Core.Policies.SystemDefault.LoginFactors.Where(factor => factor is not Factor.Password)),
+            });
+
+        Answer refused = await browser.SendAsync("POST", "/account/password", ("password", Replacement));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.FactorNotPermitted.ToString(), refused.Text("code"));
+        Assert.NotEmpty(_deployment.Links.Held);
     }
 
     /// <summary>
@@ -898,7 +982,7 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         Assert.Contains(
             standing.All,
             identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
-        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Subject is "confirm");
+        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Kind is MessageKind.IdentifierChangeConfirm);
     }
 
     /// <summary>
@@ -929,11 +1013,12 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status204NoContent, pressed.Status);
         Assert.Contains(
             _deployment.Mail.Taken,
-            sent => sent.Body.Contains(" https://identity.example.test/link#identifier.", StringComparison.Ordinal));
+            sent => sent.Values.TryGetValue("link", out string? link)
+                && link.StartsWith("https://identity.example.test/link#identifier.", StringComparison.Ordinal));
         Assert.Contains(
             (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All,
             identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
-        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Subject is "confirm");
+        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Kind is MessageKind.IdentifierChangeConfirm);
     }
 
     /// <summary>
@@ -1013,8 +1098,8 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         Assert.False(Assert.Single(await _deployment.Authenticators.OfAsync(subject, cancellationToken)).Confirmed);
     }
 
-    // AUTH-FACT-002: the policy in force permits the text code and its message has a
-    // template; the answer is the id of the number the signed-in account holds.
+    // AUTH-FACT-002: the policy in force permits the text code; the answer is the id of
+    // the number the signed-in account holds.
     private async Task<string> TextableAsync()
     {
         _deployment.Configuration.Set(
@@ -1023,11 +1108,6 @@ public sealed class CredentialFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
             });
-        _deployment.Templates.Set(
-            MessageKind.SecondStepCode,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code}"));
 
         HeldIdentifiers held = await _deployment.Identifiers
             .HeldAsync(_deployment.Directory.Created[^1].Subject, TestContext.Current.CancellationToken);

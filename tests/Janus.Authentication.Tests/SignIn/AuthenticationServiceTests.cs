@@ -93,14 +93,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// A deployment that has named the keys with no default, the languages it writes
-    /// in among them, and holds a template for every message a sign-in sends, in the
-    /// shape the message goes out in.
+    /// in among them.
     /// </summary>
     public AuthenticationServiceTests()
     {
         _notifications.Work = _work;
         _restrictions.Work = _work;
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language]);
         _configuration.Set(Settings.WebAuthnRelyingPartyId, "example.test");
         _configuration.Set(Settings.WebAuthnOrigins, ["https://example.test"]);
@@ -158,6 +156,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private SignInLinks Links =>
         new(
             _pending,
+            _challenges,
             _identifiers,
             _authenticators,
             _accounts,
@@ -202,6 +201,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
             new OidcClientStoreInMemory(),
+            new PendingAuthorizationStoreInMemory(),
             _events,
             _work,
             _clock,
@@ -321,6 +321,73 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.FactorRejected, Refused(await PresentAsync(began.Challenge, Factor.Password, Secret)));
         Assert.Empty(await _live.LiveOfAsync(subject, _clock.GetUtcNow(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-015 AC9 (D-224): the answer that asks for the second step tells whether
+    /// the call completing it may trust the browser, and the completion carries the
+    /// same; a sign-in completed by its first factor alone is offered nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_015_AC9_TheSecondStepsAnswerTellsWhetherItsCompletionMayTrustTheBrowserAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        SignInProgress alone = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Holds(subject, Factor.Totp);
+
+        SignInChallenge began = await BeganAsync(Address);
+        SignInProgress asked = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        SignInOutcome completed = await TrustedAsync();
+
+        Assert.Equal(SignInStatus.Complete, alone.Status);
+        Assert.False(alone.TrustDeviceOffered);
+        Assert.Equal(SignInStatus.FactorRequired, asked.Status);
+        Assert.True(asked.TrustDeviceOffered);
+        Assert.Equal(SignInStatus.Complete, completed.Progress.Status);
+        Assert.True(completed.Progress.TrustDeviceOffered);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-015 AC9 (D-224): the second step's answer offers no trust where its
+    /// completion could record none: on a restricted account, and while the password is
+    /// below the single-factor floor.
+    /// </summary>
+    /// <param name="restricted">
+    /// Whether the account is restricted; otherwise its password is below the floor.
+    /// </param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_FACT_015_AC9_TheSecondStepsAnswerOffersNoTrustItsCompletionCouldNotRecordAsync(bool restricted)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Remembered(subject);
+
+        if (restricted)
+        {
+            _accounts.Stands(subject, AccountState.Restricted);
+        }
+        else
+        {
+            Password held = await _passwords.FindAsync(subject, TestContext.Current.CancellationToken)
+                ?? throw new InvalidOperationException("The account holds no password.");
+
+            await _passwords.SetAsync(
+                Password.Existing(subject, held.Hash, meetsSingleFactorFloor: false, held.SetAt),
+                TestContext.Current.CancellationToken);
+        }
+
+        SignInChallenge began = await BeganAsync(Address);
+        SignInProgress asked = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+
+        Assert.Equal(SignInStatus.FactorRequired, asked.Status);
+        Assert.False(asked.TrustDeviceOffered);
     }
 
     /// <summary>
@@ -539,6 +606,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Fresh,
             remembered: null,
             trusted: null,
+            browser: null,
             TestContext.Current.CancellationToken);
 
         _work.RefusesCommit = Error.From(ErrorCodes.SystemFault);
@@ -548,6 +616,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Fresh,
             remembered: null,
             trusted: null,
+            browser: null,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.SystemFault, unopened.Match(_ => (ErrorCode?)null, error => error.Code));
@@ -701,7 +770,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     public async Task CONV_DESIGN_003_AC8_APressedLinkInsideAnOpenUnitOfWorkIsAFaultAsync()
     {
         await InsideAsync(async () => await Service.LandAsync(
-            "a-handle-nothing-opened",
             browser: null,
             "a-token-nothing-issued",
             Factor.PhoneLink,
@@ -3066,18 +3134,21 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Fresh,
             remembered: null,
             trusted: null,
+            browser: null,
             TestContext.Current.CancellationToken);
         Result<SignInChallenge> held = await Service.BeginAsync(
             Address,
             Fresh,
             remembered: null,
             trusted: null,
+            browser: null,
             TestContext.Current.CancellationToken);
         Result<SignInChallenge> other = await Service.BeginAsync(
             "somebody@example.test",
             Fresh,
             remembered: null,
             trusted: null,
+            browser: null,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Throttled, Delayed(nobodys)?.Code);
@@ -3099,11 +3170,11 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         int before = _devices.LookedUp;
 
-        _ = await Service.BeginAsync(Address, Fresh, remembered, trusted, TestContext.Current.CancellationToken);
+        _ = await Service.BeginAsync(Address, Fresh, remembered, trusted, browser: null, TestContext.Current.CancellationToken);
 
         int held = _devices.LookedUp - before;
 
-        _ = await Service.BeginAsync(Elsewhere, Fresh, remembered, trusted, TestContext.Current.CancellationToken);
+        _ = await Service.BeginAsync(Elsewhere, Fresh, remembered, trusted, browser: null, TestContext.Current.CancellationToken);
 
         int unheld = _devices.LookedUp - before - held;
 
@@ -3210,19 +3281,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         var refusal = Error.From(ErrorCodes.RestrictionExceeded);
         _restrictions.Refusal = refusal;
 
-        Result held = await Service.SendLinkAsync(Address, Language, Source, browser: null, TestContext.Current.CancellationToken);
-        Result nobodys = await Service.SendLinkAsync(Elsewhere, Language, Source, browser: null, TestContext.Current.CancellationToken);
+        Result<RequestedLink> held = await Service.SendLinkAsync(Address, Language, Source, browser: null, TestContext.Current.CancellationToken);
+        Result<RequestedLink> nobodys = await Service.SendLinkAsync(Elsewhere, Language, Source, browser: null, TestContext.Current.CancellationToken);
 
-        Assert.Same(refusal, held.Match(() => (Error?)null, error => error));
-        Assert.Same(refusal, nobodys.Match(() => (Error?)null, error => error));
+        Assert.Same(refusal, held.Match(_ => (Error?)null, error => error));
+        Assert.Same(refusal, nobodys.Match(_ => (Error?)null, error => error));
     }
 
     /// <summary>
     /// CONV-LOG-005 AC1: a link pressed in the browser that asked for it and landing
-    /// on no sign-in of its account is a refused link against that account, and a
-    /// pressed token that resolves to nothing is one against no account; an open that
-    /// is not a press and a press in another browser are no attempt and are not
-    /// recorded.
+    /// on no sign-in of its account, its sign-in having completed since, is a refused
+    /// link against that account, and a pressed token that resolves to nothing is one
+    /// against no account; an open that is not a press and a press in another browser
+    /// are no attempt and are not recorded.
     /// </summary>
     [Fact]
     public async Task CONV_LOG_005_AC1_ALinkThatDoesNotLandIsRecordedAgainstItsAccountAsync()
@@ -3234,13 +3305,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         (string challenge, string token, string browser) = await AskedAsync(subject);
 
-        _ = await LandedAsync(challenge, browser, token, press: false);
-        _ = await LandedAsync(challenge, browser: null, token, press: true);
+        _ = await LandedAsync(browser, token, press: false);
+        _ = await LandedAsync(browser: null, token, press: true);
 
         Assert.Empty(_audit.Failed);
 
         Result<SignInLanding> unknown = await Service.LandAsync(
-            challenge,
             browser,
             "a-token-nothing-issued",
             Factor.EmailLink,
@@ -3249,8 +3319,9 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken);
 
+        Assert.Equal(SignInStatus.Complete, Reached(await PresentAsync(challenge, Factor.Password, Secret)).Status);
+
         Result<SignInLanding> astray = await Service.LandAsync(
-            "a-handle-nothing-opened",
             browser,
             token,
             Factor.EmailLink,
@@ -3278,7 +3349,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         for (int attempt = 0; attempt < Settings.AbuseThrottleThreshold.Default + 1; attempt++)
         {
             answers.Add(Code(await Service.LandAsync(
-                "a-handle-nothing-opened",
                 browser: null,
                 "a-token-nothing-issued",
                 Factor.PhoneLink,
@@ -3309,7 +3379,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Assert.Equal(
                 ErrorCodes.CodeExpired,
                 Code(await Service.LandAsync(
-                    "a-handle-nothing-opened",
                     browser: null,
                     "a-token-nothing-issued",
                     Factor.EmailLink,
@@ -4406,19 +4475,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         (string challenge, string token, string browser) = await AskedAsync(subject);
 
-        SignInLanding opened = await LandedAsync(challenge, browser, token, press: false);
+        SignInLanding opened = await LandedAsync(browser, token, press: false);
 
         Assert.Null(opened.SignedIn);
         Assert.True(opened.SameBrowser);
         Assert.Null(opened.Code);
 
-        SignInLanding away = await LandedAsync(challenge, browser: null, token, press: true);
+        SignInLanding away = await LandedAsync(browser: null, token, press: true);
 
         Assert.Null(away.SignedIn);
         Assert.False(away.SameBrowser);
         Assert.NotNull(away.Code);
 
-        SignInLanding pressed = await LandedAsync(challenge, browser, token, press: true);
+        SignInLanding pressed = await LandedAsync(browser, token, press: true);
 
         Assert.NotNull(pressed.SignedIn);
         Assert.Equal(SignInStatus.Complete, pressed.SignedIn.Status);
@@ -4438,13 +4507,206 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         (string challenge, string token, string browser) = await AskedAsync(subject);
 
-        SignInLanding away = await LandedAsync(challenge, browser: null, token, press: true);
+        SignInLanding away = await LandedAsync(browser: null, token, press: true);
 
         Assert.NotNull(away.Code);
 
         Result<SignInProgress> typed = await PresentAsync(challenge, Factor.EmailLink, away.Code);
 
         Assert.Equal(SignInStatus.Complete, Reached(typed).Status);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC4 (D-226): the link is issued on the asking browser's latest
+    /// sign-in opened with the identifier, so the code it shows completes that one, and
+    /// is no code of an earlier one or of another browser's.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_003_AC4_ALinkIsIssuedOnTheAskingBrowsersLatestSignInAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        var browser = OpaqueToken.Draw(_randomness);
+        SignInChallenge earlier = await BeganAsync(Address, browser.Value);
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        SignInChallenge latest = await BeganAsync(Address, browser.Value);
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        SignInChallenge elsewhere = await BeganAsync(Address, OpaqueToken.Draw(_randomness).Value);
+
+        _ = await Service.SendLinkAsync(Address, Language, Source, browser.Value, TestContext.Current.CancellationToken);
+
+        string shown = Assert.IsType<string>((await LandedAsync(browser: null, Token(), press: true)).Code);
+
+        Assert.Equal(ErrorCodes.CodeExpired, Refused(await PresentAsync(earlier.Challenge, Factor.EmailLink, shown)));
+        Assert.Equal(ErrorCodes.CodeExpired, Refused(await PresentAsync(elsewhere.Challenge, Factor.EmailLink, shown)));
+        Assert.Equal(SignInStatus.Complete, Reached(await PresentAsync(latest.Challenge, Factor.EmailLink, shown)).Status);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC4 (D-226): a sign-in on which a factor has been accepted is not
+    /// one a link is issued on, so the link opens a sign-in of its own for the browser,
+    /// which its press completes in that browser.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_003_AC4_ASignInAFactorAnsweredIsNotOneALinkIsIssuedOnAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        var browser = OpaqueToken.Draw(_randomness);
+        SignInChallenge began = await BeganAsync(Address, browser.Value);
+
+        Assert.Equal(SignInStatus.FactorRequired, Reached(await PresentAsync(began.Challenge, Factor.Password, Secret)).Status);
+
+        _ = await Service.SendLinkAsync(Address, Language, Source, browser.Value, TestContext.Current.CancellationToken);
+
+        string token = Token();
+        string shown = Assert.IsType<string>((await LandedAsync(browser: null, token, press: false)).Code);
+
+        Assert.Equal(ErrorCodes.CodeExpired, Refused(await PresentAsync(began.Challenge, Factor.EmailLink, shown)));
+        Assert.NotNull((await LandedAsync(browser.Value, token, press: true)).SignedIn);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC4 (D-226, D-230): a link asked for from a browser holding no
+    /// sign-in opens one bound to that browser, which its press completes there and
+    /// nowhere else; a link asked for from a browser carrying no pre-authentication
+    /// session is issued on a sign-in bound to none, which no press completes, and the
+    /// code its opening shows, typed on the sign-in the answer names, completes it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_003_AC4_ALinkAskedWithoutASignInOpensOneBoundToTheBrowserAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        var browser = OpaqueToken.Draw(_randomness);
+
+        string? opened = await LinkedAsync(Address, browser: null);
+        SignInLanding unbound = await LandedAsync(browser: null, Token(), press: true);
+        Result<SignInProgress> typed = await PresentAsync(opened!, Factor.EmailLink, unbound.Code);
+
+        _ = await LinkedAsync(Address, browser.Value);
+
+        string token = Token();
+        SignInLanding away = await LandedAsync(OpaqueToken.Draw(_randomness).Value, token, press: true);
+        SignInLanding pressed = await LandedAsync(browser.Value, token, press: true);
+
+        Assert.Equal((null, false), (unbound.SignedIn, unbound.SameBrowser));
+        Assert.NotNull(opened);
+        Assert.NotNull(unbound.Code);
+        Assert.Equal(SignInStatus.Complete, typed.Match(progress => progress.Status, error => throw new InvalidOperationException(error.Code.ToString())));
+        Assert.Equal((null, false), (away.SignedIn, away.SameBrowser));
+        Assert.Equal(SignInStatus.Complete, pressed.SignedIn?.Status);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC6 (D-230): a link asked for from a browser holding no sign-in
+    /// opened with the identifier is answered with the sign-in its request opened, and
+    /// the code the link shows in another browser, typed on it, completes it; asked again
+    /// from that browser, or from one that began a sign-in with the identifier, it is
+    /// issued on the sign-in the browser holds and the answer names none.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_003_AC6_ABrowserHoldingNoSignInIsAnsweredWithTheOneItsRequestOpenedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        var browser = OpaqueToken.Draw(_randomness);
+        var began = OpaqueToken.Draw(_randomness);
+
+        string? first = await LinkedAsync(Address, browser.Value);
+        string? again = await LinkedAsync(Address, browser.Value);
+        SignInLanding away = await LandedAsync(OpaqueToken.Draw(_randomness).Value, Token(), press: true);
+        Result<SignInProgress> typed = await PresentAsync(first!, Factor.EmailLink, away.Code);
+
+        _ = await BeganAsync(Address, began.Value);
+
+        string? beside = await LinkedAsync(Address, began.Value);
+
+        Assert.NotNull(first);
+        Assert.Null(again);
+        Assert.Equal(SignInStatus.Complete, typed.Match(progress => progress.Status, error => throw new InvalidOperationException(error.Code.ToString())));
+        Assert.Null(beside);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC6, AUTH-ABUSE-002 (D-230): whether the answer names a sign-in turns
+    /// on the browser's sign-ins alone, never on the account: a browser holding none is
+    /// answered with the one its request opened, and one that began a sign-in with the
+    /// identifier with none, for an identifier no account holds, one that reads as
+    /// neither an address nor a number, a channel the policy has not enabled, an address
+    /// a domain lock refuses and a number reported as at risk alike, as for one the link
+    /// goes to.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_003_AC6_WhetherTheAnswerNamesASignInNeverTurnsOnTheAccountAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        (string? Opened, string? Held) disabled = await AnsweredAsync(Address);
+        (string? Opened, string? Held) nobodys = await AnsweredAsync(Elsewhere);
+        (string? Opened, string? Held) unread = await AnsweredAsync("neither-an-address-nor-a-number");
+
+        Enables(Factor.EmailLink);
+
+        (string? Opened, string? Held) sent = await AnsweredAsync(Address);
+
+        LockedElsewhere(subject);
+
+        (string? Opened, string? Held) locked = await AnsweredAsync(Address);
+
+        Enables(Factor.PhoneLink);
+        Answers(PhoneSignal.Risk);
+
+        (string? Opened, string? Held) risk = await AnsweredAsync(Number);
+
+        Assert.All(
+            [disabled, nobodys, unread, sent, locked, risk],
+            answered =>
+            {
+                Assert.NotNull(answered.Opened);
+                Assert.Null(answered.Held);
+            });
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC4 (D-226): the sign-in a link is issued on answers at least as
+    /// long as the link, so a press after the sign-in's own lifetime and inside the
+    /// link's completes it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_003_AC4_TheSignInALinkIsIssuedOnLivesAsLongAsTheLinkAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+        _configuration.Set(Settings.CodeVerificationLifetime, TimeSpan.FromMinutes(5));
+        _configuration.Set(Settings.LinkMagicLifetime, TimeSpan.FromMinutes(15));
+
+        (_, string token, string browser) = await AskedAsync(subject);
+
+        _clock.Advance(TimeSpan.FromMinutes(14));
+
+        Assert.Equal(SignInStatus.Complete, (await LandedAsync(browser, token, press: true)).SignedIn?.Status);
     }
 
     /// <summary>
@@ -4456,14 +4718,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     {
         SubjectId subject = await AccountAsync();
 
-        Result asked = await Service.SendLinkAsync(
+        Result<RequestedLink> asked = await Service.SendLinkAsync(
             Address,
             Language,
             Source,
             browser: null,
             TestContext.Current.CancellationToken);
 
-        Assert.True(asked.Match(() => true, _ => false));
+        Assert.True(asked.Match(_ => true, _ => false));
         Assert.Null(await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken));
         Assert.Empty(_notifications.Mail);
     }
@@ -4553,7 +4815,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 Source,
                 browser: null,
                 TestContext.Current.CancellationToken))
-            .Match(() => true, _ => false));
+            .Match(_ => true, _ => false));
 
         Assert.Empty(_notifications.Texts);
         Assert.Null(await _pending.FindAsync(
@@ -4672,6 +4934,511 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): an email code sent to the primary email, presented
+    /// from a browser the account has not been seen on, completes without the check,
+    /// remembers the browser and raises <c>DeviceVerified</c>; no check code is sent.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_AnEmailCodeToThePrimaryEmailCompletesWithoutTheCheckAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        int sent = _notifications.Mail.Count;
+        SignInProgress reached = Reached(await PresentAsync(began.Challenge, Factor.EmailCode, Code()));
+
+        Assert.Equal(SignInStatus.Complete, reached.Status);
+        Assert.NotNull(reached.Session);
+        Assert.Equal(sent, _notifications.Mail.Count);
+        await RememberedOnceAsync(subject);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): a sign-in link sent to the primary email, pressed in
+    /// the browser that asked for it, completes without the check and remembers the
+    /// browser.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_ALinkToThePrimaryEmailCompletesWithoutTheCheckAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+
+        (string challenge, string token, string browser) = await AskedAsync(subject);
+
+        SignInLanding pressed = await LandedAsync(browser, token, press: true);
+
+        Assert.Equal(SignInStatus.Complete, pressed.SignedIn!.Status);
+        Assert.NotNull(pressed.SignedIn.Session);
+        await RememberedOnceAsync(subject);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): the code a sign-in link's page showed, for a link sent
+    /// to the primary email and typed where the sign-in began, completes without the
+    /// check and remembers the browser.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_TheCodeALinksPageShowedCompletesWithoutTheCheckAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+
+        (string challenge, string token, _) = await AskedAsync(subject);
+
+        SignInLanding away = await LandedAsync(browser: null, token, press: true);
+        SignInProgress reached = Reached(await PresentAsync(challenge, Factor.EmailLink, away.Code!));
+
+        Assert.Equal(SignInStatus.Complete, reached.Status);
+        await RememberedOnceAsync(subject);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): an email code sent to another verified email proved
+    /// no primary mailbox, so the sign-in is held and its check's code goes to the
+    /// primary email.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_AnEmailCodeToAnotherEmailIsHeldWithItsCodeToThePrimaryAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        _ = _identifiers.Verified(subject, IdentifierKind.Email, Second);
+
+        Enables(Factor.EmailCode);
+
+        SignInChallenge began = await BeganAsync(Second);
+
+        _ = await Service.SendCodeAsync(Second, Language, Source, TestContext.Current.CancellationToken);
+
+        SignInProgress reached = Reached(await PresentAsync(began.Challenge, Factor.EmailCode, Code()));
+
+        Assert.Equal(SignInStatus.DeviceVerificationRequired, reached.Status);
+        Assert.Null(reached.Session);
+        Assert.Equal(Address, _notifications.Mail[^1].Destination.Canonical);
+        Assert.Equal(MessageKind.VerificationCode, _notifications.Mail[^1].Message);
+        Assert.Empty(_events.Published.OfType<DeviceVerified>());
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC8 (D-224): a sign-in link sent to a phone proved no mailbox, so
+    /// the sign-in is held and its check's code goes to the primary email.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC8_APhoneLinkIsHeldWithItsCodeToThePrimaryAsync()
+    {
+        _ = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+
+        SignInChallenge began = await BeganAsync(Number);
+        var browser = OpaqueToken.Draw(_randomness);
+
+        _ = await Service.SendLinkAsync(Number, Language, Source, browser.Value, TestContext.Current.CancellationToken);
+
+        SignInLanding pressed = (await Service.LandAsync(
+                browser.Value,
+                _notifications.Texts[^1].Token(),
+                Factor.PhoneLink,
+                press: true,
+                Browser,
+                Source,
+                TestContext.Current.CancellationToken))
+            .Match(landing => landing, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal(SignInStatus.DeviceVerificationRequired, pressed.SignedIn!.Status);
+        Assert.Equal(Address, _notifications.Mail[^1].Destination.Canonical);
+        Assert.Empty(_events.Published.OfType<DeviceVerified>());
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC9 (D-224): where the email destination restriction refuses the
+    /// check's code, the factor stays accepted and the sign-in held at the check; a
+    /// resend while the restriction still refuses is refused as it was, and one after
+    /// sends a code; the code before a resend no longer verifies, and the last one
+    /// completes the sign-in.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC9_ARefusedCheckCodeIsSentByAResendOnceTheRestrictionAllowsItAsync()
+    {
+        await AccountAsync();
+
+        var browser = OpaqueToken.Draw(_randomness);
+        SignInChallenge began = await BeganAsync(Address, browser.Value);
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refused(await PresentAsync(began.Challenge, Factor.Password, Secret)));
+        Assert.Empty(_notifications.Mail);
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Code(await ResentAsync(began.Challenge, browser.Value)));
+
+        _notifications.Refusal = null;
+
+        Assert.Null(Code(await ResentAsync(began.Challenge, browser.Value)));
+
+        string first = Code();
+
+        Assert.Null(Code(await ResentAsync(began.Challenge, browser.Value)));
+
+        string last = Code();
+
+        Assert.Equal(2, _notifications.Mail.Count);
+        Assert.All(_notifications.Mail, sent => Assert.Equal(MessageKind.VerificationCode, sent.Message));
+        Assert.All(_notifications.Mail, sent => Assert.Equal(Address, sent.Destination.Canonical));
+
+        if (!string.Equals(first, last, StringComparison.Ordinal))
+        {
+            Assert.NotNull(Refused(await VerifiedAsync(began.Challenge, first)));
+        }
+
+        SignInProgress completed = Reached(await VerifiedAsync(began.Challenge, last));
+
+        Assert.Equal(SignInStatus.Complete, completed.Status);
+        Assert.Equal(AssuranceLevel.Aal1, completed.AssuranceLevel);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC9 (D-224, D-226): a resend is answered <c>auth.code.expired</c>,
+    /// one answer for every cause, and sends nothing, for a handle that opens nothing,
+    /// a sign-in never held at the check, one held but asked from another browser or
+    /// from none, one bound to no browser, and one completed since.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC9_AResendIsRefusedWhereNoSignInIsHeldAtTheCheckAsync()
+    {
+        await AccountAsync();
+
+        var browser = OpaqueToken.Draw(_randomness);
+        SignInChallenge unheld = await BeganAsync(Address, browser.Value);
+        SignInChallenge held = await BeganAsync(Address, browser.Value);
+        SignInChallenge unbound = await BeganAsync(Address);
+
+        _ = Reached(await PresentAsync(held.Challenge, Factor.Password, Secret));
+
+        string code = Code();
+
+        _ = Reached(await PresentAsync(unbound.Challenge, Factor.Password, Secret));
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        int sent = _notifications.Mail.Count;
+
+        ErrorCode?[] answers =
+        [
+            Code(await ResentAsync("a-handle-nothing-opened", browser.Value)),
+            Code(await ResentAsync(unheld.Challenge, browser.Value)),
+            Code(await ResentAsync(held.Challenge, OpaqueToken.Draw(_randomness).Value)),
+            Code(await ResentAsync(held.Challenge, browser: null)),
+            Code(await ResentAsync(unbound.Challenge, browser: null)),
+        ];
+
+        Assert.Equal(SignInStatus.Complete, Reached(await VerifiedAsync(held.Challenge, code)).Status);
+
+        ErrorCode? completed = Code(await ResentAsync(held.Challenge, browser.Value));
+
+        Assert.All([.. answers, completed], answer => Assert.Equal(ErrorCodes.CodeExpired, answer));
+        Assert.Equal(sent, _notifications.Mail.Count);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC9 and AUTH-ABUSE-001: a resend waits out the delay the sign-in's
+    /// identifier has earned, answered <c>auth.throttled</c>, and sends nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC9_AResendWaitsOutTheDelayAsync()
+    {
+        await AccountAsync();
+
+        var browser = OpaqueToken.Draw(_randomness);
+        SignInChallenge held = await BeganAsync(Address, browser.Value);
+
+        _ = Reached(await PresentAsync(held.Challenge, Factor.Password, Secret));
+
+        int sent = _notifications.Mail.Count;
+
+        await FailedAsync(Address, Fresh, Settings.AbuseThrottleThreshold.Default);
+
+        Assert.Equal(ErrorCodes.Throttled, Code(await ResentAsync(held.Challenge, browser.Value)));
+        Assert.Equal(sent, _notifications.Mail.Count);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): the restore of a lapsed session begins with
+    /// each of the passkey and the password the account holds and the policy permits,
+    /// and request options asking user verification and naming the account's active
+    /// passkeys, a suspended one and a second-factor security key not among them; the
+    /// password alone is named where the account holds no passkey, and neither where
+    /// the policy permits neither.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_ARestoreBeginsWithTheFactorsTheAccountHoldsAndThePolicyPermitsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SubjectId other = await AccountAsync();
+        var passkey = SoftwareAuthenticator.Holding();
+
+        _ = Carries(subject, Factor.Passkey, passkey, "Phone", "internal");
+        _ = Carries(subject, Factor.SecurityKey, SoftwareAuthenticator.Holding(), "Key", "usb");
+        Carries(subject, Factor.Passkey, SoftwareAuthenticator.Holding(), "Lost", "internal")
+            .Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+
+        OpaqueToken lapsed = Lapsed(subject);
+        OpaqueToken unkeyed = Lapsed(other);
+
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+        RestoreChallenge passwordOnly = Begun(await RestoreBegunAsync(unkeyed));
+
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with
+            {
+                RequiredAssurance = AssuranceLevel.Aal2,
+                LoginFactors = new HashSet<Factor>([Factor.Totp, Factor.Google]),
+            });
+
+        RestoreChallenge unpermitted = Begun(await RestoreBegunAsync(lapsed));
+
+        Assert.Equal([Factor.Passkey, Factor.Password], began.Factors);
+        Assert.Equal("required", began.WebAuthn.UserVerification);
+        Assert.Equal("example.test", began.WebAuthn.RelyingPartyId);
+        Assert.Equal([(Base64Url.EncodeToString(passkey.CredentialId), "internal")], Described(began.WebAuthn));
+        Assert.Equal([Factor.Password], passwordOnly.Factors);
+        Assert.Empty(passwordOnly.WebAuthn.AllowCredentials);
+        Assert.Empty(unpermitted.Factors);
+        Assert.NotEqual(began.Challenge, unpermitted.Challenge);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): the password restores the lapsed session in
+    /// place: the same session, a new secret, complete at what the password proves,
+    /// and the challenge ends with it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_ThePasswordRestoresTheLapsedSessionInPlaceAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        OpaqueToken lapsed = Lapsed(subject);
+        Session before = (await _live.FindByFingerprintAsync(lapsed.Fingerprint(), TestContext.Current.CancellationToken))!;
+
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+        SignInOutcome restored = Restored(await RestoredAsync(
+            lapsed,
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = Secret }));
+
+        IssuedSession issued = Assert.IsType<IssuedSession>(restored.Session);
+
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal1, false, before.Id),
+            (restored.Progress.Status, restored.Progress.AssuranceLevel, restored.Progress.PhishingResistant, issued.Id));
+        Assert.Empty(restored.Progress.Required);
+        Assert.Null(await _live.FindByFingerprintAsync(lapsed.Fingerprint(), TestContext.Current.CancellationToken));
+        Assert.Equal(before.Id, (await _live.FindByFingerprintAsync(issued.Secret.Fingerprint(), TestContext.Current.CancellationToken))?.Id);
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            RefusedRestore(await RestoredAsync(
+                issued.Secret,
+                began.Challenge,
+                new FactorPresentation(Factor.Password) { Value = Secret })));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): a passkey the begin named restores the
+    /// session, its assertion naming the session's account in its user handle; one
+    /// that names no account there, a passkey added after the begin, and a passkey of
+    /// another account are refused <c>auth.factor.rejected</c>, each counted.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_APasskeyTheBeginNamedRestoresTheSessionAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SubjectId other = await AccountAsync();
+        var passkey = SoftwareAuthenticator.Holding();
+        var theirs = SoftwareAuthenticator.Holding();
+        var later = SoftwareAuthenticator.Holding();
+
+        _ = Carries(subject, Factor.Passkey, passkey, "Phone", "internal");
+        _ = Carries(other, Factor.Passkey, theirs, "Theirs", "internal");
+        _configuration.Set(Settings.AbuseThrottleThreshold, 100);
+
+        OpaqueToken lapsed = Lapsed(subject);
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        _ = Carries(subject, Factor.Passkey, later, "Later", "internal");
+
+        string challenge = began.WebAuthn.Challenge;
+        string relyingParty = began.WebAuthn.RelyingPartyId;
+
+        ErrorCode?[] refused =
+        [
+            RefusedRestore(await RestoredAsync(lapsed, began.Challenge, new FactorPresentation(Factor.Passkey)
+            {
+                Assertion = passkey.Asserted(challenge, "https://example.test", relyingParty),
+            })),
+            RefusedRestore(await RestoredAsync(lapsed, began.Challenge, new FactorPresentation(Factor.Passkey)
+            {
+                Assertion = later.Asserted(
+                    challenge,
+                    "https://example.test",
+                    relyingParty,
+                    userHandle: WebAuthnService.Handle(subject)),
+            })),
+            RefusedRestore(await RestoredAsync(lapsed, began.Challenge, new FactorPresentation(Factor.Passkey)
+            {
+                Assertion = theirs.Asserted(
+                    challenge,
+                    "https://example.test",
+                    relyingParty,
+                    userHandle: WebAuthnService.Handle(other)),
+            })),
+        ];
+
+        SignInOutcome restored = Restored(await RestoredAsync(lapsed, began.Challenge, new FactorPresentation(Factor.Passkey)
+        {
+            Assertion = passkey.Asserted(
+                challenge,
+                "https://example.test",
+                relyingParty,
+                userHandle: WebAuthnService.Handle(subject)),
+        }));
+
+        Assert.All(refused, code => Assert.Equal(ErrorCodes.FactorRejected, code));
+        Assert.Equal(3, _audit.Failed.Count(failed => failed == (subject, Factor.Passkey)));
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal2, true),
+            (restored.Progress.Status, restored.Progress.AssuranceLevel, restored.Progress.PhishingResistant));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC2a (D-224 item 13): a factor other than the passkey or the
+    /// password, or one the begin did not name, is refused
+    /// <c>auth.factor.notpermitted</c> before it is verified and counts nothing; a
+    /// wrong password is refused and counted as at sign-in; neither restores the
+    /// session.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC2a_ARestoreTakesOnlyAFactorTheBeginNamedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+
+        OpaqueToken lapsed = Lapsed(subject);
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+
+        ErrorCode? totp = RefusedRestore(await RestoredAsync(
+            lapsed,
+            began.Challenge,
+            new FactorPresentation(Factor.Totp) { Value = "123456" }));
+        ErrorCode? passkey = RefusedRestore(await RestoredAsync(
+            lapsed,
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey)));
+
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+
+        ErrorCode? wrong = RefusedRestore(await RestoredAsync(
+            lapsed,
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = "notthepassword" }));
+
+        Assert.Equal(
+            (ErrorCodes.FactorNotPermitted, ErrorCodes.FactorNotPermitted, ErrorCodes.FactorRejected),
+            (totp, passkey, wrong));
+        Assert.Equal((subject, Factor.Password), Assert.Single(_audit.Failed));
+        Assert.NotEmpty(_throttle.Counted);
+        Assert.NotNull(await _live.FindByFingerprintAsync(lapsed.Fingerprint(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): a challenge of another account's restore, or
+    /// one nothing opened, restores nothing and is refused as a wrong factor is.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_AChallengeOfAnotherRestoreRestoresNothingAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SubjectId other = await AccountAsync();
+        OpaqueToken lapsed = Lapsed(subject);
+        RestoreChallenge theirs = Begun(await RestoreBegunAsync(Lapsed(other)));
+
+        ErrorCode?[] refused =
+        [
+            RefusedRestore(await RestoredAsync(lapsed, theirs.Challenge, new FactorPresentation(Factor.Password) { Value = Secret })),
+            RefusedRestore(await RestoredAsync(lapsed, "a-handle-nothing-opened", new FactorPresentation(Factor.Password) { Value = Secret })),
+        ];
+
+        Assert.All(refused, code => Assert.Equal(ErrorCodes.FactorRejected, code));
+        Assert.Equal(2, _audit.Failed.Count);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC3a and AC4, OPS-BOOT-002 (D-224 item 13): where the session may
+    /// not be restored, both steps answer <c>auth.session.expired</c> asking for a full
+    /// authentication: no cookie, a cookie naming nothing, a customer's idle expiry, an
+    /// expiry past the absolute window, and a break-glass session.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_ASessionTheRestoreDoesNotAdmitAsksForAFullAuthenticationAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        OpaqueToken late = Lapsed(subject);
+        OpaqueToken breakGlass = Lapsed(subject, breakGlassReason: "Locked out of every factor");
+        RestoreChallenge began = Begun(await RestoreBegunAsync(Lapsed(subject)));
+
+        _clock.Advance(TimeSpan.FromHours(23));
+
+        OpaqueToken customer = Lapsed(subject);
+
+        _configuration.Set(Settings.PolicyDefault, Janus.Core.Policies.SystemDefault);
+
+        OpaqueToken?[] refused = [null, OpaqueToken.Draw(_randomness), customer, late, breakGlass];
+
+        foreach (OpaqueToken? secret in refused)
+        {
+            Assert.Equal("full", Asked(await RestoreBegunAsync(secret)));
+            Assert.Equal("full", Asked(await RestoredAsync(
+                secret,
+                began.Challenge,
+                new FactorPresentation(Factor.Password) { Value = Secret })));
+        }
+
+        Assert.Empty(_audit.Failed);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 and AUTH-ABUSE-001 (D-224 item 13): both steps wait out the
+    /// delay the account has earned, answered <c>auth.throttled</c>.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_ARestoreWaitsOutTheDelayAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        OpaqueToken lapsed = Lapsed(subject);
+        RestoreChallenge began = Begun(await RestoreBegunAsync(lapsed));
+
+        await FailedAsync(Address, Fresh, Settings.AbuseThrottleThreshold.Default);
+
+        Assert.Equal(
+            (ErrorCodes.Throttled, ErrorCodes.Throttled),
+            (
+                RefusedRestore(await RestoreBegunAsync(lapsed)),
+                RefusedRestore(await RestoredAsync(
+                    lapsed,
+                    began.Challenge,
+                    new FactorPresentation(Factor.Password) { Value = Secret }))));
+    }
+
+    /// <summary>
     /// REG-IDENT-006 AC6 and CONV-LOG-005 AC1: a sign-in link sent to an address the
     /// account has removed since does not sign in; the press is refused
     /// <c>auth.factor.rejected</c>, recorded against the account and counted.
@@ -4695,7 +5462,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         await RemovedAsync(subject, second);
 
         Result<SignInLanding> pressed = await Service.LandAsync(
-            began.Challenge,
             browser.Value,
             token,
             Factor.EmailLink,
@@ -4811,7 +5577,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Noon + TimeSpan.FromMinutes(20),
             (await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken))?.ExpiresAt);
 
-        string shown = Assert.IsType<string>((await LandedAsync(challenge, browser: null, token, press: false)).Code);
+        string shown = Assert.IsType<string>((await LandedAsync(browser: null, token, press: false)).Code);
 
         Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(challenge, Factor.EmailLink, Other(shown))));
         Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(challenge, Factor.EmailLink, Other(shown))));
@@ -5123,12 +5889,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.Equal(named, Assert.Single(_restrictions.Carried).Answer);
 
-        _ = await LandedAsync(challenge, browser, token, press: false);
-        _ = await LandedAsync(challenge, browser: null, token, press: true);
+        _ = await LandedAsync(browser, token, press: false);
+        _ = await LandedAsync(browser: null, token, press: true);
 
         Assert.Empty(_restrictions.Answered);
 
-        Assert.NotNull((await LandedAsync(challenge, browser, token, press: true)).SignedIn);
+        Assert.NotNull((await LandedAsync(browser, token, press: true)).SignedIn);
         Assert.Equal(named, Assert.Single(_restrictions.Answered));
     }
 
@@ -5310,8 +6076,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     /// no sign-in of its account, release nothing.
     /// </summary>
     /// <param name="locked">
-    /// Whether a domain lock refuses the press; otherwise it lands on a sign-in opened
-    /// for another identifier.
+    /// Whether a domain lock refuses the press; otherwise it lands on no sign-in, the
+    /// one it was issued on having completed by another factor.
     /// </param>
     [Theory]
     [InlineData(true)]
@@ -5324,15 +6090,17 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Remembered(subject);
 
         (string challenge, string token, string browser) = await AskedAsync(subject);
-        SignInChallenge other = await BeganAsync(Elsewhere);
 
         if (locked)
         {
             LockedElsewhere(subject);
         }
+        else
+        {
+            Assert.Equal(SignInStatus.Complete, Reached(await PresentAsync(challenge, Factor.Password, Secret)).Status);
+        }
 
         ErrorCode? refused = Code(await Service.LandAsync(
-            locked ? challenge : other.Challenge,
             browser,
             token,
             Factor.EmailLink,
@@ -6019,14 +6787,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Enables(Factor.PhoneLink);
         Answers(PhoneSignal.Risk);
 
-        Result asked = await Service.SendLinkAsync(
+        Result<RequestedLink> asked = await Service.SendLinkAsync(
             Number,
             Language,
             Source,
             browser: null,
             TestContext.Current.CancellationToken);
 
-        Assert.True(asked.Match(() => true, _ => false));
+        Assert.True(asked.Match(_ => true, _ => false));
         Assert.Empty(_notifications.Texts);
         Assert.Equal(MessageKind.SignInLink, Assert.Single(_restrictions.Drawn).Message);
         Assert.Equal([(Factor.PhoneLink, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
@@ -6045,14 +6813,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Enables(Factor.PhoneLink);
         Answers(PhoneSignal.Risk);
 
-        Result held = await Service.SendLinkAsync(
+        Result<RequestedLink> held = await Service.SendLinkAsync(
             Number,
             Language,
             Source,
             browser: null,
             TestContext.Current.CancellationToken);
 
-        Result nobodys = await Service.SendLinkAsync(
+        Result<RequestedLink> nobodys = await Service.SendLinkAsync(
             "+441632960099",
             Language,
             Source,
@@ -6060,51 +6828,13 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Equal(
-            held.Match(() => (ErrorCode?)null, error => error.Code),
-            nobodys.Match(() => (ErrorCode?)null, error => error.Code));
+            held.Match(answered => (ErrorCode?)null, error => error.Code),
+            nobodys.Match(answered => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(
+            held.Match(answered => answered.Challenge is null, _ => false),
+            nobodys.Match(answered => answered.Challenge is null, _ => false));
         Assert.Empty(_notifications.Texts);
         Assert.NotEqual(default, subject);
-    }
-
-    /// <summary>
-    /// AUTH-ABUSE-006 AC4: a sign-in link asked for by text that the gateway floor
-    /// refuses is answered as it would have been, for the number's holder and for a
-    /// number no account holds alike; nothing goes out and no sign-in is left in
-    /// flight, so the floor tells nothing of an account.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_ABUSE_006_AC4_ALinkAskTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync()
-    {
-        SubjectId subject = await AccountAsync();
-
-        Enables(Factor.PhoneLink);
-
-        var floor = Error.From(ErrorCodes.SmsBalanceFloor);
-        _notifications.Refusal = floor;
-        _restrictions.Refusal = floor;
-
-        int committed = _work.Committed;
-
-        Result held = await Service.SendLinkAsync(
-            Number,
-            Language,
-            Source,
-            browser: null,
-            TestContext.Current.CancellationToken);
-
-        Result nobodys = await Service.SendLinkAsync(
-            "+441632960099",
-            Language,
-            Source,
-            browser: null,
-            TestContext.Current.CancellationToken);
-
-        Assert.True(held.Match(() => true, _ => false));
-        Assert.True(nobodys.Match(() => true, _ => false));
-        Assert.Empty(_notifications.Texts);
-        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneLink, TestContext.Current.CancellationToken));
-        Assert.False(_work.Open);
-        Assert.Equal(committed, _work.Committed);
     }
 
     // AUTH-FACT-002 AC6: the text code asked for, in the language of the ask, at a
@@ -6277,6 +7007,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _clock.GetUtcNow() + TimeSpan.FromDays(1),
             [1],
             TestContext.Current.CancellationToken);
+
+    // AUTH-FACT-016 AC8: a sign-in the primary email's factor exempted remembers the
+    // browser once, as a completed check does, and announces it once.
+    private async Task RememberedOnceAsync(SubjectId subject)
+    {
+        IReadOnlyList<Device> standing = await _devices.StandingOfAsync(
+            subject,
+            _clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(DeviceKind.Remembered, Assert.Single(standing).Kind);
+        _ = Assert.Single(_events.Published.OfType<DeviceVerified>());
+    }
 
     private void Remembered(SubjectId subject) =>
         _configuration.Set(Settings.DeviceVerificationEnabled, false);
@@ -6459,12 +7202,16 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
     }
 
-    private async ValueTask<SignInChallenge> BeganAsync(string identifier) =>
+    private ValueTask<SignInChallenge> BeganAsync(string identifier) => BeganAsync(identifier, browser: null);
+
+    // A sign-in opened from a browser carrying a pre-authentication session, or none.
+    private async ValueTask<SignInChallenge> BeganAsync(string identifier, string? browser) =>
         (await Service.BeginAsync(
             identifier,
             Source,
             remembered: null,
             trusted: null,
+            browser,
             TestContext.Current.CancellationToken))
         .Match(
             challenge => challenge,
@@ -6532,20 +7279,22 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         return outcome;
     }
 
+    // A sign-in opened from a browser and a link asked for from it, which the link is
+    // issued on (D-226).
     private async ValueTask<(string Challenge, string Token, string Browser)> AskedAsync(
         SubjectId subject)
     {
-        SignInChallenge began = await BeganAsync(Address);
         var browser = OpaqueToken.Draw(_randomness);
+        SignInChallenge began = await BeganAsync(Address, browser.Value);
 
-        Result asked = await Service.SendLinkAsync(
+        Result<RequestedLink> asked = await Service.SendLinkAsync(
             Address,
             Language,
             Source,
             browser.Value,
             TestContext.Current.CancellationToken);
 
-        Assert.True(asked.Match(() => true, _ => false));
+        Assert.True(asked.Match(_ => true, _ => false));
         Assert.NotNull(await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken));
 
         return (began.Challenge, Token(), browser.Value);
@@ -6705,16 +7454,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     {
         (string challenge, string token, string browser) = await AskedAsync(subject);
 
-        return await LandedAsync(challenge, browser, token, press: true);
+        return await LandedAsync(browser, token, press: true);
     }
 
     private async ValueTask<SignInLanding> LandedAsync(
-        string challenge,
         string? browser,
         string token,
         bool press) =>
         (await Service.LandAsync(
-                challenge,
                 browser,
                 token,
                 Factor.EmailLink,
@@ -6742,6 +7489,82 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private static ErrorCode? Refused(Result<SignInProgress> outcome) =>
         outcome.Match(_ => (ErrorCode?)null, error => error.Code);
 
+    // A session of the account under a policy requiring AAL2, opened now and lapsed for
+    // inactivity inside its absolute window, as the secret its cookie carries.
+    private OpaqueToken Lapsed(SubjectId subject, string? breakGlassReason = null)
+    {
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with { RequiredAssurance = AssuranceLevel.Aal2 });
+
+        var session = Session.Begin(
+            SessionId.New(_clock),
+            subject,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            new SessionOrigin(Source, Browser),
+            _clock.GetUtcNow() - TimeSpan.FromHours(2),
+            TimeSpan.FromHours(1),
+            TimeSpan.FromHours(24),
+            breakGlassReason);
+        var secret = OpaqueToken.Draw(_randomness);
+
+        _live.AddAsync(
+                session,
+                secret.Fingerprint(),
+                OpaqueToken.Draw(_randomness).Fingerprint(),
+                TestContext.Current.CancellationToken)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
+
+        return secret;
+    }
+
+    private ValueTask<Result<RestoreChallenge>> RestoreBegunAsync(OpaqueToken? secret) =>
+        Service.BeginRestoreAsync(secret, browser: null, Source, TestContext.Current.CancellationToken);
+
+    private ValueTask<Result<SignInOutcome>> RestoredAsync(
+        OpaqueToken? secret,
+        string challenge,
+        FactorPresentation presented) =>
+        Service.RestoreAsync(
+            secret,
+            challenge,
+            presented,
+            new SessionOrigin(Source, Browser),
+            TestContext.Current.CancellationToken);
+
+    private static RestoreChallenge Begun(Result<RestoreChallenge> outcome) =>
+        outcome.Match(
+            challenge => challenge,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+    private static SignInOutcome Restored(Result<SignInOutcome> outcome) =>
+        outcome.Match(
+            restored => restored,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+    private static ErrorCode? RefusedRestore<TValue>(Result<TValue> outcome) =>
+        outcome.Match(_ => (ErrorCode?)null, error => error.Code);
+
+    // What a refusal asks to be done again, or nothing where it names nothing.
+    private static string? Asked<TValue>(Result<TValue> outcome) =>
+        outcome.Match(
+            _ => null,
+            error => error.Code == ErrorCodes.SessionExpired
+                && error.Details.TryGetValue("reauthenticate", out JsonElement asked)
+                    ? asked.GetString()
+                    : error.Code.ToString());
+
+    private static ErrorCode? Code(Result outcome) =>
+        outcome.Match(() => (ErrorCode?)null, error => error.Code);
+
+    private ValueTask<Result> ResentAsync(string challenge, string? browser) =>
+        Service.ResendDeviceCodeAsync(challenge, browser, Source, TestContext.Current.CancellationToken);
+
+    private ValueTask<Result<SignInProgress>> VerifiedAsync(string challenge, string code) =>
+        Service.VerifyDeviceAsync(challenge, code, Browser, Source, TestContext.Current.CancellationToken);
+
     private static ErrorCode? Code(Result<SignInLanding> outcome) =>
         outcome.Match(_ => (ErrorCode?)null, error => error.Code);
 
@@ -6765,6 +7588,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 source,
                 remembered: null,
                 trusted: null,
+                browser: null,
                 TestContext.Current.CancellationToken))
                 .Match(challenge => challenge, error => throw new InvalidOperationException(error.Code.ToString()));
 
@@ -6795,7 +7619,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     private ValueTask<Result<SignInChallenge>> BeganFromAsync(string? remembered, string? trusted) =>
-        Service.BeginAsync(Address, Fresh, remembered, trusted, TestContext.Current.CancellationToken);
+        Service.BeginAsync(Address, Fresh, remembered, trusted, browser: null, TestContext.Current.CancellationToken);
 
     private ValueTask<Result<SignInOutcome>> PresentedFromAsync(string challenge, string remembered) =>
         Service.PresentAsync(
@@ -6813,5 +7637,28 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Source,
             browser: null,
             TestContext.Current.CancellationToken))
-        .Match(() => true, _ => false);
+        .Match(_ => true, _ => false);
+
+    // A link asked for from a browser: the sign-in the request opened, or nothing where
+    // the link went on one the browser holds.
+    private async ValueTask<string?> LinkedAsync(string identifier, string? browser) =>
+        (await Service.SendLinkAsync(
+            identifier,
+            Language,
+            Source,
+            browser,
+            TestContext.Current.CancellationToken))
+        .Match(asked => asked.Challenge, error => throw new InvalidOperationException(error.Code.ToString()));
+
+    // AUTH-FACT-003 AC6: what a link asked for with an identifier is answered with, from
+    // a browser holding no sign-in and from one that began a sign-in with it.
+    private async ValueTask<(string? Opened, string? Held)> AnsweredAsync(string identifier)
+    {
+        string? opened = await LinkedAsync(identifier, OpaqueToken.Draw(_randomness).Value);
+        var holding = OpaqueToken.Draw(_randomness);
+
+        _ = await BeganAsync(identifier, holding.Value);
+
+        return (opened, await LinkedAsync(identifier, holding.Value));
+    }
 }

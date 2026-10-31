@@ -38,7 +38,7 @@ internal static class AuthenticationRegistration
     /// <summary>
     /// Registers the services of the account, identifier, registration, organization,
     /// invitation, session, factor, credential and recovery operations, the governed
-    /// send path and its restrictions, the event outbox, the alert channels, the
+    /// send path and its restrictions, the event outbox, the alert raising, the
     /// provider's credential source, and the watches and sweeps the worker runs.
     /// </summary>
     /// <param name="services">The host's collection.</param>
@@ -59,11 +59,9 @@ internal static class AuthenticationRegistration
         // event through IEventConsumer<TEvent>.
         services.RemoveAll<IEvents>();
         services.AddScoped<IEvents, EventOutbox>();
-        services.AddScoped<IAlertChannels, AlertChannels>();
+        services.AddScoped<IAlertRaising, AlertRaising>();
 
         // AUTH-ABUSE-004, OPS-ALERT-001: what decides whether a message goes.
-        services.AddScoped<SmsBalance>();
-        services.AddScoped<RelayRegistration>();
         services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),
             provider.GetRequiredService<IPhoneSignalAudit>(),
@@ -91,7 +89,7 @@ internal static class AuthenticationRegistration
         services.AddScoped<CallbackReferences>();
         services.AddScoped<ICallbackReferences>(
             provider => provider.GetRequiredService<CallbackReferences>());
-        services.AddScoped<DeliveryReports>();
+        services.AddScoped<ISendOutcomes, SendOutcomes>();
 
         // IDN-LIFE-012a, IDN-LIFE-012, REG-IDENT-008: what a provider's verified events
         // do, and the attempts this application makes as the providers' client.
@@ -112,25 +110,9 @@ internal static class AuthenticationRegistration
         services.AddScoped<IBreakGlass>(provider => provider.GetRequiredService<BreakGlassService>());
         services.AddScoped<EmergencyCredentialWatch>();
 
-        // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
-        // DR-009a: the annual operation the key-encryption key is rotated in, warned of
-        // from the log.
-        services.AddScoped<IMaintenanceRecords, MaintenanceRecords>();
-        services.AddScoped<LicenceExpiry>();
-        services.AddScoped<EnvelopeRotationWatch>();
-
-        // INF-HOST-001, INF-TLS-003: the clock and the renewer are the environment's, so
-        // what measures them is the deployment's to register, and one it does not
-        // register is raised as unwatched.
-        services.AddScoped(provider => new ClockDriftWatch(
-            provider.GetService<IClockReference>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
-            provider.GetRequiredService<TimeProvider>()));
-        services.AddScoped(provider => new CertificateRenewalWatch(
-            provider.GetService<ICertificateRenewal>(),
-            provider.GetRequiredService<IAlertChannels>(),
-            provider.GetRequiredService<TimeProvider>()));
+        // DR-009a: the end of the key-encryption key's cryptoperiod, warned of from the
+        // key's own rotation record.
+        services.AddScoped<CryptoperiodWatch>();
 
         // AUTH-SESS-001, AUTH-PASS-004, AUTH-FACT-005: the authentication services,
         // each of which reads the settings table for what it enforces.
@@ -141,6 +123,7 @@ internal static class AuthenticationRegistration
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();
         services.AddScoped<PreAuthenticationService>();
+        services.AddScoped<PendingAuthorizations>();
         services.AddScoped<SynchronizerTokens>();
         services.AddScoped<ConcurrentSessions>();
         services.AddScoped<SessionService>();
@@ -206,7 +189,6 @@ internal static class AuthenticationRegistration
         services.AddScoped<RedirectValidation>();
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
-        services.AddScoped<ITokenMinting>(provider => provider.GetRequiredService<OidcService>());
 
         services.AddScoped<OrganizationReads>();
 
@@ -223,7 +205,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<ConfigurationAdministration>(),
             provider.GetRequiredService<PolicyResolution>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<IEvents>(),
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<OrganizationReads>(),
@@ -243,7 +225,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<ConfigurationAdministration>(),
             provider.GetService<IDnsResolver>(),
             provider.GetRequiredService<IOrganizationAudit>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
@@ -251,7 +233,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<IDomainStore>(),
             provider.GetService<IDnsResolver>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
 
@@ -261,21 +243,21 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IMailServerInUse>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
-            provider.GetRequiredService<RandomNumberGenerator>()));
+            provider.GetRequiredService<RandomNumberGenerator>(),
+            provider.GetRequiredService<IMailServerFaults>()));
         services.AddScoped(provider => new MailboxReconciliation(
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<TimeProvider>()));
 
-        // INT-MAIL-010: the app passwords are the mail server's, reached with a token
-        // the provider issues to the server's client; without a server there are none.
+        // INT-MAIL-010: the app passwords are the mail server's, reached with its
+        // management key on the mailbox's account; without a server there are none.
         services.AddScoped<IAppPasswords>(provider => new AppPasswords(
             provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetRequiredService<IMailServerTokens>(),
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IAccountDirectory>(),
             provider.GetRequiredService<ISettingsRestriction>(),

@@ -113,6 +113,14 @@ internal sealed class CredentialService(
             return Result.Failure(failure);
         }
 
+        // D-224: a password is set only where the policy in force admits one, on every
+        // session, an enrolment session's included.
+        if (await AdmitsAsync(acting.Subject, FactorCatalogue.Password, cancellationToken).ConfigureAwait(false)
+            is Error refusal)
+        {
+            return Result.Failure(refusal);
+        }
+
         if (await GateAsync(
                 acting,
                 StepUpAction.PasswordSet,

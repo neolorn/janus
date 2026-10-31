@@ -28,7 +28,6 @@ using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Events;
 using Janus.Hosting.Mailboxes;
-using Janus.Hosting.Maintenance;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Passwords;
@@ -169,7 +168,8 @@ public static class HostingRegistration
         // probes, as the same client and on the same connection.
         services.AddScoped<IProviderProbes, ProviderProbes>();
 
-        // INT-MAIL-009: outbound delivery is registered apart from mailbox hosting.
+        // INT-SMS-006: what hands each message to the host's notification handler,
+        // registered apart from mailbox hosting.
         services.AddOutboundDelivery();
 
         // IDN-LIFE-012a: a provider's events are verified against the keys it publishes,
@@ -182,27 +182,12 @@ public static class HostingRegistration
         // IDN-LIFE-012, REG-IDENT-008: this application is the providers' client, on
         // the same connection their documents are read on.
         services.AddScoped<ProviderSignIn>();
-        services.AddScoped<AlertRouter>();
         services.AddScoped<AlertDispatch>();
 
         // LIB-API-001, CONV-DESIGN-002: a committed event is offered to the consumers
         // the host registered.
         services.AddScoped<EventConsumers>();
         services.AddScoped<EventPublisher>();
-
-        // DR-007, DR-008: the backups and the throwaway instance are the environment's,
-        // so what restores into one is the deployment's to register, and one it does not
-        // register fails every test; what is restored is opened with the keys this
-        // process holds, which is what the test proves the backup readable with.
-        services.AddScoped(provider => new RestoreTest(
-            provider.GetService<IRestoreTestInstance>(),
-            provider.GetRequiredService<IKeyRing>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IPrivacyAudit>(),
-            provider.GetRequiredService<IAlertChannels>(),
-            provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetRequiredService<TimeProvider>(),
-            provider.GetRequiredService<ILogger<RestoreTest>>()));
 
         // PRIV-RET-002, OPS-MIG-003a: the partitions are reached over the maintenance
         // credential only, in an area of their own built with the keys this process holds.
@@ -212,8 +197,6 @@ public static class HostingRegistration
             provider.GetRequiredService<IPrivacyAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
-        services.AddScoped<AlertDestinationChange>();
-        services.AddScoped<IAlertLog, AlertLog>();
 
         // IDN-ATTR-002, OPS-CFG-003: a system policy that shows photos is refused where
         // the deployment declared no codec, so what changes it takes the codec as it was
@@ -223,12 +206,12 @@ public static class HostingRegistration
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<ConfigurationAdministration>(),
-            provider.GetRequiredService<AlertDestinationChange>(),
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetRequiredService<CategoryRetention>(),
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<NoticeCookieCheck>(),
             provider.GetRequiredService<IUnitOfWork>()));
+        services.AddScoped<FrontendSettings>();
 
         // AUTH-PASS-004: what a password is screened against, and the record of each
         // screening.
@@ -257,7 +240,7 @@ public static class HostingRegistration
             provider.GetRequiredService<LocationCopy>(),
             provider.GetService<ILocationSource>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<ILocationResolver>(provider => provider.GetRequiredService<LocationDatabase>());
 
@@ -268,7 +251,7 @@ public static class HostingRegistration
             provider.GetRequiredService<DatacenterRangeCopy>(),
             provider.GetService<IDatacenterRangeSource>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IDatacenterRanges>(provider => provider.GetRequiredService<DatacenterRanges>());
 
@@ -280,8 +263,6 @@ public static class HostingRegistration
             provider.GetService<AuthenticationAddresses>(),
             provider.GetService<LandingOrigins>(),
             provider.GetService<SignOnClient>(),
-            provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
             provider.GetService<IDnsResolver>(),
             provider.GetServices<SocialProvider>(),
@@ -341,19 +322,9 @@ public static class HostingRegistration
         // type, never as IMailServer; the start chooses it where the host registered no
         // mail server and the endpoint is set.
         services.AddScoped<IAppPasswordLog, AppPasswordLog>();
+        services.AddSingleton<IMailServerFaults, MailServerFaults>();
         services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel);
-
-        // INT-MAIL-010: the token the provider issues to the mail server's client, with
-        // which the app passwords are reached; without a server there are none.
-        services.AddScoped<IMailServerTokens>(provider => new MailServerTokens(
-            provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerFactory>(),
-            provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerDispatcher>(),
-            provider.GetRequiredService<ITokenMinting>(),
-            provider.GetRequiredService<IOidcClientStore>(),
-            provider.GetService<MailServerClient>(),
-            provider.GetRequiredService<AuthenticationAddresses>(),
-            provider.GetRequiredService<TimeProvider>()));
 
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
         // registered after it, and the web server is one, so the checks that read the
@@ -380,29 +351,28 @@ public static class HostingRegistration
         // keys once the ring is filled, making one current where none is held, and then
         // builds the provider's options.
         services.Insert(9, ServiceDescriptor.Singleton<IHostedService, ProviderStartService>());
-        services.Insert(10, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
 
         // PRIV-BASIS-001 (D-183): the declared lawful bases are written into their table
         // once the model and the schema have been checked, and before the server serves.
-        services.Insert(11, ServiceDescriptor.Singleton<IHostedService, LawfulBasisStartService>());
+        services.Insert(10, ServiceDescriptor.Singleton<IHostedService, LawfulBasisStartService>());
 
         // PRIV-CONS-007 AC5 (D-183): a consent recorded against a document its purpose no
         // longer names is stamped superseded once the declaration has been checked, and
         // before the server serves.
-        services.Insert(12, ServiceDescriptor.Singleton<IHostedService, DocumentSupersessionStartService>());
+        services.Insert(11, ServiceDescriptor.Singleton<IHostedService, DocumentSupersessionStartService>());
 
         // PRIV-CONS-006a AC4 (D-203): the cookies the deployment now sets are compared with
         // those the current privacy notice lists once the declaration has been checked.
-        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, NoticeCookiesStartService>());
+        services.Insert(12, ServiceDescriptor.Singleton<IHostedService, NoticeCookiesStartService>());
 
         // AUTHZ-GRANT-004 (D-204): each declared role not yet seeded is defined once the
         // model and the stored roles have been checked, and before the server serves.
-        services.Insert(14, ServiceDescriptor.Singleton<IHostedService, DeclaredRoleStartService>());
+        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, DeclaredRoleStartService>());
 
         // BFF-LOG-002 (D-197): what the host's logging makes of the server's per-request
         // entries is read once the host has written every rule it will, and before the
         // server serves.
-        services.Insert(15, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
+        services.Insert(14, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(

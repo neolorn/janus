@@ -188,13 +188,13 @@ public sealed class SettingsTests
     }
 
     /// <summary>
-    /// A destination list the deployment empties is refused: the deployment names at
-    /// least one.
+    /// An origin list the deployment empties is refused: the deployment names at least
+    /// one.
     /// </summary>
     [Fact]
-    public void Accept_EmptyDestinationList_Refused()
+    public void Accept_EmptyOriginList_Refused()
     {
-        Result<IReadOnlyList<string>> outcome = Settings.AlertingEmailDestinations.Accept([]);
+        Result<IReadOnlyList<string>> outcome = Settings.WebAuthnOrigins.Accept([]);
 
         Assert.Equal(
             ErrorCodes.ConfigurationValueNotAllowed,

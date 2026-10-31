@@ -342,7 +342,7 @@ AUTH-OIDC-006), acting as a **confidential client** of the library's provider, a
 retain no token afterwards.
 
 *Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193, D-194,
-D-195, D-196, D-198, D-199*
+D-195, D-196, D-198, D-199, D-229*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -403,6 +403,11 @@ may configure.
 **What it does not do.** It never receives a refresh token, never stores an access or
 ID token, never exchanges a code from the browser, and never accepts a `redirect_uri`
 from a request — the registered value is the only one.
+
+**Where it runs (D-229).** The sign-on belongs to an application at an origin apart from
+the authentication application's. An application served at that application's own
+origin is served by the sign-in session, the session that origin's cookie carries
+(BFF-SESS-002), and derives none; its frontend starts no sign-on (FE-API-006).
 
 **Acceptance criteria**
 1. A request to an application with no session and a live auth session completes
@@ -583,18 +588,28 @@ serving as the CSRF token's binding target before a real session exists.
 the registration session it carries being bound to it; no separate key. Its cookie ends
 with the browser's session, as the notice lists it (BFF-SESS-002, PRIV-CONS-006a, D-203).
 
-*Source: D-092, D-146, D-166, D-202, D-203*
+*Source: D-092, D-146, D-166, D-202, D-203, D-224, D-226*
 
 `/register`, `/auth/begin`, `/auth/link`, `/auth/factor` and `/recovery/begin` are
 state-changing browser endpoints reached before any session exists. Without this, an implementer must
 either invent an anonymous session or quietly exempt them — and exempting is precisely
 what "no endpoint can opt out" prohibits.
 
-**It rotates into the real session on authentication** (AUTH-SESS-006), which also
-gives the fixation defence a defined starting point. It is also the binding target for
-the `state` value of the sign-on redirect (BFF-SESS-006), for the `state` of a provider
-round trip started to sign in or register (IDN-LIFE-012; one started to link is bound
-to the session), and for the registration session (BFF-CSRF-005b).
+**It rotates into the real session on authentication** (AUTH-SESS-006), which also gives
+the fixation defence a defined starting point. It is also the binding target for the
+`state` value of the sign-on redirect (BFF-SESS-006), for the `state` of a provider
+round trip started to sign in or register (IDN-LIFE-012; one started to link is bound to
+the session), for the registration session (BFF-CSRF-005b), for each sign-in challenge
+opened from it (`09` `POST /auth/begin`, D-226), and for the browser's pending
+authorization (AUTH-SESS-012, D-224), which the rotation carries over to the session it
+establishes (D-226).
+
+**Requests that carry no cookie (D-224).** Two requests that carry no cookie hold
+nothing that ties them to one browser, so each is issued a pre-authentication session
+and a CSRF token of its own, and the later answer's cookies replace the earlier's. A
+frontend holding none of the library's cookies therefore makes its first request alone
+and sends the rest once its answer has set them (`18` FE-API-002). A token accepted from
+any browser within a window would bind nothing.
 
 **Acceptance criteria**
 1. A pre-authentication session is issued on first contact with any pre-session
@@ -686,12 +701,11 @@ carrying no session and no CSRF protection.
 *Source: D-070, D-166, D-188, D-189*
 
 A protocol client calling the token endpoint, the BFFs pushing their sign-on requests
-and exchanging the codes (BFF-SESS-006), the SMS gateway calling its delivery-report
-callback, the social providers posting their security events (`09` section 10), and any
-callback a host mounts on this profile for its own processors, send no cookie, no
-synchronizer token, no custom header and no Fetch Metadata. Under the browser profile
-every one of them is rejected: mail authentication, sign-on and all callbacks fail on
-day one.
+and exchanging the codes (BFF-SESS-006), the social providers posting their security
+events (`09` section 10), and any callback a host mounts on this profile for its own
+processors, send no cookie, no synchronizer token, no custom header and no Fetch
+Metadata. Under the browser profile every one of them is rejected: mail authentication,
+sign-on and all callbacks fail on day one.
 
 **The no-opt-out property is preserved.** An endpoint's protection derives from **where
 it is mounted**, not from a flag or attribute. A developer cannot accidentally place a
@@ -778,9 +792,7 @@ does not match the signed bytes.
 ---
 
 **BFF-MACH-003** — Where signing is **not available**, the callback SHALL be treated as
-a **hint that triggers verification against the provider's API** — never as a fact. The
-SMS delivery report is the exception: the releases INT-SMS-005 allows are made
-unconfirmed, since each can only make a person less restricted (INT-SMS-005, D-197).
+a **hint that triggers verification against the provider's API** — never as a fact.
 
 **Values (D-153).** The endpoints accept `integration.callback.ratelimit` requests per
 source per minute; `alerting.callback.threshold` rejected callbacks from one source in
@@ -790,22 +802,19 @@ it; the host's route is reached only once the host's confirmation succeeds.
 `ICallbackReferences` is a seam, not an operation of LIB-API-005: it joins the host's
 transaction, so it has no endpoint and takes no access context.
 
-*Source: D-070, INT-GEN-003, D-166, D-197, D-207*
+*Source: D-070, INT-GEN-003, D-166, D-197, D-207, D-225*
 
-Of the library's own callbacks, the SMS gateway calls over plain HTTP with parameters in
-the query string, which cannot carry a signature meaningfully (R-A12). A host records
-for each of its own processors whether it signs.
+The library's own callbacks are signed (`09` section 10); a host records for each of its
+own processors whether it signs (D-225).
 
 **This is the primary control for unsigned callbacks**, not a secondary one. A record is
-not advanced because something said so; the provider is asked, save the releases
-INT-SMS-005 allows.
+not advanced because something said so; the provider is asked.
 
 Supporting controls: unguessable correlation references, rate limiting, and source
 restriction where the provider publishes ranges.
 
 **Acceptance criteria**
-1. No unsigned callback advances authoritative state without independent confirmation,
-   save the releases of INT-SMS-005.
+1. No unsigned callback advances authoritative state without independent confirmation.
 2. A forged callback with a guessed reference is rejected, recorded against its source's
    fingerprint and logged, the log line naming no source (INT-GEN-003, D-207).
 3. Repeated verification failures raise an alert.
@@ -1019,7 +1028,7 @@ identifier.
 **BFF-STEP-001** — Where a request requires step-up, the BFF SHALL reject it with the
 step-up code rather than performing it.
 
-*Source: AUTH-STEP-001, D-166, D-191, D-192, D-193*
+*Source: AUTH-STEP-001, D-166, D-191, D-192, D-193, D-224, D-226*
 
 The frontend initiates the step-up flow and retries. The BFF does not redirect
 mid-request.
@@ -1030,6 +1039,16 @@ D-123, D-139): the BFF rejects with the code and `details.reauthenticate` —
 policy's `requiredAssurance` is `aal2`, except in a break-glass session, whose account
 holds no factor to restore it with (OPS-BOOT-002); `full` otherwise (always `full` for a
 customer) — and never redirects.
+
+**The restore in place (D-224, D-226).** On a `single-factor` expiry the browser profile
+keeps the expired session's cookie and reads it on `POST /auth/restore/begin` and
+`POST /auth/restore` alone (`09`, stage 5 of section 10), on every application, so the
+frontend restores the session where it met the expiry and retries the interrupted
+request (`18` FE-API-004). The two routes are carried by that cookie and by the CSRF
+token bound to the browser's pre-authentication session, which first contact issues to a
+browser holding no live session and whose token then takes the CSRF cookie
+(BFF-CSRF-005a); a completed restore ends that pre-authentication session as a completed
+sign-in does. Every other request on that cookie is answered as stage 8 answers it.
 
 The `details` of the identity API's `auth.stepup.required` response — the three gate
 values, the `outcome`, the `options` and `pendingUntil` (`09` `/auth/step-up`, D-141) —
@@ -1045,6 +1064,11 @@ navigation (BFF-ERR-001) the step-up code crosses in `error` with nothing of its
    without re-submitting business data the user would have to re-enter.
 3. An expired-session rejection carries `details.reauthenticate`; retrying after
    reauthentication succeeds with the original data.
+4. A session expired for inactivity under a policy requiring AAL2 is restored on the
+   application where it expired, by `POST /auth/restore/begin` and `POST /auth/restore`
+   carried by its cookie and the CSRF token of the browser's pre-authentication session;
+   the cookie survives the answer that reports the expiry, and no other route accepts it
+   until it is restored.
 
 ---
 
@@ -1151,10 +1175,10 @@ reads or changes the account's state.
 | 2 | Fetch Metadata resource isolation | Cheapest rejection; no session lookup needed |
 | 3 | Origin validation | Same — cheap, no state |
 | 4 | Source-based rate limiting | Before any expensive work, including session lookup |
-| 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162). An enrolment session is resolved only on the routes `POST /enrol/begin` lists; elsewhere the request continues as one that carried none, its cookie kept (`09`, D-189). Where the host's routing runs after the profile, no route is known yet, so an enrolment session is resolved on none (D-210) |
+| 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162), save the cookie of a session expired for inactivity that the restore admits (`details.reauthenticate` `single-factor`): it is kept and recorded for `POST /auth/restore/begin` and `POST /auth/restore`, which alone read it, the request otherwise continuing as one that carried none, and it is cleared once the restore no longer admits it; this needs no route, so it holds where the host's routing runs after the profile (D-226). An enrolment session is resolved only on the routes `POST /enrol/begin` lists; elsewhere the request continues as one that carried none, its cookie kept (`09`, D-189). Where the host's routing runs after the profile, no route is known yet, so an enrolment session is resolved on none (D-210) |
 | 6 | CSRF synchronizer token validation | Requires the session; must precede any state change |
 | 7 | Account-based throttling (AUTH-ABUSE-001, AUTH-RECOV-002) | Requires the account the request names, which only the operation reads |
-| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked as answering anyone, whatever routing selected it, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188). Where the host's routing runs after the profile, the endpoint it selects is judged then, before it runs (BFF-HOST-002, D-209) |
+| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked as answering anyone, whatever routing selected it, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188); `POST /auth/restore/begin` and `POST /auth/restore` take a session expired for inactivity instead (BFF-STEP-001, D-224). Where the host's routing runs after the profile, the endpoint it selects is judged then, before it runs (BFF-HOST-002, D-209) |
 | 9 | Host endpoint | |
 | 10 | Capability projection | Requires the result set. A host endpoint places what `CapabilityFields` answers on its records itself (BFF-CAP-002); the stage adds nothing to its answer |
 | 11 | Error translation and concealment | **Last**, so nothing earlier has disclosed existence |
@@ -1167,7 +1191,7 @@ in its own memory, so a deployment of several instances sets both keys to its sh
 the limit it wants. A source or /48 already over its limit is refused without reading
 configuration or any store, and without a log line for each refused request.
 
-*Source: D-052, D-053, D-162, D-166, D-188, D-189, D-202, D-209, D-210*
+*Source: D-052, D-053, D-162, D-166, D-188, D-189, D-202, D-209, D-210, D-230*
 
 **Routing before the profile (D-210).** Stage 8 holds whatever the order of the host's
 routing (BFF-HOST-002). Stage 5 reads the endpoint before the request goes on, so where
@@ -1177,6 +1201,13 @@ before the profile, as the sample host does (`07` LIB-TEST-004), for an enrolmen
 session to reach the library's enrolment routes. The refusal of a request the framework
 cannot bind is made on the way out, after routing has run, so it is answered as
 API-CONV-002 gives, whatever the order.
+
+**The framework's own authentication (D-230).** ASP.NET Core's `WebApplication` adds an
+authentication middleware ahead of the host's middleware wherever the host calls none of
+its own. The provider, and every handler the library gives the framework's
+authentication, acts only on a request its profile has passed inside the branch the host
+mounted the library in, and passes any other request on, so no middleware of the
+framework's answers a library route ahead of its stages.
 
 **Throttling is two stages, not one.** Source-based limiting must precede session
 lookup to protect against resource exhaustion; account-based limiting cannot, because
@@ -1205,6 +1236,10 @@ which would have let an unauthenticated flood reach session resolution.
 6. Addresses within one IPv6 /64 are counted as one source, and an IPv4-mapped address
    as its IPv4 address.
 7. Requests from different /64s of one /48 are refused past `abuse.source.sitelimit`.
+8. In a host built on `WebApplication` that calls no `UseAuthentication` of its own,
+   each of the provider's routes is answered only after its profile's stages: a request
+   a stage refuses reaches no provider endpoint, and an authorization request that finds
+   no session is kept for its browser (AUTH-SESS-012, D-230).
 
 ---
 

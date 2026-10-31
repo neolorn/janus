@@ -128,7 +128,7 @@ internal static class ConfigureCommand
 
     // What the command runs over: the storage area under the connection and the keys
     // the document carried, the authentication area, whose redirect check, event outbox
-    // and alert channels the change reads and writes through, and the change itself.
+    // and alert raising the change reads and writes through, and the change itself.
     private static ServiceProvider Composed(KeyDocument keys)
     {
         var services = new ServiceCollection();

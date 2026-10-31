@@ -64,8 +64,8 @@ disabled. These rules apply to **human accounts**: the `emergency` account (D-13
 OPS-BOOT-002) and the non-human principals of IDN-PRIN-001 SHALL hold no identifier of
 any kind, SHALL never sign in interactively (`emergency` acts only through `/auth/break-glass`;
 IDN-PRIN-001 principals are constructed in code and have no sign-in) and SHALL have no
-security-notice set (REG-IDENT-002); every use of `emergency` alerts the owner
-destinations (D-129), which are its only channel.
+security-notice set (REG-IDENT-002); every use of `emergency` raises an alert the host
+delivers (D-129, D-225).
 
 *Source: D-146, D-147; supersedes IDN-LIFE-001 (phone verification) and the phone part of D-013*
 
@@ -99,8 +99,7 @@ channel.
    procedure of OPS-CFG-002.
 5. No request adds an identifier to `emergency` or to a non-human principal; neither
    appears at any identifier sign-in path; a security notice is never addressed to
-   either, and every use of `emergency` reaches the owner destinations regardless of
-   `alerting.owner.enabled` (OPS-ALERT-004).
+   either, and every use of `emergency` raises its alert (OPS-BOOT-002).
 
 ---
 
@@ -561,7 +560,7 @@ PRIV-MINOR-001's "date of birth SHALL NOT be collected"*
 
 The screen is neutral so that it does not announce what answer passes. The affirmation
 verifies nothing; what makes self-declaration proportionate is that a wrong answer has a
-defined outcome (`14-takedown-procedure`).
+defined outcome: the takedown (`01` IDN-LIFE-003).
 
 **Acceptance criteria**
 1. No identifier field is shown or accepted before the age screen is answered.
@@ -966,18 +965,23 @@ done step (`18` FE-REC-003).
 left for later, and SHALL return the person, signed in, to the **origin of the
 registered return address** of the application named by the client identifier captured
 at step 1, never to an address supplied in any request (API-REDIR-001, API-REDIR-002).
-The client captured at step 1 SHALL be kept on the session the terms step establishes,
-and the done step SHALL read its origin from `GET /auth/session` (`landing`); where no
-client was stored, `landing` is absent and the frontend chooses its own (API-REDIR-002,
-D-198). The landing address SHALL receive a signed-in session and nothing else;
-restoring what the person was doing is the application's responsibility.
+The client captured at step 1 SHALL be kept on the session record the terms step
+establishes, so every application session bound to that record answers it, the account
+application's, where the done step runs, among them (D-224), and the done step SHALL
+read its origin from `GET /auth/session` (`landing`); where no client was stored,
+`landing` is absent and the frontend chooses its own (API-REDIR-002, D-198). The landing
+address SHALL receive a signed-in session and nothing else; restoring what the person
+was doing is the application's responsibility.
 
-*Source: D-146, D-162, D-166; D-057, D-198*
+*Source: D-146, D-162, D-166; D-057, D-198, D-224*
 
 **Acceptance criteria**
 1. No registration step accepts or forwards a destination parameter.
 2. The return lands on the origin of the client's registered return address, read from
    `GET /auth/session`, with an established session.
+3. `GET /auth/session` on the account application, after its sign-on from the record
+   the terms step established, answers the same `landing` the authentication
+   application does.
 
 ---
 
@@ -1186,7 +1190,7 @@ generic, and DNS verification is what every comparable product requires.
 
 **REG-MAIL-001** — Where the organization is the administrative organization and the
 deployment has a mail server registered (the shipped adapter or the host's own; `05`
-INT-MAIL-006, INT-MAIL-009), the invitation SHALL name a **personal email**, to which
+INT-MAIL-001, INT-MAIL-006), the invitation SHALL name a **personal email**, to which
 the invitation link is sent, and the account SHALL NOT be created until that address is
 verified: the press on the invitation link in the registering browser (REG-SESS-003) is
 the verification, and the person does nothing further for it. The personal email SHALL
@@ -1245,24 +1249,24 @@ security notices reach the personal address as well.
 ---
 
 **REG-MAIL-002** — Mail app passwords SHALL be created, listed and revoked **from the
-account application through the library**: the library holds a first-party OIDC client
-for the mail server (AUTH-OIDC-001), obtains a token for the signed-in person, makes the
-server's app-password call, shows the generated secret **once** and stores nothing.
-Creation and revocation SHALL be step-up actions, notified to the security-notice set
-and audited. Each app password SHALL carry a label and MAY carry an expiry. The three
-operations SHALL be present only where the account holds a mailbox the mail server is
-told to enable (INT-MAIL-006); otherwise, and where the deployment registers no mail
-server, each SHALL answer `identity.mailbox.notfound`. A mailbox is owed `enabled` while
-its holder is `active` or `restricted`: a restriction the person asked for does not cut
-them off from their mail or end their app passwords. A `restricted` account SHALL list
-and revoke its app passwords and SHALL be refused creation with `authz.restricted`
-(IDN-ACCT-007). A creation from the break-glass session or a session another application
-opened from it (BFF-SESS-006) SHALL be refused with `authz.denied` at the operation's
-gate step, before the mailbox is looked up (OPS-BOOT-002). A creation the gate refuses
-when it is asked again after the server's call is revoked at the server, its secret
-never shown, and is neither notified nor audited as a creation or a revocation; where
-that revocation fails, the password, whose secret nobody holds, stays listed for its
-holder to revoke (INT-MAIL-010, D-186).
+account application through the library**: the library makes the server's app-password
+call with the mail server's management key on the person's account (INT-MAIL-010,
+D-226), shows the generated secret **once** and stores nothing. Creation and revocation
+SHALL be step-up actions, notified to the security-notice set and audited. Each app
+password SHALL carry a label and MAY carry an expiry. The three operations SHALL be
+present only where the account holds a mailbox the mail server is told to enable
+(INT-MAIL-006); otherwise, and where the deployment registers no mail server, each SHALL
+answer `identity.mailbox.notfound`. A mailbox is owed `enabled` while its holder is
+`active` or `restricted`: a restriction the person asked for does not cut them off from
+their mail or end their app passwords. A `restricted` account SHALL list and revoke its
+app passwords and SHALL be refused creation with `authz.restricted` (IDN-ACCT-007). A
+creation from the break-glass session or a session another application opened from it
+(BFF-SESS-006) SHALL be refused with `authz.denied` at the operation's gate step, before
+the mailbox is looked up (OPS-BOOT-002). A creation the gate refuses when it is asked
+again after the server's call is revoked at the server, its secret never shown, and is
+neither notified nor audited as a creation or a revocation; where that revocation fails,
+the password, whose secret nobody holds, stays listed for its holder to revoke
+(INT-MAIL-010, D-186).
 
 *Source: D-146, D-166, D-179, D-186; amends D-006 (managed through the library, stored
 by the mail server)*

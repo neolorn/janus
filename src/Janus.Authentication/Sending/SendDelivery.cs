@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Janus.Core;
 
 namespace Janus.Authentication.Sending;
@@ -37,35 +38,49 @@ internal sealed record SendDelivery(
     public DateTimeOffset NextAttemptAt { get; init; }
 
     /// <summary>
-    /// The admitted message as the handler that carries it receives it, with none of the
-    /// restrictions' inputs.
+    /// The languages the message goes out in: the recipient's, or every declared one in
+    /// the order of <c>notification.languages</c> as it stood at the admission
+    /// (IDN-ATTR-001).
+    /// </summary>
+    public IReadOnlyList<string> Languages { get; init; } = [];
+
+    /// <summary>
+    /// The admitted message as the host's handler receives it, with none of the
+    /// restrictions' inputs (INT-SMS-006).
     /// </summary>
     public SendRequest Admitted =>
-        new(Requested.Destination, Requested.Message, Requested.Language, Reference)
-        {
-            Subject = Requested.Subject,
-            Values = Requested.Values,
-        };
+        new(
+            Reference,
+            Requested.Message,
+            Requested.Kind,
+            Requested.Subject,
+            Requested.Destination.Canonical,
+            Languages,
+            Requested.Values);
 
     /// <summary>
     /// A message just admitted.
     /// </summary>
     /// <param name="message">What was undertaken.</param>
+    /// <param name="languages">The languages it goes out in.</param>
     /// <param name="reference">The reference drawn for it.</param>
     /// <param name="recordedAt">When it was admitted.</param>
     /// <param name="held">How long after its admission the row is due for a pass.</param>
     /// <returns>The delivery.</returns>
-    /// <exception cref="ArgumentNullException">The message is absent.</exception>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static SendDelivery Of(
         OutboundMessage message,
+        IReadOnlyList<string> languages,
         SendReference reference,
         DateTimeOffset recordedAt,
         TimeSpan held)
     {
         ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(languages);
 
         return new SendDelivery(SendDeliveryId.Of(recordedAt), recordedAt, message, reference)
         {
+            Languages = languages,
             NextAttemptAt = recordedAt + held,
         };
     }

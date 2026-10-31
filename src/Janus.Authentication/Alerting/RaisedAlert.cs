@@ -3,7 +3,7 @@ using Janus.Core;
 namespace Janus.Authentication.Alerting;
 
 /// <summary>
-/// One raised condition, kept until the alert channels have carried it.
+/// One raised condition, kept until the host's alert handler has taken it.
 /// </summary>
 /// <param name="Id">What it is kept under.</param>
 /// <param name="Raised">The condition as it was raised.</param>

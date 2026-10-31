@@ -23,6 +23,13 @@ internal sealed class LossReportStoreInMemory : ILossReportStore
         ValueTask.FromResult(_running.GetValueOrDefault(credential));
 
     /// <inheritdoc/>
+    public ValueTask<LossReport?> FindByCancelAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_running.Values.SingleOrDefault(
+            report => report.CancelFingerprint.AsSpan().SequenceEqual(fingerprint)));
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(LossReport report, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(report);

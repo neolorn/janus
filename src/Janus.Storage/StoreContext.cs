@@ -10,7 +10,6 @@ using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
-using Janus.Storage.Authentication.Maintenance;
 using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
@@ -325,11 +324,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<ThrottleRecord> ThrottleCounters => Set<ThrottleRecord>();
 
     /// <summary>
-    /// What the messaging gateway said its account stood at.
-    /// </summary>
-    public DbSet<BalanceReadingRecord> SmsBalanceReadings => Set<BalanceReadingRecord>();
-
-    /// <summary>
     /// The addresses told that no account holds them.
     /// </summary>
     public DbSet<NoticeRecord> NonexistenceNotices => Set<NoticeRecord>();
@@ -371,7 +365,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<AlertRecord> Alerts => Set<AlertRecord>();
 
     /// <summary>
-    /// The conditions raised and not yet carried by the alert channels.
+    /// The conditions raised and not yet handed to the host's alert handler.
     /// </summary>
     public DbSet<RaisedAlertRecord> RaisedAlerts => Set<RaisedAlertRecord>();
 
@@ -419,6 +413,12 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// </summary>
     public DbSet<PreAuthenticationRecord> PreAuthenticationSessions =>
         Set<PreAuthenticationRecord>();
+
+    /// <summary>
+    /// The authorization requests browsers have waiting for their sign-in.
+    /// </summary>
+    public DbSet<PendingAuthorizationRecord> PendingAuthorizations =>
+        Set<PendingAuthorizationRecord>();
 
     /// <summary>
     /// The identifiers of live accounts waiting to be proved.
@@ -539,16 +539,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<KeyRotationRecord> KeyRotations => Set<KeyRotationRecord>();
 
     /// <summary>
-    /// The licences and permits whose expiry the system warns of.
-    /// </summary>
-    public DbSet<LicenceRecord> Licences => Set<LicenceRecord>();
-
-    /// <summary>
-    /// The maintenance log: each recurring task performed and each review made.
-    /// </summary>
-    public DbSet<MaintenanceEntryRecord> MaintenanceLog => Set<MaintenanceEntryRecord>();
-
-    /// <summary>
     /// The records each person was given, counted by day.
     /// </summary>
     public DbSet<ReadVolumeRecord> ReadVolume => Set<ReadVolumeRecord>();
@@ -619,7 +609,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new SendGrantConfiguration());
         modelBuilder.ApplyConfiguration(new SendConfiguration());
         modelBuilder.ApplyConfiguration(new ThrottleConfiguration());
-        modelBuilder.ApplyConfiguration(new BalanceReadingConfiguration());
         modelBuilder.ApplyConfiguration(new NoticeConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackEventConfiguration());
@@ -636,6 +625,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new RecordOfferConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
+        modelBuilder.ApplyConfiguration(new PendingAuthorizationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
         modelBuilder.ApplyConfiguration(new ChallengeConfiguration());
         modelBuilder.ApplyConfiguration(new VerificationCodeConfiguration());
@@ -670,8 +660,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new LawfulBasisConfiguration());
         modelBuilder.ApplyConfiguration(new BackgroundJobConfiguration());
         modelBuilder.ApplyConfiguration(new KeyRotationConfiguration());
-        modelBuilder.ApplyConfiguration(new LicenceConfiguration());
-        modelBuilder.ApplyConfiguration(new MaintenanceEntryConfiguration());
         modelBuilder.ApplyConfiguration(new ReadVolumeConfiguration());
         modelBuilder.ApplyConfiguration(new ReadBaselineConfiguration());
         modelBuilder.ApplyConfiguration(new BulkExportConfiguration());

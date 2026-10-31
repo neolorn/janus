@@ -836,7 +836,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-LIFE-009a, AUTH-ABUSE-004 AC8: the link of an invitation that was issued is
-    /// carried once its transaction has committed and not before, so a transport that
+    /// carried once its transaction has committed and not before, so a handler that
     /// refuses it later leaves the invitation standing and the link to the publisher.
     /// </summary>
     [Fact]
@@ -2608,7 +2608,15 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private InvitationService ServiceWithout => Serving(server: null);
 
     private MailboxPublisher Publisher =>
-        new(_mailboxes, new MailServerInUseInMemory(_server), _configuration, new EventsInMemory(), _work, _clock, _randomness);
+        new(
+            _mailboxes,
+            new MailServerInUseInMemory(_server),
+            _configuration,
+            new EventsInMemory(),
+            _work,
+            _clock,
+            _randomness,
+            new MailServerFaultsInMemory());
 
     private static InvitationRequest Request(
         string? email = null,

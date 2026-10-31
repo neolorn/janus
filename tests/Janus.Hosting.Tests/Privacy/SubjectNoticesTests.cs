@@ -36,15 +36,6 @@ public sealed class SubjectNoticesTests : IAsyncDisposable
     {
         Flow.Prepare(_deployment);
 
-        foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-        {
-            _deployment.Templates.Set(
-                MessageKind.PrivacyRequestReceived,
-                kind,
-                Language,
-                new MessageTemplate(kind is SendKind.Email ? "receipt" : null, "body"));
-        }
-
         _subject = SubjectId.New(_randomness);
 
         _deployment.Accounts.Stands(_subject, AccountState.Active);
@@ -128,7 +119,7 @@ public sealed class SubjectNoticesTests : IAsyncDisposable
 
         _ = await _deployment.CarrySendsAsync();
 
-        Assert.Equal(address, Assert.Single(_deployment.Mail.Taken).Destination.Value);
+        Assert.Equal(address, Assert.Single(_deployment.Mail.Taken).Destination);
         Assert.Empty(_deployment.Sms.Taken);
     }
 

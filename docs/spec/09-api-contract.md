@@ -15,22 +15,20 @@ committed contract file generated from the endpoint data source, which a contrac
 checks and the release gate judges (REF-001 AC2, D-166). Under each endpoint the file
 lists every status it answers and the codes each carries: the codes its row below gives
 and those the text of its section or subsection gives the routes that text governs,
-before or after a table, which the endpoint declares (`08` CONV-DESIGN-006, D-187), and
-422 `integration.sms.balancefloor`, which an endpoint declares where its row answers
-`auth.restriction.exceeded` for a send that may go by SMS, an ask of AUTH-ABUSE-003
-excepted (AUTH-ABUSE-006, D-186), each under the status `10` gives it (a code a
-navigation route carries in the query member `error` is listed under its redirect
-instead, CONV-DESIGN-006, D-192); and the answers its mounting gives it, where its row
-does not give them, which the file derives and nothing declares: 401
-`auth.session.expired` where it requires a session, 403 `auth.session.csrfinvalid` where
-the request-forgery layers of `17` section 4 apply to it, and 400
-`api.request.malformed` where it reads a body or binds a typed route or query value (a
-navigation route binds none: it takes each value as text, judges it itself, and declares
-the `api.request.malformed` it carries in `error`, the sign-on `auth.session.expired`
-instead, CONV-DESIGN-006, D-193). What the pipeline answers whatever the endpoint (429
-`auth.throttled` from the browser profile's source-based rate limiting, 404
-`authz.resource.notfound` for a path or method no endpoint serves, 500 `system.fault`)
-is listed once, beside the stage order, and not under each endpoint (D-183).
+before or after a table, which the endpoint declares (`08` CONV-DESIGN-006, D-187), each
+under the status `10` gives it (a code a navigation route carries in the query member
+`error` is listed under its redirect instead, CONV-DESIGN-006, D-192); and the answers
+its mounting gives it, where its row does not give them, which the file derives and
+nothing declares: 401 `auth.session.expired` where it requires a session, 403
+`auth.session.csrfinvalid` where the request-forgery layers of `17` section 4 apply to
+it, and 400 `api.request.malformed` where it reads a body or binds a typed route or
+query value (a navigation route binds none: it takes each value as text, judges it
+itself, and declares the `api.request.malformed` it carries in `error`, the sign-on
+`auth.session.expired` instead, CONV-DESIGN-006, D-193). What the pipeline answers
+whatever the endpoint (429 `auth.throttled` from the browser profile's source-based rate
+limiting, 404 `authz.resource.notfound` for a path or method no endpoint serves, 500
+`system.fault`) is listed once, beside the stage order, and not under each endpoint
+(D-183).
 
 ---
 
@@ -301,6 +299,13 @@ authentication credential and is refused at every sign-in endpoint (AUTH-FACT-00
 The same endpoint shape serves adding an identifier to an existing account
 (`POST /account/identifiers/{id}/verify`).
 
+**`{id}` beside a link token (D-224).** Where the request presents a `linkToken`, `{id}`
+is not read: the token names the identifier it verifies, and a landing page, whose link
+carries no identifier (FE-VER-001), sends the nil UUID,
+`00000000-0000-0000-0000-000000000000`. The same holds at every route that takes a
+message's link token under an `{id}`: `POST /account/identifiers/{id}/verify`, `/undo`
+and `/abandon`, and `POST /recovery/report-loss/{id}/cancel`.
+
 ---
 
 ### `GET /register/events`
@@ -315,6 +320,10 @@ identifier of the state became verified), `step-completed` (`step` advanced) or
 and streaming are one shape (D-153); the `data` of `session-ended` is the last state the
 session held. Where the stream is unavailable the frontend polls `GET /register`
 (FE-VER-001).
+
+The stream sends its headers and a comment line at once, and a comment line every 30
+seconds while it sends nothing else, so a client knows it is connected and an idle proxy
+keeps it open (D-224).
 
 **200**: event stream
 **401** is never used here (API-CONV-003); a request without the session cookie
@@ -367,7 +376,7 @@ that on the same screen). No `pending` account exists to hold a password.*
 
 ## 3. Authentication
 
-### `POST /enrol/begin` · the enrolment session
+### `POST /enrol/begin` · `GET /enrol` · the enrolment session
 
 Consumes an **enrolment link token**, the admin-assisted recovery link
 (AUTH-RECOV-002), delivered to a recorded channel and landing on a frontend route
@@ -383,22 +392,23 @@ already holds an account, a sign-in followed by the membership step (REG-INV-002
 
 **200** — an **enrolment session**: no application access, valid for the remainder
 of the link's own lifetime (`recovery.link.lifetime`, default 1 hour; no separate
-constant, D-147), usable only against the endpoints below
+constant, D-147), usable only against the endpoints below; the body is the enrolment
+document `GET /enrol` answers
 **422** — `auth.recovery.tokenexpired`, `auth.enrolment.tokeninvalid`
 
-Within the enrolment session the person MAY call: `POST /account/password`,
-`/auth/webauthn/register/*`, `/account/factors/totp/*` (set a password or enrol a
-passkey; for a recovery, replacing what was lost), and, for a recovery whose approver
-recorded the mailbox as lost, `PUT /account/identifiers/{id}/replace` completing on the
-**new address alone** (AUTH-RECOV-002: the approver's recorded confirmation stands in
-for the old address; the exception is stated in REG-IDENT-007),
-`POST /account/identifiers/{id}/verify` for that replace's pending verification alone (a
-code naming any other is answered as one naming no pending verification of the account,
-**422** `auth.code.invalid`, and a press as one that opens nothing, **422**
-`auth.code.expired`; that replace's link lands on the authentication application, where
-the enrolment session is held, and a press of it there verifies, as a press in the
-browser that staged any replace does, REG-SESS-003, D-190), and
-`POST /account/recoverycodes/exported` for the codes a second step enrolled beside a
+Within the enrolment session the person MAY call: `GET /enrol`,
+`POST /account/password`, `/auth/webauthn/register/*`, `/account/factors/totp/*` (set a
+password or enrol a passkey; for a recovery, replacing what was lost), and, for a
+recovery whose approver recorded the mailbox as lost,
+`PUT /account/identifiers/{id}/replace` completing on the **new address alone**
+(AUTH-RECOV-002: the approver's recorded confirmation stands in for the old address; the
+exception is stated in REG-IDENT-007), `POST /account/identifiers/{id}/verify` for that
+replace's pending verification alone (a code naming any other is answered as one naming
+no pending verification of the account, **422** `auth.code.invalid`, and a press as one
+that opens nothing, **422** `auth.code.expired`; that replace's link lands on the
+authentication application, where the enrolment session is held, and a press of it there
+verifies, as a press in the browser that staged any replace does, REG-SESS-003, D-190),
+and `POST /account/recoverycodes/exported` for the codes a second step enrolled beside a
 password shows (AUTH-RECOV-006; before its second step showed codes, **403**
 `authz.denied`, D-190). These are the only routes on which it is resolved: on any other
 route that requires a session, a request that carries it and no ordinary session holds
@@ -412,8 +422,31 @@ completing second step showed recovery codes, the report of their export complet
 the session staying open on its routes until then or the end of its lifetime
 (AUTH-RECOV-006, D-189).
 
+`GET /enrol`, on the enrolment session, answers the document the enrolment screen
+renders from (D-224):
+
+```json
+{
+  "username": "...",                  // the primary email, FE-PM-002's hidden field
+  "password": { "set": false, "changedAt": null },
+  "offers": ["password", "passkey", "totp"],
+  "mailboxLost": true,
+  "identifiers": [ { "id": "...", "value": "...", "primary": true } ],
+  "expiresAt": "..."
+}
+```
+
+`offers` names each of `password`, `passkey`, `securityKey` and `totp` that the policy
+in force holds in `loginFactors`, the credentials the session may set; the two second
+steps need a password set beside them (FE-SEC-001). `identifiers` lists the account's
+emails where `mailboxLost` is true, so the replace names the one it replaces, and is
+empty otherwise. A password set on the session is refused **422**
+`auth.factor.notpermitted` where `loginFactors` does not hold `password`
+(`POST /account/password`). **401** `auth.session.expired` with no `details` where the
+request carries no live enrolment session.
+
 *Source: D-148; AUTH-RECOV-002, AUTH-RECOV-005, API-LAND-001, D-140, D-146, D-147,
-D-188, D-189, D-190*
+D-188, D-189, D-190, D-224*
 
 ---
 
@@ -433,22 +466,37 @@ lives `link.magic.lifetime`.
 { "identifier": "..." }
 ```
 
-**202** · **429**: `auth.throttled` with `retryAt`, or, where a restriction refuses
-the send, `auth.restriction.exceeded` with `retryAt`, identical for a registered and an
+**202**: `{ "challengeId": "..." }` where the request opened the sign-in the link is
+issued on, `{}` where the link is issued on one the browser holds (D-230) · **429**:
+`auth.throttled` with `retryAt`, or, where a restriction refuses the send,
+`auth.restriction.exceeded` with `retryAt`, identical for a registered and an
 unregistered identifier (AUTH-ABUSE-002, AUTH-ABUSE-004)
 
-*Source: D-146; AUTH-FACT-002, AUTH-FACT-003, AUTH-ABUSE-003, AUTH-ABUSE-004, D-162, D-166, D-183*
+*Source: D-146; AUTH-FACT-002, AUTH-FACT-003, AUTH-ABUSE-003, AUTH-ABUSE-004, D-162, D-166,
+D-183, D-224, D-226, D-230*
 
 The link completes **only in the browser that requested it and only on a press**
-(REG-SESS-003): the landing route (API-LAND-001) calls `POST /auth/factor` with
-`factor: "emailLink"` or `"phoneLink"` and the link token, and the server accepts it
-only with the requesting browser's pre-authentication cookie. Opened anywhere else,
-the same call without that cookie returns the code to type where the sign-in began,
-and signs nothing in. That code is an authentication code, not a verification code: it
-lives as long as its link (`link.magic.lifetime`) and is capped by
-`code.signin.attempts` wrong tries, after which it is refused `auth.code.expired`, a
-correct one included (AUTH-FACT-004). A session established by a link alone records AAL1 and a link is
-never a second step (AUTH-FACT-003).
+(REG-SESS-003). It is issued on a challenge (D-226): the browser's latest live challenge
+opened with that identifier on which no factor has been accepted, or, where the browser
+holds none, one opened for the identifier as `/auth/begin` opens one, bound to the
+browser; the challenge lives at least as long as its link. Where the request opens the
+challenge, its answer carries the `challengeId`, so the code to type is presented on it;
+whether an answer carries one turns on the browser's challenges alone, the request
+opening one wherever the browser holds none, for an identifier that resolves to nothing,
+an address a domain lock refuses, a number reported as `risk` and a channel the policy
+has not enabled alike (AUTH-ABUSE-002, D-230). The landing route (API-LAND-001) calls
+`POST /auth/factor` with `factor: "emailLink"` or `"phoneLink"` and the link token, and
+the server completes the link's challenge only where the request carries the
+pre-authentication cookie that challenge is bound to. The call carries no `challengeId`:
+the token names its pending link and the challenge it belongs to, and a `challengeId`
+sent beside it is not read (D-224). Opened anywhere else, or where the challenge is
+bound to none, the same call returns the code to type where the sign-in began, presented
+at `/auth/factor` on that challenge, and signs nothing in. That code is an
+authentication code, not a verification code: it lives as long as its link
+(`link.magic.lifetime`) and is capped by `code.signin.attempts` wrong tries, after which
+it is refused `auth.code.expired`, a correct one included (AUTH-FACT-004). A session
+established by a link alone records AAL1 and a link is never a second step
+(AUTH-FACT-003).
 
 ---
 
@@ -520,7 +568,7 @@ the identifier resolves to nothing.
 }
 ```
 
-*Source: AUTH-FACT-002, AUTH-ABUSE-003, D-076, D-146*
+*Source: AUTH-FACT-002, AUTH-ABUSE-003, D-076, D-146, D-226*
 
 Every verified identifier of an account signs in, and a non-primary one behaves
 exactly as the primary (REG-IDENT-003). While `identifiers.username.enabled` is off a
@@ -536,6 +584,12 @@ allow-list, so issuing one reveals nothing about whether credentials exist.
 first factor succeeds. Returning "this account has no second factor" before any
 credential is presented hands an attacker exactly the targeting information they
 want.
+
+**The browser's challenge (D-226).** The challenge is bound, when it is opened, to the
+pre-authentication session the browser carries (BFF-CSRF-005a), or to none where it
+carries none, as a browser holding a live session does. A sign-in link's press and a
+fresh device code are judged against that binding (`POST /auth/link`,
+`POST /auth/device/resend`).
 
 ---
 
@@ -556,7 +610,8 @@ assurance.
   "phishingResistant": true,
   "required": [],                    // populated when status is factorRequired
   "webauthn": { },                   // where required names securityKey (AUTH-FACT-002b)
-  "trustDeviceOffered": true         // AUTH-FACT-015: policy permits trusting this browser
+  "trustDeviceOffered": true,        // AUTH-FACT-015: the completing call may trust it
+  "continueTo": "..."                // AUTH-SESS-012: where an authorization waits
 }
 ```
 
@@ -590,10 +645,15 @@ D-200).
 
 The request MAY carry `"trustDevice": true` on the call that completes a two-factor
 sign-in; where `trustDeviceOffered` is true the response sets the device-trust cookie
-(AUTH-FACT-015). A trusted-device cookie presented on a later sign-in satisfies the
-second factor, and `required` omits it. For a `restricted` account `trustDeviceOffered`
-is false and `trustDevice` is not honoured: the account signs in and reads, and records
-no credential (IDN-ACCT-007).
+(AUTH-FACT-015). Every **200** of a sign-in carries `trustDeviceOffered`: on a
+`factorRequired` answer whose `required` names a second step it says whether the call
+that completes the sign-in may carry `trustDevice`, so the screen offers the choice
+beside the second step, and a `complete` answer carries the same value; it is false on
+every other answer, a single-factor sign-in's and every step-up's among them (D-224). A
+trusted-device cookie presented on a later sign-in satisfies the second factor, and
+`required` omits it. For a `restricted` account `trustDeviceOffered` is false and
+`trustDevice` is not honoured: the account signs in and reads, and records no credential
+(IDN-ACCT-007).
 
 **422** — `auth.factor.rejected`, `auth.factor.notpermitted` (verification-only factor
 offered, or a second step presented at a sign-in before a first factor),
@@ -624,10 +684,11 @@ Never 401: that code is session death only (API-CONV-003, D-125).
 
 **Link tokens.** A call carrying a sign-in link's token names `factor` `emailLink` or
 `phoneLink`; any other factor with a `linkToken` is **400** `api.request.malformed`
-naming `factor`. A pressed token that opens no pending link is recorded as a failed
-authentication behind the source delay of AUTH-ABUSE-001 and answered `auth.code.expired`
-(**429** `auth.throttled` while the delay stands); an unpressed one changes and records
-nothing (CONV-LOG-005, D-166).
+naming `factor`; it needs no `challengeId`, the token naming its challenge, and a
+`challengeId` sent beside it is not read (D-224). A pressed token that opens no pending
+link is recorded as a failed authentication behind the source delay of AUTH-ABUSE-001
+and answered `auth.code.expired` (**429** `auth.throttled` while the delay stands); an
+unpressed one changes and records nothing (CONV-LOG-005, D-166).
 
 **Sign-in codes.** A code presented as `emailCode`, as the `phoneCode` second step, or
 where a sign-in link was opened in another browser is an authentication code
@@ -669,11 +730,17 @@ not a string (D-197).
 
 **New-device check** (AUTH-FACT-016). Where the factors presented would complete a
 sign-in at reachable assurance AAL1 from a browser the account has not seen, the call
-that would complete it instead returns **200** with `status: "deviceVerificationRequired"`
-(the sign-in status of `10`, a status and not a refusal code); no session is set. A code goes to the
-primary email under `email.destination`, and the sign-in completes at
-`POST /auth/device/verify`. A passkey sign-in and a completed two-step sign-in never
-see this status.
+that would complete it instead returns **200** with
+`status: "deviceVerificationRequired"` (the sign-in status of `10`, a status and not a
+refusal code); no session is set. A code goes to the primary email under
+`email.destination`, and the sign-in completes at `POST /auth/device/verify`. A passkey
+sign-in, a completed two-step sign-in, and a sign-in whose first factor was an
+`emailLink` or `emailCode` delivered to the primary email (or the code a page showed for
+such a link) never see this status; the last remembers the browser and emits
+`DeviceVerified` (D-224). Where `email.destination` refuses the code, the factor stays
+accepted and the sign-in stays held at the check: the call is answered **429**
+`auth.restriction.exceeded` with `retryAt`, and `POST /auth/device/resend` sends the
+code once the restriction allows it.
 
 **Grace period** (AUTH-FACT-017). Where the account does not yet meet a raised
 requirement and `policy.enforcement.grace` has not elapsed, the completing response
@@ -689,6 +756,13 @@ D-198, D-199, D-200*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
+
+**`continueTo`** (AUTH-SESS-012, D-224). Where the browser's pending authorization
+waits, the answer that completes the sign-in carries `continueTo`, the absolute address
+of `GET /oidc/authorize/continue` under the provider address, and the page sends the
+browser there; the member is absent otherwise. `POST /auth/device/verify` and
+`POST /auth/break-glass` carry it alike, and `GET /auth/session` gives it for a sign-in
+a navigation completed.
 
 Throttling responses are identical whether or not the account exists
 (AUTH-ABUSE-002).
@@ -717,6 +791,30 @@ The code is a verification code (AUTH-FACT-004), not a credential: it proves the
 browser, not the person, and raises no assurance property. The remembered browser is a
 separate record from a trusted device (AUTH-FACT-015), which skips a second factor;
 this one skips nothing.
+
+---
+
+### `POST /auth/device/resend`
+
+Sends a new code for a sign-in held by the new-device check (AUTH-FACT-016, D-224).
+
+```json
+{ "challengeId": "..." }
+```
+
+**202**: a new code sent to the primary email under `email.destination`; the code before
+it no longer verifies.
+**422**: `auth.code.expired` where the challenge holds no sign-in held at the check
+(completed, lapsed, never held, or bound to another browser), one answer for every cause
+**429**: `auth.restriction.exceeded` with `retryAt` where `email.destination` refuses
+the send; `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands
+
+*Source: AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-001, AUTH-ABUSE-004, D-224*
+
+The challenge is answered only with the pre-authentication cookie it is bound to
+(BFF-CSRF-005a), the one it was opened with (`POST /auth/begin`, D-226). A resend is a
+send: it counts against `email.destination` as the first code did, and each code lives
+`code.verification.lifetime` from its own send.
 
 ---
 
@@ -830,6 +928,48 @@ the session record itself stores properties only (AUTH-SESS-002).
 
 ---
 
+### `POST /auth/restore/begin` · `POST /auth/restore`
+
+AUTH-SESS-005's single-factor restore, on every application: a session that expired for
+inactivity inside its absolute window, under a policy requiring AAL2, is restored in
+place by one passkey or the password, and the frontend retries the request the expiry
+interrupted (FE-API-004, D-224). Both routes are carried by the expired session's
+cookie, which the browser keeps while the restore admits it and which these two routes
+alone read (`17` BFF-ORDER-001 stage 5), and by the CSRF token bound to the browser's
+pre-authentication session, the one the expiry's answer left in the CSRF cookie
+(BFF-STEP-001, D-226).
+
+```json
+{ }                                                       // begin
+{ "challengeId": "...", "factor": "passkey", "value": { } }   // restore
+```
+
+**200** at `begin`: `{ challengeId, factors, webauthn }`, `factors` naming each of
+`passkey` and `password` the account holds and the policy in force permits, `webauthn`
+the request options with `userVerification` `required` and `allowCredentials` naming the
+account's active passkeys.
+**200** at `POST /auth/restore`: `/auth/factor`'s shape at `complete`; the session
+record is restored and the identifier the cookie carries rotates, and every application
+session bound to the record lives again.
+**401**: `auth.session.expired` with `details.reauthenticate` `full` where the session
+may not be restored: none, its absolute window passed, a policy below AAL2, or a
+break-glass session (OPS-BOOT-002).
+**422**: a refused factor, answered and counted as at `/auth/factor`; a factor other
+than `passkey` or `password`, or one `factors` did not name, is
+`auth.factor.notpermitted` before it is verified.
+**429**: `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands.
+
+*Source: AUTH-SESS-005, BFF-STEP-001, FE-API-004, D-139, D-224, D-226*
+
+A passkey's assertion must name the session's account in its user handle and be one of
+the passkeys `begin` named, or it is `auth.factor.rejected`. The restore presents one
+factor bound to the session secret the browser still holds (NIST SP 800-63B-4 section
+2.2.3); it raises no assurance property beyond what that factor proves. A completed
+restore ends the browser's pre-authentication session as a completed sign-in does, and
+sets the restored session's cookie and CSRF token (D-226).
+
+---
+
 ### `POST /auth/logout`
 
 **204**
@@ -851,7 +991,8 @@ application.
   "phishingResistant": true,
   "lastStrongAuthAt": "...",   // when aal2 or above was last reached; null if never
   "expiresAt": "...",
-  "landing": "..."        // the origin of the client captured at registration; absent otherwise
+  "landing": "...",       // the origin of the client captured at registration; absent otherwise
+  "continueTo": "..."     // AUTH-SESS-012: where an authorization waits; absent otherwise
 }
 ```
 
@@ -862,9 +1003,12 @@ resource, never from the session (IDN-MEM-003, AUTHZ-SCOPE-001) — returning on
 would invite the frontend to reason from it.
 
 `landing` is the origin (scheme, host and port) of the registered address of the client
-a registration captured (API-REDIR-002), kept on the session the terms step established;
-the done step of registration reads it here and never from a request (REG-SESS-008,
-D-166).
+a registration captured (API-REDIR-002), kept on the session record the terms step
+established, so every application session bound to that record answers it, the account
+application's among them, where the done step runs; the done step of registration reads
+it here and never from a request (REG-SESS-008, D-166, D-224). `continueTo` is the
+address of the browser's pending authorization, for a sign-in a navigation completed (a
+social provider's return), as `POST /auth/factor` gives it (D-224).
 
 **401** — no valid session
 
@@ -927,6 +1071,46 @@ browser is sent nowhere
 
 *Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193, D-194, D-195, D-196,
 D-198*
+
+---
+
+### `GET /settings`
+
+The deployment's settings a frontend renders its screens from (D-224). Public and
+unauthenticated, answered with `Cache-Control: no-store`.
+
+```json
+{
+  "registration": { "phone": "required" },
+  "identifiers": { "emailMax": 10, "phoneMax": 10, "usernameEnabled": false },
+  "profile": { "legalName": "off", "dateOfBirth": "off" },
+  "password": { "floorSingleFactor": 15, "floorWithMfa": 10, "maximum": 128 },
+  "providers": [ "google" ],
+  "purposes": [ { "purpose": "...", "takes": "consent", "consentKind": "ordinary",
+                  "document": "privacy-notice" } ],
+  "policy": { "requiredAssurance": "aal1", "loginFactors": [ "password", "passkey" ],
+              "photos": false }
+}
+```
+
+Each value is the `10` section 4 key it is named for: `registration.phone`,
+`identifiers.email.max`, `identifiers.phone.max`, `identifiers.username.enabled`,
+`profile.legalname`, `profile.dateofbirth`, `password.floor.singlefactor`,
+`password.floor.withmfa` and `password.maximum`. `providers` lists the social providers
+the deployment declares (IDN-LIFE-012). `purposes` lists each purpose resting on consent
+or on an objectable basis: `takes` is `consent` or `objection`, `consentKind` the
+consent kind of `10` section 5.10 (null for an objection), and `document` the legal
+document that governs it (`privacy-notice` where it names none). `policy` holds the
+`requiredAssurance`, `loginFactors` and `photos` of the policy in force (AUTH-PRIN-002)
+for the account whose session the request carries, or of the organization whose
+invitation a registration session carries (REG-INV-001), and the system policy's where
+it carries neither. Nothing else is answered: no restriction, rate, secret or other
+field of a policy.
+
+**200**, always
+
+*Source: REG-IDENT-001, REG-IDENT-002, REG-PROF-001, AUTH-PASS-001, AUTH-PRIN-002,
+PRIV-BASIS-003, REG-INV-001, D-224*
 
 ---
 
@@ -1045,7 +1229,30 @@ factor. For a self-deactivated account, completing recovery also restores `activ
 
 *Source: AUTH-RECOV-005, D-140, D-147*
 
-**422** — `auth.recovery.tokeninvalid`, `auth.recovery.tokenexpired`
+**422** — `auth.recovery.tokeninvalid`, `auth.recovery.tokenexpired`; and, as the
+password's set refuses it, `auth.password.tooshort`, `auth.password.toolong` and
+`auth.password.blocklisted` (D-224)
+
+---
+
+### `POST /recovery/username`
+
+Reads the username a password manager pairs the reset form's new password with
+(FE-PM-002, D-224): the primary email of the account the self-service recovery link was
+issued for. It spends nothing; the token stays for `POST /recovery/complete`.
+
+```json
+{ "token": "..." }
+```
+
+**200** `{ "username": "..." }`
+**422**: `auth.recovery.tokeninvalid` where the token opens nothing,
+`auth.recovery.tokenexpired` where it is past its lifetime; each held first to the delay
+of AUTH-ABUSE-001 and counted against the source, as a link token that opens nothing is
+at `POST /register/verify/{id}`
+**429**: `auth.throttled` with `retryAt` while that delay stands
+
+*Source: AUTH-RECOV-005, FE-PM-002, AUTH-ABUSE-001, D-224*
 
 ---
 
@@ -1058,11 +1265,16 @@ and suspends it at once; or cancels a pending report.
 { "credentialId": "..." }
 ```
 
-**Accepts a session that has presented one usable factor, or one unused recovery
-code** — no step-up (AUTH-RECOV-007). The request exists for someone who has lost the
-factor a gate would ask for and cannot hold a complete session. Cancellation accepts the
-same, any full session of the account, or the link carried in every
-`credential-suspended` notification (AUTH-RECOV-007).
+**Accepts a session that has presented one usable factor, or one unused recovery code**
+— no step-up (AUTH-RECOV-007). The request exists for someone who has lost the factor a
+gate would ask for and cannot hold a complete session. Cancellation accepts the same,
+any full session of the account, or the link carried in every `credential-suspended`
+notification (AUTH-RECOV-007). Cancelled by the link, the request carries
+`{ "token": "..." }`, the token finds its report by its fingerprint and `{id}` is not
+read, the landing sending the nil UUID (D-224, D-226); a token that finds none is
+answered **404** `auth.credential.notfound`, as a wrong token is. A report already open
+when the fingerprint was added holds a random one no token matches, and is cancelled
+from a session (OPS-MIG-005, D-226).
 
 **202** — accepted; the authenticator is `suspended`; body carries `invalidatesAt`
 **404**: `auth.credential.notfound` for an authenticator invalidated, or not the
@@ -1097,8 +1309,7 @@ step-up (`recovery:approve`).
 the gate step or at the second ask inside the unit of work, nothing approved and nothing
 sent (AUTHZ-GATE-006)
 **422** — `auth.recovery.reasonrequired`, `auth.recovery.channelnotonaccount`,
-`auth.recovery.selfapproval` (AUTH-RECOV-002a); `integration.sms.balancefloor` where the
-gateway floor refuses the link's SMS, and nothing is approved (AUTH-ABUSE-006)
+`auth.recovery.selfapproval` (AUTH-RECOV-002a)
 **429**: `auth.throttled` with `retryAt` past a rate limit of AUTH-RECOV-002;
 `auth.restriction.exceeded` with `retryAt` where a restriction refuses the link's send,
 and nothing is approved (AUTH-ABUSE-004)
@@ -1153,6 +1364,7 @@ and nothing else:
   "credentials": [ { "id": "...", "kind": "...", "label": "...", "state": "active",
                      "backupEligible": true, "backupState": true,
                      "addedAt": "...", "lastUsedAt": "..." } ],
+  "password": { "set": true, "changedAt": "..." },
   "secondStep": { "preferred": "..." },
   "recoveryCodes": { "remaining": 8, "generatedAt": "...", "viewedAt": "...", "exportedAt": null, "remindedAt": null },
   "profile": { "displayName": "...", "legalName": "...", "dateOfBirth": "...", "photo": "..." },
@@ -1169,8 +1381,13 @@ before either (AUTH-FACT-008). An identifier being added is listed with `verifie
 under the identifier of its pending verification, which it keeps once verified
 (REG-IDENT-004).
 
+`password` says whether a password is set and when it was last set, `changedAt` null
+where none is (D-224); the screens that hold the second-step controls disabled until a
+password exists read it here (FE-SEC-001). The credential list holds the authenticators,
+never the password, and `GET /account/credentials` lists the same.
+
 *Source: D-146; REG-ACCT-001, AUTH-FACT-001, AUTH-FACT-008, AUTH-FACT-009, D-166, D-186,
-D-187*
+D-187, D-224*
 
 ---
 
@@ -1261,8 +1478,8 @@ Verifies an added identifier, or the new value of a replace: same request, respo
 browser binding as `POST /register/verify/{id}` (REG-SESS-003), a typed code or a link
 pressed in the browser that added it. It also takes the old address's confirmation of a
 replace (`identifier-confirm`, REG-IDENT-007): link-borne, needing no session and bound
-to no browser, a press with its `linkToken` and `press` confirms from any browser, under
-the `{id}` its landing names as an `identifier` link's does, and a press after
+to no browser, a press with its `linkToken` and `press` confirms from any browser, the
+token naming the pending verification and `{id}` not read (D-224), and a press after
 `code.verification.lifetime` from its send changes nothing and is answered **422**
 `auth.code.expired`. A pressed token that opens nothing (swept, abandoned, superseded by
 a restaged add or replace, or never issued) is **422** `auth.code.expired`, and a code
@@ -1339,11 +1556,11 @@ states (D-197).
 
 Restores a removed identifier from the undo link (REG-IDENT-006). **Link-borne**: the
 account has no session that could reach this on its own after a hostile removal, so it
-accepts the link token from the undo notice, the same shape as deletion cancellation.
-Where the identifier is the number a `phoneCode` credential was bound to, the undo
-restores the number, never the credential; where an undo displaces a number a
-`phoneCode` credential is bound to, that credential is taken out of use as at a replace
-(AUTH-FACT-002, D-197).
+accepts the link token from the undo notice, the same shape as deletion cancellation;
+`{id}` is not read, the token naming the identifier (D-224). Where the identifier is the
+number a `phoneCode` credential was bound to, the undo restores the number, never the
+credential; where an undo displaces a number a `phoneCode` credential is bound to, that
+credential is taken out of use as at a replace (AUTH-FACT-002, D-197).
 
 ```json
 { "linkToken": "..." }
@@ -1416,7 +1633,8 @@ states (D-197).
 Ends the pending verification of an identifier staged by `POST /account/identifiers`
 or `PUT /account/identifiers/{id}/replace`: the ending control of an add or replace
 link opened in a browser other than the one that staged it (REG-SESS-003, FE-VER-001).
-**Link-borne**: it accepts the link token from the message and needs no session.
+**Link-borne**: it accepts the link token from the message and needs no session;
+`{id}` is not read, the token naming the pending verification (D-224).
 
 ```json
 { "linkToken": "..." }
@@ -1553,9 +1771,12 @@ Sets or changes a password while signed in. Requires step-up at the gate the
 subject's policy declares (AUTH-STEP-002).
 
 **204**
-**422**: `auth.password.blocklisted`, `auth.password.tooshort`, `auth.password.toolong`
+**422**: `auth.password.blocklisted`, `auth.password.tooshort`, `auth.password.toolong`;
+`auth.factor.notpermitted` where the policy in force does not hold `password` in
+`loginFactors`, on every session, an enrolment session's included, judged before the
+password is screened (D-224)
 
-*Source: AUTH-PASS-004, AUTH-PASS-001a, AUTH-RECOV-007a, D-092, D-162, D-166*
+*Source: AUTH-PASS-004, AUTH-PASS-001a, AUTH-RECOV-007a, D-092, D-162, D-166, D-224*
 
 The floor applied follows the account's reachable assurance **now**: ten where it is
 AAL2, fifteen where it is AAL1 (AUTH-PASS-001a).
@@ -1772,20 +1993,20 @@ is `POST /auth/logout` (AUTH-SESS-008).
 
 ### `GET /account/mail/apppasswords` · `POST /account/mail/apppasswords` · `DELETE /account/mail/apppasswords/{id}`
 
-Mail **app passwords**, managed through the library's first-party OIDC client for the
-mail server (REG-MAIL-002, INT-MAIL-010). The library obtains a token for the signed-in
-person, makes the server's app-password call and stores **nothing**. Present only where
-the account is `active` or `restricted` and holds a mailbox the mail server is told to
-enable (INT-MAIL-006); otherwise, and where the deployment registers no mail server,
-each answers **404** `identity.mailbox.notfound`. A `restricted` account lists and
-revokes its app passwords and creates none (IDN-ACCT-007). A creation from the
-break-glass session, or from a session another application opened from it
-(BFF-SESS-006), is refused **403** `authz.denied` at the operation's gate step, after
-the body is read and before the label is judged and the mailbox is looked up
-(OPS-BOOT-002, CONV-DESIGN-002): a creation without a `label` is **400** from any
-session, and an unusable label is **403** from either session and **422** from any
-other. Listing and revocation from either session answer **404**
-`identity.mailbox.notfound`, the reserved account holding no mailbox.
+Mail **app passwords**, managed by the library with the mail server's management key on
+the signed-in person's account (REG-MAIL-002, INT-MAIL-010, D-226). The library makes
+the server's app-password call and stores **nothing**. Present only where the account is
+`active` or `restricted` and holds a mailbox the mail server is told to enable
+(INT-MAIL-006); otherwise, and where the deployment registers no mail server, each
+answers **404** `identity.mailbox.notfound`. A `restricted` account lists and revokes
+its app passwords and creates none (IDN-ACCT-007). A creation from the break-glass
+session, or from a session another application opened from it (BFF-SESS-006), is refused
+**403** `authz.denied` at the operation's gate step, after the body is read and before
+the label is judged and the mailbox is looked up (OPS-BOOT-002, CONV-DESIGN-002): a
+creation without a `label` is **400** from any session, and an unusable label is **403**
+from either session and **422** from any other. Listing and revocation from either
+session answer **404** `identity.mailbox.notfound`, the reserved account holding no
+mailbox.
 
 ```json
 { "label": "...", "expiresAt": "..." }        // POST; expiresAt optional
@@ -1809,7 +2030,7 @@ session or a session opened from it (OPS-BOOT-002)
 no app password of the person under the identifier
 **422**: `auth.credential.labelinvalid`
 
-*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166, D-179, D-183, D-186, D-187*
+*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166, D-179, D-183, D-186, D-187, D-226*
 
 Creation and revocation are notified to the security-notice set and audited; no secret
 or hash appears in the library's database, logs or audit records. Ending a membership
@@ -1959,6 +2180,11 @@ email the lock could admit (REG-DOM-001)
 
 Emits `MembershipChanged` and, where a corporate address is taken on,
 `IdentifierAdded` and `IdentifierPrimaryChanged`.
+
+**What the client sees** (D-224). The **204** ends no session and sets no cookie. The
+session keeps reading, and its next request a gate asks a step-up for is answered
+**403** `auth.stepup.required`, its options judged under the organization's policy
+(AUTH-SESS-009); the frontend steps up in place and retries (FE-API-004).
 
 *Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183, D-187, D-212*
 
@@ -2142,7 +2368,7 @@ library's are: in `machine` under the keys `<section>.<index>.<value>`, the inde
 counting the section's records from 0 (D-206); in `human` grouped under the section in
 the same order, its labels read from the deployment's frontend message catalogue under
 the key `export/<section>` for a section and `export/<section>/<value>` for a value,
-which the host adds for its own (`18` FE-LOC-001); `/` and `.` are outside the names'
+which the host adds for its own; `/` and `.` are outside the names'
 rule and in no library name, so no two keys coincide. A contributor that fails or faults
 fails the export: **500** `system.fault`, nothing returned (D-203). **Neither is a
 rendered document.** The frontend renders the readable view and localizes it through the
@@ -2197,7 +2423,7 @@ and answers **201** with its state; `age` is required. `GET /records/collection`
 
 | Endpoint | Does |
 |---|---|
-| `POST /records/access` | `{ "kind": "email", "value": "..." }`: sends `record-access-code` where a reachable record holds the value as a contact verified at a collection, `record-access-none` otherwise, once per `abuse.nonexistent.window` (REC-ACC-001). **202** in identical bytes whatever is held, answered before any transport is called (AUTH-ABUSE-003, API-CONV-005). **422** `identity.identifier.invalid` for a value that is not a well-formed email or phone. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands; `auth.restriction.exceeded` with `retryAt` where a restriction refuses the send, the same whether or not a record holds the value (AUTH-ABUSE-002) |
+| `POST /records/access` | `{ "kind": "email", "value": "..." }`: sends `record-access-code` where a reachable record holds the value as a contact verified at a collection, `record-access-none` otherwise, once per `abuse.nonexistent.window` (REC-ACC-001). **202** in identical bytes whatever is held, answered before the notification handler is called (AUTH-ABUSE-003, API-CONV-005). **422** `identity.identifier.invalid` for a value that is not a well-formed email or phone. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands; `auth.restriction.exceeded` with `retryAt` where a restriction refuses the send, the same whether or not a record holds the value (AUTH-ABUSE-002) |
 | `POST /records/access/verify` | `{ "code": "..." }`: opens the record access session (REC-ACC-001). **200** with the state below. **422** `auth.code.invalid` for each of the first `code.signin.attempts` wrong codes, then `auth.code.expired`, as for a code past its lifetime or where no code was asked for in the browser. **429** `auth.throttled` with `retryAt` |
 | `GET /records/access` | **200** the state: `{ "expiresAt": "...", "records": [ { "subject": "...", "organization": "...", "organizationName": "...", "createdAt": "...", "state": "active" } ] }`, the records the session reaches |
 | `POST /records/access/reference` | `{ "reference": "..." }`, 1 to 64 characters after trimming: adds every reachable record holding the session's value and that reference (REC-ACC-001). **200** the state, whether or not one was added. **400** `api.request.malformed` naming `reference` outside its bounds. **429** `auth.throttled` with `retryAt` |
@@ -2427,9 +2653,9 @@ D-171).
 
 **200** — a time-boxed **auth session** (`breakglass.session.lifetime`) whose subject
 is the reserved `emergency` account (D-138), which holds the `system-administrator`
-role; the audit trail shows `emergency` as the actor, and every use alerts the owner
-destinations (D-129, D-147). The applications open from it as from any sign-in
-(BFF-SESS-006)
+role; the audit trail shows `emergency` as the actor, and every use raises an alert
+the host delivers to the owner (D-129, D-147, D-225). The applications open from it as
+from any sign-in (BFF-SESS-006)
 **400**: `api.request.malformed` naming `reason`
 **422**: `auth.breakglass.invalid`, for a code that is not 36 symbols of the alphabet
 once hyphens and spaces are set aside, whose groups do not all hold their check symbol,
@@ -2444,8 +2670,8 @@ refused attempt (OPS-BOOT-004, D-147)
 
 *Source: D-065, D-129, D-138, D-147; OPS-BOOT-004, D-166*
 
-Called by the frontend route `/break-glass` (FE-BG-001), which is what the envelope
-names; the owner never calls this endpoint directly.
+Called by the frontend route `/break-glass` (FE-BG-001); the holder of the credential
+never calls this endpoint directly.
 
 *Source: D-065, OPS-BOOT-002, D-129*
 
@@ -2475,8 +2701,7 @@ It is composed from the declaration and never from the request.
 Without this, one emergency exhausts the mechanism until the operator returns — which
 is the scenario it exists for.
 
-Every generation is audited and raises `breakglass-generated`, to the owner whatever
-`alerting.owner.enabled` holds (OPS-BOOT-004 AC2).
+Every generation is audited and raises `breakglass-generated` (OPS-BOOT-004 AC2).
 
 ---
 
@@ -2506,9 +2731,8 @@ Terminates every session and derived token for **one account**. Under
 
 *Source: D-077, D-166*
 
-Required by offboarding (`16-offboarding-procedure` step 1), which previously had only
-the system-wide operation available — so signing out one departing clerk would have
-signed out every customer.
+Previously only the system-wide operation existed, so signing out one departing clerk
+would have signed out every customer (D-077).
 
 ---
 
@@ -2557,15 +2781,11 @@ read with `protected: true` and refused on `PUT`. A `policy.default` whose `phot
 **200** / **204**
 **400**: `api.request.malformed` naming `key` where `{key}` is none of the keys the route
 serves; naming `reason` where it is longer than 1024 characters after trimming
-**403**: `auth.stepup.required`, for a **loosening** change (`config:loosen`) and for
-any change of an `alerting.*.destinations` key (`alerting:destinations`); `authz.denied`
-for a loosening by a caller without `system:administer` in the administrative
-organization
-**409**: `config.change.superseded`, for a change of an `alerting.*.destinations` key
-whose value in force changed after its previous destinations were notified
-(OPS-ALERT-004a)
+**403**: `auth.stepup.required`, for a **loosening** change (`config:loosen`);
+`authz.denied` for a loosening by a caller without `system:administer` in the
+administrative organization
 **422**: `config.value.belowfloor`, `config.value.aboveceiling`,
-`config.value.notallowed`, `config.key.protected`, `config.value.lastdestination`;
+`config.value.notallowed`, `config.key.protected`;
 `integration.endpoint.insecure`, `details.key` naming the key, for a value of
 `password.blocklist.selfhosted.address` that is not an absolute `https` address
 (INT-GEN-001, D-198); `config.change.reasonrequired`, `details.key` naming the key,
@@ -2817,9 +3037,6 @@ Self-service explanation for **non-concealed** types is `GET /account/explanatio
 
 | Endpoint | Does |
 |---|---|
-| `GET /admin/compliance/licences` | The licence and permit records as stored (OPS-MAINT-001) |
-| `PUT /admin/compliance/licences` | Replaces the licence and permit records the system warns on (OPS-MAINT-001); the body is the list of records, each keyed by the caller's `id`; two records under one `id` are refused **422** `api.request.invalid` (`details.member` `id`) |
-| `GET` · `POST /admin/compliance/maintenance` | Reads and appends the maintenance log (OPS-MAINT-001); the entry's actor is the signed-in subject; an entry dated after now is refused **422** `api.request.invalid` (`details.member` `performedAt`); no route changes or removes an entry |
 | `PUT /admin/compliance/assessments` | The three human-input fields of the records of processing (PRIV-ROPA-001): the data owner, the implemented organizational security measures, and the links to LIA, DPIA and TIA. A statement replaces the three whole: a field it omits, or sends as `null`, is cleared, and the links are the list it carries. `dataOwner` and `organizationalSecurityMeasures` are free text (API-CONV-002): trimmed, and refused **400** `api.request.malformed` naming the member where blank or longer than 1024 characters (D-183). The deployment holds one statement. **204** |
 
 ### Reads of organizations, members and people — D-218
@@ -2869,6 +3086,7 @@ Standard endpoints for first-party, manually registered clients.
 | `POST /oidc/par` | Pushed Authorization Request (RFC 9126): the client posts the authorization parameters over the back channel and receives a single-use `request_uri` valid for 60 seconds; required for every client (AUTH-OIDC-006, D-164); a `redirect_uri` that is not exactly the client's registered destination is refused with `invalid_request` and no `request_uri` is issued (RFC 9126 section 2.1), and an absent one takes the registered destination; a browser application's request asking for `offline_access` is refused with `invalid_request` (AUTH-OIDC-002) |
 | `GET /oidc/authorize` | Authorization code with PKCE, by `request_uri` from `/oidc/par` only; direct parameters are refused with `invalid_request` — **redirects to the authentication application; never renders a page**. Honours `prompt=none` for silent sign-on (AUTH-SESS-012) |
 | `POST /oidc/token` | Token issuance and refresh — machine profile (BFF-MACH-001) |
+| `GET /oidc/authorize/continue` | The continuation of the browser's pending authorization (AUTH-SESS-012, D-224): with a live session, the code to the client's registered destination, as `/oidc/authorize` answers it; with none pending, a **302** to the origin of the registered address of `redirect.defaultclient`, or to `/` while that key is empty (API-REDIR-001, D-228). Never renders a page |
 | `GET /oidc/userinfo` | Claims, by scope (D-153): `openid` gives `sub`; `email` gives `email` and `email_verified` (the primary email); `profile` gives `name` (display name), `preferred_username` where `identifiers.username.enabled`, and `locale` (language preference). Nothing else is issued: no phone, legal name, date of birth or photo |
 
 **Deliberately absent:** token introspection, dynamic client registration, consent
@@ -2884,16 +3102,31 @@ answered to the browser in the API-CONV-002 body (LIB-API-003, D-166).
 than rendering a sign-in page. A conventional OIDC provider renders one; this one does
 not, because the library never renders user-facing text (D-054).
 
-*Source: AUTH-OIDC-001, AUTH-KEY-001, D-041, D-166, D-181*
+**The pending authorization** (AUTH-SESS-012, D-224). A request that finds no live
+session and is not silent is kept, its pushed request spent, as the browser's pending
+authorization, bound to its pre-authentication session (one a browser, a later one
+replacing it) for `oidc.continuation.lifetime`, and the browser goes to the sign-in
+address. The rotation at the completed sign-in carries it over to the session it
+establishes (AUTH-SESS-006, D-226). The answer that completes the sign-in carries
+`continueTo`, the continuation's absolute address, and the authentication application
+sends the browser there; the continuation finds the pending authorization on the session
+the browser carries.
 
-**Two kinds of client share the registry.** Protocol clients (Stalwart, future native
-clients) receive access and refresh tokens (AUTH-OIDC-003, AUTH-OIDC-004). **Each
-browser application's BFF is a confidential client** that uses the code flow once to
-establish its per-app session and receives **no refresh token** (AUTH-SESS-012,
-BFF-SESS-006, D-104). The kind is recorded on the client and determines what the
-token endpoint will issue. Every client carries one registered `redirect_uri`, an
-absolute `https` address (or `http` on a loopback IP literal), matched exactly at the
-push (AUTH-OIDC-006, API-REDIR-001 AC3).
+**The provider's address** (D-224). Every route of this section is served only under the
+provider address the host declares (LIB-HOST-001): the issuer is that address exactly,
+each route is that address followed by the route's path, and a request for one of them
+anywhere else is not the provider's and reaches the host's routing.
+
+*Source: AUTH-OIDC-001, AUTH-KEY-001, D-041, D-166, D-181, D-224*
+
+**Two kinds of client share the registry.** Protocol clients (a client a deployment
+registers for the mail server, INT-MAIL-004; future native clients) receive access and
+refresh tokens (AUTH-OIDC-003, AUTH-OIDC-004). **Each browser application's BFF is a
+confidential client** that uses the code flow once to establish its per-app session and
+receives **no refresh token** (AUTH-SESS-012, BFF-SESS-006, D-104). The kind is recorded
+on the client and determines what the token endpoint will issue. Every client carries
+one registered `redirect_uri`, an absolute `https` address (or `http` on a loopback IP
+literal), matched exactly at the push (AUTH-OIDC-006, API-REDIR-001 AC3).
 
 Refresh tokens rotate on use; reuse of a consumed token revokes the session family
 (AUTH-OIDC-003).
@@ -2903,25 +3136,16 @@ Refresh tokens rotate on use; reuse of a consumed token revokes the session fami
 ## 10. Callbacks
 
 Inbound from providers. Each follows INT-GEN-003: hostile input, unguessable references,
-rate-limited; an unsigned callback never advances an authoritative state by itself, save
-the releases INT-SMS-005 allows (BFF-MACH-003), and a verified, signed provider security
-event acts as IDN-LIFE-012a states. The library defines two callback endpoints of its
-own; a host mounts its own providers' callbacks on the same machine-profile pipeline
-(BFF-MACH-002, INT-GEN-003) under paths of its choosing, and those paths are not part of
-this contract.
+rate-limited; an unsigned callback never advances an authoritative state by itself, and
+a verified, signed provider security event acts as IDN-LIFE-012a states. The library
+defines one callback endpoint of its own, and takes no gateway's delivery report
+(INT-SMS-005, D-225); a host mounts its own providers' callbacks on the same
+machine-profile pipeline (BFF-MACH-002, INT-GEN-003) under paths of its choosing, and
+those paths are not part of this contract.
 
 | Endpoint | Source | Never does |
 |---|---|---|
-| `GET /callbacks/sms/dlr` | SMS gateway | Mark a phone verified |
 | `POST /callbacks/providers/{provider}` | Google (Cross-Account Protection) and Apple (server-to-server notifications); `{provider}` is `google` or `apple` | Act on an event its provider's published keys do not verify |
-
-A delivery report taken is answered **200** with no body: the acknowledgement a gateway
-expects, rather than API-CONV-003's success with a body. The transport reads the report
-(INT-SMS-005); a report of anything other than a final failure, an intermediate state
-included, is read as not failed and changes nothing, save a report that a text of a send
-of purpose `secondfactor` was delivered, which releases that send's one count from each
-restriction marked `resend` and nothing else, as AUTH-ABUSE-004 and INT-SMS-005 state
-(D-197).
 
 Google delivers the Security Event Token as the request body and follows RFC 8935: a
 carried or repeated event is answered **202** with no body; a token that fails
@@ -2954,15 +3178,14 @@ the provider delivers it again; one meeting an older unsettled claim takes it ov
 is carried (BFF-MACH-002).
 
 *Source: AUTH-ABUSE-007, INT-GEN-003, IDN-LIFE-012a, BFF-MACH-002, D-164, D-166, D-183,
-D-187, D-188, D-197, D-207*
+D-187, D-188, D-197, D-207, D-225*
 
 **Acceptance criteria**
-1. A forged callback (a guessed reference on the delivery reports' route, a token that
-   does not verify on a provider's) is rejected, recorded against its source's
-   fingerprint and logged, the log line carrying no source (INT-GEN-003, D-207).
-2. An unsigned callback advances state only after independent confirmation, save the
-   releases of INT-SMS-005; a provider event advances it only once its provider's
-   published keys verify it.
+1. A forged callback (a token that does not verify on a provider's route) is rejected,
+   recorded against its source's fingerprint and logged, the log line carrying no
+   source (INT-GEN-003, D-207).
+2. An unsigned callback advances state only after independent confirmation; a provider
+   event advances it only once its provider's published keys verify it.
 
 ---
 

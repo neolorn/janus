@@ -24,7 +24,6 @@ namespace Janus.Hosting.Tests.Bff;
 [Trait("kind", "unit")]
 public sealed class ThrottlingTests : IAsyncDisposable
 {
-    private const string Language = "en";
     private const string Wrong = "notthepasswordatall";
     private const string Unheld = "nobody@example.test";
     private const string Trace = "throttled";
@@ -52,24 +51,6 @@ public sealed class ThrottlingTests : IAsyncDisposable
                 LoginFactors = new HashSet<Factor>(
                     [.. Policies.SystemDefault.LoginFactors, Factor.EmailLink, Factor.EmailCode]),
             });
-
-        foreach (MessageKind message in new[]
-        {
-            MessageKind.SignInLink,
-            MessageKind.NoAccount,
-            MessageKind.RecoveryLink,
-            MessageKind.SecurityNotice,
-        })
-        {
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                _deployment.Templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "message" : null, "{code} {link}"));
-            }
-        }
     }
 
     /// <inheritdoc/>
@@ -317,7 +298,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
         AssertRestricted(held);
         AssertAlike(held, unheld);
         Assert.Equal(0, sent);
-        Assert.Single(_deployment.Mail.Taken, taken => taken.Destination.Value == Unheld);
+        Assert.Single(_deployment.Mail.Taken, taken => taken.Destination == Unheld);
     }
 
     /// <summary>
@@ -338,7 +319,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
         AssertRestricted(held);
         AssertAlike(held, unheld);
         Assert.Equal(0, sent);
-        Assert.Single(_deployment.Mail.Taken, taken => taken.Destination.Value == Unheld);
+        Assert.Single(_deployment.Mail.Taken, taken => taken.Destination == Unheld);
     }
 
     /// <summary>
@@ -359,15 +340,15 @@ public sealed class ThrottlingTests : IAsyncDisposable
         AssertRestricted(held);
         AssertAlike(held, unheld);
         Assert.Equal(0, sent);
-        Assert.Single(_deployment.Mail.Taken, taken => taken.Destination.Value == Unheld);
+        Assert.Single(_deployment.Mail.Taken, taken => taken.Destination == Unheld);
     }
 
     /// <summary>
     /// AUTH-ABUSE-003 AC7, AUTH-ABUSE-004: an ask of a sign-in link, an email code or a
-    /// recovery is answered before any transport is called, whether or not an account
+    /// recovery is answered before the host's handler is called, whether or not an account
     /// holds the address: no mail is handed over while either request runs, both are
     /// answered 202 alike, and the messages go once the publisher's pass carries them.
-    /// With a transport that refuses everything, both asks are still answered alike.
+    /// With a handler that refuses everything, both asks are still answered alike.
     /// </summary>
     /// <param name="path">The ask.</param>
     /// <returns>The work of the test.</returns>
@@ -375,7 +356,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
     [InlineData("/auth/link")]
     [InlineData("/auth/email-otp")]
     [InlineData("/recovery/begin")]
-    public async Task AUTH_ABUSE_003_AC7_AnAskIsAnsweredBeforeTheTransportIsCalledAsync(string path)
+    public async Task AUTH_ABUSE_003_AC7_AnAskIsAnsweredBeforeTheHandlerIsCalledAsync(string path)
     {
         await RegisteredAsync();
 
@@ -405,9 +386,9 @@ public sealed class ThrottlingTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// BFF-ABUSE-002 AC1: a sign-in link asked for an address an account holds and
-    /// one asked for an address nobody holds are answered alike: status, body and
-    /// every header.
+    /// BFF-ABUSE-002 AC1, AUTH-FACT-003 AC6: a sign-in link asked for an address an
+    /// account holds and one asked for an address nobody holds are answered alike:
+    /// status, body and every header, each naming the sign-in its request opened.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -418,6 +399,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
         (Answer held, Answer unheld, int sent) = await AskedAsync("/auth/link");
 
         Assert.Equal(StatusCodes.Status202Accepted, held.Status);
+        Assert.NotEmpty(held.Text("challengeId"));
         AssertAlike(held, unheld);
         Assert.Equal(2, sent);
     }
@@ -443,7 +425,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
     private static void AssertAlike(Answer held, Answer unheld)
     {
         Assert.Equal(held.Status, unheld.Status);
-        Assert.Equal(held.Body, unheld.Body);
+        Assert.Equal(held.Drawn(), unheld.Drawn());
         Assert.Equal(held.SetCookie, unheld.SetCookie);
         Assert.Equal(
             held.Headers.OrderBy(header => header.Key, StringComparer.OrdinalIgnoreCase),

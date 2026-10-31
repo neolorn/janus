@@ -1,6 +1,10 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
@@ -26,6 +30,7 @@ namespace Janus.Hosting.Oidc;
 /// <param name="addresses">Where a browser holding no session is sent.</param>
 /// <param name="configuration">Where the code's lifetime comes from.</param>
 /// <param name="pushed">What spends the pushed request a forwarded browser carried.</param>
+/// <param name="pending">Where a forwarded browser's request waits for its sign-in.</param>
 /// <remarks>
 /// Implements AUTH-SESS-012, AUTH-OIDC-002, AUTH-OIDC-004, AUTH-OIDC-006 and
 /// API-LAND-001. The endpoint forwards a browser and never renders a page, so a person
@@ -38,9 +43,21 @@ internal sealed class AuthorizationIssue(
     RequestSession browser,
     AuthenticationAddresses addresses,
     IConfigurationStore configuration,
-    PushedRequestSpent pushed)
+    PushedRequestSpent pushed,
+    PendingAuthorizations pending)
     : IOpenIddictServerHandler<OpenIddictServerEvents.HandleAuthorizationRequestContext>
 {
+    // The parameters a kept request leaves behind: the reference it was read from and
+    // whatever authenticated the client at the push.
+    private static readonly string[] Unkept =
+    [
+        OpenIddictConstants.Parameters.RequestUri,
+        OpenIddictConstants.Parameters.Request,
+        OpenIddictConstants.Parameters.ClientSecret,
+        OpenIddictConstants.Parameters.ClientAssertion,
+        OpenIddictConstants.Parameters.ClientAssertionType,
+    ];
+
     /// <inheritdoc/>
     public async ValueTask HandleAsync(
         OpenIddictServerEvents.HandleAuthorizationRequestContext context)
@@ -73,6 +90,23 @@ internal sealed class AuthorizationIssue(
         }
 
         context.SignIn(Principal(context, live, lifetime));
+    }
+
+    // What the continuation reads back: the parameters the request was validated with,
+    // without the reference it was read from or anything that authenticated a client.
+    private static string Kept(OpenIddictRequest request)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            new OpenIddictRequest(request
+                    .GetParameters()
+                    .Where(parameter => !Unkept.Contains(parameter.Key, StringComparer.Ordinal)))
+                .WriteTo(writer);
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
     private static TimeSpan Withheld(Error error, ref Error? failure)
@@ -127,6 +161,14 @@ internal sealed class AuthorizationIssue(
         if (!silent && context.Transaction.GetHttpRequest() is HttpRequest request)
         {
             await pushed.SpendAsync(context.Transaction, cancellationToken).ConfigureAwait(false);
+
+            // AUTH-SESS-012 AC10 (D-224): the request, validated, waits for the sign-in
+            // on the browser's pre-authentication session, a later one replacing it.
+            if (browser.FirstContact is PreAuthentication contact)
+            {
+                (await pending.KeepAsync(contact, Kept(context.Request), cancellationToken).ConfigureAwait(false))
+                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            }
 
             request.HttpContext.Response.Redirect(addresses.SignIn);
             context.HandleRequest();

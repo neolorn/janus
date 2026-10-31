@@ -85,16 +85,22 @@ public sealed class DeclaredProcessingTests
 
     /// <summary>
     /// PRIV-BASIS-001 AC4: no library source chooses a path by a basis of the default
-    /// declaration, which is what a conditional on one is. Three files carry the words:
+    /// declaration, which is what a conditional on one is. Four files carry the words:
     /// the declaration PRIV-BASIS-001 ships, which is the list itself, the wire name of
     /// a capability residual of chapter 10 section 5.20 and that of a delivery kind of
-    /// section 5.50, neither of which is a basis, each asserted to be what it is.
+    /// section 5.50, neither of which is a basis, each asserted to be what it is, and
+    /// the wire name of what a purpose takes in chapter 09's <c>GET /settings</c>, no
+    /// basis either, which
+    /// <c>FrontendSettingsTests.PRIV_BASIS_003_ThePurposesAPersonDecidesAreAnsweredWithWhatEachTakesAsync</c>
+    /// asserts.
     /// </summary>
     [Fact]
     public void PRIV_BASIS_001_AC4_NoLibrarySourceNamesABasis()
     {
         Assert.Empty(Branching(DefaultBases));
-        Assert.Equal(["CapabilityResidual.cs", "DeliveryKind.cs", "LawfulBases.cs"], Naming(DefaultBases));
+        Assert.Equal(
+            ["CapabilityResidual.cs", "DeliveryKind.cs", "LawfulBases.cs", "PurposeSettingView.cs"],
+            Naming(DefaultBases));
         Assert.Equal("consent", Wire(CapabilityResidual.Consent));
         Assert.Equal("consent", Wire(DeliveryKind.Consent));
         Assert.Equal(DefaultBases, LawfulBases.Default.Select(basis => basis.Key));

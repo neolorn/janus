@@ -368,8 +368,8 @@ public sealed class KeyMaterialTests
 
     private static IServiceCollection Registered(SecretSourceInMemory source) =>
         new ServiceCollection()
-            .AddSingleton<IMailTransport>(new MailTransportInMemory())
-            .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
+            .AddSingleton<INotificationHandler>(new Janus.Testing.InMemoryNotifications())
+            .AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))

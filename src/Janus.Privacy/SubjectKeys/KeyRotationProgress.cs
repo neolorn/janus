@@ -66,8 +66,7 @@ internal sealed class KeyRotationProgress
     public DateTimeOffset? CompletedAt { get; private set; }
 
     /// <summary>
-    /// When the operator confirmed the escrow copy sealed and the versions before this
-    /// one were retired.
+    /// When the versions before this one were retired.
     /// </summary>
     public DateTimeOffset? RetiredAt { get; private set; }
 
@@ -153,7 +152,7 @@ internal sealed class KeyRotationProgress
     }
 
     /// <summary>
-    /// Records that the escrow copy is sealed and the versions before this one retired.
+    /// Records that the versions before this one are retired.
     /// </summary>
     /// <param name="at">When.</param>
     /// <exception cref="InvalidOperationException">

@@ -51,5 +51,23 @@ public static class WorkshopSchema
             need bytea NOT NULL);
         CREATE INDEX ix_fittings_repair_id ON workshop.fittings (repair_id);
         CREATE INDEX ix_fittings_customer ON workshop.fittings (customer);
+        CREATE TABLE workshop.post (
+            reference text PRIMARY KEY,
+            kind text NOT NULL,
+            channel text NOT NULL,
+            destination text NOT NULL,
+            languages text NOT NULL,
+            taken_at timestamptz NOT NULL);
+        CREATE TABLE workshop.post_places (
+            reference text NOT NULL REFERENCES workshop.post (reference),
+            name text NOT NULL,
+            value text NOT NULL,
+            PRIMARY KEY (reference, name));
+        CREATE TABLE workshop.duty_board (
+            key text PRIMARY KEY,
+            condition text NOT NULL,
+            severity text NOT NULL,
+            scope text,
+            raised_at timestamptz NOT NULL);
         """;
 }

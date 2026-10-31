@@ -18,8 +18,8 @@ namespace Janus.Cli.Tests;
 /// <summary>
 /// What the <c>bootstrap</c> command leaves in a fresh deployment's database: the first
 /// organization and administrator with an enrolment link, the reserved
-/// <c>emergency</c> account, the restore test's canary, and no credential of any kind
-/// (OPS-BOOT-001, OPS-BOOT-002, PRIV-MINOR-001).
+/// <c>emergency</c> account, and no credential of any kind (OPS-BOOT-001, OPS-BOOT-002,
+/// PRIV-MINOR-001).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFixture<BootstrappedDeployment>
@@ -150,7 +150,7 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
 
     /// <summary>
     /// OPS-BOOT-001 AC3 and D-133: the command emits no break-glass credential, and the
-    /// alert that none exists is raised on the alert channels at once.
+    /// alert that none exists is raised at once.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -309,42 +309,10 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
-    /// DR-007 and OPS-BOOT-001: the canary subject is seeded in the administrative
-    /// organization with one encrypted field and one verified email, and recorded where
-    /// the restore test reads it.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task DR_007_TheCanarySubjectIsSeededAsync()
-    {
-        await using NpgsqlConnection connection = await deployment.OpenAsync();
-
-        var canary = Guid.Parse(await connection.QuerySingleAsync<string>(
-            "SELECT value FROM identity.settings WHERE key = @Key",
-            new { Key = Settings.BackupRestoreTestCanary.Key.ToString() }));
-
-        Assert.Equal(1, await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM identity.identifiers WHERE subject = @Subject AND kind = 'email' AND verified_at IS NOT NULL",
-            new { Subject = canary }));
-        Assert.Equal(1, await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM identity.profiles WHERE subject = @Subject AND enc_display_name IS NOT NULL",
-            new { Subject = canary }));
-        Assert.Equal(1, await connection.ExecuteScalarAsync<long>(
-            """
-            SELECT count(*) FROM identity.memberships m
-            JOIN identity.organizations o ON o.id = m.organization
-            WHERE m.subject = @Subject AND o.administrative
-            """,
-            new { Subject = canary }));
-        Assert.Empty(await RolesAsync(connection, canary));
-    }
-
-    /// <summary>
     /// PRIV-MINOR-001 AC3: under the default <c>registration.adultaffirmation</c> of
     /// <c>required</c>, the first administrator is created having affirmed, derived from
-    /// the date the command was given, with no terms step recorded; the only accounts
-    /// that carry no answer are the reserved account and the canary, which no person
-    /// answers for.
+    /// the date the command was given, with no terms step recorded; the only account
+    /// that carries no answer is the reserved account, which no person answers for.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -360,10 +328,6 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
         Guid emergency = await connection.QuerySingleAsync<Guid>(new CommandDefinition(
             "SELECT subject FROM identity.accounts WHERE emergency",
             cancellationToken: cancellationToken));
-        var canary = Guid.Parse(await connection.QuerySingleAsync<string>(new CommandDefinition(
-            "SELECT value FROM identity.settings WHERE key = @Key",
-            new { Key = Settings.BackupRestoreTestCanary.Key.ToString() },
-            cancellationToken: cancellationToken)));
 
         (bool? Affirmed, string? Group, bool Answered, string? Terms) answer = await connection
             .QuerySingleAsync<(bool?, string?, bool, string?)>(new CommandDefinition(
@@ -375,9 +339,7 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
             cancellationToken: cancellationToken))];
 
         Assert.Equal((true, null, true, null), answer);
-        Assert.Equal(2, unaffirmed.Count);
-        Assert.Contains((emergency, false), unaffirmed);
-        Assert.Contains((canary, false), unaffirmed);
+        Assert.Equal((emergency, false), Assert.Single(unaffirmed));
     }
 
     /// <summary>
@@ -543,7 +505,6 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
         string[] named =
         [
             .. Invocation.Named().Keys.Select(key => key.ToString()),
-            Settings.BackupRestoreTestCanary.Key.ToString(),
             Settings.OrganizationPolicy.For(organization).ToString(),
         ];
 
@@ -571,9 +532,6 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
             "SELECT id::text FROM identity.organizations WHERE administrative") ?? string.Empty;
 
         Assert.All(Invocation.Named().Keys, key => Assert.Null(before[key.ToString()]));
-        Assert.Equal(
-            Settings.BackupRestoreTestCanary.Write(Settings.BackupRestoreTestCanary.Default),
-            before[Settings.BackupRestoreTestCanary.Key.ToString()]);
         Assert.Equal(
             Settings.OrganizationPolicy.Write(Settings.OrganizationPolicy.Default),
             before[Settings.OrganizationPolicy.For(organization).ToString()]);
@@ -683,9 +641,9 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
-    /// D-162: each membership bootstrap attaches (the administrator, <c>emergency</c> and
-    /// the canary) is announced by one <c>MembershipChanged</c> that says it began,
-    /// written with the rows it announces.
+    /// D-162: each membership bootstrap attaches (the administrator and <c>emergency</c>)
+    /// is announced by one <c>MembershipChanged</c> that says it began, written with the
+    /// rows it announces.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -706,7 +664,7 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
                 FROM identity.events WHERE kind = 'MembershipChanged'
                 """)];
 
-        Assert.Equal(3, memberships.Count);
+        Assert.Equal(2, memberships.Count);
         Assert.Equal(
             memberships.Order(StringComparer.Ordinal),
             announced.Select(one => one.Membership).Order(StringComparer.Ordinal));
@@ -724,7 +682,7 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
         Assert.Equal(
-            (3, 0, 3, 0),
+            (2, 0, 2, 0),
             await connection.QuerySingleAsync<(int, int, int, int)>(
                 """
                 SELECT
@@ -741,7 +699,7 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
 
     /// <summary>
     /// OPS-ALERT-001 and OPS-BOOT-001 AC3: that no emergency credential exists is raised
-    /// through the alert channels, so the <c>AlertRaised</c> event is written with the
+    /// through the alert raising, so the <c>AlertRaised</c> event is written with the
     /// raised row, in bootstrap's transaction.
     /// </summary>
     /// <returns>The work of the test.</returns>

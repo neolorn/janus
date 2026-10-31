@@ -23,6 +23,16 @@ internal interface ILossReportStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The report whose cancel token has a fingerprint (D-226).
+    /// </summary>
+    /// <param name="fingerprint">The SHA-256 fingerprint of the token presented.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The report, or nothing where no running report's token has it.</returns>
+    ValueTask<LossReport?> FindByCancelAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Opens a report.
     /// </summary>
     /// <param name="report">The report.</param>

@@ -257,6 +257,9 @@ internal static class StorageRegistration
         services.AddScoped<IPreAuthenticationStore>(provider => new PreAuthenticationStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DeploymentDataKeyStore>()));
+        services.AddScoped<IPendingAuthorizationStore>(provider => new PendingAuthorizationStore(
+            provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DeploymentDataKeyStore>()));
         services.AddScoped<IChallengeStore>(provider => new ChallengeStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>()));
@@ -376,11 +379,10 @@ internal static class StorageRegistration
         services.AddScoped<IRegistrationSources>(provider => new RegistrationSourceLedger(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>()));
-        services.AddScoped<ISmsBalanceLedger, SmsBalanceLedger>();
         services.AddScoped<IAlertLedger, AlertLedger>();
         services.AddScoped<IRaisedAlerts, RaisedAlerts>();
         services.AddScoped<IPendingEvents, PendingEvents>();
-        services.AddScoped<IMaintenanceStore, MaintenanceStore>();
+        services.AddScoped<ICryptoperiodStore, CryptoperiodStore>();
         services.AddScoped<IJobRuns, JobRunStore>();
         services.AddScoped<IDeploymentSeed, DeploymentSeed>();
         services.AddScoped<IConfigurationAudit, ConfigurationAudit>();

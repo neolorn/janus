@@ -30,7 +30,7 @@ internal sealed class DomainReverification(
     IDomainStore domains,
     IDnsResolver? dns,
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IUnitOfWork work,
     TimeProvider time)
 {

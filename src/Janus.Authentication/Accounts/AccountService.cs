@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Passwords;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -19,6 +20,7 @@ namespace Janus.Authentication.Accounts;
 /// <param name="identifiers">Where the account's identifiers are.</param>
 /// <param name="authenticators">Where the account's credentials are.</param>
 /// <param name="recoveryCodes">Where the account's single-use codes are.</param>
+/// <param name="passwords">Where whether the account holds a password is read.</param>
 /// <param name="audit">Where a change the account made to itself is recorded.</param>
 /// <param name="stepUp">What a username change asks of the session.</param>
 /// <param name="reserved">The usernames no account takes.</param>
@@ -39,6 +41,7 @@ internal sealed class AccountService(
     IIdentifierDirectory identifiers,
     IAuthenticatorStore authenticators,
     IRecoveryCodeStore recoveryCodes,
+    IPasswordStore passwords,
     IAccountAudit audit,
     StepUpGuard stepUp,
     ReservedUsernames reserved,
@@ -99,6 +102,9 @@ internal sealed class AccountService(
         RecoveryCodeSet? codes = await recoveryCodes.FindAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
+        Password? password = await passwords.FindAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
         HeldProfile profile = await directory.ProfileAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
@@ -109,6 +115,7 @@ internal sealed class AccountService(
             state,
             Shown(held, fields),
             Shown(enrolled),
+            new PasswordStatus(password is not null, password?.SetAt),
             codes is null
                 ? null
                 : new RecoveryCodeStatus(

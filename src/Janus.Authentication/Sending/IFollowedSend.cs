@@ -6,12 +6,11 @@ using Janus.Core;
 namespace Janus.Authentication.Sending;
 
 /// <summary>
-/// The governed send as the two callers that act on what became of a message meet it:
-/// the alert router, which falls to its second channel where the first carried
-/// nothing, and a loss report, whose invalidation waits while no notice was delivered.
+/// The governed send as a caller that acts on what became of a message meets it: a
+/// loss report, whose invalidation waits while no notice was delivered.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-ABUSE-004, OPS-ALERT-003 and AUTH-RECOV-007. The message is
+/// Implements AUTH-ABUSE-004 and AUTH-RECOV-007. The message is
 /// undertaken like any other, in a unit of work of the caller's own, and its one attempt
 /// follows that commit; the caller then asks whether the attempt carried it. What it did
 /// not carry is the publisher's, as for every message.

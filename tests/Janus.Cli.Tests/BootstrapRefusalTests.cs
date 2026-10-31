@@ -52,47 +52,14 @@ public sealed class BootstrapRefusalTests : System.IDisposable
     public async Task OPS_BOOT_001_AValueTheDeploymentLeftUnnamedIsRefusedByItsKeyAsync()
     {
         Invocation run = await Invocation.PipedAsync(
-            Invocation.Bootstrap(Settings.AlertingOwnerSms.Key),
+            Invocation.Bootstrap(Settings.PrivacyCalendarTimeZone.Key),
             Invocation.Keys(Nowhere));
 
         Assert.Equal(1, run.ExitCode);
         Assert.Equal(ErrorCodes.StartupDeclarationMissing.ToString(), Code(run));
-        Assert.Equal(Settings.AlertingOwnerSms.Key.ToString(), Detail(run, "key"));
+        Assert.Equal(Settings.PrivacyCalendarTimeZone.Key.ToString(), Detail(run, "key"));
     }
 
-    /// <summary>
-    /// OPS-BOOT-002 AC5: the owner's destinations are required, so bootstrap without
-    /// <c>alerting.owner.email</c> and <c>alerting.owner.sms</c>, or without either of
-    /// them, is refused naming a missing key and prints no link.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task OPS_BOOT_002_AC5_BootstrapWithoutTheOwnersDestinationsIsRefusedAsync()
-    {
-        string email = Settings.AlertingOwnerEmail.Key.ToString();
-        string sms = Settings.AlertingOwnerSms.Key.ToString();
-
-        Invocation neither = await Invocation.PipedAsync(
-            Invocation.Bootstrap(Settings.AlertingOwnerEmail.Key, Settings.AlertingOwnerSms.Key),
-            Invocation.Keys(Nowhere));
-        Invocation withoutEmail = await Invocation.PipedAsync(
-            Invocation.Bootstrap(Settings.AlertingOwnerEmail.Key),
-            Invocation.Keys(Nowhere));
-        Invocation withoutSms = await Invocation.PipedAsync(
-            Invocation.Bootstrap(Settings.AlertingOwnerSms.Key),
-            Invocation.Keys(Nowhere));
-
-        foreach (Invocation run in (Invocation[])[neither, withoutEmail, withoutSms])
-        {
-            Assert.Equal(1, run.ExitCode);
-            Assert.Empty(run.Output);
-            Assert.Equal(ErrorCodes.StartupDeclarationMissing.ToString(), Code(run));
-        }
-
-        Assert.Contains(Detail(neither, "key"), (string[])[email, sms]);
-        Assert.Equal(email, Detail(withoutEmail, "key"));
-        Assert.Equal(sms, Detail(withoutSms, "key"));
-    }
 
     /// <summary>
     /// OPS-BOOT-001 and chapter 10 section 4: a value its key does not admit is refused

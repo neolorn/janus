@@ -31,6 +31,7 @@ namespace Janus.Authentication.Sessions;
 /// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="concurrent">The watch over sessions used implausibly far apart at once.</param>
 /// <param name="clients">Where the client a registration captured is read, for the return it answers.</param>
+/// <param name="pending">Where an authorization waits on a session's record for its continuation.</param>
 /// <param name="events">Where each session an end takes is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -55,6 +56,7 @@ internal sealed class SessionService(
     ILocationResolver locations,
     ConcurrentSessions concurrent,
     IOidcClientStore clients,
+    IPendingAuthorizationStore pending,
     IEvents events,
     IUnitOfWork work,
     TimeProvider time,
@@ -338,8 +340,30 @@ internal sealed class SessionService(
     }
 
     /// <summary>
+    /// The session a presented secret belongs to, where it lapsed for inactivity and
+    /// one factor bound to that secret restores it, judged as resolving it judges it.
+    /// </summary>
+    /// <param name="secret">What the cookie carried, or nothing where it carried none.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The session, or <c>auth.session.expired</c> asking for a full authentication
+    /// where it may not be restored: none, its absolute window passed, a policy below
+    /// AAL2, or a break-glass session.
+    /// </returns>
+    /// <remarks>
+    /// Implements AUTH-SESS-005 and D-224 item 13. Nothing is written: the session is
+    /// only read, so that a restore's begin refreshes nothing it has not proved.
+    /// </remarks>
+    public async ValueTask<Result<Session>> RestorableAsync(
+        OpaqueToken? secret,
+        CancellationToken cancellationToken) =>
+        (await HeldForRestoreAsync(secret, cancellationToken).ConfigureAwait(false))
+        .Match(held => Result.Success(held.Session), Result.Failure<Session>);
+
+    /// <summary>
     /// Restores a session that lapsed for inactivity inside its absolute window, on
-    /// one factor bound to the secret the browser still holds.
+    /// one factor bound to the secret the browser still holds, with the record it
+    /// stands on and every session standing on that record.
     /// </summary>
     /// <param name="secret">What the cookie carried.</param>
     /// <param name="presented">What was presented.</param>
@@ -351,6 +375,11 @@ internal sealed class SessionService(
     /// proves nothing on a session that already exists.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-SESS-005 and D-224 item 13: the session record is restored, the
+    /// identifier the cookie carries rotates, and every application session bound to
+    /// the record lives again.
+    /// </remarks>
     public async ValueTask<Result<IssuedSession>> RestoreAsync(
         OpaqueToken secret,
         IReadOnlyCollection<Factor> presented,
@@ -360,20 +389,11 @@ internal sealed class SessionService(
         ArgumentNullException.ThrowIfNull(presented);
         ArgumentNullException.ThrowIfNull(origin);
 
-        Session? session = await sessions
-            .FindByFingerprintAsync(secret.Fingerprint(), cancellationToken)
-            .ConfigureAwait(false);
-
-        if (session is null)
-        {
-            return Result.Failure<IssuedSession>(Expiry(ReauthenticationKind.Full));
-        }
-
         Error? failure = null;
 
-        Policy policy = (await policies.ForAsync(session.Subject, cancellationToken)
+        (Session session, Session spine, Policy policy) = (await HeldForRestoreAsync(secret, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Held<Policy>(error, ref failure));
+            .Match(value => value, error => Held<(Session, Session, Policy)>(error, ref failure));
 
         if (failure is not null)
         {
@@ -381,14 +401,6 @@ internal sealed class SessionService(
         }
 
         DateTimeOffset now = time.GetUtcNow();
-
-        // The allowance is written for a short gap inside the absolute window, which
-        // is why a ninety-day one does not reach it (AUTH-SESS-005 AC3a).
-        if (SessionClock.Expired(session, now, policy.RequiredAssurance)
-            is not ReauthenticationKind.SingleFactor)
-        {
-            return Result.Failure<IssuedSession>(Expiry(ReauthenticationKind.Full));
-        }
 
         // One factor bound to the session secret, which a second factor alone, a
         // social credential and an email factor are not.
@@ -420,9 +432,33 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(notBegun);
         }
 
+        SessionOrigin used = located.Match(one => one, _ => origin);
+
         session.Present(proved, now);
-        session.Touch(located.Match(one => one, _ => origin), now, inactivity);
+        session.Touch(used, now, inactivity);
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
+
+        if (!ReferenceEquals(spine, session))
+        {
+            spine.Present(proved, now);
+            spine.Touch(used, now, inactivity);
+            await sessions.RecordAsync(spine, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Every application session bound to the record lives again; each is refreshed
+        // as a use of the record refreshes it, and proves nothing more than it did.
+        foreach (Session standing in await sessions.StandingOnAsync(spine.Id, cancellationToken)
+                     .ConfigureAwait(false))
+        {
+            if (standing.Id == session.Id || standing.Id == spine.Id)
+            {
+                continue;
+            }
+
+            standing.Touch(standing.LastSeen, now, inactivity);
+            await sessions.RecordAsync(standing, cancellationToken).ConfigureAwait(false);
+        }
+
         await sessions
             .ReplaceSecretAsync(
                 session.Id,
@@ -613,11 +649,22 @@ internal sealed class SessionService(
             return Result.Failure<SessionDetail>(Error.From(ErrorCodes.SessionExpired));
         }
 
-        // REG-SESS-008, API-REDIR-002: the return is read from the client the session
-        // kept, never from a request.
-        OidcClient? captured = live.Client is string named
+        // REG-SESS-008, API-REDIR-002: the return is read from the client the record
+        // kept, never from a request, so every session standing on the record answers
+        // it (D-224).
+        Session? record = live.Spine == live.Id
+            ? live
+            : await sessions.FindAsync(live.Spine, cancellationToken).ConfigureAwait(false);
+
+        OidcClient? captured = record?.Client is string named
             ? await clients.FindAsync(named, cancellationToken).ConfigureAwait(false)
             : null;
+
+        // AUTH-SESS-012 (D-224): a sign-in a navigation completed learns here that an
+        // authorization waits on its record for the continuation.
+        bool waiting = await pending
+            .WaitsAsync(live.Spine, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
 
         return Result.Success(new SessionDetail(
             live.Subject,
@@ -625,7 +672,10 @@ internal sealed class SessionService(
             live.PhishingResistant,
             live.Aal2At,
             live.IdleExpiry < live.AbsoluteExpiry ? live.IdleExpiry : live.AbsoluteExpiry,
-            captured is null ? null : RedirectValidation.Landing(captured)));
+            captured is null ? null : RedirectValidation.Landing(captured))
+        {
+            AuthorizationWaiting = waiting,
+        });
     }
 
     /// <inheritdoc/>
@@ -1016,6 +1066,47 @@ internal sealed class SessionService(
     // still decide whether the values are honoured (AUTH-SESS-005).
     private static DateTimeOffset? Lasting(Policy policy, Session session) =>
         policy.RequiredAssurance is AssuranceLevel.Aal1 ? session.AbsoluteExpiry : null;
+
+    // AUTH-SESS-005 (D-224 item 13): the restore admits a session the record it stands
+    // on, or failing that the session itself, asks one factor of, as resolving it asks.
+    private async ValueTask<Result<(Session Session, Session Spine, Policy Policy)>> HeldForRestoreAsync(
+        OpaqueToken? secret,
+        CancellationToken cancellationToken)
+    {
+        Session? session = secret is OpaqueToken carried
+            ? await sessions.FindByFingerprintAsync(carried.Fingerprint(), cancellationToken).ConfigureAwait(false)
+            : null;
+
+        if (session is null)
+        {
+            return Result.Failure<(Session, Session, Policy)>(Expiry(ReauthenticationKind.Full));
+        }
+
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(session.Subject, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<(Session, Session, Policy)>(failure);
+        }
+
+        Session? spine = session.Spine == session.Id
+            ? session
+            : await sessions.FindAsync(session.Spine, cancellationToken).ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        // The allowance is written for a short gap inside the absolute window, which
+        // is why a ninety-day one does not reach it (AUTH-SESS-005 AC3a).
+        return spine is not null
+            && (SessionClock.Expired(spine, now, policy.RequiredAssurance)
+                ?? SessionClock.Expired(session, now, policy.RequiredAssurance))
+                is ReauthenticationKind.SingleFactor
+            ? Result.Success((session, spine, policy))
+            : Result.Failure<(Session, Session, Policy)>(Expiry(ReauthenticationKind.Full));
+    }
 
     private static Error Expiry(ReauthenticationKind asked) =>
         Error.From(

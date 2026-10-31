@@ -47,15 +47,14 @@ namespace Janus.Hosting.Background;
 internal static class BackgroundJobs
 {
     // INT-MAIL-007: the reconciliation runs daily, which the chapter fixes and no
-    // setting names. The watches over a list of dates (OPS-MAINT-001, PRIV-RIGHT-002)
-    // run at the same pace, since the lead they measure is counted in days, and so
+    // setting names. The watches of a date ahead (DR-009a, PRIV-RIGHT-002) run at the
+    // same pace, since the lead they measure is counted in days, and so
     // does the recovery-code reminder (AUTH-FACT-008), whose age is counted in months,
     // and the audit retention (PRIV-RET-002), whose partitions are counted in months.
     private static readonly TimeSpan Daily = TimeSpan.FromDays(1);
 
-    // INF-TLS-003: a failed renewal is seen the day it happens, and INF-HOST-001: a clock
-    // drifts by seconds a day, so an hour finds either long before an outage. OPS-BOOT-001
-    // AC3: a deployment without an emergency credential hears of it within the hour.
+    // OPS-BOOT-001 AC3: a deployment without an emergency credential hears of it within
+    // the hour.
     private static readonly TimeSpan Hourly = TimeSpan.FromHours(1);
 
     // AUTH-OIDC-003: no refresh token outlives its session and no session outlives
@@ -282,30 +281,6 @@ internal static class BackgroundJobs
                 .WatchAsync(context, cancellationToken)
                 .ConfigureAwait(false)),
         BackgroundJob.Every(
-            "clock-drift",
-            "INF-HOST-001",
-            SystemOperation.Monitoring,
-            Hourly,
-            async (services, context, cancellationToken) => await services.GetRequiredService<ClockDriftWatch>()
-                .WatchAsync(context, cancellationToken)
-                .ConfigureAwait(false)),
-        BackgroundJob.Every(
-            "certificate-renewal",
-            "INF-TLS-003",
-            SystemOperation.Monitoring,
-            Hourly,
-            async (services, context, cancellationToken) => await services.GetRequiredService<CertificateRenewalWatch>()
-                .WatchAsync(context, cancellationToken)
-                .ConfigureAwait(false)),
-        BackgroundJob.Every(
-            "restore-test",
-            "DR-007",
-            SystemOperation.Monitoring,
-            Settings.BackupRestoreTestInterval,
-            async (services, context, cancellationToken) => await services.GetRequiredService<RestoreTest>()
-                .RunAsync(context, cancellationToken)
-                .ConfigureAwait(false)),
-        BackgroundJob.Every(
             "audit-partitions",
             "PRIV-RET-002",
             SystemOperation.RetentionPurge,
@@ -315,29 +290,14 @@ internal static class BackgroundJobs
                     .RunAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
-            "licence-expiry",
-            "OPS-MAINT-001",
-            SystemOperation.Monitoring,
-            Daily,
-            async (services, context, cancellationToken) => Done(
-                await services.GetRequiredService<LicenceExpiry>()
-                    .WarnAsync(context, cancellationToken)
-                    .ConfigureAwait(false))),
-        BackgroundJob.Every(
-            "envelope-rotation",
+            CryptoperiodWatch.Job,
             "DR-009a",
             SystemOperation.Monitoring,
             Daily,
             async (services, context, cancellationToken) => Done(
-                await services.GetRequiredService<EnvelopeRotationWatch>()
+                await services.GetRequiredService<CryptoperiodWatch>()
                     .WatchAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
-        BackgroundJob.Every(
-            "sms-balance",
-            "INT-SMS-004",
-            SystemOperation.Monitoring,
-            Settings.AbuseSmsPollInterval,
-            (services, context, cancellationToken) => PollBalanceAsync(services, context, cancellationToken)),
     ];
 
     // AUTH-KEY-003, OPS-OBS-003, IDN-PRIN-003 AC4: what has expired or been delivered
@@ -352,6 +312,8 @@ internal static class BackgroundJobs
         DateTimeOffset now = services.GetRequiredService<TimeProvider>().GetUtcNow();
 
         _ = await services.GetRequiredService<ISessionStore>()
+            .SweepAsync(now, cancellationToken).ConfigureAwait(false);
+        _ = await services.GetRequiredService<IPendingAuthorizationStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IPreAuthenticationStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
@@ -448,27 +410,6 @@ internal static class BackgroundJobs
 
         return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error);
-    }
-
-    // INT-SMS-004: no poll succeeds without a balance read, so a deployment that
-    // registered no transport fails the poll, and its lapse raises
-    // background-job-failed, naming the declaration the balance needs (LIB-HOST-001).
-    private static async ValueTask<Result> PollBalanceAsync(
-        IServiceProvider services,
-        AccessContext context,
-        CancellationToken cancellationToken)
-    {
-        if (services.GetService<ISmsTransport>() is null)
-        {
-            return Result.Failure(Error.From(
-                ErrorCodes.StartupDeclarationMissing,
-                "key",
-                JsonSerializer.SerializeToElement("smsTransport")));
-        }
-
-        return Done(await services.GetRequiredService<SmsBalance>()
-            .PollAsync(context, cancellationToken)
-            .ConfigureAwait(false));
     }
 
     // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the sweep, which reaches the stores

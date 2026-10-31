@@ -15,15 +15,12 @@ namespace Janus.Hosting.Tests.Sending;
 /// <summary>
 /// The sending path as the library puts it together, over the fakes a test reads: the
 /// admission, the governed send, the publisher that carries what was admitted, and the
-/// handler it carries through, the shipped one unless a test stands in its own.
+/// host's handler it hands each message to, unless a test stands in another.
 /// </summary>
 /// <param name="configuration">Where the restrictions, the languages and the schedule are read.</param>
 /// <param name="ledger">Where what was admitted is counted.</param>
 /// <param name="outbox">Where an admitted message waits.</param>
-/// <param name="templates">Where the shipped handler finds its words.</param>
-/// <param name="mail">What carries a mail.</param>
-/// <param name="sms">What carries a text message, and answers the gateway's balance.</param>
-/// <param name="balances">Where the gateway's balance is kept.</param>
+/// <param name="notifications">The host's handler, read by channel.</param>
 /// <param name="work">The unit of work every part of the path runs in.</param>
 /// <param name="events">Where the events and the raised alerts go.</param>
 /// <param name="clock">The clock the deployment runs on.</param>
@@ -32,10 +29,7 @@ internal sealed class SendingPath(
     IConfigurationStore configuration,
     SendLedgerInMemory ledger,
     SendOutboxInMemory outbox,
-    IMessageTemplates templates,
-    IMailTransport mail,
-    SmsTransportInMemory sms,
-    SmsBalanceLedgerInMemory balances,
+    NotificationsInMemory notifications,
     UnitOfWorkInMemory work,
     EventsInMemory events,
     TimeProvider clock,
@@ -52,8 +46,7 @@ internal sealed class SendingPath(
     public PhoneSignals Signals { get; set; } = Considered.Nothing(work, clock);
 
     /// <summary>
-    /// The handler a deployment registered in the shipped one's place, where a test
-    /// stands one in.
+    /// Another handler, where a test stands one in.
     /// </summary>
     public INotificationHandler? Replaced { get; set; }
 
@@ -61,7 +54,7 @@ internal sealed class SendingPath(
     /// Where a spent retry budget's alert goes, the events unless a test stands in a
     /// channel that refuses.
     /// </summary>
-    public IAlertChannels Alerts { get; set; } = events;
+    public IAlertRaising Alerts { get; set; } = events;
 
     /// <summary>
     /// Where the publisher logs a fault of its immediate attempt, nowhere unless a test
@@ -73,13 +66,13 @@ internal sealed class SendingPath(
     /// What judges and counts a send.
     /// </summary>
     public SendAdmission Admission =>
-        new(configuration, ledger, Suppliers, new SmsBalance(configuration, sms, balances, work, events, clock));
+        new(configuration, ledger, Suppliers);
 
     /// <summary>
     /// What carries one admitted message.
     /// </summary>
     public INotificationHandler Handler =>
-        Replaced ?? new NotificationHandler(configuration, templates, mail, sms);
+        Replaced ?? notifications;
 
     /// <summary>
     /// What carries what was admitted, after the commit and in its passes.

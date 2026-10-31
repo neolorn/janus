@@ -6,14 +6,17 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Hosting.Authentication;
 
@@ -58,7 +61,7 @@ internal static class AuthenticationEndpoints
                     ErrorCodes.CodeExpired, ErrorCodes.CodeReplayed, ErrorCodes.CredentialSuspended,
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnCounterMismatch,
                     ErrorCodes.WebAuthnRelyingPartyChanged, ErrorCodes.WebAuthnUserVerificationRequired,
-                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
             .Accepts<PresentFactorRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>()
             .Produces<SignInLandingView>()
@@ -69,6 +72,11 @@ internal static class AuthenticationEndpoints
                     ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.RestrictionExceeded))
             .Accepts<VerifyDeviceRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>();
+        _ = group.MapPost("/device/resend", ResendDeviceAsync)
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.CodeExpired, ErrorCodes.RestrictionExceeded, ErrorCodes.Throttled))
+            .Accepts<ResendDeviceRequest>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status202Accepted);
         _ = SessionRequired.On(group.MapPost("/step-up", StepUpAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -78,14 +86,27 @@ internal static class AuthenticationEndpoints
                     ErrorCodes.WebAuthnAlgorithmNotAllowed,
                     ErrorCodes.WebAuthnCounterMismatch, ErrorCodes.WebAuthnRelyingPartyChanged,
                     ErrorCodes.WebAuthnUserVerificationRequired, ErrorCodes.Throttled,
-                    ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+                    ErrorCodes.RestrictionExceeded))
             .Accepts<PresentFactorRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>()
             .Produces(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/restore/begin", BeginRestoreAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.Throttled))
+            .Produces<RestoreChallengeView>();
+        _ = group.MapPost("/restore", RestoreAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.SessionExpired, ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.FactorRejected, ErrorCodes.CredentialSuspended,
+                    ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnCounterMismatch,
+                    ErrorCodes.WebAuthnRelyingPartyChanged, ErrorCodes.WebAuthnUserVerificationRequired,
+                    ErrorCodes.Throttled))
+            .Accepts<PresentFactorRequest>(MediaTypeNames.Application.Json)
+            .Produces<SignInProgressView>();
         _ = group.MapPost("/link", LinkAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
             .Accepts<SignInRequest>(MediaTypeNames.Application.Json)
-            .Produces(StatusCodes.Status202Accepted);
+            .Produces<RequestedLinkView>(StatusCodes.Status202Accepted);
         _ = group.MapPost("/link/abandon", AbandonLinkAsync)
             .Declares(EndpointDeclaration.Answering())
             .Accepts<AbandonLinkRequest>(MediaTypeNames.Application.Json)
@@ -117,7 +138,8 @@ internal static class AuthenticationEndpoints
     }
 
     // AUTH-ABUSE-001 AC5: the browser's own tokens travel with the sign-in it opens, so
-    // a browser the account knows is not held by an attack on the account.
+    // a browser the account knows is not held by an attack on the account; the
+    // sign-in is bound to the browser's pre-authentication session (D-226).
     private static async Task<IResult> BeginAsync(
         IAuthentication authentication,
         HttpContext context,
@@ -139,6 +161,7 @@ internal static class AuthenticationEndpoints
                         RequestOrigin.Source(context.Request),
                         Carried(context.Request, BrowserCookies.Browser),
                         Carried(context.Request, BrowserCookies.Device),
+                        Carried(context.Request, BrowserCookies.PreAuthentication),
                         cancellationToken)
                     .ConfigureAwait(false),
                 challenge => TypedResults.Json(
@@ -148,9 +171,10 @@ internal static class AuthenticationEndpoints
                     StatusCodes.Status200OK));
     }
 
-    // REG-SESS-003, API-LAND-001: a link completes in the browser that asked for it
-    // and on a press; the same call from anywhere else changes nothing and carries
-    // back the code to type where the sign-in began.
+    // REG-SESS-003, API-LAND-001: a link completes in the browser its sign-in is bound
+    // to and on a press; the same call from anywhere else changes nothing and carries
+    // back the code to type where the sign-in began. A link's token names its sign-in,
+    // so a challengeId beside it is not read (D-224 item 17).
     private static async Task<IResult> PresentAsync(
         AuthenticationService authentication,
         BrowserSessionCookies cookies,
@@ -167,11 +191,6 @@ internal static class AuthenticationEndpoints
             .ReadAsync<PresentFactorRequest>(context.Request, cancellationToken)
             .ConfigureAwait(false);
 
-        if (request.ChallengeId is not { Length: > 0 } challenge)
-        {
-            return Answers.Malformed("challengeId");
-        }
-
         SessionOrigin origin = RequestOrigin.Of(context.Request);
 
         if (request.LinkToken is { Length: > 0 } token)
@@ -186,7 +205,6 @@ internal static class AuthenticationEndpoints
             return await LandedAsync(
                     await authentication
                         .LandAsync(
-                            challenge,
                             Carried(context.Request, BrowserCookies.PreAuthentication),
                             token,
                             request.Factor,
@@ -202,6 +220,11 @@ internal static class AuthenticationEndpoints
                     context,
                     cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        if (request.ChallengeId is not { Length: > 0 } challenge)
+        {
+            return Answers.Malformed("challengeId");
         }
 
         if (request.Presented() is not FactorPresentation presented)
@@ -287,6 +310,33 @@ internal static class AuthenticationEndpoints
             .ConfigureAwait(false);
     }
 
+    // AUTH-FACT-016 AC9 (D-224 item 18): a new code is sent only to the browser the
+    // held sign-in is bound to (D-226).
+    private static async Task<IResult> ResendDeviceAsync(
+        IAuthentication authentication,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authentication);
+        ArgumentNullException.ThrowIfNull(context);
+
+        ResendDeviceRequest request = await JsonBody
+            .ReadAsync<ResendDeviceRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        return request.ChallengeId is not { Length: > 0 } challenge
+            ? Answers.Malformed("challengeId")
+            : Answers.Of(
+                await authentication
+                    .ResendDeviceCodeAsync(
+                        challenge,
+                        Carried(context.Request, BrowserCookies.PreAuthentication),
+                        RequestOrigin.Source(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                Accepted);
+    }
+
     private static async Task<IResult> StepUpAsync(
         AuthenticationService authentication,
         RequestSession browser,
@@ -352,8 +402,86 @@ internal static class AuthenticationEndpoints
             .ConfigureAwait(false);
     }
 
+    // AUTH-SESS-005, D-224 item 13: the restore in place reads the cookie of the session
+    // that lapsed, which stage 5 kept and recorded for this route and the next alone,
+    // and is carried by the token of the browser's pre-authentication session (D-226).
+    private static async Task<IResult> BeginRestoreAsync(
+        AuthenticationService authentication,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authentication);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return Answers.Of(
+            await authentication
+                .BeginRestoreAsync(
+                    browser.Restorable,
+                    Carried(context.Request, BrowserCookies.PreAuthentication),
+                    RequestOrigin.Source(context.Request),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            challenge => TypedResults.Json(
+                RestoreChallengeView.Of(challenge),
+                AuthenticationJson.Default.RestoreChallengeView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    // AUTH-SESS-005, D-224 item 13: a completed restore ends the browser's
+    // pre-authentication session as a completed sign-in does, and sets the restored
+    // session's cookie and token (D-226).
+    private static async Task<IResult> RestoreAsync(
+        AuthenticationService authentication,
+        RequestSession browser,
+        BrowserSessionCookies cookies,
+        PreAuthenticationService contacts,
+        IConfigurationStore configuration,
+        TimeProvider time,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authentication);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        PresentFactorRequest request = await JsonBody
+            .ReadAsync<PresentFactorRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (request.ChallengeId is not { Length: > 0 } challenge)
+        {
+            return Answers.Malformed("challengeId");
+        }
+
+        if (request.Presented() is not FactorPresentation presented)
+        {
+            return Answers.Malformed("value");
+        }
+
+        return await ReachedAsync(
+                await authentication
+                    .RestoreAsync(
+                        browser.Restorable,
+                        challenge,
+                        presented,
+                        RequestOrigin.Of(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                cookies,
+                contacts,
+                configuration,
+                time,
+                context,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     // AUTH-ABUSE-003: accepted whether or not the identifier belongs to an account
-    // and whether or not the policy enables the entry the link would be.
+    // and whether or not the policy enables the entry the link would be, naming the
+    // sign-in the ask opened where it opened one (AUTH-FACT-003 AC6).
     private static async Task<IResult> LinkAsync(
         IAuthentication authentication,
         HttpContext context,
@@ -377,7 +505,11 @@ internal static class AuthenticationEndpoints
                         Carried(context.Request, BrowserCookies.PreAuthentication),
                         cancellationToken)
                     .ConfigureAwait(false),
-                Accepted);
+                requested => TypedResults.Json(
+                    RequestedLinkView.Of(requested),
+                    AuthenticationJson.Default.RequestedLinkView,
+                    contentType: null,
+                    StatusCodes.Status202Accepted));
     }
 
     private static async Task<IResult> CodeAsync(
@@ -460,19 +592,26 @@ internal static class AuthenticationEndpoints
     private static async Task<IResult> SessionAsync(
         ISessions sessions,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
 
         AccessContext holder = Asking(browser);
 
+        // AUTH-SESS-012 (D-224): a sign-in a navigation completed, such as a social
+        // provider's return, is told here where its authorization waits.
         return Answers.Of(
             await sessions
                 .ReadAsync(holder, browser.Required.Id, cancellationToken)
                 .ConfigureAwait(false),
             session => TypedResults.Json(
-                SessionDetailView.Of(session),
+                SessionDetailView.Of(session) with
+                {
+                    ContinueTo = session.AuthorizationWaiting ? Continuing(context) : null,
+                },
                 AuthenticationJson.Default.SessionDetailView,
                 contentType: null,
                 StatusCodes.Status200OK));
@@ -605,11 +744,16 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(time);
 
+        string? continueTo = null;
+
         if (outcome.Session is IssuedSession issued)
         {
-            if (Carried(context.Request, BrowserCookies.PreAuthentication) is string first)
+            // AUTH-SESS-012 AC10 (D-226): the rotation carries the authorization the
+            // browser had waiting to the record, and the answer says where it waits.
+            if (Carried(context.Request, BrowserCookies.PreAuthentication) is string first
+                && await contacts.RotateAsync(OpaqueToken.Of(first), issued.Id, cancellationToken).ConfigureAwait(false))
             {
-                await contacts.RotateAsync(OpaqueToken.Of(first), cancellationToken).ConfigureAwait(false);
+                continueTo = Continuing(context);
             }
 
             cookies.Write(context.Response, issued);
@@ -641,11 +785,18 @@ internal static class AuthenticationEndpoints
         }
 
         return TypedResults.Json(
-            SignInProgressView.Of(outcome.Progress),
+            SignInProgressView.Of(outcome.Progress) with { ContinueTo = continueTo },
             AuthenticationJson.Default.SignInProgressView,
             contentType: null,
             StatusCodes.Status200OK);
     }
+
+    // AUTH-SESS-012 (D-224): the continuation's address under the provider address the
+    // host declared.
+    private static string? Continuing(HttpContext context) =>
+        context.RequestServices.GetService<AuthenticationAddresses>() is AuthenticationAddresses addresses
+            ? OidcRegistration.Continuing(addresses)
+            : null;
 
     // BFF-STEP-001: the endpoints that read this are mounted as ones that need a
     // session, so the stage that requires one has already answered a request that

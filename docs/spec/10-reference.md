@@ -190,11 +190,11 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `config.value.notallowed` | Value outside the key's enum or set, or of the wrong JSON type. For `restrictions`, a restriction whose name breaks the rule of section 4.5, whose `host:<name>` key has no registered supplier (`details.supplier`), or whose bucket list is empty. A system policy naming a locked domain (`details.field` `emailDomains`). A value whose feature needs a host declaration the deployment has not made: a policy's `photos` set to `true` without an image codec, or a domain added to a lock without a DNS resolver, `details.field` naming the field and `details.requires` the declaration (`imageCodec`, `dnsResolver`). From `configure` (OPS-CFG-004), a protected key's value outside its set, `token.signing.algorithm` other than `ES256` among them (AUTH-KEY-001); 422 | section 4 value types, OPS-CFG-004, OPS-CFG-008, LIB-HOST-001, D-151, D-166, D-181 |
 | `config.change.reasonrequired` **(renamed)** | A configuration change submitted without a reason: a key at `/admin/config/{key}`, an organization's policy or its locked domains, any edit of the restriction set, a tightening included, or a restriction grant; and a protected key set by `configure` from the server without `--reason`; `details.key` names the setting where one is changed; 422 | OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, OPS-CFG-008, AUTH-ABUSE-004, D-146, D-166 (renamed from `auth.restriction.reasonrequired`) |
 | ~~`config.change.stepuprequired`~~ | *Retired by D-166. A loosening without step-up is refused with `auth.stepup.required` (`09` `PUT /admin/config/{key}`).* | |
-| `config.value.lastdestination` | A change would leave an `alerting.*.destinations` list empty; 422 | OPS-ALERT-004a, D-153 |
-| `config.change.superseded` **(new)** | A change of an `alerting.*.destinations` key found, under its row's lock, a value in force other than the one whose destinations it notified: a concurrent change committed meanwhile; nothing is changed; 409 | OPS-ALERT-004a, D-183 |
+| `config.value.lastdestination` | *Retired by D-225. Alert destinations are the host's.* | |
+| `config.change.superseded` | *Retired by D-225. Alert destinations are the host's.* | |
 | `config.policy.belowsystem` **(new)** | An organization policy field the replacement states is looser than the system default; `details.field` names the first such field in the order of section 4.1a; a field the replacement leaves out is not judged; 422 | AUTH-STEP-002a, D-143, D-166 |
 | `api.request.malformed` | The request could not be read: its body is not the shape the endpoint takes; a member it requires is absent or empty; a free-text member is outside 1 to 1024 characters after trimming (API-CONV-002; a blank reason whose absence has a code of its own answers that code); or a member or path segment holds a word outside the closed vocabulary this chapter or the declared model fixes for it (a takedown trigger outside section 5.12d, a configuration key the route does not serve, an undeclared permission), or a route or query value or a body member that does not read as its type (an identifier, an app password's identifier outside its form, or a role, restriction or document name outside its rule), `details.member` naming it. `details.member` names the member the reader stopped at, or the one the endpoint required, by its name as the request writes it: a member inside another by the member names from the body's top joined by dots; an element of a list, or a member inside one, by the list's name; a member inside an element of a body that is itself a list by its own name; and never with a `$` root or a list index (API-CONV-002); it carries nothing of the member's value; where the body failed before any member, the refusal carries the code alone. Also: an authorization request the provider refused and cannot return to a client, `details.error` then carrying the protocol's code and nothing else (LIB-API-003); a registration through `IResources` whose member is absent or unreadable, a sensitive type naming no `subject` included (AUTHZ-INHERIT-002, IDN-LIFE-002a); for a `Janus.Cli` command, a command, argument or input it cannot read, answered as one JSON line (OPS-BOOT-001, OPS-SEC-001, DR-016); and, at the sign-on's return, the code a refusal logs as carried inside and never answers, for a return carrying neither `code` nor `error` or one whose `error` does not read as RFC 6749 Appendix A.7 defines one or is longer than 64 characters, the browser returned with `auth.session.expired` (BFF-SESS-006, D-195, D-196); 400 | API-CONV-002, API-CONV-003, INT-SMS-003, D-162, D-166, D-179, D-183, CONV-DESIGN-004, D-187, D-195, D-196 |
-| `api.request.invalid` | A well-formed request refused on its meaning where no more specific code of section 1 exists: a body naming something that does not exist or cannot be acted on (an invitation's `documents` naming a document not published, `details.member` `documents`; an invitation's `formerMailbox` where no held mailbox stands for its corporate address, `details.member` `formerMailbox`; a group member that does not exist or belongs to another organization; an out-of-band privacy request naming a subject no account bears; a preferred second step naming a method the account has not enrolled, `details.member` `method`); a compliance record dated after now, or two licences under one identifier; a registration, move or removal through `IResources` that the declaration or the library's records refuse (a removal naming a record not registered, `details.member` `resource`); a host's field opened for a subject the deployment holds no key for (`IPersonalFields`, `details.member` `subject`). `details.member` names the member in the form `api.request.malformed` gives; 422 | API-CONV-002, API-CONV-003, REG-INV-001, REG-MAIL-003, AUTHZ-GROUP-001, IDN-ATTR-008, AUTHZ-INHERIT-002, IDN-LIFE-002a, OPS-MAINT-001, PRIV-RIGHT-001, PRIV-RIGHT-005a, D-166, D-178, D-179, D-183, D-203 |
+| `api.request.invalid` | A well-formed request refused on its meaning where no more specific code of section 1 exists: a body naming something that does not exist or cannot be acted on (an invitation's `documents` naming a document not published, `details.member` `documents`; an invitation's `formerMailbox` where no held mailbox stands for its corporate address, `details.member` `formerMailbox`; a group member that does not exist or belongs to another organization; an out-of-band privacy request naming a subject no account bears; a preferred second step naming a method the account has not enrolled, `details.member` `method`); a registration, move or removal through `IResources` that the declaration or the library's records refuse (a removal naming a record not registered, `details.member` `resource`); a host's field opened for a subject the deployment holds no key for (`IPersonalFields`, `details.member` `subject`). `details.member` names the member in the form `api.request.malformed` gives; 422 | API-CONV-002, API-CONV-003, REG-INV-001, REG-MAIL-003, AUTHZ-GROUP-001, IDN-ATTR-008, AUTHZ-INHERIT-002, IDN-LIFE-002a, PRIV-RIGHT-001, PRIV-RIGHT-005a, D-166, D-178, D-179, D-183, D-203 |
 | `model.containment.cycle` **(new)** | Containment declaration forms a cycle | AUTHZ-MODEL-004 |
 | `model.derivation.unindexed` **(new)** | Derivation names an unindexed column | AUTHZ-DERIVE-004 |
 | `model.purpose.missingassessment` **(new)** | Legitimate interest declared without an assessment | PRIV-BASIS-002 |
@@ -207,12 +207,12 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `model.startup.secretunavailable` **(renamed)** | Startup: a secret the library reads through the host's secret source (LIB-EXT-001) was not supplied, or was supplied empty or unusable: a key-encryption key or fingerprint key version (a fingerprint key version shorter than 32 bytes included), the maintenance credential, the mail server's secret where the library's mail-server adapter is used, or a social provider's credential, read by the provider's name; `details.key` names the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`. A `Janus.Cli` command gives it where its standard input is a terminal (`details.key` `input`) or the document it reads there holds no usable key (`details.key` naming the member); `migrate`, whose document carries the connection alone, gives it with `details.key` `input` where the document carries no member (one carrying any other member is `api.request.malformed` naming `input`, first); a `connection` absent, blank or not a string is `api.request.malformed` naming `connection` for every command, save `migrate`'s absent member (OPS-MIG-001, OPS-SEC-001, D-204, D-209). Also raised at the start where a row of the subject-key table that is not erased stands under a key-encryption key version the source does not supply, and, as a fault a request answers `system.fault` (section 6), by an unwrap of a stored value under a version no longer held; `details.version` names the version | OPS-SEC-001, AUTH-KEY-002, OPS-MIG-003a, OPS-SEC-003, LIB-EXT-001, D-147, D-166 (renamed from `model.startup.kekunavailable`), D-183, D-204, D-209 |
 | `model.startup.governinglanguage` **(new)** | Startup: `legal.governinglanguage` is unset | PRIV-CONS-005, LIB-HOST-001, D-147 |
 | `model.startup.preferencedeclaration` **(new)** | Startup: a host preference declaration is malformed, a preference's name holding a `.` or `/` or being `language` or `timeZone` among them (D-206) | REG-PREF-001, D-147, D-206 |
-| `model.startup.declarationmissing` | Startup: a required deployment value or host declaration is absent: a key of section 4 that names the deployment, or a conditional one whose condition holds; a declaration of LIB-HOST-001 (the secret source, the passkey pages, the authentication addresses, the sign-on client, the landing origins, the mail server client where a mail server is registered, and each mail and SMS transport the deployment does not take from the library); a subject-event handler (none covering a type declared sensitive), an export contributor (none covering a type that declares an encrypted field or a sensitive category, PRIV-RIGHT-003, D-203), a purpose handler (none naming a purpose resting on consent or on an objectable basis, PRIV-RIGHT-001a, D-203) or a restriction key supplier; a declaration a stored value or the model needs (the image codec while a policy's `photos` is `true`, the DNS resolver while a domain is listed, the relationship source of every declared derivation, materialised or not). Or the model declares an item without what it requires: an encrypted field without its subject column, a type without its purposes, a purpose without its data categories, a category without its retention floor, a consent-based purpose on a type with no one subject column (`details.key` `<type>.<purpose>`). `details.key`, `details.handler` or `details.supplier` names it. The declarations' `details.key` spellings are `secretSource`, `passkeyAddresses` (or its field), `authenticationAddresses.signIn`, `authenticationAddresses.provider`, `signOnClient.clientId`, `landingOrigins.authentication`, `landingOrigins.account`, `mailServerClient.clientId`, `mailTransport`, `smsTransport`, `imageCodec` and `dnsResolver`; a relationship source is named by its relationship | LIB-HOST-001, AUTHZ-MODEL-003, PRIV-PRIN-001, PRIV-RIGHT-005a, PRIV-RIGHT-005b, PRIV-RIGHT-001a, PRIV-RIGHT-003, PRIV-SENS-002, IDN-ATTR-002, REG-DOM-001, AUTHZ-DERIVE-005, AUTHZ-DERIVE-007, D-153, D-162, D-166, D-180, D-203 |
-| `model.startup.declarationinvalid` | Startup: a declaration is present but malformed: a name held to the rule of INT-SMS-003 that breaks it (a governing document's, a subject-event subscriber's, a purpose handler's: 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`); a text-message template naming a place section 5.26 does not list (`details.declaration` the message kind, `details.field` the place); an encrypted field or its subject column that is not a member of the declared type, or a subject column that is not of the library's subject identifier type; two encrypted fields of one type under one declared name, a member's or the one `Encrypted` is given (`details.declaration` the type, `details.field` the name, PRIV-RIGHT-005a, D-206); an encrypted field whose data category no purpose declared on its type names (`details.declaration` the type, `details.field` the field); a social provider declared twice or with a member outside its rule (`details.declaration` `socialProvider.<provider>`, for example `socialProvider.apple`, the name `model.startup.secretunavailable` gives the provider's credential; `details.field` the member, `provider` where the provider is declared twice or names a factor that is not a social provider); a relationship source given twice, naming no declared relationship, answering rows of another type than its derivation's, or naming a context the container does not give in a scope or whose model does not map the contract tables (`details.declaration` `relationshipSource.<relationship>`, `details.field` `relationship`, `rows` or `context`); a lawful basis list naming one key twice, or a basis with an empty key or label (`details.declaration` `lawfulBases`, `details.field` `key` or `label`); a type declaring as a capability a permission it does not declare, or two capabilities of one action (`details.declaration` the type, `details.field` `capabilities`, BFF-CAP-002, D-202, D-206); a job declared with a permission not declared, a library-owned one, one bound to a step-up gate or one whose action is `export` (`details.declaration` `job.<name>`, `details.field` `permissions`), or under a name of section 5.29 or `migrate` (`details.field` `name`) (IDN-PRIN-001, D-202, D-206); a resource type declared twice under one name (`details.declaration` the type, `details.field` `name`, AUTHZ-MODEL-004, D-206); a declared role naming a permission not declared or `system:administer` (`details.field` `permissions`), or named as a role of section 3 (`details.field` `name`) (`details.declaration` `role.<name>`, AUTHZ-GRANT-004, D-204); a step-up gate or a purpose bound to a library-owned permission of section 2.1 (`details.declaration` `binding.<permission>`, `details.field` `stepUpGate` or `purpose`, AUTHZ-GATE-005, D-209); a declared cookie naming a purpose not declared or not resting on consent (`details.field` `purpose`), or named as a cookie the library sets (`details.field` `name`) (`details.declaration` `cookie.<name>`, PRIV-CONS-006a, D-203); a job's or an export contributor's name that breaks the rule of INT-SMS-003, a declared role's name outside the rule `09` `POST /admin/roles` gives, a declared cookie's name that is no cookie name (RFC 6265), or any of these given twice (`details.declaration` `job.<name>`, `contributor.<name>`, `role.<name>` or `cookie.<name>`, `details.field` `name`, D-206). `details.declaration` and `details.field` name it. A landing origin that is not the origin of a registered browser client's return address, or an authentication landing origin that is not the origin of the sign-in address, is refused with `details.key` `landingOrigins.authentication` or `landingOrigins.account` | LIB-HOST-001, INT-SMS-003, PRIV-PRIN-001, PRIV-RIGHT-005a, AUTHZ-MODEL-003, AUTHZ-MODEL-004, IDN-LIFE-012, AUTHZ-DERIVE-005, PRIV-BASIS-001, AUTHZ-GATE-005, D-166, D-175, D-183, D-202, D-203, D-204, D-206, D-209 |
+| `model.startup.declarationmissing` | Startup: a required deployment value or host declaration is absent: a key of section 4 that names the deployment, or a conditional one whose condition holds; a declaration of LIB-HOST-001 (the secret source, the passkey pages, the authentication addresses, the sign-on client, the landing origins, the notification handler and the alert handler, D-225); a subject-event handler (none covering a type declared sensitive), an export contributor (none covering a type that declares an encrypted field or a sensitive category, PRIV-RIGHT-003, D-203), a purpose handler (none naming a purpose resting on consent or on an objectable basis, PRIV-RIGHT-001a, D-203) or a restriction key supplier; a declaration a stored value or the model needs (the image codec while a policy's `photos` is `true`, the DNS resolver while a domain is listed, the relationship source of every declared derivation, materialised or not). Or the model declares an item without what it requires: an encrypted field without its subject column, a type without its purposes, a purpose without its data categories, a category without its retention floor, a consent-based purpose on a type with no one subject column (`details.key` `<type>.<purpose>`). `details.key`, `details.handler` or `details.supplier` names it. The declarations' `details.key` spellings are `secretSource`, `passkeyAddresses` (or its field), `authenticationAddresses.signIn`, `authenticationAddresses.provider`, `signOnClient.clientId`, `landingOrigins.authentication`, `landingOrigins.account`, `notificationHandler`, `alertHandler`, `imageCodec` and `dnsResolver`; a relationship source is named by its relationship | LIB-HOST-001, AUTHZ-MODEL-003, PRIV-PRIN-001, PRIV-RIGHT-005a, PRIV-RIGHT-005b, PRIV-RIGHT-001a, PRIV-RIGHT-003, PRIV-SENS-002, IDN-ATTR-002, REG-DOM-001, AUTHZ-DERIVE-005, AUTHZ-DERIVE-007, D-153, D-162, D-166, D-180, D-203, D-226 |
+| `model.startup.declarationinvalid` | Startup: a declaration is present but malformed: a name held to the rule of INT-SMS-003 that breaks it (a governing document's, a subject-event subscriber's, a purpose handler's: 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`); an encrypted field or its subject column that is not a member of the declared type, or a subject column that is not of the library's subject identifier type; two encrypted fields of one type under one declared name, a member's or the one `Encrypted` is given (`details.declaration` the type, `details.field` the name, PRIV-RIGHT-005a, D-206); an encrypted field whose data category no purpose declared on its type names (`details.declaration` the type, `details.field` the field); a social provider declared twice or with a member outside its rule (`details.declaration` `socialProvider.<provider>`, for example `socialProvider.apple`, the name `model.startup.secretunavailable` gives the provider's credential; `details.field` the member, `provider` where the provider is declared twice or names a factor that is not a social provider); a relationship source given twice, naming no declared relationship, answering rows of another type than its derivation's, or naming a context the container does not give in a scope or whose model does not map the contract tables (`details.declaration` `relationshipSource.<relationship>`, `details.field` `relationship`, `rows` or `context`); a lawful basis list naming one key twice, or a basis with an empty key or label (`details.declaration` `lawfulBases`, `details.field` `key` or `label`); a type declaring as a capability a permission it does not declare, or two capabilities of one action (`details.declaration` the type, `details.field` `capabilities`, BFF-CAP-002, D-202, D-206); a job declared with a permission not declared, a library-owned one, one bound to a step-up gate or one whose action is `export` (`details.declaration` `job.<name>`, `details.field` `permissions`), or under a name of section 5.29 or `migrate` (`details.field` `name`) (IDN-PRIN-001, D-202, D-206); a resource type declared twice under one name (`details.declaration` the type, `details.field` `name`, AUTHZ-MODEL-004, D-206); a declared role naming a permission not declared or `system:administer` (`details.field` `permissions`), or named as a role of section 3 (`details.field` `name`) (`details.declaration` `role.<name>`, AUTHZ-GRANT-004, D-204); a step-up gate or a purpose bound to a library-owned permission of section 2.1 (`details.declaration` `binding.<permission>`, `details.field` `stepUpGate` or `purpose`, AUTHZ-GATE-005, D-209); a declared cookie naming a purpose not declared or not resting on consent (`details.field` `purpose`), or named as a cookie the library sets (`details.field` `name`) (`details.declaration` `cookie.<name>`, PRIV-CONS-006a, D-203); a job's or an export contributor's name that breaks the rule of INT-SMS-003, a declared role's name outside the rule `09` `POST /admin/roles` gives, a declared cookie's name that is no cookie name (RFC 6265), or any of these given twice (`details.declaration` `job.<name>`, `contributor.<name>`, `role.<name>` or `cookie.<name>`, `details.field` `name`, D-206). `details.declaration` and `details.field` name it. A landing origin that is not the origin of a registered browser client's return address, or an authentication landing origin that is not the origin of the sign-in address, is refused with `details.key` `landingOrigins.authentication` or `landingOrigins.account` | LIB-HOST-001, INT-SMS-003, PRIV-PRIN-001, PRIV-RIGHT-005a, AUTHZ-MODEL-003, AUTHZ-MODEL-004, IDN-LIFE-012, AUTHZ-DERIVE-005, PRIV-BASIS-001, AUTHZ-GATE-005, D-166, D-175, D-183, D-202, D-203, D-204, D-206, D-209 |
 | `model.startup.redirectclient` | Startup: a registered client's return address is not an absolute `https` address with a host (or `http` on a loopback IP literal), `details.client` naming the client; or `redirect.defaultclient` names no registered client of kind `browser-application`, `details.key` naming the key | API-REDIR-001 AC3, D-162, D-166 |
 | `model.startup.subscribername` | Startup: two subject-event subscribers or purpose handlers are registered under one name, or one under `erasure-ledger`, the name the library records the off-host ledger's confirmation under; `details.handler` names it | IDN-LIFE-003a, DR-016, D-166, D-203 |
 | `model.startup.requestlogging` **(new)** | Startup: the host's logging enables the category of the framework's per-request entries, `Microsoft.AspNetCore.Hosting.Diagnostics`, which carry a request's query string, at Information through any provider, or disables that category in every provider, which would drop the scope carrying `RequestId` (BFF-LOG-002) | BFF-LOG-002, D-197 |
-| `model.rotation.notready` | A key rotation's seal (`rotate-kek --sealed`, `rotate-fingerprint-key --sealed`) was confirmed where no rotation of that kind awaits one, where the latest has retired, or while values stand under a previous version, a held username, an unlapsed reservation, an abuse ledger line that still counts or a sign-in in progress included; `details.pending` counts them. The command exits 1 | OPS-SEC-003 AC3, AC4, AC6, D-166, D-183 |
+| `model.rotation.notready` | A key rotation's retirement (`rotate-kek --retire`, `rotate-fingerprint-key --retire`) was asked where no rotation of that kind awaits one, where the latest has retired, or while values stand under a previous version, a held username, an unlapsed reservation, an abuse ledger line that still counts or a sign-in in progress included; `details.pending` counts them. The command exits 1 | OPS-SEC-003 AC3, AC4, AC6, D-166, D-183, D-225 |
 | `model.type.undeclaredreference` | Startup: a resource type references a type that is not declared, or an action is bound to a purpose no resource type declares; `details.permission` names the action | AUTHZ-MODEL-004, AUTHZ-GATE-005, D-153, D-166 |
 | `model.role.undeclaredpermission` | Startup: a role the deployment holds grants a permission that is not declared; a declared role naming one fails with `model.startup.declarationinvalid` (AUTHZ-GRANT-004) | AUTHZ-MODEL-004, D-153, D-204 |
 | `model.derivation.undeclaredreference` | Startup: a derivation references a type or relationship that is not declared | AUTHZ-MODEL-004, D-153 |
@@ -222,12 +222,12 @@ message — rewording the human-facing text is free, changing the code is breaki
 
 | Code | Meaning | Source |
 |---|---|---|
-| `integration.callback.rejected` **(new)** | A callback refused. 429 with `Retry-After`, the error carrying `details.retryAt`, where `integration.callback.ratelimit` refused it; 422 with no `Retry-After` for every other cause: signature, window, event identifier, source range, reference, confirmation, an unreadable or unheld delivery report, a provider event its keys do not verify, a request carrying the session cookie once the rate limit admits it (BFF-MACH-001, D-189). The Google security-event route answers a Security Event Token that fails validation as RFC 8935 section 2.3 does (400 with `err` and `description`), not with this code. A provider's document the library cannot have or read is no cause of this code: the delivery is answered `system.fault` (500) on either provider route | INT-GEN-003, BFF-MACH-001, BFF-MACH-002, BFF-MACH-003, IDN-LIFE-012a, D-166, D-183, D-189 |
+| `integration.callback.rejected` **(new)** | A callback refused. 429 with `Retry-After`, the error carrying `details.retryAt`, where `integration.callback.ratelimit` refused it; 422 with no `Retry-After` for every other cause: signature, window, event identifier, source range, reference, confirmation, a provider event its keys do not verify, a request carrying the session cookie once the rate limit admits it (BFF-MACH-001, D-189). The Google security-event route answers a Security Event Token that fails validation as RFC 8935 section 2.3 does (400 with `err` and `description`), not with this code. A provider's document the library cannot have or read is no cause of this code: the delivery is answered `system.fault` (500) on either provider route | INT-GEN-003, BFF-MACH-001, BFF-MACH-002, BFF-MACH-003, IDN-LIFE-012a, D-166, D-183, D-189 |
 | `integration.callback.inprogress` | A delivery of an event whose earlier delivery is still being carried: its claim is unsettled and younger than `integration.callback.claimtimeout`. Not recorded as a rejection and not counted toward `alerting.callback.threshold`; 409 | BFF-MACH-002 AC3, D-166 |
-| `integration.endpoint.insecure` **(new)** | Startup, a change by `configure` (OPS-CFG-004), or a change of `password.blocklist.selfhosted.address` through `PUT /admin/config/{key}` (422, D-198): a key naming an endpoint the library calls (`integration.mail.endpoint`, `integration.sms.endpoint`, `integration.mailserver.endpoint`, `password.blocklist.selfhosted.address`) holds a value that is not an absolute `https` address; `details.key` names the key | INT-GEN-001, INF-TLS-004, D-162, D-166, D-198 |
+| `integration.endpoint.insecure` **(new)** | Startup, a change by `configure` (OPS-CFG-004), or a change of `password.blocklist.selfhosted.address` through `PUT /admin/config/{key}` (422, D-198): a key naming an endpoint the library calls (`integration.mailserver.endpoint`, `password.blocklist.selfhosted.address`) holds a value that is not an absolute `https` address; `details.key` names the key | INT-GEN-001, INF-TLS-004, D-162, D-166, D-198 |
 | `integration.mailserver.conflict` **(new)** | A mail server's answer to a mailbox push, never a route's: the server holds an account at the mailbox's name that does not carry the mailbox's identifier, so the push adopts nothing and changes nothing there. The push is marked failed at that attempt and raises `degradation` scoped `mailbox.conflict:<mailbox id>` | INT-MAIL-001, INT-MAIL-007, LIB-HOST-001, REG-MAIL-003, D-177 |
 | `integration.sms.windowactive` | *Retired by D-146. See `auth.restriction.exceeded` (AUTH-ABUSE-004).* | |
-| `integration.sms.balancefloor` **(new)** | The latest balance a poll recorded is below the configured floor; with none recorded nothing is refused, and an alert is never refused (INT-SMS-004, OPS-ALERT-003); 422 | INT-SMS-004, D-166, D-186 |
+| `integration.sms.balancefloor` | *Retired by D-225. The library keeps no gateway floor.* | |
 
 ---
 
@@ -274,8 +274,8 @@ IDN-READ-004 names, `record:read` and `record:erase`, and no other (D-218, D-221
 | `ropa:read` | Generating records of processing |
 | `privacyrequest:manage` | The data-subject request queue, erasure progress, the list of incomplete deliveries, and the manual completion path of a delivery of any kind of section 5.50 (IDN-LIFE-003a, D-203) |
 | `notice:publish` | Publishing a compliance-text version (PRIV-CONS-006) |
-| `compliance:manage` | Licence and permit dates, assessment references, and the declared human-input fields of the records of processing |
-| `system:administer` | **Loosening** any runtime configuration (OPS-CFG-002), the named restriction set, the alert destinations, an organization's policy and its locked domains included, asked in the administrative organization beside the route's own permission; granting, revoking or changing a role that carries it, and changing the members of a group that holds one (OPS-CFG-007); generating the break-glass credential and reading whether one stands (`GET /admin/break-glass`, OPS-BOOT-001, OPS-BOOT-004); writing and revoking a grant in an organization other than the administrative organization, so an organization `POST /admin/organizations` created receives its first grants (AUTHZ-SCOPE-001, D-207), an invitation's roles excepted (`09`). The protected settings in OPS-CFG-004 are not changeable through the application at all, by anyone |
+| `compliance:manage` | Assessment references and the declared human-input fields of the records of processing |
+| `system:administer` | **Loosening** any runtime configuration (OPS-CFG-002), the named restriction set, an organization's policy and its locked domains included, asked in the administrative organization beside the route's own permission; granting, revoking or changing a role that carries it, and changing the members of a group that holds one (OPS-CFG-007); generating the break-glass credential and reading whether one stands (`GET /admin/break-glass`, OPS-BOOT-001, OPS-BOOT-004); writing and revoking a grant in an organization other than the administrative organization, so an organization `POST /admin/organizations` created receives its first grants (AUTHZ-SCOPE-001, D-207), an invitation's roles excepted (`09`). The protected settings in OPS-CFG-004 are not changeable through the application at all, by anyone |
 
 `system:administer` is self-referential — granting or revoking it requires holding it
 (OPS-CFG-007). A **break-glass session holds the `system-administrator` role**, which
@@ -345,21 +345,17 @@ loosens upward, a key with a floor and no ceiling loosens downward, a boolean lo
 away from its default, and any other key (both bounds, neither bound, enum, list, set,
 string) loosens on any change, as D-079b classifies settings with no direction.
 
-**Every key carries a safe default (P-001) except the twelve that name the deployment**
-— origins (`webauthn.origins`), hosting location (`hosting.location`), the two alert
-destination lists, the owner's email and SMS destinations (D-129), the SMS balance
-floor, the governing language of legal documents (`legal.governinglanguage`, D-146), the
-calendar time zone (`privacy.calendar.timezone`), the message languages
-(`notification.languages`), the email sending domain
-(`notification.email.sendingdomain`) (D-153) and the hosting environment
-(`hosting.environment`, PRIV-ROPA-001), which every deployment needs because every
-deployment generates the records of processing (D-166). **Six further keys are
-conditional**: `hosting.crossborderbasis`, required only when `hosting.location` is
-`outside` (INT-HOST-002, D-147); `service.name`, required only when `context` is in
-`password.blocklist.sources` (D-153); `password.blocklist.selfhosted.address`, required
-only when `password.blocklist.source` is `selfHosted`; `integration.mail.endpoint` and
-`integration.sms.endpoint`, each required only while the library's shipped transport for
-it is registered (D-162); and `integration.mailserver.endpoint`, required only where the
+**Every key carries a safe default (P-001) except the six that name the deployment** —
+origins (`webauthn.origins`), hosting location (`hosting.location`), the governing
+language of legal documents (`legal.governinglanguage`, D-146), the calendar time zone
+(`privacy.calendar.timezone`), the message languages (`notification.languages`) (D-153)
+and the hosting environment (`hosting.environment`, PRIV-ROPA-001), which every
+deployment needs because every deployment generates the records of processing (D-166,
+D-225). **Four further keys are conditional**: `hosting.crossborderbasis`, required only
+when `hosting.location` is `outside` (INT-HOST-002, D-147); `service.name`, required
+only when `context` is in `password.blocklist.sources` (D-153);
+`password.blocklist.selfhosted.address`, required only when `password.blocklist.source`
+is `selfHosted`; and `integration.mailserver.endpoint`, required only where the
 library's mail-server adapter is used (D-166). Those are shown with no default, are
 listed in LIB-HOST-001, and startup **fails** with a named error if any is unset (a
 conditional one, when its condition holds). The public-holiday list is **not** among
@@ -468,10 +464,10 @@ is the empty list.
 | `abuse.botdefence.repeatedattempts` | 3 per `PT1H` | R, integer registration sessions per source per hour; raising is loosening | AUTH-ABUSE-008, D-153, D-189: the count behind the `repeatedAttempts` signal, which fires where the session a request would create makes more than this many |
 | `integration.callback.ratelimit` | 60 per `PT1M` | R, integer per source per minute, fixed window; 429 `integration.callback.rejected` before any lookup; raising is loosening | INT-GEN-003, BFF-MACH-003, D-153 |
 | `integration.callback.claimtimeout` | `PT5M` | R, duration, floor `PT1M` | BFF-MACH-002, D-166: how long an unsettled claim on a host callback's event stands; a redelivery meeting a younger claim is answered 409 `integration.callback.inprogress`, and one meeting an older claim takes it over and is carried |
-| `integration.mail.endpoint` | empty | **P**, string, an absolute `https` address; startup refuses another with `integration.endpoint.insecure` naming the key | INT-GEN-001, LIB-EXT-001, D-162, D-166: where the library's shipped mail transport calls; empty while the deployment registers a transport of its own |
-| `integration.sms.endpoint` | empty | **P**, string, an absolute `https` address; startup refuses another with `integration.endpoint.insecure` naming the key | INT-GEN-001, INT-SMS-001, LIB-EXT-001, D-162, D-166: where the library's shipped SMS transport calls; empty while the deployment registers a transport of its own |
+| `integration.mail.endpoint` | *Retired by D-225. The library sends no mail (`05` INT-SMS-006).* | | |
+| `integration.sms.endpoint` | *Retired by D-225. The library sends no SMS (`05` INT-SMS-006).* | | |
 | `integration.mailserver.endpoint` | empty | **P**, string, an absolute `https` address, required only where the library's mail-server adapter is used; read at the start, so a change takes effect at the next start; startup refuses another with `integration.endpoint.insecure` naming the key | INT-MAIL-001, INT-GEN-001, LIB-EXT-001, D-166, D-176: where the library's mail-server adapter reaches the mail server (JMAP at `<endpoint>/jmap`, INT-MAIL-001); where it is set when the application starts and the host registers no `IMailServer`, the adapter is the deployment's mail server integration until the next start (LIB-HOST-001, CONV-DESIGN-007) |
-| `restrictions` | the five shipped restrictions below | R, edited through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up `restriction:edit`, a reason on every edit, OPS-CFG-008); a restriction's name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`; a `{name}` outside it is refused 400 `api.request.malformed` naming `name` on every route that takes one, and a name outside it inside the `restrictions` value with `config.value.notallowed`; a loosening (the changes section 4's Direction paragraph names for this row: a higher max, a shorter interval, a removed bucket, a deleted restriction, a narrowed channel and a `resend` mark added among them) falls under OPS-CFG-002, needs `system:administer` and raises a Normal alert | AUTH-ABUSE-004, OPS-CFG-008, D-146, D-166, D-183, D-197: the **named restriction set** governing every send except an alert, which answers to the deduplication of OPS-ALERT-002 alone. Each restriction is a key (§5.14), an optional purpose (§5.15), an optional channel (§5.15a), one or more buckets of (max, interval, `sliding` · `fixed`, §5.16) and, optionally, the `resend` mark (§5.16a). Security notices to an existing holder answer only to restrictions whose purpose is `notification`. Replaces `abuse.sms.window`, INT-SMS-002 and IDN-LIFE-011 |
+| `restrictions` | the five shipped restrictions below | R, edited through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up `restriction:edit`, a reason on every edit, OPS-CFG-008); a restriction's name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`; a `{name}` outside it is refused 400 `api.request.malformed` naming `name` on every route that takes one, and a name outside it inside the `restrictions` value with `config.value.notallowed`; a loosening (the changes section 4's Direction paragraph names for this row: a higher max, a shorter interval, a removed bucket, a deleted restriction, a narrowed channel and a `resend` mark added among them) falls under OPS-CFG-002, needs `system:administer` and raises a Normal alert | AUTH-ABUSE-004, OPS-CFG-008, D-146, D-166, D-183, D-197: the **named restriction set** governing every message the library hands to the host (`05` INT-SMS-006); an alert, handed to the alert handler, answers to the deduplication of OPS-ALERT-002 alone. Each restriction is a key (§5.14), an optional purpose (§5.15), an optional channel (§5.15a), one or more buckets of (max, interval, `sliding` · `fixed`, §5.16) and, optionally, the `resend` mark (§5.16a). Security notices to an existing holder answer only to restrictions whose purpose is `notification`. Replaces `abuse.sms.window`, INT-SMS-002 and IDN-LIFE-011 |
 | `restrictions` · `sms.destination` | key `destination`, purpose `any`, channel `sms`, 3 per 24 h sliding | R, as above | AUTH-ABUSE-004, D-146, D-166 |
 | `restrictions` · `sms.source` | key `source`, purpose `any`, channel `sms`, 10 per 1 h sliding | R, as above | AUTH-ABUSE-004, D-146, D-166 |
 | `restrictions` · `sms.resend` | key `destination`, purpose `any`, channel `sms`, 1 per 3 min sliding, marked `resend` (§5.16a) | R, as above | AUTH-ABUSE-004, D-197 |
@@ -485,9 +481,9 @@ is the empty list.
 | `link.invitation.lifetime` | 7 days | R, ceiling 30 d | IDN-LIFE-009a, D-132 — single use |
 | `photo.maxbytes` | 2097152 | R, integer bytes (2 MiB), ceiling 10485760 (10 MiB) | IDN-ATTR-004, D-132, D-152 |
 | `photo.maxdimension` | 1024 | R, integer pixels on the longest side; larger images are downscaled | IDN-ATTR-004, D-132 |
-| `abuse.sms.balancefloor` | — **required** | R, decimal in the currency the gateway reports | INT-SMS-004, D-153 |
-| `abuse.sms.pollinterval` | `PT15M` | R | INT-SMS-004, AUTH-ABUSE-006, D-153: how often the gateway balance is read |
-| `abuse.sms.drainfactor` | 3.0 | R, decimal, floor 1.0; raising is loosening | INT-SMS-004, D-153: the `sms-balance` alert fires when the last hour's spend exceeds this factor times the trailing seven-day hourly mean, or when the balance would reach `abuse.sms.balancefloor` within 24 hours at the current rate |
+| `abuse.sms.balancefloor` | *Retired by D-225. A gateway's balance is the host's.* | | |
+| `abuse.sms.pollinterval` | *Retired by D-225. A gateway's balance is the host's.* | | |
+| `abuse.sms.drainfactor` | *Retired by D-225. A gateway's balance is the host's.* | | |
 | `abuse.botdefence.signals` | `[datacenterRange, repeatedAttempts]` | R, set over the two members named; the set is closed until a decision adds a member; removing a member is loosening; while `datacenterRange` is in the set and no fresh range file is held, it does not fire and `degradation` is raised (D-189) | AUTH-ABUSE-008, D-107, D-152, D-189 |
 | `abuse.botdefence.ranges.refresh` | `P1D` | R, duration | AUTH-ABUSE-008, D-189: the datacenter range file's refresh cadence, as `location.database.refresh` is the location file's |
 | `abuse.botdefence.ranges.maxage` | `P30D` | R, duration | AUTH-ABUSE-008, D-189: beyond this age, judged from the date the file states, the range file is stale, `datacenterRange` does not fire, and a Normal degradation is raised |
@@ -495,11 +491,11 @@ is the empty list.
 | `exfiltration.export.stepuprequired` | true | R | D-045, D-148, D-166: **staff bulk export only**. `/privacy/export` is not governed by this key; it is gated at the account's reachable assurance by AUTH-STEP-002a instead (D-141). Turning it off raises `stepup-policy-weakened` (OPS-ALERT-001) |
 | `exfiltration.export.ratelimit` | 5 per hour | R | D-045, D-107 |
 | `exfiltration.export.auditing` | `true` | **P** | D-045 |
-| `alerting.email.destinations` | — **required** | R, **list** | D-048, D-071 |
-| `alerting.sms.destinations` | — **required** | R, **list** | D-048, D-071 |
-| `alerting.owner.enabled` | false | R | D-071, D-129, D-166: routine alerts to the owner; `breakglass-used` and `breakglass-generated` bypass it |
-| `alerting.owner.email` | — **required** | R | OPS-BOOT-002, D-129 |
-| `alerting.owner.sms` | — **required** | R | OPS-BOOT-002, D-129 |
+| `alerting.email.destinations` | *Retired by D-225. Alert destinations are the host's.* | | |
+| `alerting.sms.destinations` | *Retired by D-225. Alert destinations are the host's.* | | |
+| `alerting.owner.enabled` | *Retired by D-225. Alert destinations are the host's.* | | |
+| `alerting.owner.email` | *Retired by D-225. Alert destinations are the host's.* | | |
+| `alerting.owner.sms` | *Retired by D-225. Alert destinations are the host's.* | | |
 | `alerting.destinationchange.notify` | *Retired by D-152. The notice to the previous destinations is non-suppressible (D-083, OPS-ALERT-004a); a switch for it was the hole D-083 closed, so no key exists.* | | |
 | `exfiltration.readvolume.baselinewindow` | 30 days | R | D-071, D-107 |
 | `exfiltration.readvolume.factor` | 3.0 | R, decimal, floor 1.0; raising is loosening | OPS-ALERT-005, D-153: `read-volume-anomaly` fires when the actor's records returned today exceed this factor times their daily mean over the baseline window and exceed `exfiltration.readvolume.minimum` |
@@ -513,8 +509,8 @@ is the empty list.
 | `alerting.nonexistent.threshold` | 20 per `PT1H` | R, integer, system-wide; raising is loosening | AUTH-ABUSE-003, D-121, D-153: `nonexistent-notice-rate` |
 | `alerting.callback.threshold` | 10 per `PT1H` | R, integer rejected callbacks per source; raising is loosening | BFF-MACH-003, D-153: `callback-verification-failed` |
 | `alerting.dedupe.window` | 1 hour | R | D-048, D-107 |
-| `alerting.sms.severitythreshold` | `high` | R: `high` · `normal` (OPS-ALERT-001 severities); to `normal` sends more, to `high` fewer | D-048, D-152 |
-| `maintenance.expiry.warninglead` | 30 days | R | OPS-MAINT-001, OPS-ALERT-001, D-121 |
+| `alerting.sms.severitythreshold` | *Retired by D-225. How an alert is delivered is the host's.* | | |
+| `maintenance.expiry.warninglead` | 30 days | R | DR-009a, PRIV-RIGHT-002, OPS-ALERT-001, D-121, D-225: the lead of the key-encryption key's cryptoperiod warning and of the holiday list's |
 
 ### 4.5a Authorization
 
@@ -554,9 +550,9 @@ is the empty list.
 | `outbox.retry.maxattempts` | 10 | R, integer, floor 1 | IDN-LIFE-003a, AUTH-ABUSE-004, D-153, D-162, D-166: attempts before a delivery of section 5.50 (an erasure's, a takedown's, a restriction's, a consent's or an objection's) is `failed` with `erasure-delivery-exhausted`, an event is `failed` with `degradation`, or a message is removed with `degradation` scoped `send:<channel>` (about eight hours end to end at the defaults) |
 | `outbox.claim.timeout` | `PT2M` | R, duration, floor `PT30S`, ceiling `PT10M` | CONV-DESIGN-003, INF-BG-001, AUTH-ABUSE-004, D-183, D-186: how long a claim on a row that a delivery job or a send's immediate attempt carries stands, renewed before each delivery of a row that tracks several; an attempt still running then is abandoned as failed, and the next pass may take the row once it is due |
 | `sweep.interval` | `PT5M` | R, duration, ceiling `PT15M` | OPS-OBS-003, AUTH-KEY-003, PRIV-RIGHT-002, PRIV-RET-005, OPS-ALERT-006, D-153, D-166, D-187: one sweep for expired sessions, tokens and codes, identifier adds and replaces whose every record is spent or past its lifetime, elapsed grace and cooling-off windows, privacy request deadlines (PRIV-RIGHT-002), sending-restriction records and every other abuse ledger line its own check no longer reads (PRIV-RET-005), export-limit records an hour old (OPS-ALERT-006) and domain re-verification, and collection sessions, record access sessions, offers to attach and person records' deletion windows (`21`, D-221); a deadline therefore fires within this interval of its instant |
-| `notification.languages` | none; **required** | R, **list** of BCP 47 tags, at least one | IDN-ATTR-001, AUTH-ABUSE-004, AUTH-ABUSE-005, D-031, D-153, D-166, D-186, D-197: the deployment's message languages. Step 3 of the recipient-language resolution sends in all of them: by email one message carrying every language in this order, subject lines joined by a space, `|` and a space and texts by one blank line (IDN-ATTR-001), judged and counted once; by text message one message per language, judged with the weight of their number and each counted by every applicable restriction not marked `resend`; a restriction marked `resend` judges and counts the send once (section 5.16a). Every template is validated in each language at startup |
-| `notification.email.sendingdomain` | — **required** | R, string | INT-MAIL-011, D-153 |
-| `notification.email.relayregistered` | empty | R, **set** of domains | INT-MAIL-011, D-153: domains registered with the Apple private relay; when `apple` is in any effective `loginFactors` and the sending domain is not in this set, the Normal condition `relay-domain-unregistered` fires |
+| `notification.languages` | none; **required** | R, **list** of BCP 47 tags, at least one | IDN-ATTR-001, AUTH-ABUSE-004, D-031, D-153, D-166, D-186, D-197, D-225: the deployment's message languages. Step 3 of the recipient-language resolution hands the host one message carrying all of them, in this order (IDN-ATTR-001, `05` INT-SMS-006): by email it is judged and counted once; by SMS it is judged with the weight of their number and counted that many times by every applicable restriction not marked `resend`; a restriction marked `resend` judges and counts the send once (section 5.16a) |
+| `notification.email.sendingdomain` | *Retired by D-225. Delivering mail is the host's.* | | |
+| `notification.email.relayregistered` | *Retired by D-225. Delivering mail is the host's.* | | |
 | `location.database.refresh` | `P7D` | R, duration | INT-GEN-006, D-153: IP location database refresh cadence |
 | `location.database.maxage` | `P30D` | R, duration | INT-GEN-006, D-153, D-166: beyond this age, judged from the date the file states, the file is stale, no location is shown, and a Normal degradation is raised |
 | `service.name` | — **required when `context` is in `password.blocklist.sources`** | R, string | AUTH-PASS-004, D-153: the word the `context` source forbids in passwords |
@@ -576,10 +572,10 @@ is the empty list.
 | `retention.consent` | `P3Y` | R, duration counted from the end of the processing the consent covered, floor `P1Y` | PRIV-RET-001, D-132, D-152 — evidential period |
 | `retention.<category>` | the floor the host declares for that category (LIB-HOST-001); no library default, startup fails for a declared category without one | R, duration, one key per host-declared data category, floor enforced; changed through `PUT /admin/config/retention.<category>`, shortening is loosening | PRIV-RET-001, D-107, D-166 |
 | `hosting.environment` | none; **required** | R, string | PRIV-ROPA-001, LIB-HOST-001, D-153, D-166: the free-text hosting environment cell of the register; required of every deployment, since every deployment generates the records of processing |
-| `backup.restoretest.objective` | `PT8H` | R, duration, ceiling `PT8H` | DR-007, D-044, D-153: `restore-test-failed` fires when the automatic restore test exceeds this; the upper bound of the accepted objective |
-| `backup.restoretest.interval` | `P90D` | R, duration, ceiling `P90D` | DR-007, D-110, D-153, D-166: a day count, so the interval never exceeds the shortest calendar quarter; D-152's months rule, written for floors, would hold `P3M` at 93 days |
-| `backup.restoretest.canary` | set at bootstrap | R, subject identifier | DR-007, OPS-BOOT-001, D-153, D-166: the canary account bootstrap seeds as a member of the administrative organization holding no role and no credential: display name `Restore canary` (its encrypted field) and verified email `canary@restore-test.invalid`; the restore test decrypts the field and resolves the email's fingerprint |
-| `backup.retention` | 35 days | R, floor 14 days | DR-003, DR-006a, DR-010, D-132 — also bounds how long a pre-erasure backup survives |
+| `backup.restoretest.objective` | *Retired by D-225. Backups are the deployment's.* | | |
+| `backup.restoretest.interval` | *Retired by D-225. Backups are the deployment's.* | | |
+| `backup.restoretest.canary` | *Retired by D-225. Backups are the deployment's.* | | |
+| `backup.retention` | *Retired by D-225. Backups are the deployment's.* | | |
 | `hosting.location` | none; **required** | **P**; `inside` · `outside` (section 5.40) | INT-HOST-001, D-162, D-166: read at generation into the records of processing |
 | `hosting.crossborderbasis` | — **required when outside Egypt** | **P** | INT-HOST-002 |
 | `legal.governinglanguage` | — **required** | **P** (a restart to change); a change raises a Normal alert (OPS-ALERT-001) | PRIV-CONS-005, LIB-HOST-001, D-146: the default governing language of every legal document version; each version carries its own, translations attach and never govern. Arabic for the default (Egyptian) deployment (D-031) |
@@ -608,8 +604,6 @@ redeployment. Every change is recorded and alerted (OPS-ALERT-001).
 | `webauthn.algorithms` | OPS-CFG-004; AUTH-FACT-014, D-120, D-166 |
 | `hosting.location` | OPS-CFG-004; INT-HOST-001, D-166 |
 | `hosting.crossborderbasis` | OPS-CFG-004; INT-HOST-002, D-166 |
-| `integration.mail.endpoint` | OPS-CFG-004; INT-GEN-001, D-162, D-166 |
-| `integration.sms.endpoint` | OPS-CFG-004; INT-GEN-001, D-162, D-166 |
 | `integration.mailserver.endpoint` | OPS-CFG-004; INT-MAIL-001, INT-GEN-001, D-166, D-176 |
 | `redirect.defaultclient` | OPS-CFG-004; API-REDIR-001, D-162, D-166 |
 
@@ -623,9 +617,10 @@ any relying party that validates offline against the JWKS (AUTH-OIDC-004, D-147)
 |---|---|---|---|
 | `oidc.accesstoken.lifetime` | 10 minutes | R, ceiling 1 h; lengthening is loosening (OPS-CFG-002) | AUTH-OIDC-004, D-147: for an offline validator this is the revocation latency |
 | `oidc.code.lifetime` | 60 seconds | R, ceiling 10 min | AUTH-SESS-012, D-147: replaces the hard-coded sixty seconds |
+| `oidc.continuation.lifetime` | 30 minutes | R, ceiling 1 h | AUTH-SESS-012, D-224: how long a browser's pending authorization waits for the sign-in that completes it; past it the continuation issues nothing |
 | `token.signing.algorithm` | `ES256` | **P** (§4.8); `ES256`, the one member in this version | AUTH-KEY-001, D-147, D-148: verified against the mail server's source, file `crates/directory/src/backend/oidc/lookup.rs` of its repository, inspected 2026-09-18, which accepts P-256 keys from a JWKS as ES256 and refuses symmetric keys. The one value admitted in this version; any other is refused with `config.value.notallowed` (D-181). The one place the value is held |
 | `token.signing.rotation` | 90 days | R, duration, floor `P1D`; lengthening is loosening | AUTH-KEY-001, OPS-SEC-002, D-147, D-166, D-181, D-197: the cadence of the signing keys and of every registered client's secret, which the library generates and holds wrapped under the deployment's data key; overlap is `oidc.accesstoken.lifetime` plus 5 minutes, for a signing key the longest lifetime it signed under, not a key of its own |
-| `redirect.defaultclient` | empty | **P**, string, the identifier of a registered client of kind `browser-application`; startup refuses one the registry does not hold, or one of kind `protocol`, with `model.startup.redirectclient` | API-REDIR-001, API-REDIR-002, D-162, D-166: the client a browser falls back to where the identifier a request carried is not one the registry holds; while empty, no fallback destination is carried and the frontend chooses its own |
+| `redirect.defaultclient` | empty | **P**, string, the identifier of a registered client of kind `browser-application`; startup refuses one the registry does not hold, or one of kind `protocol`, with `model.startup.redirectclient` | API-REDIR-001, API-REDIR-002, D-162, D-166: the client a browser falls back to where the identifier a request carried is not one the registry holds; while empty, no fallback destination is carried and the frontend chooses its own, and `GET /oidc/authorize/continue` with no authorization pending answers `/` (D-228) |
 
 ---
 
@@ -970,24 +965,21 @@ Recorded by the age screen when `registration.adultaffirmation` = `off`: `minor`
 
 ### 5.23 Alert conditions
 
-One identifier per OPS-ALERT-001 row, carried by `AlertRaised` and the first part of
-the deduplication key of OPS-ALERT-002, which adds the scope (below) and the account or
-actor: `auth-failures-sustained` · `recovery-clustering`
-· `approver-volume` · `read-volume-anomaly` · `breakglass-used` ·
-`breakglass-generated` · `protected-setting-changed` · `alert-destination-changed` ·
-`stepup-policy-weakened` · `concurrent-sessions-implausible` · `denial-spike` ·
-`sms-balance` · `background-job-failed` · `erasure-delivery-exhausted` ·
-`certificate-renewal-failed` · `clock-drift` · `degradation` ·
-`callback-verification-failed` · `nonexistent-notice-rate` ·
-`privacy-deadline-approaching` · `privacy-deadline-reached` · `expiry-approaching` ·
-`holiday-list-exhausted` · `no-emergency-credential` · `restore-test-failed` ·
+One identifier per OPS-ALERT-001 row, carried by `AlertRaised` and the first part of the
+deduplication key of OPS-ALERT-002, which adds the scope (below) and the account or
+actor: `auth-failures-sustained` · `recovery-clustering` · `approver-volume` ·
+`read-volume-anomaly` · `breakglass-used` · `breakglass-generated` ·
+`protected-setting-changed` · `stepup-policy-weakened` ·
+`concurrent-sessions-implausible` · `denial-spike` · `background-job-failed` ·
+`erasure-delivery-exhausted` · `degradation` · `callback-verification-failed` ·
+`nonexistent-notice-rate` · `privacy-deadline-approaching` · `privacy-deadline-reached`
+· `expiry-approaching` · `holiday-list-exhausted` · `no-emergency-credential` ·
 `restriction-loosened` · `restriction-granted` · `domain-reverification-failed` ·
-`domain-removed` · `governing-language-changed` · `governing-text-missing` ·
-`relay-domain-unregistered`.
+`domain-removed` · `governing-language-changed` · `governing-text-missing`.
 
 `breakglass-used` and `breakglass-generated` (a first issue or a replacement) are High,
-and reach the owner's destinations whatever `alerting.owner.enabled` holds (OPS-BOOT-002,
-OPS-BOOT-004).
+and reach the owner as well as the operator when the host delivers them (OPS-BOOT-002,
+OPS-BOOT-004, OPS-ALERT-003).
 
 **Scopes.** Where a condition is raised for one of several things, a scope names the
 thing. The scopes the chapters name:
@@ -997,15 +989,12 @@ thing. The scopes the chapters name:
 | `degradation` | `mailbox.push:<mailbox id>` | A mailbox push spent `outbox.retry.maxattempts`; details `{ mailbox, state, attempts }`, the mailbox named by its identifier and never by its address; raised again each time the push, begun again, spends them | INT-MAIL-007, D-177 |
 | `degradation` | `mailbox.conflict:<mailbox id>` | A mailbox push met, at the mailbox's name, a server account that does not carry the mailbox's identifier (`integration.mailserver.conflict`); details `{ mailbox, state }`, the mailbox named by its identifier and never by its address; raised again each day the push, begun again, meets it | INT-MAIL-001, INT-MAIL-007, D-177 |
 | `degradation` | `mailbox.reconciliation` | Reconciliation found a difference, details `{ mailboxes, unknown }`, or could not have the listing, `{ listed: false }` | INT-MAIL-007 |
-| `degradation` | `send:<channel>` | A message spent `outbox.retry.maxattempts` (section 4.6) and was removed | AUTH-ABUSE-004, D-162 |
+| `degradation` | `send:<channel>` | A message the host's notification handler never took spent `outbox.retry.maxattempts` (section 4.6) and was removed (INT-SMS-006) | AUTH-ABUSE-004, D-162 |
 | `degradation` | `notice.cookies` | The cookies the deployment sets (the library's and the host's declared ones) differ from those the current version of the privacy notice lists; compared by name, purpose, lifetime and third-party readability at each start and at each change of a key that gives a library cookie's lifetime, and raised until a version is published that lists them; nothing is raised before a first version is published; details `{ added, removed, changed }`, by name | PRIV-CONS-006a, D-203 |
 | `degradation` | `password.blocklist.fallback` | Screening fell back to the offline list; `details.configured` and `details.used` (`offline`) | OPS-OBS-002, AUTH-PASS-004 |
-| `degradation` | `clock.reference.absent` · `clock.reference.unread` | No clock reference is declared, or the declared one could not answer | OPS-OBS-002, INF-HOST-001 |
-| `degradation` | `certificate.renewal.absent` · `certificate.renewal.unread` | No certificate renewal outcome is declared, or the declared one could not answer | OPS-OBS-002, INF-TLS-003 |
 | `degradation` | `botdefence.ranges.absent` · `botdefence.ranges.stale` · `botdefence.ranges.refresh` | At a read of the file that fails, the job's or the first a process makes where a registration is judged, the file not opened or read, or refused whole (`.refresh`); and while `datacenterRange` is among `abuse.botdefence.signals`, at each run of the `datacenter-ranges` job and where a registration is judged, no range source declared or no range file read (`.absent`), or the file held older than `abuse.botdefence.ranges.maxage` by its own date (`.stale`) | AUTH-ABUSE-008, D-189, D-190, D-191 |
 | `degradation` | `location.database.absent` · `location.database.stale` · `location.database.refresh` | At a read of the file that fails, the job's or the first a process makes where an address is resolved, the file not opened or read, or refused whole (`.refresh`); and where an address is resolved, no location file declared or none read (`.absent`), or the file held older than `location.database.maxage` by its own date (`.stale`) | INT-GEN-006, OPS-OBS-002, D-190, D-191 |
 | `degradation` | `provider.unavailable:<provider>` | A social provider's round trip could not reach or read the provider, its discovery document, its published keys or its token endpoint; details `{ provider, part }`, `part` one of `discovery` · `keys` · `token` | IDN-LIFE-012, OPS-OBS-002, D-192 |
-| `expiry-approaching` | `envelope-rotation` | The annual envelope operation falls due within `maintenance.expiry.warninglead` of a year after the log's latest `envelope-rotation` entry | OPS-MAINT-001 |
 | `expiry-approaching` | `kek-cryptoperiod` | The key-encryption key's cryptoperiod ends within `maintenance.expiry.warninglead`; `details.version`, `details.rotatedAt`, `details.dueAt` | DR-009a |
 
 A lost registration channel raises `degradation` with `details.component`
@@ -1108,9 +1097,9 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `ops.configuration.changed` | security | A runtime setting was changed through the one configuration operation, or a value was set by bootstrap or by `configure` from the server under that command's principal; `details.key`, `details.before` (the value in force, null where the key has no default and no value stood), `details.after`, `details.loosening` and `details.reason`, which every change carries | OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, OPS-CFG-008 |
 | `ops.keyrotation.completed` | security | A rotation of the key-encryption key or the fingerprint key reached every value under its version; principal `rotate-kek` or `rotate-fingerprint-key`, reason `OPS-SEC-003`; `details.kind` (section 5.41), `details.version`, `details.processed`; no subject, no organization | OPS-SEC-003 AC5 |
 | `ops.keyrotation.resumed` | security | A stopped rotation was taken up again from its recorded progress; the same principal and details | OPS-SEC-003 AC2, AC5 |
-| `ops.keyrotation.retired` | security | The versions before a completed rotation's were retired once its escrow copy was confirmed sealed; the same details and `details.retired` | OPS-SEC-003 AC3, AC4, AC5 |
+| `ops.keyrotation.retired` | security | The versions before a completed rotation's were retired by `--retire`; the same details and `details.retired` | OPS-SEC-003 AC3, AC4, AC5 |
 | `ops.keyrotation.started` | security | A rotation started; the same principal and details | OPS-SEC-003 AC5 |
-| `ops.restoretest.completed` | security | A run of the automated restore test ended; principal `restore-test`, reason `DR-007`; `details.outcome` (`passed` · `unrestored` · `undecrypted` · `unresolved` · `overrun`), `details.elapsedSeconds`, `details.objectiveSeconds`, `details.outlived`; no subject, no organization | DR-007 AC2, DR-008 AC2 |
+| `ops.restoretest.completed` | *Retired by D-225. Backups are the deployment's.* | | |
 | `privacy.consent.granted` | security | A consent was granted for a purpose, naming the document version it stands against; where staff acted for a person record (`21` REC-ADM-002), the staff member acting, the record the `subject`, `details.mechanism` `administrator` and `details.reason` the reason given | PRIV-CONS-001, PRIV-CONS-011, D-223 |
 | `privacy.consent.withdrawn` | security | A consent was withdrawn for a purpose; where staff acted for a person record (`21` REC-ADM-002), the staff member acting, the record the `subject`, `details.mechanism` `administrator` and `details.reason` the reason given | PRIV-CONS-008, D-223 |
 | `privacy.document.published` | security | A version of a legal document was published in its governing language | PRIV-CONS-005 |
@@ -1132,11 +1121,12 @@ D-187, D-197, D-206, D-207*
 
 ### 5.25 Message kinds
 
-What the library asks a deployment's catalogue for when it sends a message. The set is
-closed; the library holds no words (CONV-CONTENT-001), and every send of a kind fills the
-same places (section 5.26), so one text serves every send of it. A kind that carries a
-link carries it in the place `link`; section 5.43 names the link kind each such message
-kind lands under.
+The kinds of message the library hands the host's notification handler (`05`
+INT-SMS-006, D-225). The set is closed; the library holds no words (CONV-CONTENT-001),
+and every message of a kind carries the same values, its places (section 5.26), which
+the host's text places. A kind that carries a link carries it in the place `link`;
+section 5.43 names the link kind each such message kind lands under. An alert is no
+message: it reaches the host's alert handler (OPS-ALERT-003).
 
 | Kind | Asked for when | Places | Source |
 |---|---|---|---|
@@ -1150,7 +1140,6 @@ kind lands under.
 | `credential-unbound` | A `phoneCode` credential is suspended and its number has left the account, whatever suspended it (AUTH-FACT-002); sent when the number leaves, then on the schedule its suspension runs (every `recovery.invalidation.noticeinterval` and 24 hours before invalidation), carrying no link, since no cancel returns it | none | AUTH-RECOV-007, AUTH-FACT-002, D-197 |
 | `enrolment-link` | The link that carries an admin-assisted enrolment | `link` | AUTH-RECOV-002 |
 | `recovery-link` | The link a person asked for to set a new password; it restores nothing else, and carries the `signin` purpose (section 5.15) | `link` | AUTH-RECOV-004, AUTH-RECOV-005, REG-IDENT-002 |
-| `alert` | An OPS-ALERT-001 condition the operator has to see | `condition`, `raisedAt`, and the places of section 5.26 its condition carries | OPS-ALERT-001 |
 | `no-account` | The answer to a request made for an address no account holds | none | AUTH-ABUSE-003 |
 | `record-access-code` | The code that opens a record access session, an authentication code held to `code.signin.lifetime` and `code.signin.attempts`, under the `signin` purpose | `code` | REC-ACC-001, D-221 |
 | `record-access-none` | The answer to an ask of a code for an address no reachable person record holds as a contact verified at a collection, once per `abuse.nonexistent.window`, judged under the purpose of the code asked for | none | REC-ACC-001, D-221 |
@@ -1174,38 +1163,16 @@ kind lands under.
 
 ### 5.26 Message places
 
-The places a text leaves for the library's values, and the width each is measured at
-when a text-message template is checked against its budget at startup (INT-SMS-003,
-AUTH-ABUSE-005): a text that carries `{link}` is budgeted at two segments of its
-alphabet, 306 characters of the GSM 7-bit default alphabet or 134 otherwise, and every
-other text at one, 160 or 70. The set is closed: startup refuses a text-message template
-naming a place not listed here with `model.startup.declarationinvalid`.
+The values a message carries, each by name, for the host's text to place (`05`
+INT-SMS-006, D-225). The set is closed.
 
-| Place | Width | Carries |
-|---|---|---|
-| `code` | the verification code's digits | The code to enter |
-| `link` | the longer declared landing origin, `/link#`, the widest kind of section 5.43, `.` and a drawn token, one token size for every link | The address to open, `<origin>/link#<kind>.<token>` (section 5.43) |
-| `token` | *Retired by D-166. Every link-bearing kind carries `link`, which holds the token; no text carries a bare token, and a text-message template naming `{token}` names a place with no width and is refused at startup.* | |
-| `condition` | the widest spelling of section 5.23 | The alert condition |
-| `raisedAt` | the width of an instant | When it was raised |
-| `restriction` | 64, the bound its name is held to | The restriction a grant or a loosening names |
-| `key` | the widest settings key, each family at its widest parameter | The setting a change names |
-| `destinationsBefore` | the width of a count | Alert destinations before a change |
-| `destinationsAfter` | the width of a count | Alert destinations after it |
-| `balance` | the width of an amount | The gateway balance |
-| `floor` | the width of an amount | `abuse.sms.balancefloor` |
-| `spentLastHour` | the width of an amount | The last hour's spend |
-| `document` | 64, the bound its name is held to | The governing document with no text |
-| `delivery` | the width of an identifier | The delivery of section 5.50 that exhausted its attempts |
-| `kind` | 32 | The section 5b event that delivery carries |
-| `attempts` | the width of a count | Its attempts |
-| `outstanding` | the joined width of the registered required subscribers' names or of the registered purpose handlers' names, whichever is wider, measured at startup | The subscribers or purpose handlers that have not confirmed it |
-| `request` | the width of an identifier | The privacy request whose deadline was reached |
-| `type` | the widest spelling of section 5.12c types | What was asked for |
-| `status` | the widest spelling of section 5.12c statuses | Where it had got to |
-| `decisionDue` | the width of an instant | When the decision was due |
+| Place | Carries |
+|---|---|
+| `code` | The code to enter |
+| `link` | The address to open, `<origin>/link#<kind>.<token>` (section 5.43) |
+| `token` | *Retired by D-166. Every link-bearing kind carries `link`, which holds the token.* |
 
-*Source: INT-SMS-003, AUTH-ABUSE-005, D-162, D-166*
+*Source: D-162, D-166, D-225*
 
 ### 5.27 Register findings
 
@@ -1266,7 +1233,7 @@ of this table, nor `migrate`, the command that runs as none (D-206).
 | `events` | job | `delivery` | IDN-LIFE-003a |
 | `sends` | job | `delivery` | INF-BG-001 |
 | `mailbox-provisioning` | job | `delivery` | INT-MAIL-006a |
-| `alert-dispatch` | job | `delivery` | OPS-ALERT-001 |
+| `alert-dispatch` | job | `delivery` | OPS-ALERT-003 |
 | `mail-reconciliation` | job | `reconciliation` | INT-MAIL-007 |
 | `derivation-driftcheck` | job | `reconciliation` | AUTHZ-DERIVE-005 |
 | `location-database` | job | `monitoring` | INT-GEN-006 |
@@ -1274,13 +1241,8 @@ of this table, nor `migrate`, the command that runs as none (D-206).
 | `read-volume-baseline` | job | `monitoring` | OPS-ALERT-005 |
 | `holiday-list` | job | `monitoring` | PRIV-RIGHT-002 |
 | `emergency-credential` | job | `monitoring` | OPS-BOOT-001 |
-| `clock-drift` | job | `monitoring` | INF-HOST-001 |
-| `certificate-renewal` | job | `monitoring` | INF-TLS-003 |
-| `restore-test` | job | `monitoring` | DR-007 |
 | `audit-partitions` | job | `retention-purge` | PRIV-RET-002 |
-| `licence-expiry` | job | `monitoring` | OPS-MAINT-001 |
-| `envelope-rotation` | job | `monitoring` | DR-009a |
-| `sms-balance` | job | `monitoring` | INT-SMS-004 |
+| `kek-cryptoperiod` | job | `monitoring` | DR-009a |
 | `bootstrap` | command | `bootstrap` | OPS-BOOT-001 |
 | `configure` | command | `configuration` | OPS-CFG-004 |
 | `register-client` | command | `configuration` | AUTH-OIDC-001 |
@@ -1348,11 +1310,7 @@ check, AUTH-FACT-016), the `kind` of `GET /account/devices`.
 
 ### 5.35 Licence kinds and maintenance tasks
 
-Licence kinds: `licence` · `permit`. Maintenance tasks: `envelope-rotation` ·
-`licence-renewal` · `approver-review` · `pipeline-consumption-review` ·
-`risk-trigger-review`.
-
-*Source: OPS-MAINT-001, D-166*
+*Retired by D-225, with OPS-MAINT-001.*
 
 ### 5.36 Phone signal
 
@@ -1621,7 +1579,7 @@ another person's account or loosens a control has one (`09` section 8a).
 | `privacyrequest:fulfil` | Fulfil a privacy request | `POST /admin/privacy/requests/{id}/fulfil`, for every request type (section 5.12c): an erasure's fulfilment starts a grace window, a restriction's restricts another person's account; refusing is not gated (PRIV-RIGHT-001) |
 | `erasure:complete` | Complete a stuck delivery of host-side work of any kind of section 5.50 manually | `POST /admin/erasures/{id}/complete` |
 | `config:loosen` | Loosen any security setting | `PUT /admin/config/{key}` where the change is a loosening (OPS-CFG-002); a tightening is not gated |
-| `alerting:destinations` | Change alert destinations | `PUT /admin/config/{key}` for the `alerting.*.destinations` keys (OPS-ALERT-004a) |
+| `alerting:destinations` | *Retired by D-225. Alert destinations are the host's.* | |
 | `policy:change` | Change an organization's policy | `PUT /admin/organizations/{id}/policy`: every replacement, a tightening included |
 | `organization:delete` | Request or cancel an organization's deletion | `POST /admin/organizations/{id}/delete`, `/delete/cancel` (IDN-ORG-003); creating an organization is not gated |
 | `domain:manage` | Add, verify or remove a locked domain | `/admin/organizations/{id}/domains/*` (REG-DOM-001) |
@@ -1686,7 +1644,7 @@ REC-ATT-002, D-221).
 | `RestrictionChanged` | `restricted` set or lifted | Every registered subject-event handler — **required** |
 | `SendingRestrictionChanged` | A named restriction was created, edited or deleted through `/admin/restrictions/{name}` (AUTH-ABUSE-004); carries the restriction name, the actor and whether the change was a loosening. | Audit, alerting (OPS-ALERT-001) |
 | `SendingRestrictionGranted` | Support added credit to one key under a restriction (AUTH-ABUSE-004); carries the restriction name, the credit, the actor and the reason, never the plain key value | Audit, alerting (OPS-ALERT-001) |
-| `DeviceVerified` | A new-device check completed (AUTH-FACT-016); carries the browser identifier and no personal data | Host (optional) |
+| `DeviceVerified` | A new-device check completed, or a sign-in by a factor delivered to the primary email passed it (AUTH-FACT-016, D-224); carries the browser identifier and no personal data | Host (optional) |
 | ~~`ExportRequested`~~ | *Retired by D-203.* What the host holds reaches an export through its export contributors when the export is assembled (`IExportContributor`, PRIV-RIGHT-003) | |
 | `TakedownExecuted` | Phase one of a takedown has committed; for an account it fires with `AccountSuspended`, for a person record alone (`21` REC-TKD-001); `AccountDeletionRequested` and `RecordDeletionRequested` do **not** fire for a takedown | Host (stop its own processing for the subject, as a required subscriber) |
 | `MembershipChanged` | A membership begins or ends, one bootstrap attaches included; carries `change` (`began` · `ended`, section 5.39) and `invitation`, the invitation whose acknowledgement began it, null otherwise (`01` IDN-READ-002, D-218) | Host |
@@ -1695,7 +1653,7 @@ REC-ATT-002, D-221).
 | `CredentialEnrolled` | An authenticator reached `active`, or a password was set on an existing account, by the person, by recovery or by an invitation, with the enrolment notification to every other recorded channel (AUTH-STEP-007); carries the credential identifier (absent for the password), the catalogue entry and the subject | Host (optional) |
 | `CredentialSuspended` · `CredentialRestored` · `CredentialInvalidated` | A loss report started, by a report, by a removal that would lower reachable assurance, or, for a `phoneCode` credential, by the number it is bound to leaving the account (AUTH-FACT-002), was cancelled, or completed after the window (AUTH-RECOV-007); each carries the credential identifier, the catalogue entry and the subject, and `CredentialSuspended` the instant the window ends. `CredentialSuspended`, and `CredentialRestored` raised from a session, carry the acting and the effective identity of the context that raised it, as the context gives them (AUTHZ-IMP-001); `CredentialRestored` raised from the cancel link carries neither | Host (optional) |
 | ~~`NotificationRequested`~~ | *Retired by D-183. A message is undertaken through the governed send (`IGovernedSend`, AUTH-ABUSE-004) and carried from the library's send outbox to `INotificationHandler` (LIB-EXT-001); an alert travels on its `AlertRaised` row (OPS-ALERT-001). No event is emitted for either.* | |
-| `AlertRaised` | An OPS-ALERT-001 condition fires; carries the condition identifier and, where the alert is raised under one, its scope (section 5.23), the severity and the structured details of the row. Written in the transaction that raised it, at every raise site; the alert channels carry it from that row after commit (OPS-ALERT-001) | Alert channels |
+| `AlertRaised` | An OPS-ALERT-001 condition fires; carries the condition identifier and, where the alert is raised under one, its scope (section 5.23), the severity and the structured details of the row. Written in the transaction that raised it, at every raise site; `alert-dispatch` hands it to the host's alert handler after commit (OPS-ALERT-001, OPS-ALERT-003) | The host's alert handler |
 
 Mail provisioning consumes no event: it reads the state these events announce
 (INT-MAIL-006).

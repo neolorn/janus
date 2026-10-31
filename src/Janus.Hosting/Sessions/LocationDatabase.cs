@@ -23,7 +23,7 @@ namespace Janus.Hosting.Sessions;
 /// Implements INT-GEN-006 and AUTH-SESS-013. An address is resolved against the copy
 /// held and never leaves the process. With no file, a file refused or a file older than
 /// <c>location.database.maxage</c>, no location is answered and the degradation is
-/// raised, each under a scope of its own so that the router carries one alert a window
+/// raised, each under a scope of its own so that one alert is handed over a window
 /// rather than one a sign-in (OPS-ALERT-002); the session is recorded without a
 /// location either way.
 /// </remarks>
@@ -31,7 +31,7 @@ internal sealed class LocationDatabase(
     LocationCopy copy,
     ILocationSource? source,
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time) : ILocationResolver
 {
     private const string Absent = "location.database.absent";

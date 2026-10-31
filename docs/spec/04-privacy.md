@@ -187,7 +187,7 @@ so another jurisdiction declares its own list and changes no code; a list that n
 | Behaviour | Requirement |
 |---|---|
 | Consent | Written consent captured before processing **for those purposes that rest on consent** (PRIV-SENS-002a) |
-| Encryption | Personal fields encrypted per subject (PRIV-RIGHT-005a); backups encrypted (DR-010); disk encrypted |
+| Encryption | Personal fields encrypted per subject (PRIV-RIGHT-005a); backups and disk encrypted by the deployment (D-225) |
 | Retention | Declared like any other category (PRIV-RET-001 AC1); the library has no default retention a sensitive category could be stricter than, so the declaration is required and the register shows it (D-153) |
 | Records | Reported in the sensitive category, separately from non-sensitive |
 
@@ -202,7 +202,7 @@ for authenticator secrets.
 |---|---|
 | Stolen disk | Full-disk encryption (infrastructure) |
 | Database dump | Per-subject encryption of personal fields (PRIV-RIGHT-005a) |
-| Backup file | Backup encryption under a key not on the host (DR-010) |
+| Backup file | Per-subject encryption of personal fields (PRIV-RIGHT-005a); a backup's own encryption is the deployment's (D-225) |
 
 **Which fields are encrypted is declared, not universal.** A column a host record is
 queried by (a reference, a date, an amount, a status) is not personal and stays in
@@ -429,6 +429,11 @@ one deployment (a multi-market document set) are deferred (`00` section 7.3,
 version's number is the count of versions of that document published before it plus
 one, written in decimal, counted per document; the highest is the current version. It
 crosses the wire as the string `version` (`09` section 7).
+
+**The texts' format (D-224).** A version's governing text and each translation are
+CommonMark 0.31.2. The library stores and serves them as published and renders none of
+them; a frontend renders them as CommonMark with raw HTML disabled, escaping any HTML a
+text holds (`18` FE-COMP-002).
 
 **Acceptance criteria**
 1. Every published document version carries exactly one governing language; a version
@@ -1120,8 +1125,8 @@ foreign key does that today.
 - **The KEK SHALL be versioned**, with prior versions held by the application until
   re-wrapping completes. Rotation otherwise strands everything encrypted under the old
   version. A retired version leaves the application's key document at once
-  and the running application when it next starts, and stays in the secrets manager and the envelope until every backup taken before the rotation completed has
-  expired (OPS-SEC-003, DR-009)
+  and the running application when it next starts; keeping it for a backup taken under
+  it is the deployment's (OPS-SEC-003, D-225)
 - **Everything under the key-encryption key is a row of the subject-key table.** A value
   the library encrypts that belongs to no subject (a secret of the deployment, or data
   held for a person who is not yet a subject) SHALL be encrypted, or its own data key
@@ -1335,9 +1340,9 @@ becomes load-bearing; pinning the version means a future normalization change re
 rather than silently stranding every existing fingerprint.
 
 **Where the key lives:** in the secrets manager, fetched at startup beside the
-key-encryption key and never written to the database (INF-HOST-003, D-105). It is
-escrowed in the envelope (DR-009) because a restore without it is a system nobody can
-sign in to.
+key-encryption key and never written to the database (INF-HOST-003, D-105). A restore
+without it is a system nobody can sign in to, so the deployment keeps it as it keeps the
+key-encryption key (D-225).
 
 **Rotation is possible and expensive.** Re-deriving requires the plaintext identifier,
 recoverable by decrypting the subject's own encrypted column — so rotation is a batch
@@ -1503,22 +1508,21 @@ members, the members of its public types, its column) spells it `organizational`
 **PRIV-ROPA-002** — All processors SHALL appear as recipients with their legal
 characterisation and agreement reference.
 
-Processors the library itself makes true: the mail server, the SMS gateway, the
-hosting provider and the password-screening recipient (D-162 C.103). Every processor of
-the host's own business is the host's declaration.
+Processors the library itself makes true: the mail server, the hosting provider and the
+password-screening recipient (D-162 C.103, D-225). Every processor of the host's own
+business, the providers that deliver its messages among them, is the host's declaration.
 
 **Values (D-153).** Recipients are a `recipients` declaration on the model builder
 (LIB-HOST-001): each entry `{ name, characterisation: processor · recipient,
 dataReceived: [category labels], location: inside · outside, agreementReference
 (optional), callback: boolean }`, the six columns of `05` section 6. The library ships
-that section's four rows as defaults (D-162 C.103, D-165): the hosting provider and the
-SMS gateway rows on every deployment, since every deployment holds data and declares
-SMS alert destinations (LIB-HOST-001); the mail server row where a mail server is
-integrated (the host's `IMailServer`, or the shipped adapter with
-`integration.mailserver.endpoint` set when the application starts; `07` LIB-HOST-001)
-or the shipped mail transport is in use; the password-screening row while online
-screening is configured. The host adds its own; a person or firm that administers the
-deployment for the controller (D-029) is a processor the host declares.
+that section's three rows as defaults (D-162 C.103, D-165): the hosting provider row on
+every deployment, since every deployment holds data; the mail server row where a mail
+server is integrated (the host's `IMailServer`, or the shipped adapter with
+`integration.mailserver.endpoint` set when the application starts; `07` LIB-HOST-001);
+the password-screening row while online screening is configured. The host adds its
+own, the providers that deliver its messages among them (D-225); a person or firm that
+administers the deployment for the controller (D-029) is a processor the host declares.
 
 *Source: D-036, D-041, D-029, D-166, D-176*
 
@@ -1562,11 +1566,10 @@ is already running.
 *Source: D-025, D-088*
 
 **Acceptance criteria**
-1. Notification templates exist for both audiences.
+1. *Retired by D-225: the text of a notice is the host's.*
 2. The clock starts at detection and is tracked.
 3. No procedure defers the clock start pending assessment.
-4. Operator-facing documents state the same rule (`11-runbook`,
-   `14-takedown-procedure`).
+4. *Retired by D-225: a company's own documents are its own.*
 
 ---
 
@@ -1789,8 +1792,8 @@ REC-AGE-001, D-221).
    one after the age step; with it on, the date is a personal field under the subject
    key.
 3. With `registration.adultaffirmation` = `required`, no account of a person exists
-   whose subject has not affirmed; the reserved `emergency` account (OPS-BOOT-002) and
-   the restore-test canary (DR-007), which no person answers for, carry no answer.
+   whose subject has not affirmed; the reserved `emergency` account (OPS-BOOT-002),
+   which no person answers for, carries no answer.
 4. A deployment with `registration.adultaffirmation` = `off` and no written-consent
    basis declared for minors' data fails startup validation.
 5. With `registration.adultaffirmation` = `required`, no record of a sensitive type is
@@ -1799,17 +1802,18 @@ REC-AGE-001, D-221).
 
 ---
 
-**PRIV-MINOR-002** — A written takedown procedure SHALL exist and be executed on any
-credible indication that a customer is under 18.
+**PRIV-MINOR-002** — The takedown (IDN-LIFE-003) SHALL be available for any credible
+indication that a customer is under 18; the procedure staff follow is the host's own
+document (D-225).
 
-*Source: D-039, IDN-LIFE-003*
+*Source: D-039, IDN-LIFE-003, D-225*
 
 The affirmation verifies nothing. What makes self-declaration proportionate for
 sensitive data is that the situation has a defined outcome rather than being decided
 on the spot.
 
 **Acceptance criteria**
-1. The procedure exists as `14-takedown-procedure.md`.
+1. *Retired by D-225: the procedure is the host's document.*
 2. An operation performs suspension, the host's `TakedownExecuted` work, data erasure
    and recording **reliably, with per-subscriber completion visible** (IDN-LIFE-003a),
    not atomically, which is unachievable across the library/host boundary.

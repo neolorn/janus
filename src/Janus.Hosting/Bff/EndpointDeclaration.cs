@@ -14,11 +14,10 @@ namespace Janus.Hosting.Bff;
 /// values it binds to a type.
 /// </summary>
 /// <remarks>
-/// Implements CONV-DESIGN-006 and API-CONV-003. The codes are its row's, those the text
-/// of its section gives the routes that text governs, and the gateway floor's where the
-/// chapter's preamble gives it. What its mounting answers, where its row does not give
-/// it, is derived and declared by no endpoint. It declares codes only, the status of
-/// each being the one <see cref="ApiStatus"/> maps. A navigation route (BFF-ERR-001)
+/// Implements CONV-DESIGN-006 and API-CONV-003. The codes are its row's and those the
+/// text of its section gives the routes that text governs. What its mounting answers,
+/// where its row does not give it, is derived and declared by no endpoint. It declares
+/// codes only, the status of each being the one <see cref="ApiStatus"/> maps. A navigation route (BFF-ERR-001)
 /// declares the same way the codes it carries in the query member <c>error</c> of its
 /// redirect, which go with that redirect and with no status. The values are declared
 /// in the order the request is read for the first that does not parse, and each

@@ -66,7 +66,6 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     public AccountLifecycleTests()
     {
         _notifications.Work = _work;
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, English);
         _person = SubjectId.New(_randomness);
         _directory.Stands(_person, AccountState.Active);
@@ -709,7 +708,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             _ => throw new Xunit.Sdk.XunitException("The operation was admitted."),
             error => error.Code);
 
-    // The token the notice carried, read off the body the template put it in.
+    // The token the notice carried, read off the link among its values.
     private string Link() => _notifications.Mail[^1].Token();
 
     private async Task<AccountState?> StateAsync() =>

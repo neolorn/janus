@@ -410,12 +410,7 @@ internal sealed class RecordAccessSessions(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            // AUTH-ABUSE-006: the gateway floor's refusal answers the ask as it would have
-            // been answered, as for a value no record holds, so the floor tells nothing of
-            // a record. The browser carries a session no code answers.
-            return failure.Code == ErrorCodes.SmsBalanceFloor
-                ? await UnsentAsync(session, carried, cancellationToken).ConfigureAwait(false)
-                : failure;
+            return failure;
         }
 
         return (await work.CommitAsync(cancellationToken).ConfigureAwait(false)).Match<Error?>(() => null, error => error);

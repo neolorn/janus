@@ -374,13 +374,14 @@ internal sealed class RegistrationSessionStore(
     }
 
     // The link rows are what the landing route resolves a token through, so they
-    // follow exactly what the session still has outstanding.
+    // follow exactly what the session still has outstanding. An empty fingerprint is
+    // no token's, so it is never a row (D-224).
     private void Relink(RegistrationSession session, List<RegistrationLinkRecord> held)
     {
         byte[][] outstanding =
         [
             .. session.Identifiers
-                .Where(staged => staged.Link is not null)
+                .Where(staged => staged.Link is { Length: > 0 })
                 .Select(staged => staged.Link!),
         ];
 

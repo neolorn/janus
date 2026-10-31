@@ -13,12 +13,11 @@ namespace Janus.Cli.Rotation;
 
 /// <summary>
 /// The <c>rotate-kek</c> command: re-wraps every row of the subject-key table, the only
-/// values held under the key-encryption key, under its current version and prints that
-/// version's escrow copy, or, given <c>--sealed</c> once the copy is sealed, retires the
-/// versions before it and says until when they are kept.
+/// values held under the key-encryption key, under its current version, or, given
+/// <c>--retire</c>, retires the versions before it.
 /// </summary>
 /// <remarks>
-/// Implements OPS-SEC-003, DR-009, DR-009a and OPS-SEC-001 (D-166, 316, 317). The
+/// Implements OPS-SEC-003, DR-009a and OPS-SEC-001 (D-166, D-225). The
 /// operator puts the new version in the secrets manager as current, keeping the previous
 /// one, and pipes the document to the command under the maintenance credential. The
 /// command needs nothing of the application, and a run that stops is resumed by running
@@ -33,20 +32,19 @@ internal static class RotateKeyEncryptionKeyCommand
 
     /// <summary>
     /// What the command declares (LIB-API-001): its arguments, the key document, the
-    /// escrow copy and the pass's report, or with the seal the retirement's report, and
-    /// the codes a refusal or a fault carries.
+    /// pass's report, or with the retirement its report, and the codes a refusal or a
+    /// fault carries.
     /// </summary>
     public static CommandContract Contract { get; } = new(
         Name,
         RotationArguments.Declared,
         KeyDocument.Members,
         [
-            new("application/json", ["keyEncryptionKeys.current: number", "keyEncryptionKeys.versions{}: string"]),
             new("application/json", ["version: number", "processed: number"]),
             new(
                 "application/json",
-                ["version: number", "processed: number", "retired[]: number", "keepUntil: DateTime"],
-                RotationArguments.Sealed),
+                ["version: number", "processed: number", "retired[]: number"],
+                RotationArguments.Retire),
         ],
         [
             ErrorCodes.RequestMalformed,
@@ -60,15 +58,15 @@ internal static class RotateKeyEncryptionKeyCommand
     /// Runs the command.
     /// </summary>
     /// <param name="arguments">The arguments that follow the command's name.</param>
-    /// <param name="terminal">Where the keys are read from and the escrow copy written to.</param>
+    /// <param name="terminal">Where the keys are read from.</param>
     /// <param name="cancellationToken">
     /// Abandons the command; the batch in hand rolls back and the next run resumes after
     /// the last one that committed.
     /// </param>
     /// <returns>
     /// The rotation's version and the count of subject keys it re-wrapped, with the
-    /// versions retired and the date they are kept until where the seal was confirmed;
-    /// or the failure naming what was refused.
+    /// versions retired where the retirement was asked for; or the failure naming what was
+    /// refused.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static async Task<Result<string>> RunAsync(
@@ -79,10 +77,10 @@ internal static class RotateKeyEncryptionKeyCommand
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(terminal);
 
-        RotationRequest request = default!;
+        bool retire = false;
         Error? failure = null;
 
-        RotationArguments.Read(arguments).Switch(value => request = value, error => failure = error);
+        RotationArguments.Read(arguments).Switch(value => retire = value, error => failure = error);
 
         if (failure is not null)
         {
@@ -104,24 +102,14 @@ internal static class RotateKeyEncryptionKeyCommand
 
         KeyRotation rotation = scope.ServiceProvider.GetRequiredService<KeyRotation>();
 
-        if (request.Sealed)
+        if (retire)
         {
             return (await rotation.RetireAsync(cancellationToken).ConfigureAwait(false))
-                .Match(retirement => Result.Success(RotationReport.Of(retirement, request.Retention)), Result.Failure<string>);
+                .Match(retirement => Result.Success(RotationReport.Of(retirement)), Result.Failure<string>);
         }
 
-        Result<KeyRotationProgress> outcome = await rotation.ReWrapAsync(cancellationToken).ConfigureAwait(false);
-
-        if (outcome.Match(_ => (Error?)null, error => error) is Error refused)
-        {
-            return Result.Failure<string>(refused);
-        }
-
-        // DR-009, OPS-SEC-003 AC4: the escrow copy of the version every value is now
-        // under, for the envelope, before the report the seal is confirmed against.
-        await EscrowCopy.WriteKeyEncryptionKeyAsync(terminal.Output, keys.Ring, cancellationToken).ConfigureAwait(false);
-
-        return outcome.Match(progress => Result.Success(RotationReport.Of(progress)), Result.Failure<string>);
+        return (await rotation.ReWrapAsync(cancellationToken).ConfigureAwait(false))
+            .Match(progress => Result.Success(RotationReport.Of(progress)), Result.Failure<string>);
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

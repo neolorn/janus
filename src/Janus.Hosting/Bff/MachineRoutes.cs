@@ -20,7 +20,6 @@ internal static class MachineRoutes
         new("/oidc/par"),
         new("/oidc/token"),
         new("/oidc/userinfo"),
-        new("/callbacks/sms/dlr"),
         new("/callbacks/providers/google"),
         new("/callbacks/providers/apple"),
         new("/callbacks/providers/google/return"),

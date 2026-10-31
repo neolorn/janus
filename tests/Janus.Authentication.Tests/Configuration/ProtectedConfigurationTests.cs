@@ -11,7 +11,7 @@ using Xunit;
 namespace Janus.Authentication.Tests.Configuration;
 
 /// <summary>
-/// How a change from the server is told: through the alert channels, in the change's
+/// How a change from the server is told: through the alert raising, in the change's
 /// own transaction, so the event is written with the row and a change whose alert
 /// cannot be raised is not made (OPS-ALERT-001, D-166 entry 308).
 /// </summary>
@@ -52,7 +52,7 @@ public sealed class ProtectedConfigurationTests : IAsyncDisposable
     public async ValueTask DisposeAsync() => await _work.DisposeAsync();
 
     /// <summary>
-    /// OPS-ALERT-001: a protected change is raised through the alert channels as the
+    /// OPS-ALERT-001: a protected change is raised through the alert raising as the
     /// High <c>protected-setting-changed</c> naming the key, inside the transaction
     /// that writes it.
     /// </summary>

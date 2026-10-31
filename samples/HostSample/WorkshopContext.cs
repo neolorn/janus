@@ -44,6 +44,21 @@ internal sealed class WorkshopContext(DbContextOptions<WorkshopContext> options)
     public DbSet<Fitting> Fittings => Set<Fitting>();
 
     /// <summary>
+    /// The letters the post room took, waiting for the courier.
+    /// </summary>
+    public DbSet<Letter> Post => Set<Letter>();
+
+    /// <summary>
+    /// The values each letter carries.
+    /// </summary>
+    public DbSet<LetterPlace> Places => Set<LetterPlace>();
+
+    /// <summary>
+    /// The alerts pinned on the duty board.
+    /// </summary>
+    public DbSet<PinnedAlert> Board => Set<PinnedAlert>();
+
+    /// <summary>
     /// The ancestry closure, read from the library's schema.
     /// </summary>
     public DbSet<AncestryEntry> Ancestry => Set<AncestryEntry>();
@@ -124,6 +139,39 @@ internal sealed class WorkshopContext(DbContextOptions<WorkshopContext> options)
             fitting.Property(row => row.Customer).HasColumnName("customer").HasConversion(Subject);
             fitting.Property(row => row.Need).HasColumnName("need");
             fitting.HasOne<Repair>().WithMany().HasForeignKey(row => row.RepairId);
+        });
+
+        modelBuilder.Entity<Letter>(letter =>
+        {
+            letter.ToTable("post", WorkshopSchema.Name);
+            letter.HasKey(row => row.Reference);
+            letter.Property(row => row.Reference).HasColumnName("reference");
+            letter.Property(row => row.Kind).HasColumnName("kind");
+            letter.Property(row => row.Channel).HasColumnName("channel");
+            letter.Property(row => row.Destination).HasColumnName("destination");
+            letter.Property(row => row.Languages).HasColumnName("languages");
+            letter.Property(row => row.TakenAt).HasColumnName("taken_at");
+        });
+
+        modelBuilder.Entity<LetterPlace>(place =>
+        {
+            place.ToTable("post_places", WorkshopSchema.Name);
+            place.HasKey(row => new { row.Reference, row.Name });
+            place.Property(row => row.Reference).HasColumnName("reference");
+            place.Property(row => row.Name).HasColumnName("name");
+            place.Property(row => row.Value).HasColumnName("value");
+            place.HasOne<Letter>().WithMany().HasForeignKey(row => row.Reference);
+        });
+
+        modelBuilder.Entity<PinnedAlert>(pinned =>
+        {
+            pinned.ToTable("duty_board", WorkshopSchema.Name);
+            pinned.HasKey(row => row.Key);
+            pinned.Property(row => row.Key).HasColumnName("key");
+            pinned.Property(row => row.Condition).HasColumnName("condition");
+            pinned.Property(row => row.Severity).HasColumnName("severity");
+            pinned.Property(row => row.Scope).HasColumnName("scope");
+            pinned.Property(row => row.RaisedAt).HasColumnName("raised_at");
         });
 
         modelBuilder.MapAuthorizationTables();

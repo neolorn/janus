@@ -11,7 +11,7 @@ namespace Janus.Core;
 /// <param name="Purpose">Which restrictions it answers to.</param>
 /// <param name="Source">
 /// The source of the request that asked for the send, or nothing where no request
-/// asked for it: a background job's send or an alert (chapter 10 section 5.14).
+/// asked for it: a background job's send (chapter 10 section 5.14).
 /// </param>
 /// <param name="Language">
 /// The recipient's language, resolved before the send, or nothing where no language
@@ -40,7 +40,7 @@ public sealed record OutboundMessage(
     public SubjectId? Subject { get; init; }
 
     /// <summary>
-    /// What the library puts in the template's places, by name.
+    /// What the library puts in the message's places, by name.
     /// </summary>
     public IReadOnlyDictionary<string, string> Values { get; init; } = Nothing;
 
@@ -48,13 +48,6 @@ public sealed record OutboundMessage(
     /// The channel the message goes out on.
     /// </summary>
     public SendKind Kind => Destination.Kind;
-
-    /// <summary>
-    /// Whether this is an alert to an operator destination, which is outside every
-    /// restriction and continues below the gateway floor when ordinary sends stop
-    /// (OPS-ALERT-003).
-    /// </summary>
-    public bool IsAlert => Message is MessageKind.Alert;
 
     /// <summary>
     /// What a host-registered key supplier is told about the send.

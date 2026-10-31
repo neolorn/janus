@@ -2181,6 +2181,24 @@ internal sealed class RegistrationService(
             .Match(() => decided, Result.Failure<TAnswer>);
     }
 
+    /// <summary>
+    /// The policy that governs a registration, which is its invitation's organization's
+    /// from the moment the token attaches (IDN-LIFE-009a), as the frontend's settings
+    /// read it (09 <c>GET /settings</c>, D-224).
+    /// </summary>
+    /// <param name="session">The registration session the browser carries.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The policy, and whether it was read as an invitation's organization's or as the
+    /// system's, or nothing where the session is no longer live.
+    /// </returns>
+    public async ValueTask<(Result<Policy> Policy, bool Invited)?> GoverningAsync(
+        RegistrationSessionId session,
+        CancellationToken cancellationToken) =>
+        await LiveAsync(session, cancellationToken).ConfigureAwait(false) is RegistrationSession live
+            ? (await PolicyAsync(live, cancellationToken).ConfigureAwait(false), live.Invitation is not null)
+            : null;
+
     private async ValueTask<RegistrationSession?> LiveAsync(
         RegistrationSessionId id,
         CancellationToken cancellationToken)

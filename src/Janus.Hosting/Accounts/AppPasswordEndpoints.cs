@@ -68,7 +68,7 @@ internal static class AppPasswordEndpoints
 
         return Answers.Of(
             await passwords
-                .ListAsync(browser.Asking, browser.Required.Id, cancellationToken)
+                .ListAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             held => TypedResults.Json<IReadOnlyList<AppPasswordView>>(
                 [.. held.Select(AppPasswordView.Of)],

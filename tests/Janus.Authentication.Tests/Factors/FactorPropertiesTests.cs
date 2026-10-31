@@ -48,7 +48,6 @@ public sealed class FactorPropertiesTests : IDisposable
             Channel: null,
             Restricted: false,
             SingleUse: false,
-            RelaysAddress: false,
             OperatedDomains: FrozenSet<string>.Empty,
             OperatesHostedDomain: false);
         var gate = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(15));

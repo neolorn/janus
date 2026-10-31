@@ -114,7 +114,6 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     {
         _notifications.Work = _work;
         _restrictions.Work = _work;
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.ServiceName, "Example");
         _configuration.Set(Settings.NotificationLanguages, [Language]);
         _configuration.Set(
@@ -202,6 +201,43 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         Assert.Equal(0, _work.OutermostCommitted);
         Assert.Empty(_notifications.Sent);
         Assert.DoesNotContain(_events.Of<CredentialEnrolled>(), each => each.Credential == begun.Credential);
+    }
+
+    /// <summary>
+    /// FE-SEC-001 (D-224): where the policy in force does not hold <c>password</c> in its
+    /// login factors, a password is refused <c>auth.factor.notpermitted</c> on every
+    /// session, an account's and an enrolment session's alike, and nothing is announced.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_APasswordThePolicyDoesNotAdmitIsRefusedOnEverySessionAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        EnrolmentSession opened = await OpenedAsync(await AccountAsync(password: false));
+
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Core.Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>(
+                    Core.Policies.SystemDefault.LoginFactors.Where(factor => factor is not Factor.Password)),
+            });
+        _events.Published.Clear();
+
+        Result held = await Service.SetPasswordAsync(
+            Authority(subject, session),
+            Another,
+            Source,
+            TestContext.Current.CancellationToken);
+        Result enrolling = await Service.SetPasswordAsync(
+            CredentialAuthority.Of(opened.Id),
+            Another,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorNotPermitted, held.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(ErrorCodes.FactorNotPermitted, enrolling.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_events.Of<CredentialEnrolled>());
     }
 
     /// <summary>
@@ -2594,6 +2630,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
             new OidcClientStoreInMemory(),
+            new PendingAuthorizationStoreInMemory(),
             _events,
             _work,
             _clock,
@@ -2632,6 +2669,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _accounts,
             _authenticators,
             Passwords,
+            _passwords,
             Policies,
             Sessions,
             Guard,

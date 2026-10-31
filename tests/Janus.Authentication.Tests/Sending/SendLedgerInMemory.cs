@@ -181,7 +181,8 @@ internal sealed class SendLedgerInMemory : ISendLedger
                 resend,
                 resend.Length > 0 ? at : null,
                 secondFactor,
-                answer);
+                answer,
+                Released: false);
         }
 
         foreach ((string reference, Counted other) in Of(send))
@@ -248,17 +249,24 @@ internal sealed class SendLedgerInMemory : ISendLedger
             return ValueTask.FromResult(false);
         }
 
+        // D-227: a message released already stays known until its send settles, and is
+        // released once.
+        if (record.Released)
+        {
+            return ValueTask.FromResult(true);
+        }
+
         Undoing();
         TakeBack(record);
 
         // The last message of a send to fail for good takes what the send counted once
         // with it.
-        if (Of(record.Send).Length == 1)
+        if (Of(record.Send).Count(one => !one.Value.Released) == 1)
         {
             TakeBackOnce(record.Send);
         }
 
-        _records.Remove(held);
+        _records[held] = _records[held] with { Keys = [], Spent = [], Admitted = false, Released = true };
 
         return ValueTask.FromResult(true);
     }
@@ -271,7 +279,7 @@ internal sealed class SendLedgerInMemory : ISendLedger
             return ValueTask.FromResult(false);
         }
 
-        if (record.SecondFactor)
+        if (record.SecondFactor && !record.Released)
         {
             Undoing();
             TakeBackOnce(record.Send);
@@ -438,8 +446,8 @@ internal sealed class SendLedgerInMemory : ISendLedger
 
     // One message as the ledger counts it: the send it is of, the keys, the credit
     // spent, the instants, whether it holds the count of an admission, what its send
-    // counted once and when, whether a delivered report releases that, and what the
-    // send is answered by.
+    // counted once and when, whether a delivered report releases that, what the send
+    // is answered by, and whether it failed for good (D-227).
     private sealed record Counted(
         string Send,
         RestrictionKey[] Keys,
@@ -450,5 +458,6 @@ internal sealed class SendLedgerInMemory : ISendLedger
         RestrictionKey[] Resend,
         DateTimeOffset? ResendAt,
         bool SecondFactor,
-        string? Answer);
+        string? Answer,
+        bool Released);
 }

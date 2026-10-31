@@ -1,4 +1,5 @@
 using System;
+using System.Data.Common;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -52,12 +53,12 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, ID
 
     /// <summary>
     /// LIB-TEST-003, REG-SESS-003: a customer's address and number are each verified by a
-    /// press of the registration link the in-memory transport holds for it, and no code is
-    /// typed.
+    /// press of the registration link the in-memory notification handler holds for it, and
+    /// no code is typed.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task LIB_TEST_003_EachVerificationLinkTheTransportsHoldIsPressedAsync()
+    public async Task LIB_TEST_003_EachVerificationLinkTheHandlerHoldsIsPressedAsync()
     {
         await PublishedAsync();
         var requests = new RequestsInMemory();
@@ -84,11 +85,13 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, ID
             Assert.False(verification.TryGetProperty("code", out _));
         });
         Assert.Contains(
-            host.Mail.SentTo(email),
-            mail => mail.Body.Contains("#registration." + Token(verifications[0]), StringComparison.Ordinal));
+            host.Notifications.SentTo(email),
+            mail => mail.Values.TryGetValue("link", out string? link)
+                && link.EndsWith("#registration." + Token(verifications[0]), StringComparison.Ordinal));
         Assert.Contains(
-            host.Sms.SentTo(phone),
-            message => message.Text.Contains("#registration." + Token(verifications[1]), StringComparison.Ordinal));
+            host.Notifications.SentTo(phone),
+            text => text.Values.TryGetValue("link", out string? link)
+                && link.EndsWith("#registration." + Token(verifications[1]), StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -268,8 +271,78 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, ID
         Assert.Null(stepped);
     }
 
+    /// <summary>
+    /// LIB-TEST-003 (D-228), AUTH-SESS-005: a session that lapsed for inactivity is
+    /// restored in place with the person's own passkey, through the library's restore,
+    /// and the request the expiry refused is then answered.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_003_ALapsedSessionIsRestoredInPlaceWithThePersonsPasskeyAsync()
+    {
+        await LapsedAsync(host.Administrator.Subject);
+
+        using HttpResponseMessage refused = await host.Administrator.GetAsync(
+            new Uri("auth/session", UriKind.Relative),
+            TestContext.Current.CancellationToken);
+        JsonElement refusal = await refused.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+
+        Exception? restored = await Record.ExceptionAsync(
+            () => host.Administrator.RestoreAsync(TestContext.Current.CancellationToken).AsTask());
+
+        using HttpResponseMessage retried = await host.Administrator.GetAsync(
+            new Uri("auth/session", UriKind.Relative),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+        Assert.Equal("single-factor", refusal.GetProperty("details").GetProperty("reauthenticate").GetString());
+        Assert.Null(restored);
+        Assert.Equal(HttpStatusCode.OK, retried.StatusCode);
+    }
+
+    /// <summary>
+    /// LIB-TEST-003 (D-228): a session the restore does not admit, one that has not
+    /// lapsed, is not restored, and the test is told so.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_003_ASessionTheRestoreDoesNotAdmitIsNotRestoredAsync()
+    {
+        await PublishedAsync();
+        using TestSession customer = await host.People.CustomerAsync(
+            Email("customer.six@sample.example.test"),
+            Phone("+201000000029"),
+            Password,
+            TestContext.Current.CancellationToken);
+
+        Exception? restored = await Record.ExceptionAsync(
+            () => customer.RestoreAsync(TestContext.Current.CancellationToken).AsTask());
+
+        Assert.IsType<InvalidOperationException>(restored);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _randomness.Dispose();
+
+    // AUTH-SESS-005: every session of the person passes its idle expiry, as one left alone
+    // past it does, and stays within its absolute window.
+    private async Task LapsedAsync(SubjectId subject)
+    {
+        await using DbConnection connection = await host.ConnectAsync(TestContext.Current.CancellationToken);
+        await using DbCommand lapsing = connection.CreateCommand();
+
+        lapsing.CommandText =
+            "UPDATE identity.sessions SET idle_expiry = now() - interval '1 minute' "
+            + "WHERE subject = @subject AND ended_at IS NULL;";
+
+        DbParameter named = lapsing.CreateParameter();
+
+        named.ParameterName = "subject";
+        named.Value = subject.Value;
+        lapsing.Parameters.Add(named);
+
+        Assert.True(await lapsing.ExecuteNonQueryAsync(TestContext.Current.CancellationToken) > 0);
+    }
 
     private static string? Token(JsonElement verification) => verification.GetProperty("linkToken").GetString();
 
@@ -307,8 +380,7 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, ID
             SampleHost.Client,
             SampleHost.Terms,
             () => requests.Over(host.Channel()),
-            host.Mail,
-            host.Sms,
+            host.Notifications,
             _randomness);
 
     // The notice and the terms a registration accepts, published by the administrator.

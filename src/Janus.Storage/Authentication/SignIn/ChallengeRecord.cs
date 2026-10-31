@@ -32,9 +32,10 @@ internal sealed class ChallengeRecord
 
     /// <summary>
     /// The <c>identifier</c> column: the keyed hash of the identifier the sign-in was
-    /// opened with, which a refused factor is counted against.
+    /// opened with, which a refused factor is counted against, or nothing where it was
+    /// opened to restore a session.
     /// </summary>
-    public byte[] Identifier { get; set; } = [];
+    public byte[]? Identifier { get; set; }
 
     /// <summary>
     /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
@@ -45,11 +46,23 @@ internal sealed class ChallengeRecord
     /// <summary>The <c>webauthn</c> column: what an assertion has to sign over.</summary>
     public string WebAuthn { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The <c>browser</c> column: what the pre-authentication session of the browser
+    /// that opened it hashes to, absent where it carried none.
+    /// </summary>
+    public byte[]? Browser { get; set; }
+
     /// <summary>The <c>created_at</c> column.</summary>
     public DateTimeOffset CreatedAt { get; set; }
 
     /// <summary>The <c>expires_at</c> column, which the sweep reads.</summary>
     public DateTimeOffset ExpiresAt { get; set; }
+
+    /// <summary>
+    /// The <c>held_at</c> column: when the new-device check held the sign-in, absent
+    /// where it has not.
+    /// </summary>
+    public DateTimeOffset? HeldAt { get; set; }
 
     /// <summary>The <c>presented</c> column: the catalogue entries accepted so far.</summary>
     public string[] Presented { get; set; } = [];

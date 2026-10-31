@@ -50,7 +50,7 @@ public interface IUnitOfWork : IAsyncDisposable
     /// <exception cref="InvalidOperationException">No unit of work is in progress.</exception>
     /// <remarks>
     /// Implements CONV-DESIGN-002 and AUTH-ABUSE-004: a send's one immediate attempt is
-    /// registered here, so no transport is called while a transaction is open.
+    /// registered here, so no handler is called while a transaction is open.
     /// </remarks>
     Result AfterCommit(Func<CancellationToken, ValueTask> work);
 

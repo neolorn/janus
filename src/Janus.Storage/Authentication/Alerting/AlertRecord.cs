@@ -16,4 +16,16 @@ internal sealed class AlertRecord
 
     /// <summary>The <c>at</c> column.</summary>
     public DateTimeOffset At { get; set; }
+
+    /// <summary>
+    /// The <c>raise</c> column: the raise the claim was made for, or nothing for a claim
+    /// made before claims named their raise.
+    /// </summary>
+    public Guid? Raise { get; set; }
+
+    /// <summary>
+    /// The <c>unanswered</c> column: whether the claim was made for a hand-over the
+    /// host's handler has not taken yet.
+    /// </summary>
+    public bool Unanswered { get; set; }
 }

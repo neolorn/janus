@@ -13,10 +13,9 @@ namespace Janus.Authentication.Mailboxes;
 
 /// <summary>
 /// The mail app passwords of the signed-in person, created, listed and revoked at the
-/// mail server with a token the library issues for them.
+/// mail server with its management key on the account of the mailbox they hold.
 /// </summary>
 /// <param name="inUse">The mail server in use, where the deployment has one.</param>
-/// <param name="tokens">Where the person's token is issued.</param>
 /// <param name="mailboxes">Where the mailbox the account holds is read.</param>
 /// <param name="accounts">Where the account's state is read.</param>
 /// <param name="restriction">Whether the account's processing is restricted.</param>
@@ -30,13 +29,14 @@ namespace Janus.Authentication.Mailboxes;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements LIB-API-005, REG-MAIL-002, INT-MAIL-010, IDN-ACCT-007, AUTHZ-GATE-006 and
-/// AUTH-OIDC-001 AC4. The library stores nothing about an app password: the server generates the secret and holds the
-/// credential, and what is written here is the notice and the audit row, which name the
-/// server's identifier and never the secret or the label.
+/// AUTH-OIDC-001 AC4. The library issues no token for the mail server and stores nothing
+/// about an app password: the server generates the secret and holds the credential, and
+/// what is written here is the notice and the audit row, which name the server's
+/// identifier and never the secret or the label. The account acted on is the one the
+/// mailbox the acting account holds names, never one a request names (D-226).
 /// </remarks>
 internal sealed class AppPasswords(
     IMailServerInUse inUse,
-    IMailServerTokens tokens,
     IMailboxStore mailboxes,
     IAccountDirectory accounts,
     ISettingsRestriction restriction,
@@ -55,28 +55,23 @@ internal sealed class AppPasswords(
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<AppPassword>>> ListAsync(
         AccessContext context,
-        SessionId session,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         Error? failure = null;
 
-        (SubjectId subject, IMailServer hosting) = (await HolderAsync(context, cancellationToken).ConfigureAwait(false))
-            .Match(held => held, error => Withheld<(SubjectId, IMailServer)>(error, ref failure));
+        (_, IMailServer hosting, Mailbox mailbox) = (await HolderAsync(context, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(held => held, error => Withheld<(SubjectId, IMailServer, Mailbox)>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure<IReadOnlyList<AppPassword>>(failure);
         }
 
-        string token = (await tokens.IssueAsync(subject, session, cancellationToken).ConfigureAwait(false))
-            .Match(issued => issued, error => Withheld<string>(error, ref failure));
-
         // INT-MAIL-010 AC2: what the server holds, read from it now and never from a copy.
-        return failure is Error refused
-            ? Result.Failure<IReadOnlyList<AppPassword>>(refused)
-            : await hosting.AppPasswordsAsync(token, cancellationToken).ConfigureAwait(false);
+        return await hosting.AppPasswordsAsync(mailbox.Id, mailbox.Address, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -101,8 +96,9 @@ internal sealed class AppPasswords(
 
         Error? failure = null;
 
-        (SubjectId subject, IMailServer hosting) = (await HolderAsync(context, cancellationToken).ConfigureAwait(false))
-            .Match(held => held, error => Withheld<(SubjectId, IMailServer)>(error, ref failure));
+        (SubjectId subject, IMailServer hosting, Mailbox mailbox) = (await HolderAsync(context, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(held => held, error => Withheld<(SubjectId, IMailServer, Mailbox)>(error, ref failure));
 
         if (failure is not null)
         {
@@ -131,18 +127,10 @@ internal sealed class AppPasswords(
             return Result.Failure<IssuedAppPassword>(gate);
         }
 
-        string token = (await tokens.IssueAsync(subject, session, cancellationToken).ConfigureAwait(false))
-            .Match(issued => issued, error => Withheld<string>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure<IssuedAppPassword>(failure);
-        }
-
         // INT-MAIL-010 AC1: one call to the server, which generates the secret; the
         // library neither chooses one nor keeps the one it is handed.
         IssuedAppPassword created = (await hosting
-                .CreateAppPasswordAsync(token, named.Value, expiresAt, cancellationToken)
+                .CreateAppPasswordAsync(mailbox.Id, mailbox.Address, named.Value, expiresAt, cancellationToken)
                 .ConfigureAwait(false))
             .Match(issued => issued, error => Withheld<IssuedAppPassword>(error, ref failure));
 
@@ -166,7 +154,7 @@ internal sealed class AppPasswords(
             // INT-MAIL-010: what the server created is revoked there before the refusal
             // is answered, and its secret goes nowhere. A revocation the server does not
             // take leaves the password listed for its holder to revoke, and is logged.
-            (await hosting.RevokeAppPasswordAsync(token, created.Id, cancellationToken).ConfigureAwait(false))
+            (await hosting.RevokeAppPasswordAsync(mailbox.Id, mailbox.Address, created.Id, cancellationToken).ConfigureAwait(false))
                 .Switch(() => { }, unrevoked => log.RevocationFailed(subject, unrevoked.Code));
 
             return Result.Failure<IssuedAppPassword>(since);
@@ -195,8 +183,9 @@ internal sealed class AppPasswords(
 
         Error? failure = null;
 
-        (SubjectId subject, IMailServer hosting) = (await HolderAsync(context, cancellationToken).ConfigureAwait(false))
-            .Match(held => held, error => Withheld<(SubjectId, IMailServer)>(error, ref failure));
+        (SubjectId subject, IMailServer hosting, Mailbox mailbox) = (await HolderAsync(context, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(held => held, error => Withheld<(SubjectId, IMailServer, Mailbox)>(error, ref failure));
 
         if (failure is not null)
         {
@@ -211,17 +200,9 @@ internal sealed class AppPasswords(
             return Result.Failure(gate);
         }
 
-        string token = (await tokens.IssueAsync(subject, session, cancellationToken).ConfigureAwait(false))
-            .Match(issued => issued, error => Withheld<string>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
-        }
-
         // INT-MAIL-010 AC3: the credential goes at the server, so a client using it fails
         // on its next connection.
-        if ((await hosting.RevokeAppPasswordAsync(token, id, cancellationToken).ConfigureAwait(false))
+        if ((await hosting.RevokeAppPasswordAsync(mailbox.Id, mailbox.Address, id, cancellationToken).ConfigureAwait(false))
             .Match(() => (Error?)null, error => error) is Error refused)
         {
             return Result.Failure(refused);
@@ -253,25 +234,25 @@ internal sealed class AppPasswords(
     // holds a mailbox the server has been told to enable, which is an active or
     // restricted account holding one; a deployment that registers no mail server has
     // none to hold. A context naming no account is refused as any such context is.
-    private async ValueTask<Result<(SubjectId Subject, IMailServer Server)>> HolderAsync(
+    private async ValueTask<Result<(SubjectId Subject, IMailServer Server, Mailbox Mailbox)>> HolderAsync(
         AccessContext context,
         CancellationToken cancellationToken)
     {
         if (context.Effective is not SubjectId subject)
         {
-            return Result.Failure<(SubjectId, IMailServer)>(Error.From(ErrorCodes.Denied));
+            return Result.Failure<(SubjectId, IMailServer, Mailbox)>(Error.From(ErrorCodes.Denied));
         }
 
         if (inUse.Chosen().Match<IMailServer?>(chosen => chosen, _ => null) is not IMailServer server
             || await mailboxes.HeldByAsync(subject, cancellationToken).ConfigureAwait(false)
-                is not { IsHeld: true, StandsForAddress: true }
+                is not { IsHeld: true, StandsForAddress: true } held
             || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
                 is not (AccountState.Active or AccountState.Restricted))
         {
-            return Result.Failure<(SubjectId, IMailServer)>(Error.From(ErrorCodes.MailboxNotFound));
+            return Result.Failure<(SubjectId, IMailServer, Mailbox)>(Error.From(ErrorCodes.MailboxNotFound));
         }
 
-        return Result.Success((subject, server));
+        return Result.Success((subject, server, held));
     }
 
     // REG-MAIL-002: creation and revocation are notified to the security-notice set and

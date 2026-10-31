@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Storage.Authentication.Oidc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
@@ -28,6 +30,9 @@ internal static class OidcRegistration
 {
     /// <summary>The route the authorization request arrives at.</summary>
     public const string Authorization = "oidc/authorize";
+
+    /// <summary>The continuation of a browser's pending authorization (AUTH-SESS-012, D-224).</summary>
+    public const string Continuation = "oidc/authorize/continue";
 
     /// <summary>The route the authorization request is pushed to beforehand.</summary>
     public const string PushedAuthorization = "oidc/par";
@@ -80,14 +85,6 @@ internal static class OidcRegistration
             })
             .AddServer(options =>
             {
-                _ = options
-                    .SetAuthorizationEndpointUris(Authorization)
-                    .SetPushedAuthorizationEndpointUris(PushedAuthorization)
-                    .SetTokenEndpointUris(Token)
-                    .SetUserInfoEndpointUris(UserInfo)
-                    .SetJsonWebKeySetEndpointUris(KeySet)
-                    .SetConfigurationEndpointUris(Configuration);
-
                 // AUTH-OIDC-001: the code flow with proof key and the refresh flow, and
                 // nothing else. No implicit flow, no password grant, no device flow.
                 _ = options.AllowAuthorizationCodeFlow().AllowRefreshTokenFlow();
@@ -127,6 +124,28 @@ internal static class OidcRegistration
                         .SetOrder(RegisteredDestination.Order));
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleAuthorizationRequestContext>(
                     handler => handler.UseScopedHandler<AuthorizationIssue>());
+
+                // AUTH-SESS-012 AC10 (D-224): the continuation answers the request a
+                // browser's sign-in was waited for with, read back off the session
+                // record, and that request was pushed when it was first made.
+                _ = options.AddEventHandler<OpenIddictServerEvents.ExtractAuthorizationRequestContext>(
+                    handler => handler
+                        .UseScopedHandler<AuthorizationContinued>()
+                        .SetOrder(AuthorizationContinued.Order));
+                _ = options.RemoveEventHandler(
+                    OpenIddictServerHandlers.Authentication.ValidateRequestUriParameter.Descriptor);
+                _ = options.AddEventHandler<OpenIddictServerEvents.ValidateAuthorizationRequestContext>(
+                    handler => handler
+                        .UseSingletonHandler<ReferenceOrContinued>()
+                        .SetOrder(OpenIddictServerHandlers.Authentication.ValidateRequestUriParameter.Descriptor.Order));
+                _ = options.RemoveEventHandler(
+                    OpenIddictServerHandlers.Authentication.ValidatePushedAuthorizationRequestsRequirement.Descriptor);
+                _ = options.AddEventHandler<OpenIddictServerEvents.ValidateAuthorizationRequestContext>(
+                    handler => handler
+                        .AddFilter<OpenIddictServerHandlerFilters.RequireDegradedModeDisabled>()
+                        .UseScopedHandler<PushedOrContinued>()
+                        .SetOrder(OpenIddictServerHandlers.Authentication
+                            .ValidatePushedAuthorizationRequestsRequirement.Descriptor.Order));
                 _ = options.AddEventHandler<OpenIddictServerEvents.ApplyAuthorizationResponseContext>(
                     handler => handler.UseScopedHandler<PushedRequestSpent>());
 
@@ -148,6 +167,21 @@ internal static class OidcRegistration
 
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(
                     handler => handler.UseScopedHandler<TokenIssue>());
+
+                // AUTH-OIDC-001 AC5, D-226: a client receives each scope it is registered
+                // with, so the server's check of a requested scope against its own and the
+                // deployment's rows gives way, at each endpoint that reads one, to the
+                // check against the client's registration.
+                Scoped<OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext>(
+                    options,
+                    OpenIddictServerHandlers.Authentication.ValidatePushedScopes.Descriptor);
+                Scoped<OpenIddictServerEvents.ValidateAuthorizationRequestContext>(
+                    options,
+                    OpenIddictServerHandlers.Authentication.ValidateScopes.Descriptor);
+                Scoped<OpenIddictServerEvents.ValidateTokenRequestContext>(
+                    options,
+                    OpenIddictServerHandlers.Exchange.ValidateScopes.Descriptor);
+
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleUserInfoRequestContext>(
                     handler => handler.UseScopedHandler<ClaimsAnswer>());
                 // AUTH-KEY-001, CONV-CODE-007, D-181: the server's own steps that take a
@@ -177,7 +211,38 @@ internal static class OidcRegistration
                 _ = options.AddEventHandler<OpenIddictServerEvents.ValidateTokenContext>(
                     handler => handler.UseScopedHandler<TokenReuse>().SetOrder(TokenReuse.Order));
 
+                // BFF-ORDER-001 AC8 (D-230): the provider acts only on a request its
+                // profile has passed, whichever authentication middleware hands it on.
+                _ = options.AddEventHandler<OpenIddictServerEvents.ProcessRequestContext>(
+                    handler => handler
+                        .UseSingletonHandler<OnlyPastTheProfile>()
+                        .SetOrder(OnlyPastTheProfile.Order));
+
                 _ = options.UseAspNetCore();
+            });
+
+        // Chapter 09 section 9 (D-224): the provider answers at the address the host
+        // declares and nowhere else. Its issuer is that address exactly and each route is
+        // that address followed by the route's path, so a request for one of them at any
+        // other address is not the provider's and goes on to the host's routing. A
+        // deployment that declared no addresses is refused at startup (LIB-HOST-001,
+        // AUTH-SESS-012), so the options are built without them for that refusal alone.
+        _ = services.AddOptions<OpenIddictServerOptions>()
+            .Configure<IServiceProvider>((options, provider) =>
+            {
+                if (provider.GetService<AuthenticationAddresses>() is not AuthenticationAddresses addresses)
+                {
+                    return;
+                }
+
+                options.Issuer = new Uri(addresses.Provider, UriKind.Absolute);
+                ProvidedAt(options.AuthorizationEndpointUris, addresses, Authorization);
+                options.AuthorizationEndpointUris.Add(Under(addresses, Continuation));
+                ProvidedAt(options.PushedAuthorizationEndpointUris, addresses, PushedAuthorization);
+                ProvidedAt(options.TokenEndpointUris, addresses, Token);
+                ProvidedAt(options.UserInfoEndpointUris, addresses, UserInfo);
+                ProvidedAt(options.JsonWebKeySetEndpointUris, addresses, KeySet);
+                ProvidedAt(options.ConfigurationEndpointUris, addresses, Configuration);
             });
 
         // AUTH-KEY-001, CONV-CODE-007, CONV-DESIGN-007: the server requires one
@@ -210,12 +275,71 @@ internal static class OidcRegistration
         return services;
     }
 
+    /// <summary>
+    /// Whether a request arrived at the provider address the host declares, which is
+    /// where the provider's routes are served and nowhere else (09 section 9, D-224).
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <param name="addresses">The addresses the host declares.</param>
+    /// <returns>Whether its origin and its mount are the provider address's.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public static bool Serves(HttpRequest request, AuthenticationAddresses addresses)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(addresses);
+
+        var provider = new Uri(addresses.Provider, UriKind.Absolute);
+
+        return string.Equals(provider.Scheme, request.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(provider.Authority, request.Host.Value, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                provider.AbsolutePath.TrimEnd('/'),
+                request.PathBase.Value?.TrimEnd('/') ?? string.Empty,
+                StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The absolute address of the continuation under the provider address, which the
+    /// answer that completes a sign-in carries as <c>continueTo</c> (AUTH-SESS-012, D-224).
+    /// </summary>
+    /// <param name="addresses">The addresses the host declares.</param>
+    /// <returns>The address.</returns>
+    /// <exception cref="ArgumentNullException">The addresses are absent.</exception>
+    public static string Continuing(AuthenticationAddresses addresses)
+    {
+        ArgumentNullException.ThrowIfNull(addresses);
+
+        return addresses.Provider.TrimEnd('/') + "/" + Continuation;
+    }
+
+    // The server starts each list with a default of its own for the discovery
+    // document and the key set, which would answer at any address, so each list holds
+    // the provider's address alone.
+    private static void ProvidedAt(List<Uri> routes, AuthenticationAddresses addresses, string route)
+    {
+        routes.Clear();
+        routes.Add(Under(addresses, route));
+    }
+
+    private static Uri Under(AuthenticationAddresses addresses, string route) =>
+        new(addresses.Provider.TrimEnd('/') + "/" + route, UriKind.Absolute);
+
     private static void CookieRefused<TContext>(OpenIddictServerBuilder options)
         where TContext : OpenIddictServerEvents.BaseValidatingContext =>
         _ = options.AddEventHandler<TContext>(
             handler => handler
                 .UseScopedHandler<SessionCookieRefused<TContext>>()
                 .SetOrder(SessionCookieRefused<TContext>.Order));
+
+    private static void Scoped<TContext>(OpenIddictServerBuilder options, OpenIddictServerHandlerDescriptor replaced)
+        where TContext : OpenIddictServerEvents.BaseValidatingContext
+    {
+        _ = options.RemoveEventHandler(replaced);
+        _ = options.AddEventHandler<TContext>(
+            handler => handler
+                .UseScopedHandler<RegisteredScopes<TContext>>()
+                .SetOrder(replaced.Order));
+    }
 
     private static void ErrorAlone<TContext>(OpenIddictServerBuilder options)
         where TContext : OpenIddictServerEvents.BaseRequestContext =>

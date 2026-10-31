@@ -22,7 +22,6 @@ namespace Janus.Hosting.Tests.Recovery;
 [Trait("kind", "unit")]
 public sealed class RecoveryFlowTests : IAsyncDisposable
 {
-    private const string Language = "en";
     private const string Elsewhere = "nobody@example.test";
     private const string NewPassword = "lemoncurdandbutter";
     private const string Recorded = "recovered@example.test";
@@ -35,25 +34,13 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
 
     /// <summary>
     /// A deployment that can send, whose recovery message and suspension notice carry
-    /// the token as the shipped templates do.
+    /// the token among their values.
     /// </summary>
     public RecoveryFlowTests()
     {
         Flow.Prepare(_deployment);
         _deployment.RecoveryApprovals.Work = _deployment.Work;
         _deployment.RecoveryAudit.Work = _deployment.Work;
-
-        foreach (MessageKind message in new[] { MessageKind.RecoveryLink, MessageKind.SecurityNotice, MessageKind.CredentialSuspended })
-        {
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                _deployment.Templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "recovery" : null, "{link}"));
-            }
-        }
     }
 
     /// <inheritdoc/>
@@ -156,7 +143,7 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         string token = Token();
 
         Assert.NotEmpty(token);
-        Assert.Equal("https://identity.example.test/link#recovery." + token, _deployment.Mail.Taken[^1].Body);
+        Assert.Equal("https://identity.example.test/link#recovery." + token, _deployment.Mail.Taken[^1].Values["link"]);
         Assert.Same(held, await HashAsync(subject));
 
         Answer completed = await browser.SendAsync(
@@ -167,6 +154,131 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, completed.Status);
         Assert.NotSame(held, await HashAsync(subject));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-005 and D-224: a password the link would set that its screening
+    /// refuses is answered with the refusal the password's set gives, and the token
+    /// still sets an accepted one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_005_APasswordTheScreeningRefusesIsAnsweredWithItsRefusalAsync()
+    {
+        _ = await RegisteredAsync();
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address));
+
+        string token = Token();
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/recovery/complete",
+            ("token", token),
+            ("password", "short"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.PasswordTooShort.ToString(), refused.Text("code"));
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync(
+                "POST",
+                "/recovery/complete",
+                ("token", token),
+                ("password", NewPassword))).Status);
+    }
+
+    /// <summary>
+    /// FE-PM-002 (D-224): the reset form reads its username, the account's primary
+    /// email, from the self-service link's token, and the read spends nothing, so the
+    /// token still sets the password.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_PM_002_TheResetFormReadsItsUsernameFromTheTokenAndSpendsNothingAsync()
+    {
+        _ = await RegisteredAsync();
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address));
+
+        string token = Token();
+
+        Answer read = await browser.SendAsync("POST", "/recovery/username", ("token", token));
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal(Flow.Address, read.Text("username"));
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync(
+                "POST",
+                "/recovery/complete",
+                ("token", token),
+                ("password", NewPassword))).Status);
+    }
+
+    /// <summary>
+    /// FE-PM-002 (D-224): a token past its lifetime is refused
+    /// <c>auth.recovery.tokenexpired</c>, and one spent is refused
+    /// <c>auth.recovery.tokeninvalid</c>, as the completion refuses them.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_PM_002_AUsernameReadOfATokenPastItsLifetimeOrSpentIsRefusedAsync()
+    {
+        _ = await RegisteredAsync();
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address));
+
+        string spent = Token();
+
+        _ = await browser.SendAsync("POST", "/recovery/complete", ("token", spent), ("password", NewPassword));
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(5));
+        _ = await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address));
+
+        string lapsed = Token();
+
+        _deployment.Clock.Advance(Settings.RecoveryLinkLifetime.Default + TimeSpan.FromSeconds(1));
+
+        Answer invalid = await browser.SendAsync("POST", "/recovery/username", ("token", spent));
+        Answer expired = await browser.SendAsync("POST", "/recovery/username", ("token", lapsed));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, invalid.Status);
+        Assert.Equal(ErrorCodes.RecoveryTokenInvalid.ToString(), invalid.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, expired.Status);
+        Assert.Equal(ErrorCodes.RecoveryTokenExpired.ToString(), expired.Text("code"));
+    }
+
+    /// <summary>
+    /// FE-PM-002, AUTH-ABUSE-001 (D-224): a token that opens nothing is counted against
+    /// the source that presents it, and while that source's delay stands the read
+    /// answers 429 <c>auth.throttled</c> with <c>retryAt</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_PM_002_AUsernameReadOfATokenThatOpensNothingIsCountedThenThrottledAsync()
+    {
+        Browser browser = await ArrivedAsync();
+
+        for (int read = 0; read < Settings.AbuseThrottleThreshold.Default; read++)
+        {
+            Answer gone = await browser.SendAsync("POST", "/recovery/username", ("token", "a-token-nothing-issued"));
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, gone.Status);
+            Assert.Equal(ErrorCodes.RecoveryTokenInvalid.ToString(), gone.Text("code"));
+        }
+
+        Answer held = await browser.SendAsync("POST", "/recovery/username", ("token", "a-token-nothing-issued"));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, held.Status);
+        Assert.Equal(ErrorCodes.Throttled.ToString(), held.Text("code"));
+        Assert.True(held.Json().GetProperty("details").TryGetProperty("retryAt", out _));
     }
 
     /// <summary>
@@ -257,8 +369,43 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         Answer cancelled = await elsewhere.SendAsync(
             "POST",
             "/recovery/report-loss/" + credential + "/cancel",
-            ("token", Landing.Token(_deployment.Mail.Taken[^1].Body)));
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Values["link"])));
 
+        Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
+    }
+
+    /// <summary>
+    /// FE-VER-001 AC8 (D-224 item 19, D-226): a landing page cancels a report by the link
+    /// under the nil identifier, the token finding its report, and a token that finds
+    /// none is answered 404 <c>auth.credential.notfound</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_ALossReportsLinkUnderTheNilIdentifierCancelsItsReportAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        Browser browser = await RegisteredAsync();
+        AuthenticatorId credential = Enrolled();
+
+        _ = await browser.SendAsync(
+            "POST",
+            "/recovery/report-loss",
+            ("credentialId", credential.ToString()));
+
+        Browser elsewhere = await ArrivedAsync();
+
+        Answer wrong = await elsewhere.SendAsync(
+            "POST",
+            "/recovery/report-loss/" + Guid.Empty + "/cancel",
+            ("token", "a-token-no-notice-carried"));
+        Answer cancelled = await elsewhere.SendAsync(
+            "POST",
+            "/recovery/report-loss/" + Guid.Empty + "/cancel",
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Values["link"])));
+
+        Assert.Equal(StatusCodes.Status404NotFound, wrong.Status);
+        Assert.Equal(ErrorCodes.CredentialNotFound.ToString(), wrong.Text("code"));
         Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
     }
 
@@ -292,7 +439,7 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
             "POST",
             "/recovery/report-loss",
             ("credentialId", bound.Id.ToString()));
-        string link = Landing.Token(_deployment.Mail.Taken[^1].Body);
+        string link = Landing.Token(_deployment.Mail.Taken[^1].Values["link"]);
         Answer suspended = await browser.SendAsync("GET", "/account/credentials");
 
         Assert.Equal(StatusCodes.Status202Accepted, reported.Status);
@@ -595,5 +742,5 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
             : throw new InvalidOperationException("The label is not one.");
 
     // The token the recovery message carried, which never touches any answer.
-    private string Token() => Landing.Token(_deployment.Mail.Taken[^1].Body);
+    private string Token() => Landing.Token(_deployment.Mail.Taken[^1].Values["link"]);
 }

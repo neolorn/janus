@@ -93,18 +93,11 @@ public static class AuditActions
     public static AuditAction KeyRotationCompleted { get; } = AuditAction.Parse("ops.keyrotation.completed");
 
     /// <summary>
-    /// The versions before a completed rotation's were retired once its escrow copy was
-    /// confirmed sealed, with the versions retired.
+    /// The versions before a completed rotation's were retired by <c>--retire</c>, with the
+    /// versions retired.
     /// </summary>
     /// <remarks>Implements OPS-SEC-003 AC3, AC4, AC5.</remarks>
     public static AuditAction KeyRotationRetired { get; } = AuditAction.Parse("ops.keyrotation.retired");
-
-    /// <summary>
-    /// A run of the automated restore test ended, with what it found, the time it took,
-    /// the objective it was judged against and whether its instance outlived it.
-    /// </summary>
-    /// <remarks>Implements DR-007 AC2, DR-008 AC2.</remarks>
-    public static AuditAction RestoreTestCompleted { get; } = AuditAction.Parse("ops.restoretest.completed");
 
     /// <summary>
     /// A run of the audit retention job ended, with how many monthly partitions it
@@ -401,7 +394,7 @@ public static class AuditActions
     /// <summary>
     /// A phone signal was consulted before a send, recorded without the number it was consulted for.
     /// </summary>
-    /// <remarks>Implements AUTH-ABUSE-006, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-FACT-002b, chapter 10 section 5.</remarks>
     public static AuditAction PhoneSignalConsidered { get; } = AuditAction.Parse("auth.phonesignal.considered");
 
     /// <summary>
@@ -515,7 +508,7 @@ public static class AuditActions
     /// <summary>
     /// A sending restriction was edited.
     /// </summary>
-    /// <remarks>Implements AUTH-ABUSE-005, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-ABUSE-004, chapter 10 section 5.</remarks>
     public static AuditAction RestrictionEdited { get; } = AuditAction.Parse("auth.restriction.edited");
 
     /// <summary>
@@ -528,7 +521,7 @@ public static class AuditActions
     /// <summary>
     /// A sending restriction was granted against an address or a number.
     /// </summary>
-    /// <remarks>Implements AUTH-ABUSE-005, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-ABUSE-004, chapter 10 section 5.</remarks>
     public static AuditAction RestrictionGranted { get; } = AuditAction.Parse("auth.restriction.granted");
 
     /// <summary>

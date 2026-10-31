@@ -22,10 +22,9 @@ public sealed class SettingWrittenFormTests
 {
     /// <summary>
     /// Every key of the catalogue writes its default and reads the same value back.
-    /// The keys whose default is no value at all, one derived at startup, two named
-    /// only where the shipped transport is used, one named only where the mail server
-    /// adapter is used, one the deployment names and one naming a registered client,
-    /// are the only ones the round trip passes over.
+    /// The keys whose default is no value at all, one derived at startup, one named only
+    /// where the mail server adapter is used and one naming a registered client, are the
+    /// only ones the round trip passes over.
     /// </summary>
     [Fact]
     public void Written_EveryDefaultOfTheCatalogue_ReadsBackAsItself()
@@ -43,10 +42,7 @@ public sealed class SettingWrittenFormTests
         Assert.Equal(
             [
                 "webauthn.rpid",
-                "integration.mail.endpoint",
-                "integration.sms.endpoint",
                 "integration.mailserver.endpoint",
-                "backup.restoretest.canary",
                 "redirect.defaultclient",
             ],
             passedOver);
@@ -65,7 +61,7 @@ public sealed class SettingWrittenFormTests
     /// </summary>
     [Fact]
     public void Written_AValueOfAStatedSet_IsTheNameTheContractGivesIt() =>
-        Assert.Equal("normal", Settings.AlertingSmsSeverityThreshold.Write(AlertSeverity.Normal));
+        Assert.Equal("selfHosted", Settings.PasswordBlocklistSource.Write(BlocklistSource.SelfHosted));
 
     /// <summary>
     /// A set of a stated vocabulary is written as the names, and read back as the

@@ -12,9 +12,8 @@ namespace HostSample;
 /// <summary>
 /// The kite workshop's application: the library composed with the workshop's own
 /// declaration, context, handlers and endpoints, and mounted under the workshop's
-/// prefix. What a deployment supplies of its own (its secret source, its mail and SMS
-/// transports, its web server and its clock) is registered beside it by whoever starts
-/// it.
+/// prefix. What a deployment supplies of its own (its secret source, its web server and
+/// its clock) is registered beside it by whoever starts it.
 /// </summary>
 public static class WorkshopApplication
 {
@@ -45,24 +44,46 @@ public static class WorkshopApplication
     /// <summary>
     /// Registers the application: the library under the workshop's declaration, the
     /// values LIB-HOST-001 asks of a host, the workshop's own context and the source of
-    /// each relationship its derivations are over, and its purpose handler, subject-event
-    /// subscriber and export contributor.
+    /// each relationship its derivations are over, its notification and alert handlers
+    /// and its courier, and its purpose handler, subject-event subscriber and export
+    /// contributor.
     /// </summary>
     /// <param name="services">The host's collection.</param>
     /// <param name="origin">The origin the application answers at, where its frontend's pages are.</param>
     /// <param name="connectionString">How the application reaches the deployment's database.</param>
     /// <exception cref="ArgumentNullException">The collection or the origin is absent.</exception>
     /// <exception cref="ArgumentException">The connection string is empty.</exception>
-    public static void Register(IServiceCollection services, Uri origin, string connectionString)
+    public static void Register(IServiceCollection services, Uri origin, string connectionString) =>
+        Register(services, origin, Client, connectionString);
+
+    /// <summary>
+    /// Registers the application as <see cref="Register(IServiceCollection, Uri, string)"/>
+    /// does, as a given client of the provider: the authentication application itself
+    /// where the client is <see cref="Client"/>, or a second application of the same
+    /// deployment, served at an origin of its own, whose sign-on that client is
+    /// (BFF-SESS-006, D-229).
+    /// </summary>
+    /// <param name="services">The host's collection.</param>
+    /// <param name="origin">
+    /// The origin the deployment's authentication application answers at, where its
+    /// frontend's pages are.
+    /// </param>
+    /// <param name="client">Which client of the provider the application is.</param>
+    /// <param name="connectionString">How the application reaches the deployment's database.</param>
+    /// <exception cref="ArgumentNullException">The collection or the origin is absent.</exception>
+    /// <exception cref="ArgumentException">The client or the connection string is empty.</exception>
+    public static void Register(IServiceCollection services, Uri origin, string client, string connectionString)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(origin);
+        ArgumentException.ThrowIfNullOrWhiteSpace(client);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
         string site = origin.GetLeftPart(UriPartial.Authority);
 
         // LIB-HOST-001: the frontend's pages, its sign-in screen and the provider, which
-        // is this application, and which client of the provider it is.
+        // is the authentication application, and which client of the provider this one
+        // is.
         _ = services.AddSingleton(new PasskeyAddresses(
             new Uri(origin, "/account/password").AbsoluteUri,
             new Uri(origin, "/account/passkeys/new").AbsoluteUri,
@@ -70,7 +91,7 @@ public static class WorkshopApplication
         _ = services.AddSingleton(new AuthenticationAddresses(
             new Uri(origin, "/signin").AbsoluteUri,
             Address(origin).AbsoluteUri));
-        _ = services.AddSingleton(new SignOnClient(Client));
+        _ = services.AddSingleton(new SignOnClient(client));
 
         // API-LAND-001: both of the frontend's applications are served at the one origin.
         _ = services.AddSingleton(new LandingOrigins(site, site));
@@ -88,6 +109,16 @@ public static class WorkshopApplication
             RelationshipSource.Of<WorkshopContext, RepairOwner>(WorkshopModel.Owner, context => context.Owners));
         _ = services.AddSingleton(
             RelationshipSource.Of<WorkshopContext, RepairCollector>(WorkshopModel.Collector, context => context.Collectors));
+
+        // INT-SMS-006, OPS-ALERT-003, INT-SMS-005 (D-225): every message the library owes
+        // goes to the workshop's post room and every alert to its duty board, and the
+        // courier that carries the post reports what became of each letter.
+        _ = services.AddSingleton<INotificationHandler>(provider => new PostRoom(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<TimeProvider>()));
+        _ = services.AddSingleton<IAlertHandler>(provider =>
+            new DutyBoard(provider.GetRequiredService<IServiceScopeFactory>()));
+        _ = services.AddSingleton(provider => new Courier(provider.GetRequiredService<IServiceScopeFactory>()));
 
         // PRIV-RIGHT-001a, PRIV-RIGHT-005b, PRIV-RIGHT-003: the workshop's own work for a
         // change of consent or objection, for an event about a customer, and for an export.

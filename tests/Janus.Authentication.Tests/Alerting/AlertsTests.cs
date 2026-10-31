@@ -28,15 +28,11 @@ public sealed class AlertsTests
         "breakglass-used",
         "breakglass-generated",
         "protected-setting-changed",
-        "alert-destination-changed",
         "stepup-policy-weakened",
         "concurrent-sessions-implausible",
         "denial-spike",
-        "sms-balance",
         "background-job-failed",
         "erasure-delivery-exhausted",
-        "certificate-renewal-failed",
-        "clock-drift",
         "degradation",
         "callback-verification-failed",
         "nonexistent-notice-rate",
@@ -45,14 +41,12 @@ public sealed class AlertsTests
         "expiry-approaching",
         "holiday-list-exhausted",
         "no-emergency-credential",
-        "restore-test-failed",
         "restriction-loosened",
         "restriction-granted",
         "domain-reverification-failed",
         "domain-removed",
         "governing-language-changed",
         "governing-text-missing",
-        "relay-domain-unregistered",
     ];
 
     private static readonly AlertCondition[] High =
@@ -64,14 +58,11 @@ public sealed class AlertsTests
         AlertCondition.BreakGlassUsed,
         AlertCondition.BreakGlassGenerated,
         AlertCondition.ProtectedSettingChanged,
-        AlertCondition.AlertDestinationChanged,
         AlertCondition.StepUpPolicyWeakened,
         AlertCondition.ConcurrentSessionsImplausible,
         AlertCondition.ErasureDeliveryExhausted,
-        AlertCondition.CertificateRenewalFailed,
         AlertCondition.PrivacyDeadlineReached,
         AlertCondition.NoEmergencyCredential,
-        AlertCondition.RestoreTestFailed,
     ];
 
     /// <summary>
@@ -89,14 +80,16 @@ public sealed class AlertsTests
                 .Select(field => Alerts.Key((AlertCondition)field.GetValue(null)!, scope: null, named: null)));
 
     /// <summary>
-    /// D-166 (291): a condition is never renumbered; the one added for a generated
-    /// break-glass credential takes the next free value.
+    /// D-225: with the conditions it retired gone, the values run from zero in the order
+    /// of the table, the generated break-glass credential's beside its use.
     /// </summary>
     [Fact]
-    public void OPS_ALERT_001_AGeneratedBreakGlassCredentialTakesTheNextFreeValue() =>
+    public void OPS_ALERT_001_TheValuesRunInTheOrderOfTheTable() =>
         Assert.Equal(
-            AlertCondition.BreakGlassGenerated,
-            Enum.GetValues<AlertCondition>().Max());
+            Enumerable.Range(0, Identifiers.Length),
+            typeof(AlertCondition)
+                .GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Select(field => (int)(AlertCondition)field.GetValue(null)!));
 
     /// <summary>
     /// The severity of a condition is the table's and not the caller's, so two
@@ -161,10 +154,10 @@ public sealed class AlertsTests
     [Fact]
     public void Deduplication_AConditionNamingNoOne_IsTheIdentifierAlone()
     {
-        AlertRaised raised = Alerts.Of(AlertCondition.SmsBalance, null, Noon);
-        AlertRaised later = Alerts.Of(AlertCondition.SmsBalance, null, Noon + TimeSpan.FromHours(2));
+        AlertRaised raised = Alerts.Of(AlertCondition.HolidayListExhausted, null, Noon);
+        AlertRaised later = Alerts.Of(AlertCondition.HolidayListExhausted, null, Noon + TimeSpan.FromHours(2));
 
-        Assert.Equal("sms-balance", Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.Equal("holiday-list-exhausted", Alerts.Deduplication(raised.IdempotencyKey));
         Assert.Equal(
             Alerts.Deduplication(raised.IdempotencyKey),
             Alerts.Deduplication(later.IdempotencyKey));

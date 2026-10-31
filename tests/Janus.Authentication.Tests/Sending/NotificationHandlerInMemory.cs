@@ -8,7 +8,7 @@ using Janus.Core;
 namespace Janus.Authentication.Tests.Sending;
 
 /// <summary>
-/// A handler a deployment registered in the shipped one's place, keeping each admitted
+/// A handler a deployment registers, keeping each admitted
 /// message it was asked to carry so a test can read what reached it and what never did.
 /// </summary>
 internal sealed class NotificationHandlerInMemory : INotificationHandler
@@ -22,13 +22,13 @@ internal sealed class NotificationHandlerInMemory : INotificationHandler
     /// Those of them that went to an address.
     /// </summary>
     public IReadOnlyList<SendRequest> Mail =>
-        [.. Taken.Where(one => one.Kind is SendKind.Email)];
+        [.. Taken.Where(one => one.Channel is SendKind.Email)];
 
     /// <summary>
     /// Those of them that went to a number.
     /// </summary>
     public IReadOnlyList<SendRequest> Texts =>
-        [.. Taken.Where(one => one.Kind is SendKind.Sms)];
+        [.. Taken.Where(one => one.Channel is SendKind.Sms)];
 
     /// <summary>
     /// How many times the handler was asked, whether or not it took the message.
@@ -37,7 +37,7 @@ internal sealed class NotificationHandlerInMemory : INotificationHandler
 
     /// <summary>
     /// What the handler answers with instead of taking the message, where a test
-    /// stands in for a transport that refuses.
+    /// stands in for a handler that refuses.
     /// </summary>
     public Error? Refusal { get; set; }
 

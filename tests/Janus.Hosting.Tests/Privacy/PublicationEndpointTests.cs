@@ -187,7 +187,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3, 09 section 8a (D-187): the name is bound from the route as a
+    /// INT-SMS-003 AC1, 09 section 8a (D-187): the name is bound from the route as a
     /// document name, so a publication or a translation under a name outside the rule is
     /// answered naming <c>document</c> before its body is read: a body that is no JSON,
     /// and one whose member does not read, are never named.
@@ -197,7 +197,7 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
     [Theory]
     [InlineData("{")]
     [InlineData("""{ "material": "yes", "text": 7 }""")]
-    public async Task INT_SMS_003_AC3_ANameOutsideTheRuleIsAnsweredBeforeTheBodyIsReadAsync(string body)
+    public async Task INT_SMS_003_AC1_ANameOutsideTheRuleIsAnsweredBeforeTheBodyIsReadAsync(string body)
     {
         Browser browser = await AuthorisedAsync();
 

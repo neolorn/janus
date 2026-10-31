@@ -33,6 +33,8 @@ public sealed class OidcFlowTests
 {
     private const string Second = "another-browser-app";
     private const string Prefix = "/identity/v1";
+    private const string Mailing = "mailing-client";
+    private const string MailScope = "urn:ietf:params:oauth:scope:mail";
 
     /// <summary>
     /// AUTH-OIDC-001 AC1: the discovery document names the endpoints the deployment
@@ -68,6 +70,60 @@ public sealed class OidcFlowTests
             StringComparison.Ordinal);
         Assert.Equal(["code"], Listed(document, "response_types_supported"));
         Assert.Contains("S256", Listed(document, "code_challenge_methods_supported"));
+    }
+
+    /// <summary>
+    /// 09 section 9 (D-224 item 11): the issuer is the provider address the host
+    /// declares exactly, and each route the document names is that address followed by
+    /// the route's path.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_TheIssuerIsTheProviderAddressAndEachRouteIsUnderItAsync()
+    {
+        await using var deployment = new Deployment(prefix: Prefix);
+        const string provider = "https://identity.example.test" + Prefix;
+
+        JsonElement document = (await new Machine(deployment)
+                .GetAsync(Prefix + "/.well-known/openid-configuration", bearer: string.Empty))
+            .Json();
+
+        Assert.Equal(provider, document.GetProperty("issuer").GetString());
+        Assert.Equal(provider + "/oidc/authorize", document.GetProperty("authorization_endpoint").GetString());
+        Assert.Equal(
+            provider + "/oidc/par",
+            document.GetProperty("pushed_authorization_request_endpoint").GetString());
+        Assert.Equal(provider + "/oidc/token", document.GetProperty("token_endpoint").GetString());
+        Assert.Equal(provider + "/oidc/userinfo", document.GetProperty("userinfo_endpoint").GetString());
+        Assert.Equal(provider + "/oidc/jwks", document.GetProperty("jwks_uri").GetString());
+    }
+
+    /// <summary>
+    /// 09 section 9 (D-224 item 11): a request for one of the provider's routes at any
+    /// other address is not the provider's: it is answered as a route the host never
+    /// mapped is answered there, and not by the provider.
+    /// </summary>
+    /// <param name="path">The route asked for.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/.well-known/openid-configuration")]
+    [InlineData("/oidc/jwks")]
+    [InlineData("/oidc/userinfo")]
+    public async Task AUTH_OIDC_001_AProviderRouteAtAnotherAddressIsNotTheProvidersAsync(string path)
+    {
+        await using var deployment = new Deployment();
+        var elsewhere = new Machine(deployment) { Host = "accounts.example.test" };
+
+        Answer read = await elsewhere.GetAsync(path, bearer: string.Empty);
+        Answer unmapped = await elsewhere.GetAsync("/no-such-route", bearer: string.Empty);
+        Answer token = await elsewhere.PostAsync("/oidc/token", ("grant_type", "authorization_code"));
+        Answer posted = await elsewhere.PostAsync("/no-such-route", ("grant_type", "authorization_code"));
+        Answer provider = await new Machine(deployment).GetAsync(path, bearer: string.Empty);
+
+        Assert.NotEqual(provider.Status, read.Status);
+        Assert.Equal(unmapped.Status, read.Status);
+        Assert.Equal(posted.Status, token.Status);
+        Assert.DoesNotContain("invalid_", token.Body, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -663,13 +719,137 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// AUTH-OIDC-001 AC4: the token a protocol client obtains is the signed-in person's
-    /// and nobody else's, which is what the mail server manages app passwords under;
-    /// the library holds none of those passwords.
+    /// AUTH-OIDC-001 AC5 (D-226): a client registered with a scope beyond the four
+    /// receives it where its request asks for it, and the access token carries it.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_OIDC_001_AC4_TheProtocolClientsTokenIsTheSignedInPersonsAsync()
+    public async Task AUTH_OIDC_001_AC5_AClientReceivesAScopeItIsRegisteredWithAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await deployment.Clients.AddAsync(
+            new OidcClient(
+                Mailing,
+                Mailing,
+                OidcClientKind.Protocol,
+                RelyingParty.Destination,
+                ["openid", "email", "offline_access", MailScope]),
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        Answer answered = await browser.SendAsync(
+            "GET",
+            await RelyingParty.AuthorizeAsync(
+                deployment,
+                Mailing,
+                silent: true,
+                RelyingParty.Destination,
+                "openid " + MailScope));
+
+        Assert.Equal(StatusCodes.Status302Found, answered.Status);
+
+        Answer exchanged = await new Machine(deployment).PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(RelyingParty.Returned(answered, "code"), Mailing));
+
+        Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
+        Assert.Contains(
+            MailScope,
+            exchanged.Text("scope").Split(' '));
+        Assert.Contains(
+            MailScope,
+            MailServerAdapter.Claims(exchanged.Text("access_token")).GetProperty("scope").GetString()!.Split(' '));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 AC5 (D-226): a request for a scope its client is not registered with
+    /// is refused with <c>invalid_scope</c>, and no reference is issued for it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_AC5_AScopeTheClientIsNotRegisteredWithIsRefusedAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RelyingParty.RegisteredAsync(deployment);
+
+        Answer refused = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Protocol,
+            silent: false,
+            RelyingParty.Destination,
+            "openid " + MailScope);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal("invalid_scope", refused.Text("error"));
+        Assert.False(refused.Json().TryGetProperty("request_uri", out _));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 AC5 (D-227): the clause leaves the four their own rules. <c>openid</c>
+    /// is every client's, registered or not; <c>offline_access</c> a protocol client's
+    /// whatever it is registered with (AUTH-OIDC-002); <c>email</c> and <c>profile</c> a
+    /// client's registered with them, a request for one its client is not registered
+    /// with refused with <c>invalid_request</c> and no reference issued.
+    /// </summary>
+    /// <param name="registered">The scopes the client is registered with.</param>
+    /// <param name="asked">The scopes its request asks for.</param>
+    /// <param name="refused">The code it is refused with, or nothing where it is admitted.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("email", "openid email", null)]
+    [InlineData("openid email", "openid email offline_access", null)]
+    [InlineData("openid profile", "openid profile", null)]
+    [InlineData("openid profile", "openid email", "invalid_request")]
+    [InlineData("openid email", "openid profile", "invalid_request")]
+    public async Task AUTH_OIDC_001_AC5_TheFourScopesKeepTheirOwnRulesAsync(
+        string registered,
+        string asked,
+        string? refused)
+    {
+        await using var deployment = new Deployment();
+
+        await deployment.Clients.AddAsync(
+            new OidcClient(
+                Mailing,
+                Mailing,
+                OidcClientKind.Protocol,
+                RelyingParty.Destination,
+                registered.Split(' ')),
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Answer pushed = await RelyingParty.PushAsync(
+            deployment,
+            Mailing,
+            silent: false,
+            RelyingParty.Destination,
+            asked);
+
+        if (refused is null)
+        {
+            Assert.Equal(StatusCodes.Status201Created, pushed.Status);
+            Assert.True(pushed.Json().TryGetProperty("request_uri", out _));
+
+            return;
+        }
+
+        Assert.Equal(StatusCodes.Status400BadRequest, pushed.Status);
+        Assert.Equal(refused, pushed.Text("error"));
+        Assert.False(pushed.Json().TryGetProperty("request_uri", out _));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001: the token a protocol client obtains is the signed-in person's and
+    /// nobody else's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_TheProtocolClientsTokenIsTheSignedInPersonsAsync()
     {
         await using var deployment = new Deployment();
 

@@ -51,7 +51,6 @@ public sealed class VocabularyContractTests
         "record:takedownreverse",
         "erasure:complete",
         "config:loosen",
-        "alerting:destinations",
         "policy:change",
         "domain:manage",
         "restriction:edit",
@@ -88,15 +87,11 @@ public sealed class VocabularyContractTests
         "breakglass-used",
         "breakglass-generated",
         "protected-setting-changed",
-        "alert-destination-changed",
         "stepup-policy-weakened",
         "concurrent-sessions-implausible",
         "denial-spike",
-        "sms-balance",
         "background-job-failed",
         "erasure-delivery-exhausted",
-        "certificate-renewal-failed",
-        "clock-drift",
         "degradation",
         "callback-verification-failed",
         "nonexistent-notice-rate",
@@ -105,14 +100,12 @@ public sealed class VocabularyContractTests
         "expiry-approaching",
         "holiday-list-exhausted",
         "no-emergency-credential",
-        "restore-test-failed",
         "restriction-loosened",
         "restriction-granted",
         "domain-reverification-failed",
         "domain-removed",
         "governing-language-changed",
         "governing-text-missing",
-        "relay-domain-unregistered",
     ];
 
     /// <summary>
@@ -336,7 +329,6 @@ public sealed class VocabularyContractTests
         Assert.Equal(
             [
                 "account-exists",
-                "alert",
                 "credential-enrolled",
                 "credential-suspended",
                 "credential-unbound",

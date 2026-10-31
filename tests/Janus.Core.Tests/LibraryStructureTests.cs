@@ -164,6 +164,7 @@ public sealed class LibraryStructureTests
         "OpenIddict.Validation",
         "Otp.NET",
         "System.Formats.Cbor",
+        "Testcontainers",
         "Testcontainers.PostgreSql",
         "xunit.v3",
     ];
@@ -1052,17 +1053,12 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// DR-006a AC2: no erasure procedure attempts to modify a backup. The library takes
-    /// and writes no backup, and the one port through which it reaches one is the restore
-    /// test's, which restores a copy into a throwaway instance; nothing that erases names
-    /// it.
+    /// DR-006a AC2: no erasure procedure attempts to modify a backup. The library takes,
+    /// writes and restores no backup (D-225).
     /// </summary>
     [Fact]
     public void DR_006a_AC2_NoErasureProcedureReachesABackup()
     {
-        Assert.Equal(
-            ["HostingRegistration.cs", "IRestoreTestInstance.cs", "RestoreTest.cs"],
-            Named(text => Regex.IsMatch(text, @"\bIRestoreTestInstance\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
         Assert.Empty(Named(text => Regex.IsMatch(
             text,
             @"\bpg_(dump|dumpall|restore|basebackup)\b",
@@ -1542,6 +1538,51 @@ public sealed class LibraryStructureTests
 
         Assert.Equal("5.0.0", versions["Microsoft.CodeAnalysis.CSharp"]);
         Assert.Equal("5.6.0", versions["Microsoft.CodeAnalysis.Analyzers"]);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-008 (D-224): the container package stands at the version the
+    /// PostgreSQL container package brings, and every lockfile that resolves the second
+    /// resolves the first at that version.
+    /// </summary>
+    [Fact]
+    public void ContainerPackage_InThePackageVersions_StandsAtTheVersionThePostgreSqlPackageBrings()
+    {
+        const string container = "Testcontainers";
+        const string postgreSql = "Testcontainers.PostgreSql";
+
+        var versions = XDocument
+            .Parse(Repository.ReadText("Directory.Packages.props"))
+            .Descendants("PackageVersion")
+            .ToDictionary(
+                package => package.Attribute("Include")!.Value,
+                package => package.Attribute("Version")!.Value,
+                StringComparer.Ordinal);
+
+        string version = versions[container];
+        string[] roots = [.. Roots, "tests"];
+        int read = 0;
+
+        foreach (string lockfile in roots.SelectMany(root => Directory.EnumerateFiles(
+            Path.Combine(Repository.Root, root),
+            "packages.lock.json",
+            SearchOption.AllDirectories)))
+        {
+            using var locked = JsonDocument.Parse(File.ReadAllText(lockfile));
+
+            foreach (JsonProperty framework in locked.RootElement.GetProperty("dependencies").EnumerateObject())
+            {
+                if (framework.Value.TryGetProperty(postgreSql, out JsonElement resolved)
+                    && resolved.TryGetProperty("dependencies", out JsonElement brought))
+                {
+                    Assert.Equal(version, brought.GetProperty(container).GetString());
+                    Assert.Equal(version, framework.Value.GetProperty(container).GetProperty("resolved").GetString());
+                    read++;
+                }
+            }
+        }
+
+        Assert.NotEqual(0, read);
     }
 
     /// <summary>

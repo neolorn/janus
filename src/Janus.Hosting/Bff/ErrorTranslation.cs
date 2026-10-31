@@ -1,5 +1,4 @@
 using System;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -28,8 +27,6 @@ namespace Janus.Hosting.Bff;
 /// </remarks>
 internal sealed class ErrorTranslation(ConcealedRefusals refusals) : IMiddleware
 {
-    private const string Fault = "fault";
-
     /// <summary>
     /// Runs the layer.
     /// </summary>
@@ -74,10 +71,7 @@ internal sealed class ErrorTranslation(ConcealedRefusals refusals) : IMiddleware
             when (!context.Response.HasStarted
                 && (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested))
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.SystemFault,
-                Fault,
-                JsonSerializer.SerializeToElement(FaultLog.Of(fault))));
+            return Result.Failure(FaultLog.Failure(fault));
         }
     }
 

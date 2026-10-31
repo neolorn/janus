@@ -31,6 +31,14 @@ internal sealed record SessionDetailView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Landing)
 {
     /// <summary>
+    /// The absolute address of the continuation, where the session's record has an
+    /// authorization waiting for a sign-in a navigation completed, and left out
+    /// everywhere else (AUTH-SESS-012, D-224).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ContinueTo { get; init; }
+
+    /// <summary>
     /// Reads a session.
     /// </summary>
     /// <param name="session">What the session says about itself.</param>

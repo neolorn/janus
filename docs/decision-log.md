@@ -18672,6 +18672,760 @@ section 5.24 (`privacy.consent.granted`, `privacy.consent.withdrawn`,
 
 ---
 
+## D-224 — Round H3: what a host's own frontends meet
+
+**Date:** 2026-10-29 · **Status:** accepted · **Follows from:** D-202, D-220
+
+**TL;DR.** The decision round H3 waits for (plan, section 3a). A host building its
+authentication and account applications on the library found four defects, seven gaps in
+the contract and fifteen questions (2026-10-29, checked against 285838ac). And the
+mail-server adapter has never met a real mail server. The round builds every item below.
+Questions 11 and 15 are already answered: round P checks the terms and notice versions
+(D-222) and serves people a host keeps data on without an account (D-221).
+
+**Defects.**
+
+1. **A staged registration's arrays (A).** A staged session's optional byte arrays
+   round-trip through the real store as they were written: null stays null and an empty
+   array stays empty, so a staged TOTP credential reads back whole and a verified
+   identifier's link keeps its fingerprint. A registration link row is never written
+   with an empty fingerprint. A test of the real store round-trips a staged session with
+   every optional array null and one with every array set (REG-SESS-001).
+
+2. **A sign-in that proved the mailbox (B).** A sign-in whose accepted first factor is
+   an `emailLink` or an `emailCode` delivered to the account's primary email, or the
+   code a sign-in link's page showed for such a link, has proved that mailbox. The
+   new-device check does not hold it: the browser is remembered for
+   `device.verification.lifetime` and `DeviceVerified` is emitted, as a completed check
+   does (AUTH-FACT-016). A link or code delivered to another email, or to a phone, is
+   held as before, and its check's code goes to the primary email, a destination
+   `email.destination` counts apart. Where the restriction refuses the check's code, the
+   factor stays accepted and the sign-in stays held at the check: the call is answered
+   **429** `auth.restriction.exceeded` with `retryAt`, and the resend of item 18 sends
+   the code after it. *Rejected:* judging the check's send before the link is spent (the
+   hold would remain for a phone link and a second email); exempting every link sign-in
+   (a phone link proves no mailbox).
+
+3. **The registration stream's first bytes (C).** `GET /register/events` sends its
+   headers and a comment line at once, and a comment line every 30 seconds while it
+   sends nothing else, so a client knows it is connected and an idle proxy keeps the
+   stream open (`09`).
+
+4. **Parallel first requests (D): by design.** Two requests that carry no cookie hold
+   nothing that ties them to one browser, so each is issued a pre-authentication session
+   of its own (BFF-CSRF-005a). A frontend that holds none of the library's cookies makes
+   its first request alone and sends the rest once its answer has set them (FE-API-002).
+   *Rejected:* one pair for every request in a short window (a pair issued to one
+   browser would then be accepted from another).
+
+**Gaps in the contract.**
+
+5. **`/recovery/complete` declares the password refusals (E):** **422**
+   `auth.password.tooshort`, `auth.password.toolong` and `auth.password.blocklisted`, as
+   every route that sets a password does.
+
+6. **Whether a password is set (F, question 14).** `GET /account` carries `password`,
+   `{ set, changedAt }`, `changedAt` null where none is set; the enrolment document of
+   item 14 carries the same. The credential list stays the authenticators' list.
+
+7. **When `trustDeviceOffered` holds (G).** Every **200** of a sign-in carries it. On a
+   `factorRequired` answer whose `required` names a second step it is true where the
+   call that completes the sign-in may carry `trustDevice` (AUTH-FACT-015: a policy
+   below AAL2, a password at the single-factor floor, an account not `restricted`), so
+   the screen offers the choice beside the second step; a `complete` answer carries the
+   same value. It is false on every other answer, a single-factor sign-in's and every
+   step-up's among them.
+
+8. **The legal texts are CommonMark (H).** A document version's governing text and each
+   translation are CommonMark 0.31.2. The library stores and serves them as published
+   and renders none of them; a frontend renders them as CommonMark with raw HTML
+   disabled, escaping any HTML a text holds (PRIV-CONS-005, FE-COMP-002).
+
+9. **An acknowledgement downgrades (I).** The **204** of
+   `POST /account/invitation/acknowledge` ends no session and sets no cookie. The
+   session keeps reading, and its next request a gate asks a step-up for is answered
+   **403** `auth.stepup.required`, its options judged under the organization's policy
+   (AUTH-SESS-009, FE-API-004).
+
+10. **A startup failure names itself (J).** A `StartupException` carrying a failure has
+    as its message the operator's sentence, then the failure's code and each of its
+    details by name and value. No detail of a startup failure carries a secret's value
+    (CONV-ERR-001), so the message can be logged as it is.
+
+11. **The provider answers at its own address (K).** The provider's routes (`09` section
+    9) are served only under the provider address the host declares (LIB-HOST-001). Its
+    issuer is that address exactly, each route is that address followed by the route's
+    path, and a request for one of them anywhere else is not the provider's and reaches
+    the host's routing. The sample and conformance hosts are mounted the same way.
+
+**Questions.**
+
+12. **Back to the application after sign-in (1).** An authorization request that finds
+    no live session and is not silent is kept, its pushed request spent as now, as the
+    browser's **pending authorization**, bound to the browser's pre-authentication
+    session (one a browser; a later one replaces it), for `oidc.continuation.lifetime`
+    (default 30 minutes, ceiling 1 hour), and the browser goes to the sign-in address as
+    before. Every answer that completes a sign-in in a body (`POST /auth/factor`,
+    `POST /auth/device/verify`, `POST /auth/break-glass`) carries `continueTo` where one
+    is pending: the absolute address of `GET /oidc/authorize/continue` under the
+    provider address. `GET /auth/session` carries it too, for a sign-in a navigation
+    completed (a social provider's return). The page sends the browser there. The
+    continuation answers the pending authorization as `/oidc/authorize` would have
+    answered it with the session now live: **302** to the client's registered
+    destination with the code and `state`, spending it. Where none is pending, it
+    answers **302** to the origin of the registered address of `redirect.defaultclient`.
+    *Rejected:* a return address on the sign-in address (a destination in the browser's
+    hands, API-REDIR-001); keeping the pushed request past its 60 seconds
+    (AUTH-OIDC-006).
+
+13. **Restoring a session in place (2).** `POST /auth/restore/begin` and
+    `POST /auth/restore` are AUTH-SESS-005's single-factor restore, on every
+    application. Both are carried by the cookie of a session that expired for inactivity
+    and the CSRF token bound to it, which the browser profile admits on these two routes
+    alone. `begin` answers `challengeId`, `factors` (each of `passkey` and `password`
+    the account holds and the policy in force permits) and `webauthn`, the request
+    options naming the account's passkeys. `POST /auth/restore` takes
+    `{ challengeId, factor, value }` and answers **200** in `/auth/factor`'s shape,
+    `complete`: the session record restored and the identifier the cookie carries
+    rotated, every application session bound to the record living again. Where the
+    session may not be restored (none, its absolute window passed, a policy below AAL2,
+    a break-glass session), both answer **401** `auth.session.expired` with
+    `details.reauthenticate` `full`; a refused factor is answered and counted as at
+    `/auth/factor` (**422**), and the source's delay is **429** `auth.throttled`. The
+    frontend then retries the interrupted request.
+
+14. **An enrolment session's password and screen (2, 8, 9).** `POST /account/password`
+    is refused **422** `auth.factor.notpermitted` where the policy in force does not
+    hold `password` in `loginFactors`, on every session, an enrolment session's
+    included. `GET /enrol`, on the enrolment session, answers the screen's document, and
+    `POST /enrol/begin`'s **200** carries the same: `username` (the account's primary
+    email, the value FE-PM-002's hidden field holds); `password` `{ set, changedAt }`;
+    `offers`, each of `password`, `passkey`, `securityKey` and `totp` the policy's
+    `loginFactors` holds; `mailboxLost`; where it is true, `identifiers`, the account's
+    emails as `{ id, value, primary }`, which the replace names; and `expiresAt`.
+
+15. **What the frontend may know of the settings (3).** `GET /settings`, public,
+    answered with `Cache-Control: no-store`: `registration.phone`,
+    `identifiers.email.max`, `identifiers.phone.max`, `identifiers.username.enabled`,
+    `profile.legalname`, `profile.dateofbirth`, `password.floor.singlefactor`,
+    `password.floor.withmfa` and `password.maximum`; the social providers declared; the
+    purposes resting on consent or on an objectable basis, each with its name, whether
+    it takes consent or objection, its consent kind and its governing document; and
+    `policy`, the `requiredAssurance`, `loginFactors` and `photos` of the policy in
+    force for the account whose session the request carries, the system policy's where
+    it carries none. Nothing else: no restriction, rate or secret.
+
+16. **Registration steps 7 to 10 (4): held by the frontend.** FE-REG-005's server state
+    is the registration session's, steps 1 to 6. Steps 7 to 10 are account screens: each
+    writes to the account, and which of them the person is on is the account
+    application's route, so a reload returns to the step its route names; the membership
+    step reads its invitation from `GET /account/invitation`.
+
+17. **A sign-in link pressed in another tab (5).** A press that presents a sign-in
+    link's token needs no `challengeId`: the token names its pending link and the
+    challenge it belongs to, and the press completes the sign-in only where the request
+    carries the pre-authentication cookie that challenge is bound to, and answers the
+    code to type otherwise, as now. A `challengeId` sent beside a token is not read. The
+    tab that asked learns of the sign-in by `GET /auth/session` or by a message from the
+    landing tab (FE-VER-001).
+
+18. **A fresh device code (13).** `POST /auth/device/resend` `{ challengeId }`, with the
+    pre-authentication cookie the challenge is bound to: **202**, a new code sent to the
+    primary email under `email.destination`, the code before it no longer verifying;
+    **422** `auth.code.expired` where the challenge holds no sign-in held at the check,
+    one answer for every cause; **429** `auth.restriction.exceeded` with `retryAt`, or
+    `auth.throttled` with `retryAt` while AUTH-ABUSE-001's delay stands.
+
+19. **A link-borne call's `{id}` (6, 7).** Where a request presents a message's link
+    token, at `POST /register/verify/{id}`, `POST /account/identifiers/{id}/verify`,
+    `/undo` and `/abandon`, and `POST /recovery/report-loss/{id}/cancel`, the route does
+    not read `{id}`: the token names what it acts on, a loss report's cancel finding its
+    report by the token, and a landing page sends the nil UUID.
+
+20. **The username on a reset form (8).** `POST /recovery/username` `{ token }` answers
+    **200** `{ username }`, the primary email of the self-service recovery link's
+    account, and spends nothing. A token that opens nothing is **422**
+    `auth.recovery.tokeninvalid`, and one past its lifetime
+    `auth.recovery.tokenexpired`, each held to AUTH-ABUSE-001's delay and counted
+    against the source, as a link token that opens nothing is. An enrolment session
+    reads it from `GET /enrol`, an ordinary session from `GET /account`.
+
+21. **Recovery codes saved at registration (10).** Their export is reported once, on the
+    session the terms step establishes, at once after that step; the registration
+    session cannot record it, since the codes' account does not exist before then
+    (FE-SEC-001).
+
+22. **`landing` on every session of the record (12).** `landing` is the session
+    record's: every application session bound to the record the terms step established
+    answers it at `GET /auth/session`, the account application's among them, where the
+    done step runs (FE-REG-005, REG-SESS-008). Its absence there was a defect.
+
+**The mail server.**
+
+23. **The adapter meets a real Stalwart.** INT-MAIL-001's adapter is tested in the
+    pipeline against a real Stalwart server of the release it is written for, 1.0 (its
+    newest 1.0 patch when the round begins), its container image pinned by digest and
+    run through `Testcontainers`, which joins the allow-list (CONV-DESIGN-008). The
+    tests decide INT-MAIL-001 criteria 3 to 6 there: create, disable and enable under
+    each permission mode, remove, the listing, the conflict of criterion 4 and a replay
+    converging. App passwords are listed, created and revoked with a person's token
+    (INT-MAIL-010). Stalwart, configured as INT-MAIL-004 states against the provider of
+    a test host listening on a real port, accepts an access token issued to its client
+    and refuses one issued to another, with no introspection (INT-MAIL-004 criteria 1 to
+    3). The adapter's calls go over TLS, the test trusting the container's certificate
+    through the adapter's HTTP client `identity-mailserver` and never by turning
+    validation off. Where the server answers otherwise than the adapter's contract
+    states, the round parks that item and asks (Tier 3), since the contract changes only
+    by a decision. CONV-TEST-002 gains the rule: a shipped adapter for an external
+    server is tested against a real one, never against a fake alone.
+
+**Propagated to:** `02` AUTH-FACT-015, AUTH-FACT-016, AUTH-SESS-005, AUTH-SESS-012; `04`
+PRIV-CONS-005; `05` INT-MAIL-001, INT-MAIL-004; `07` LIB-API-001; `08` CONV-ERR-001,
+CONV-DESIGN-008, CONV-TEST-002; `09` `POST /register/verify/{id}`,
+`GET /register/events`, `POST /enrol/begin` and `GET /enrol`, `POST /auth/link`,
+`POST /auth/factor`, `POST /auth/device/verify`, `POST /auth/device/resend`,
+`POST /auth/restore/begin` and `POST /auth/restore`, `GET /auth/session`,
+`POST /recovery/username`, `POST /recovery/complete`,
+`POST /recovery/report-loss/{id}/cancel`, `GET /account`,
+`POST /account/identifiers/{id}/verify`, `/undo` and `/abandon`,
+`POST /account/password`, `POST /account/invitation/acknowledge`, `GET /settings`,
+section 9 (the provider's address, the continuation); `10` section 4
+(`oidc.continuation.lifetime`) and `DeviceVerified`; `17` BFF-CSRF-005a, BFF-STEP-001,
+BFF-ORDER-001 (stage 8); `18` FE-API-002, FE-API-004, FE-API-006, FE-COMP-002,
+FE-REG-005, FE-VER-001, FE-PM-002, FE-SEC-001; `20` REG-SESS-008;
+`implementation-plan.md` (round H3's row).
+
+---
+
+## D-225 — The library sends nothing, and keeps to its own work
+
+**Date:** 2026-10-29 · **Status:** accepted · **Amends:** D-022, D-044, D-048, D-071, D-220
+
+**TL;DR.** A communication library of its own carries every message a host's
+applications send: email, SMS and push. This library is identity, sign-in, permissions,
+the privacy of the data it holds and the mail server's mailboxes, and nothing else. A
+sweep of every chapter against that found what it still did beyond it: it composed and
+queued messages for senders of its own (specified, and never built), read an SMS
+gateway's balance and delivery reports, delivered its own alerts, watched the server's
+certificates and clock, tested backups, and kept a register of licences and a
+maintenance log; and its chapters carried a deployment's and a company's procedures and
+a frontend's technology. Each leaves the library as below. Round H3 builds this decision
+with D-224.
+
+1. **Messages leave through the host.** The library decides that a message is owed, to
+   whom, in which languages and with which values, admits it under the named
+   restrictions (AUTH-ABUSE-004), and hands it to the host's `INotificationHandler`, now
+   required and with no default. The handler is given a `SendRequest`: the send's
+   reference (the same at every attempt, so the host's idempotency key), the message
+   kind (`10` section 5.15), the channel (`email` · `sms`), the destination, the
+   languages (one, or every declared language in `notification.languages` order) and the
+   kind's values, the places of `10` section 5.26 filled (the code, the link and the
+   rest). It answers whether it took the message, and took means the host has recorded
+   it to be sent. The library's outbox keeps the immediate attempt and the retries under
+   `outbox.retry.*` for that handing over. The library holds no message text, renders
+   nothing and calls no gateway: `IMailTransport`, `ISmsTransport`, `IMessageTemplates`
+   and the shipped catalogue, the shipped senders and their keys
+   `integration.mail.endpoint` and `integration.sms.endpoint`, the SMS length budgets,
+   the SMS balance poll and its floor (`integration.sms.balancefloor`), and the
+   composing of one mail in several languages are removed. A message owed in every
+   declared language is one `SendRequest` carrying them all, which the host composes;
+   the restrictions judge it as before. *Rejected:* keeping the library's senders as a
+   fallback (none was built, and a second sender on one gateway account splits its
+   reports); depending on the communication library (the libraries never know each
+   other, D-220).
+
+2. **Outcomes come from the host.** The delivery-report route `GET /callbacks/sms/dlr`
+   is removed, with every rule of a gateway's report: the library talks to no gateway. A
+   host that learns a message's final outcome reports it in process,
+   `ISendOutcomes.ReportAsync(reference, delivered)`: a message that failed releases its
+   counts as INT-SMS-005 states, and a delivered `secondfactor` SMS releases its count
+   from each restriction marked `resend` (D-197). A reference naming no message of the
+   library's changes nothing and is answered false. The operation takes no access
+   context and meets no gate, since it can only make a person less restricted.
+
+3. **Alerts are raised here and delivered by the host.** The library decides when an
+   alert is raised and deduplicates it (OPS-ALERT-001, OPS-ALERT-002), and the job
+   `alert-dispatch` hands each raised alert to the host's `IAlertHandler`, required,
+   oldest first, retried until taken. Where an alert goes, by which channel and to whom,
+   the owner included, is the host's: the alert channels, the destination keys
+   (`alerting.email.destinations`, `alerting.sms.destinations`, `alerting.owner.*`,
+   `alerting.sms.severitythreshold`), OPS-ALERT-003's routing, OPS-ALERT-004,
+   OPS-ALERT-004a and the condition `alert-destination-changed` are removed, and
+   bootstrap no longer asks for the owner's destinations.
+
+4. **The server is the deployment's to watch.** The certificate renewal and clock
+   watches, their seams (`ICertificateRenewal`, `IClockReference`), the conditions
+   `certificate-renewal-failed` and `clock-drift`, their `degradation` scopes,
+   INF-TLS-003, INF-OBS-001 and INF-OBS-003 are removed. INF-HOST-001 stays a
+   requirement on the environment: the library needs a synchronised clock and does not
+   watch it.
+
+5. **Backups are the deployment's.** Chapter 12 keeps three items: erasure by key
+   destruction (DR-006a), the off-host erasure ledger replayed after a restore (DR-016),
+   and the key-encryption key's cryptoperiod (DR-009a). Every other item of it retires,
+   and with them the restore test, its job, its seam (`IRestoreTestInstance`), its keys
+   (`backup.*`), the condition `restore-test-failed`, the canary account bootstrap
+   seeded for it, INF-DB-004 and INT-MAIL-002's backup clause. The key rotations stay
+   and keep no backup's clock: they print no escrow copy, `--sealed` becomes `--retire`,
+   and `--retention` and `keepUntil` go, since keeping a retired version for a backup is
+   the deployment's (OPS-SEC-003).
+
+6. **No licence register and no maintenance log.** OPS-MAINT-001 retires with
+   `/admin/compliance/licences` and `/admin/compliance/maintenance`, their vocabularies,
+   and the `expiry-approaching` scope `envelope-rotation`. `expiry-approaching` stays
+   for the key-encryption key's cryptoperiod, and `maintenance.expiry.warninglead` stays
+   as its lead and the holiday list's. The job that warns of the cryptoperiod runs as
+   `kek-cryptoperiod`, in place of `envelope-rotation`, and the key's rotation is the
+   one maintenance exception left (`06` section 9).
+
+7. **A deployment's and a company's procedures leave the specification** for the host's
+   own documents: chapters 14 (the takedown procedure) and 16 (the offboarding
+   procedure), whose library functions stay specified where they are (the takedown, a
+   membership's end, session revocation); runbook sections 1, 2, 3.3, 5, 6, 7.1, 7.2,
+   10, 11 and 12, and the envelope in section 3.2; a deployment's gate on destructive
+   schema changes (OPS-DEP-001 to OPS-DEP-003), whose report stays as
+   `migrate --report`, which now states itself which statements are destructive
+   (OPS-MIG-001), and its pipeline as the only way to change production (INF-DEP-002);
+   the custody of the sealed envelope and of copies of keys (OPS-BOOT-003, DR-009,
+   DR-009b); the text of breach notices and the company's documents (PRIV-BREACH-001
+   criteria 1 and 4; IDN-LIFE-003 and PRIV-MINOR-002 criterion 1); a single host,
+   hosting abroad and certificate issuance (INF-HOST-002, INF-HOST-004, INF-TLS-002);
+   the risk register's R-A01, R-A04, R-A08, R-A11, R-A12, R-A13, R-O01, R-O02 and R-O03;
+   and the overview's regulatory context, its hosting and SMS rows, its server and
+   frontend stack, and the deferrals that are a deployment's.
+
+8. **A frontend's technology is its own.** FE-PLAT-001 to FE-PLAT-003, FE-LOC-001 to
+   FE-LOC-005 and FE-A11Y-001 retire. Chapter 18 keeps how a frontend uses the library.
+
+9. **What was out of date.** LIB-PKG-003: the packages are attached to the tagged
+   release (plan section 4), and a package feed is a host's. The 3,000 Actions minutes
+   and their monthly review go (CONV-GATE-002, OPS-DEP-005); the rule that the heavy
+   suites do not run on every push stays. The privacy features keep Egypt's law as their
+   default values, each a key or a declaration a host changes (D-166), and no feature
+   changes for it.
+
+10. **What a host now supplies.** `INotificationHandler` and `IAlertHandler`, each
+    required: absent, startup fails with `model.startup.declarationmissing`,
+    `details.key` `notificationHandler` or `alertHandler`, in place of `mailTransport`
+    and `smsTransport`. `Janus.Testing` carries an in-memory handler of each, holding
+    every message and alert handed to it, readable by destination with each kind's
+    values, so a test reads a code as a value and never out of a text (LIB-TEST-003).
+    The sample host registers its own of each.
+
+**Propagated to:** `00` sections 1.1, 2.1, 4, 6, 7.2, 7.3 and 8; `01` IDN-LIFE-002a,
+IDN-LIFE-003, IDN-LIFE-009b, IDN-ATTR-001; `02` AUTH-STEP-004, AUTH-SESS-010,
+AUTH-RECOV-002, AUTH-ABUSE-003 to AUTH-ABUSE-007, section 10; `03` AUTHZ-GATE-006; `04`
+PRIV-SENS-002, PRIV-RIGHT-005a, PRIV-RIGHT-005c, PRIV-ROPA-002, PRIV-BREACH-001,
+PRIV-MINOR-001, PRIV-MINOR-002; `05` INT-GEN-001, INT-GEN-003, INT-MAIL-002,
+INT-MAIL-006, INT-MAIL-006a, INT-MAIL-008, INT-MAIL-009, INT-MAIL-011, INT-SMS-001,
+INT-SMS-003 to INT-SMS-006, section 6; `06` OPS-MIG-001, OPS-DEP-001 to OPS-DEP-003,
+OPS-DEP-005, OPS-CFG-002, OPS-CFG-004, OPS-CFG-008, OPS-ALERT-001 to OPS-ALERT-004a,
+OPS-BOOT-001 to OPS-BOOT-004, OPS-SEC-001 to OPS-SEC-003, OPS-OBS-002, section 9 and
+OPS-MAINT-001, OPS-ENV-001; `07` LIB-PKG-003, LIB-API-001, LIB-API-003, LIB-API-005,
+LIB-HOST-001, LIB-EXT-001, LIB-TEST-003; `08` CONV-LAYOUT-001, CONV-SETUP-002,
+CONV-DESIGN-002, CONV-DESIGN-003, CONV-DESIGN-006, CONV-DESIGN-007, CONV-GATE-001,
+CONV-GATE-002, sections 9 to 11; `09` `POST /admin/recovery/approve`,
+`GET /privacy/export`, `POST /records/access`,
+`POST /admin/accounts/{subject}/sessions/revoke`, `POST /auth/break-glass`,
+`POST /admin/break-glass/generate`, `/admin/config/{key}`, `/admin/compliance/*`,
+section 10; `10` the codes, permissions, keys, conditions, scopes, audit actions,
+message kinds and places, principals, step-up actions, events and vocabularies of the
+items above; `11` sections 1, 2, 3.2, 3.3, 4, 5, 6, 7.1, 7.2, 8.3, 10, 11 and 12; `12`
+all; `13` the entries above, R-A05, R-A21, R-M22, R-M23, R-O04 and section 4; `14` and
+`16` all; `15` sections 3.3, 3.4, 3.5, 4, 5, 6.4, 6.5, 7 and 8; `17` BFF-MACH-001,
+BFF-MACH-003; `18` FE-PLAT-001 to FE-PLAT-003, FE-LOC-001 to FE-LOC-005, FE-COMP-006,
+FE-BG-001, FE-A11Y-001; `19` INF-TLS-002 to INF-TLS-004, INF-HOST-001 to INF-HOST-004,
+INF-DB-004, INF-BG-001, INF-DEP-002, INF-OBS-001, INF-OBS-003, sections 9 to 11; `20`
+REG-IDENT-001, REG-PROF-002, REG-MAIL-001; `21` REC-ACC-001, REC-TKD-001; the decision
+log's deferred table; `janus-explained.md`; `implementation-plan.md` (round H3's row and
+section 4).
+
+---
+
+## D-226 — Round H3 questions 1, 2, 3, 8 and 9: the mail server's tokens, a loss report's link, a challenge's browser, and what a sign-in and a restore keep
+
+> **Amended.** Answer 1: the scopes a client is registered with are those beyond `openid`, `email`, `profile` and `offline_access`, which keep their own rules (D-227).
+
+> **Amended.** Answer 4: with no authorization pending and `redirect.defaultclient` empty, the continuation answers `/` (D-228).
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-224, D-225
+
+**TL;DR.** Round H3 asked nine questions. Questions 4 to 7 were about an SMS gateway's
+delivery reports, which D-225 removed with their route, and need no answer. The other
+five are answered here, each after reading the code it touches, and question 1 also
+against Stalwart 1.0's own documentation (2026-10-31). App passwords are managed with
+the mail server's management key acting on the person's account, and the library issues
+no token for the mail server (1). A loss report is found by its cancel token's
+fingerprint (2). Every sign-in challenge is bound to the browser that opened it, and a
+sign-in link to a challenge (3). A pending authorization moves into the session its
+sign-in establishes (4). A session the restore can still bring back keeps its cookie,
+which the two restore routes alone read (5). Round H3 builds this decision with D-225
+and the items it unparks.
+
+1. **The mail server's tokens (question 1).** Stalwart 1.0 grants a token from an
+   external provider one of three things: the account's full permissions, where the
+   token's client is the `oauthClientId` of an application installed on the mail server,
+   as its own web interface is; the interoperable scopes the token carries
+   (`urn:ietf:params:oauth:scope:mail` and the contacts, calendars and files scopes);
+   or, where it carries none, what `unscopedTokens` sets: `reject` by default,
+   `interoperable` as if it carried the four, or `full`, every permission of the
+   account, management included, which its documentation calls unsafe. `x:AppPassword/*`
+   is a management call under `urn:stalwart:jmap`, which no scope reaches, so the round
+   saw the person's token refused, as the documentation says. `requireAudience` does not
+   exist in 1.0.
+
+   - **App passwords by the management key.** The adapter lists, creates and revokes a
+     person's app passwords with the management key, acting on the person's account by
+     the request-level `accountId` (RFC 8620), which is how Stalwart has an
+     administrator act for a user: `x:AppPassword/query` and `x:AppPassword/get`, and
+     `x:AppPassword/set` to create and to destroy, which ask the key's role for
+     `impersonate`, `sysAppPasswordQuery`, `sysAppPasswordGet`, `sysAppPasswordCreate`
+     and `sysAppPasswordDestroy`. The account acted on is the server account that
+     carries the identifier of the mailbox the library holds for the acting account,
+     found as a push finds it (INT-MAIL-001), never one a request names; where the
+     server holds none, the call fails as a failed call does, and reconciliation reports
+     the drift (INT-MAIL-007). `IMailServer`'s three app-password calls take that
+     mailbox in place of the person's token. The rest of INT-MAIL-010 stands: the gate
+     and its second ask, the step-ups, the notice, the audit, the secret shown once and
+     nothing stored. The person's token was no barrier: the library issued it in process
+     from any session, and the management key already creates and destroys the accounts.
+
+   - **No token for the mail server.** The library's in-process token, the
+     `MailServerClient` declaration and its startup check are removed. A client a
+     deployment registers for the mail server is an ordinary registered client.
+
+   - **The mail server's check in 1.0's terms (INT-MAIL-004).** Its directory names the
+     provider address as `issuerUrl`, the clients whose tokens it accepts in
+     `acceptedAudiences`, `skipAudienceValidation` off, `opaqueTokenValidation` `none`,
+     `unscopedTokens` `reject`, and `email` as `claimUsername`. It accepts a token whose
+     `aud` is such a client and which carries an interoperable scope, and refuses one
+     issued to any other client; it would also accept an `aud` naming one of its own
+     resource identifiers, which the provider never issues (AUTH-OIDC-006).
+
+   - **A client receives the scopes it is registered with.** Besides `openid`, `email`,
+     `profile` and `offline_access`, the provider issues a client any scope it is
+     registered with (`register-client --scopes`) where it asks for it, and refuses a
+     scope the client is not registered with as `invalid_scope`; a client registered for
+     the mail server with `urn:ietf:params:oauth:scope:mail` receives the scope the mail
+     server grants access by.
+
+   *Rejected:* `unscopedTokens` `full` (every token issued to an accepted client would
+   carry the account's management permissions); the library's client as an installed
+   application's `oauthClientId` (the mail server's own web interface signs in with that
+   identifier, and the library's client is confidential). The round decides
+   INT-MAIL-010's calls and INT-MAIL-004 criteria 1 to 3 against the pinned server so
+   configured; where it answers otherwise, the item parks again (Tier 3).
+
+2. **A loss report's link (question 2).** `loss_reports` holds the cancel token's
+   SHA-256 fingerprint, as every link token is held to be found, beside the token
+   encrypted for the notices that repeat it. A cancel by the link finds its report by
+   that fingerprint, `{id}` unread, and a token that finds none is answered as a wrong
+   token is now (**404** `auth.credential.notfound`). The column is not null and unique,
+   and the migration that adds it gives each row already present a random value no token
+   hashes to: no release exists, so only a development database holds such a row
+   (OPS-MIG-005 criterion 3), and its report is cancelled from a session. *Rejected:* a
+   nullable column filled at the next notice (a column of the first release carries its
+   final constraint); `{id}` kept for the older reports (two ways to find one report).
+
+3. **A challenge's browser (question 3).** Items 17 and 18 rest on a binding no
+   challenge had.
+
+   - A sign-in challenge (`POST /auth/begin`) is bound, when it is opened, to the
+     pre-authentication session the browser carries, or to none where it carries none (a
+     browser holding a live session).
+
+   - `POST /auth/link` issues its link on a challenge: the browser's latest live
+     challenge opened with that identifier on which no factor has been accepted, or,
+     where it holds none, one it opens for the identifier as `/auth/begin` does, bound
+     to the browser. Its answer is unchanged. The link names its challenge, and the
+     challenge lives at least as long as the link, its end moved to the link's where it
+     would come first.
+
+   - A press presenting the link's token completes the link's challenge only where the
+     request carries the pre-authentication cookie that challenge is bound to; anywhere
+     else, or where it is bound to none, it answers the code to type, which is presented
+     at `/auth/factor` on that challenge.
+
+   - `POST /auth/device/resend` judges its challenge's binding as D-224 item 18 states.
+
+   This unparks items 17 and 18, and item 2's resend clause (AUTH-FACT-016 criterion 9).
+
+4. **The pending authorization after sign-in (question 8).** The rotation that ends the
+   pre-authentication session at a completed sign-in (BFF-CSRF-005a, AUTH-SESS-006)
+   carries the browser's pending authorization over to the session record it
+   establishes, in the same transaction. The continuation finds it on the session the
+   browser then carries and spends it; `continueTo` and `GET /auth/session` read it
+   there. Its lifetime still runs from its creation (`oidc.continuation.lifetime`), and
+   the session's end ends it. *Rejected:* the pre-authentication session kept beside the
+   new session (AUTH-SESS-006 ends it, and one browser would hold two bindings).
+
+5. **The restore's cookie (question 9).** Stage 5 clears a cookie that no longer
+   resolves, so the 401 that reports an idle expiry took away the cookie the restore
+   needs. Where the session a cookie names ended for inactivity and the restore admits
+   it (its answer's `details.reauthenticate` is `single-factor`: inside the absolute
+   window, under a policy requiring AAL2, not a break-glass session), stage 5 now keeps
+   the cookie and records the ended session for `POST /auth/restore/begin` and
+   `POST /auth/restore`, which alone read it. Every other request goes on as one that
+   carried no session, so stage 8 answers a route that requires one **401**
+   `auth.session.expired` with `details.reauthenticate` `single-factor`, as now. Once
+   the restore no longer admits it, stage 5 clears it as before. Stage 5 needs no route
+   for this, so it holds where the host's routing comes after the profile (D-210). The
+   session and the pre-authentication session share one CSRF cookie, and a browser
+   without a live session is issued a pre-authentication session on first contact
+   (BFF-CSRF-005a), whose token then takes the cookie: the two restore routes are
+   carried by the expired session's cookie and the CSRF token bound to the browser's
+   pre-authentication session, which the frontend reads from the cookie again after the
+   expiry's answer (FE-API-004). A completed restore ends that pre-authentication
+   session as a completed sign-in does, and sets the restored session's cookie and
+   token. *Rejected:* keeping the session's CSRF token by issuing no pre-authentication
+   session beside a restorable cookie (the browser could then begin no sign-in,
+   registration or recovery until the cookie ended).
+
+**Propagated to:** `02` AUTH-OIDC-001, AUTH-OIDC-006, AUTH-SESS-005, AUTH-SESS-012; `05`
+INT-MAIL-001, INT-MAIL-004, INT-MAIL-010; `07` LIB-HOST-001; `09` `POST /auth/begin`,
+`POST /auth/link`, `POST /auth/restore/begin` and `POST /auth/restore`,
+`POST /recovery/report-loss/{id}/cancel`, the app-password routes, section 9; `10`
+`model.startup.declarationmissing`; `13` R-A02; `17` BFF-CSRF-005a, BFF-STEP-001,
+BFF-ORDER-001 (stage 5); `18` FE-API-004; `20` REG-MAIL-002; `implementation-plan.md`
+(round H3's row).
+
+---
+
+## D-227 — Round H3 questions 10 and 11: a repeated failure report, and the four scopes
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-225, D-226
+
+**TL;DR.** A repeated report of a message the library handed over answers true, as
+INT-SMS-005 already says, so the ledger keeps a released message's row, marked
+released, for as long as it would have kept it unreleased (10). The scope clause of
+AUTH-OIDC-001 covers the scopes beyond `openid`, `email`, `profile` and
+`offline_access`, which keep their own rules (11).
+
+1. **A repeated failure report (question 10).** INT-SMS-005 answers true "where the
+   reference names a message the library handed over", a repeated report changing
+   nothing; a message the host reported failed is still one the library handed over.
+   Removing its row at the first failure made the second answer false, which a host
+   reads as a reference the library never issued. The row stays, marked released, until
+   the time it would have left the ledger had no report come; a report on a released
+   row answers true and changes nothing. The criterion's test asserts the answer.
+
+   *Rejected:* false, as built (it says the reference is unknown when it is known, and
+   a host that alerts on unknown references would alert on every gateway's retry).
+
+2. **The four scopes (question 11).** D-226 set the four apart with "besides": the
+   clause gives a client the scopes beyond them that it is registered with, and refuses
+   the others with `invalid_scope`. The four keep the rules they had: `openid` is every
+   client's; `offline_access` is a `protocol` client's alone, a browser application's
+   request for it refused at `POST /oidc/par` with `invalid_request` (AUTH-OIDC-002);
+   `email` and `profile` are a client's registered with them, a request for one its
+   client is not registered with refused with `invalid_request` by the provider's own
+   check of a client's permissions, as before.
+
+   *Rejected:* judging the four by the clause (it would make `offline_access` a matter
+   of registration rather than of the client's kind, against AUTH-OIDC-002, and change
+   the refusal every registered client meets today for no gain in what it may receive).
+
+**Propagated to:** `02` AUTH-OIDC-001.
+
+---
+
+## D-228 — Round H3 questions 12 and 13: the continuation with nowhere to go, and a test's restore
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-226
+
+**TL;DR.** With no authorization pending and `redirect.defaultclient` empty, its
+default, `GET /oidc/authorize/continue` answers a **302** to `/`, the root of the
+application that serves it, as API-REDIR-001 replaces any other destination (12). A
+`TestSession` restores its session in place, as it steps up, with the person's passkey
+or password (13).
+
+1. **The continuation with nowhere to go (question 12).** `10` already says what an
+   empty `redirect.defaultclient` means: no fallback destination is carried, and the
+   frontend chooses its own. API-REDIR-001 already says where a browser goes when its
+   destination is not one the library may name: `/`, that application's root. The
+   continuation joins the two: `/` of the application it is served by, whose frontend
+   chooses what a person signed in with no application waiting sees.
+
+   *Rejected:* a 302 to the sign-in screen (the person has just signed in, and would
+   be asked again for nothing); an error body under a new code (the route never renders
+   a page, and nothing went wrong); startup refusing an empty key (the key is optional
+   by design, and a deployment with one browser application need not name it).
+
+2. **A test's restore (question 13).** LIB-TEST-003 gives each `TestSession` the
+   person's step-up and keeps the person's passkey inside it. A restore in place is
+   the same kind of act, a ceremony with the person's own credential on their own
+   session, and a host's tests meet it wherever its frontend restores after an idle
+   expiry. The `TestSession` makes the two restore calls with the person's passkey or
+   password, as `StepUpAsync` makes the step-up's.
+
+   *Rejected:* handing the passkey to the test (it would let a test act as the person
+   outside the session the library built for it); the sample host's test enrolling a
+   staff member of its own (a host's tests would repeat `TestPeople`'s steps to reach
+   a flow every frontend meets).
+
+**Propagated to:** `02` AUTH-SESS-012; `07` LIB-TEST-003; `09`
+`GET /oidc/authorize/continue`; `10` `redirect.defaultclient`.
+
+---
+
+## D-229 — Round H3 question 14: the sign-on at the authentication application's origin
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-224
+
+**TL;DR.** The sign-on belongs to an application at an origin apart from the
+authentication application's. An application served at that application's own origin is
+served by the sign-in session and derives none, so its frontend starts no sign-on (14).
+The sample host proves the sign-on and back between two origins: its tests run it a
+second time, on the same deployment, as an application at an origin of its own.
+
+1. **An application at the authentication application's origin (question 14).** The
+   library puts the authentication application at an origin of its own and each other
+   browser application at another (BFF-SESS-003, D-104), and its cookies are one set per
+   origin (BFF-SESS-002). At the authentication application's origin the sign-in session
+   is the session that origin's cookie carries, and that application's own endpoints are
+   served by it, as the sample host's are. There is no per-app session to derive there:
+   a sign-on completed at that origin would put one in the place of the sign-in session,
+   under the one cookie both would need. So FE-API-006 binds the frontend of an
+   application at an origin of its own, and a frontend at the authentication
+   application's origin that finds no session sends the browser to its sign-in page.
+
+   *Rejected:* the rotation at the sign-in carrying the sign-on's attempt (reading A:
+   the return would then put a per-app session in the place of the sign-in session); a
+   return that finds no attempt on a live session sent to `/` (reading B: a `state` the
+   browser was never sent out with would be followed, where BFF-SESS-006 refuses it as a
+   forged return, and the route would be lost all the same).
+
+2. **The sample host at two origins.** The plan's row has a host built only from the
+   packages send a person from its application's sign-on to the sign-in and back to that
+   application's route, which is what a host with a second application meets. The sample
+   host's tests run it twice on one deployment, from the same packages: once as the
+   authentication application, and once at an origin of its own, with a sign-on client
+   of its own registered for it, the first's addresses as its `AuthenticationAddresses`
+   and the deployment's landing origins as the first declares them. The person starts at
+   the second's sign-on, signs in at the first and is shown the second's route
+   (reading C).
+
+   *Rejected:* meeting the row with the sign-in and the continuation alone at one origin
+   (reading D as the whole answer: the sign-on between two origins, which every host
+   with a second application meets, would go unproved from the packages).
+
+**Propagated to:** `07` LIB-TEST-004; `17` BFF-SESS-006; `18` FE-API-006.
+
+---
+
+## D-230 — Round H3 question 15 and review: the provider inside its branch, a link's own sign-in, and public values
+
+> **Amended.** Item 1: source-based rate limiting was missed at `/oidc/authorize` alone; `/oidc/par` and `/oidc/token`, held by the machine profile, which has no source rate limit, were answered outside it, so a fault there was not answered as the profile answers one (D-231).
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-225, D-226, D-229
+
+**TL;DR.** The provider, and every handler the library gives the framework's
+authentication, acts only on a request its profile has passed inside the library's
+branch, so the authentication middleware ASP.NET Core adds by itself answers no library
+route ahead of its stages (1). Where `POST /auth/link` opens the sign-in its link is
+issued on, its answer carries that sign-in's `challengeId` (2). Until the first final
+release the values of a public enumeration carry no promise, so the round's
+renumbering stands (3).
+
+1. **The provider inside its branch (question 15).** BFF-ORDER-001 makes the order of
+   the stages part of the public contract, and its AC1 lets no host insert middleware
+   between them. ASP.NET Core's `WebApplication` adds the authentication middleware
+   itself, right after routing and ahead of every middleware the host adds, wherever
+   the host has not called `UseAuthentication` on the application; the library's own
+   call, inside the branch the host mounts it in, does not count. The provider answers
+   its routes from that middleware, so in such a host `/oidc/authorize`, `/oidc/par`
+   and `/oidc/token` were answered before any stage of their profile ran: no
+   pre-authentication session for the first, no source-based rate limiting for any.
+   The provider, and every handler the library gives the framework's authentication,
+   now acts only on a request its profile has passed inside that branch, and passes any
+   other request on untouched, so the order holds whatever the host's pipeline holds.
+
+   *Rejected:* requiring the host to call `UseAuthentication` (a host that omits it is
+   open and nothing tells it, which P-003's secure-by-default test forbids); the
+   library's mount calling it on the host's own pipeline (a change made where the host
+   did not choose, LIB-HOST-003); provider routes relative to the branch (every
+   application that mounts the library would answer them, which the absolute addresses
+   prevent).
+
+2. **A link's own sign-in (review).** D-226 issues a sign-in link on the browser's
+   latest live sign-in opened with the identifier, or on one the request opens as
+   `/auth/begin` opens one. In the second case the sign-in's handle reached no one, so
+   the code shown where the link is opened could be typed nowhere, which AUTH-FACT-003
+   AC4 forbids. Where the request opens the sign-in, its answer carries the
+   `challengeId`, as `/auth/begin`'s does; where the link is issued on a sign-in the
+   browser holds, the answer carries none, the frontend holding it already.
+   `/auth/begin` opens a sign-in for every identifier, one that resolves to nothing
+   included, so whether an answer carries a `challengeId` turns on the browser's
+   sign-ins alone, provided the request opens one wherever the browser holds none: for
+   an identifier that resolves to nothing, an address a domain lock refuses, a number
+   reported as `risk` and a channel the policy has not enabled alike (AUTH-ABUSE-002).
+
+   *Rejected:* `POST /auth/factor` taking the code without a `challengeId` and
+   finding the sign-in by the browser's cookie (a second way to name a sign-in, beside
+   the handle every other step uses); a new handle drawn for a held sign-in so that
+   every answer carries one (the frontend's handle would change under it, and the store
+   keeps fingerprints only).
+
+3. **Public values before the first final release (review).** D-225 retired members of
+   three public enumerations, and the round renumbered the members left in `10`'s
+   order. D-166 entry 291 placed `BreakGlassGenerated` at the next free value when it
+   was added, and set no rule for a later removal. No release has been cut, and the
+   library stores these as their vocabulary strings or not at all, so no stored value
+   moves. Until the first final release a value lives in `PublicAPI.Unshipped.txt`
+   and carries no promise; from it, the shipped file holds it and the compatibility
+   gate keeps it, as it keeps the rest of the surface. A change of the public surface
+   is never Tier 1, so the renumbering is recorded as a question this review answered.
+
+   *Rejected:* restoring the earlier values with gaps (a promise no release has made).
+
+**Propagated to:** `02` AUTH-FACT-003; `09` `POST /auth/link`; `17` BFF-ORDER-001.
+
+---
+
+## D-231 — Round H3 questions 17 and 18: the sample host's part of the row, and the provider's machine routes
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-225, D-230
+
+**TL;DR.** The sample host does in the gate what round H3's row asks of a host; that the
+key rotations print no key is the command-line tool's, proven by its own tests, so the
+sample runs no rotation (1). At `/oidc/par` and `/oidc/token` no stage of the machine
+profile refuses a request before the provider, so BFF-ORDER-001 AC8 holds there as the
+provider acting on them only inside that profile; D-230 item 1 named source-based rate
+limiting for them in error (2).
+
+1. **The sample host's part of the row (question 17).** Round H3's row lists what a host
+   built only on the public surface does, then that the key rotations print no key and
+   that no code of a retired item remains, and says the sample host does each in the
+   gate. A key rotation is an operator's act with the command-line tool, not part of
+   what a host composes, and LIB-TEST-004 names none among what the sample's tests
+   prove. The tool's own tests prove OPS-SEC-003 AC4 against PostgreSQL; in the sample a
+   rotation would need a key document of the next version, built for the test alone.
+   The sample host does each clause of the row about a host; the key rotations and the
+   retired code are the library's, proven by its own tests.
+
+   *Rejected:* a rotation run by the sample host (a document with no meaning for a host,
+   proving again what the tool's own tests prove).
+
+2. **The provider's machine routes (question 18).** The machine profile holds
+   `/oidc/par` and `/oidc/token` and has no source rate limit of its own: the provider
+   authenticates each client calling them with the secret the library generated for it
+   (BFF-MACH-001). Around the provider the profile sets its mark and answers a fault and
+   an unreadable request; none of its stages refuses a request before the provider does,
+   the refusal of a request carrying the session cookie being the provider's own
+   (BFF-MACH-001 AC2). In a host built on `WebApplication` the provider answered these
+   two routes outside the profile, so a fault there was not answered as the profile
+   answers one; source-based rate limiting was missed at `/oidc/authorize` alone, not at
+   all three as D-230 item 1 said. BFF-ORDER-001 AC8 holds at the two routes as the
+   provider acting on them only inside their profile, a fault in it answered by the
+   profile's error translation.
+
+   *Rejected:* a source rate limit on the provider's machine routes (BFF-MACH-001 leaves
+   a volumetric flood to the reverse proxy, and holds each client by its secret).
+
+**Propagated to:** D-230 (item 1, amended); `implementation-plan.md` (the H3 row).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18905,6 +19659,14 @@ section 5.24 (`privacy.consent.granted`, `privacy.consent.withdrawn`,
 | Round P: people without an account | D-221 |
 | Round P questions 1 to 11: the terms document, staff rows, notices, an attached record's restriction, a guest's browser | D-222 |
 | Round P questions 12 and 13: where staff's mechanism and reasons are recorded | D-223 |
+| Round H3: what a host's own frontends meet | D-224 |
+| The library sends nothing, and keeps to its own work | D-225 |
+| Round H3 questions 1, 2, 3, 8 and 9: the mail server's tokens, a loss report's link, a challenge's browser, and what a sign-in and a restore keep | D-226 |
+| Round H3 questions 10 and 11: a repeated failure report, and the four scopes | D-227 |
+| Round H3 questions 12 and 13: the continuation with nowhere to go, and a test's restore | D-228 |
+| Round H3 question 14: the sign-on at the authentication application's origin | D-229 |
+| Round H3 question 15 and review: the provider inside its branch, a link's own sign-in, and public values | D-230 |
+| Round H3 questions 17 and 18: the sample host's part of the row, and the provider's machine routes | D-231 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
@@ -18940,19 +19702,15 @@ Per P-003 — nothing deferred silently.
 | Third-party app platform, consent and dynamic registration (D-005) | First external client that is not first-party |
 | Multiple organization memberships enabled by default (D-003) | First person needing access across organizations |
 | Multi-market legal document sets, several governing languages on one deployment (D-146) | Serving a second market whose law names another language |
-| Approval gate on destructive DDL (D-019) | First additional person with deploy access |
 | Two-approver recovery (D-008) | First additional person with recovery approval rights |
 | Self-hosted password breach corpus (D-011) | If counsel objects to the range API |
 | Read/write separation for historical reporting (D-017) | When reporting queries outgrow tuning |
 | Hash-chained tamper-evident audit records (D-071) | When a second person shares administrative duties, or audit integrity is challenged |
 | Automated erasure routine for management schemas (D-101) | **The user's decision** — not an automatic trigger |
-| **Scripted one-command restore the owner can run** (D-085) | Once the system is released and stable |
 | Migration away from in-library authorization (D-015) | When permission queries are a top-3 slow query and index tuning has stopped helping |
 | **External key service with per-subject keys (D-082, superseded by D-097)** | If protecting pre-erasure backups against a compromised secrets manager ever justifies a second stateful store |
-| Templates editable outside the repository (D-059) | When a non-engineer needs to change a message |
 | Profile photos enabled for customers (D-060) | When a feature makes a customer photo meaningful |
 | Object storage for uploads (D-060) | Customer photos, or any genuinely large artifact |
 | District-level boundary polygons (D-061) | If city-level preselection proves too coarse |
 | Paid geocoding provider (D-061) | If customers demonstrably struggle with the address form |
-| Separate hosts per application (D-063) | When host compromise becomes a threat worth defending against |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |

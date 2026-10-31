@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
@@ -26,6 +27,11 @@ namespace Janus.Hosting.Bff;
 /// elsewhere the request goes on as one that carried none, and the browser keeps what
 /// it carries (D-189). Where the host's routing comes after the profile, no route is
 /// known here, so an enrolment session is resolved on none, which fails closed (D-210).
+/// The cookie of a session that lapsed for inactivity and that one factor restores is
+/// kept instead, and recorded for the two restore routes, which alone read it; the
+/// request otherwise goes on as one that carried none, and the cookie is cleared once
+/// the restore no longer admits it. This needs no route, so it holds where the host's
+/// routing comes after the profile (D-226).
 /// </remarks>
 internal sealed class SessionResolution(
     SessionService sessions,
@@ -59,10 +65,14 @@ internal sealed class SessionResolution(
                     .ConfigureAwait(false))
                 .Switch(session => resolved.Resolved(session), error => failure = error);
 
-            if (failure is Error ended)
+            if (failure is Error ended && Restorable(ended))
+            {
+                resolved.Kept(ended, OpaqueToken.Of(secret));
+            }
+            else if (failure is Error gone)
             {
                 cookies.Clear(context.Response);
-                resolved.Ended(ended);
+                resolved.Ended(gone);
             }
         }
 
@@ -73,6 +83,14 @@ internal sealed class SessionResolution(
 
         await next(context).ConfigureAwait(false);
     }
+
+    // BFF-STEP-001: what the restore admits is what the expiry's answer names
+    // single-factor, which resolving the cookie judged.
+    private static bool Restorable(Error ended) =>
+        ended.Code == ErrorCodes.SessionExpired
+        && ended.Details.TryGetValue("reauthenticate", out JsonElement asked)
+        && asked.ValueKind is JsonValueKind.String
+        && asked.GetString() == "single-factor";
 
     private async ValueTask CarriedAsync(HttpContext context, CancellationToken cancellationToken)
     {

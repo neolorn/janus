@@ -36,6 +36,8 @@ GET /account
       credentials[].backupState: boolean?
       credentials[].addedAt: DateTimeOffset
       credentials[].lastUsedAt: DateTimeOffset?
+      password.set: boolean
+      password.changedAt: DateTimeOffset?
       secondStep.preferred: string
       recoveryCodes.remaining: number
       recoveryCodes.generatedAt: DateTimeOffset
@@ -216,7 +218,7 @@ POST /account/identifiers
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   409 identity.identifier.maximum
-  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript integration.sms.balancefloor
+  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript
   429 auth.restriction.exceeded
 PUT /account/identifiers/backup
   request application/json
@@ -253,7 +255,7 @@ PUT /account/identifiers/{id}/replace
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   409 identity.change.pending identity.identifier.locked
-  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript integration.sms.balancefloor
+  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript
   429 auth.restriction.exceeded
 POST /account/identifiers/{id}/undo
   request application/json
@@ -361,7 +363,7 @@ POST /account/password
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
-  422 auth.password.blocklisted auth.password.toolong auth.password.tooshort
+  422 auth.factor.notpermitted auth.password.blocklisted auth.password.toolong auth.password.tooshort
 DELETE /account/photo
   204
   401 auth.session.expired
@@ -897,52 +899,6 @@ PUT /admin/compliance/assessments
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied authz.restricted
-GET /admin/compliance/licences
-  200
-    application/json
-      licences[].id: Guid
-      licences[].kind: string
-      licences[].name: string
-      licences[].expiresAt: DateTimeOffset
-      licences[].renewedAt: DateTimeOffset?
-  401 auth.session.expired
-  403 auth.session.csrfinvalid authz.denied
-PUT /admin/compliance/licences
-  request application/json
-    [].id: Guid?
-    [].kind: string
-    [].name: string
-    [].expiresAt: DateTimeOffset?
-    [].renewedAt: DateTimeOffset?
-  204
-  400 api.request.malformed
-  401 auth.session.expired
-  403 auth.session.csrfinvalid authz.denied authz.restricted
-  422 api.request.invalid
-GET /admin/compliance/maintenance
-  200
-    application/json
-      entries[].task: string
-      entries[].performedAt: DateTimeOffset
-      entries[].actor: Guid
-      entries[].note: string
-  401 auth.session.expired
-  403 auth.session.csrfinvalid authz.denied
-POST /admin/compliance/maintenance
-  request application/json
-    task: string
-    performedAt: DateTimeOffset?
-    note: string
-  201
-    application/json
-      task: string
-      performedAt: DateTimeOffset
-      actor: Guid
-      note: string
-  400 api.request.malformed
-  401 auth.session.expired
-  403 auth.session.csrfinvalid authz.denied authz.restricted
-  422 api.request.invalid
 GET /admin/config/{key}
   200
     application/json
@@ -962,8 +918,7 @@ PUT /admin/config/{key}
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
-  409 config.change.superseded
-  422 config.change.reasonrequired config.key.protected config.value.aboveceiling config.value.belowfloor config.value.lastdestination config.value.notallowed integration.endpoint.insecure
+  422 config.change.reasonrequired config.key.protected config.value.aboveceiling config.value.belowfloor config.value.notallowed integration.endpoint.insecure
 POST /admin/documents/{document}/versions
   request application/json
     text: string
@@ -1658,7 +1613,7 @@ POST /admin/recovery/approve
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
-  422 auth.recovery.channelnotonaccount auth.recovery.reasonrequired auth.recovery.selfapproval integration.sms.balancefloor
+  422 auth.recovery.channelnotonaccount auth.recovery.reasonrequired auth.recovery.selfapproval
   429 auth.restriction.exceeded auth.throttled
 GET /admin/restrictions
   200
@@ -1808,10 +1763,20 @@ POST /auth/break-glass
     credential: string
     reason: string
   200
+    application/json
+      continueTo: string
   400 api.request.malformed
   409 auth.breakglass.consumed
   422 auth.breakglass.invalid
   429 auth.throttled
+POST /auth/device/resend
+  request application/json
+    challengeId: string
+  202
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  422 auth.code.expired
+  429 auth.restriction.exceeded auth.throttled
 POST /auth/device/verify
   request application/json
     challengeId: string
@@ -1832,6 +1797,7 @@ POST /auth/device/verify
       policyRequirement.value: string
       policyRequirement.deadline: DateTimeOffset
       passwordChangeRequired: boolean
+      continueTo: string
   400 api.request.malformed
   403 auth.session.csrfinvalid
   422 auth.code.expired auth.code.invalid
@@ -1867,18 +1833,21 @@ POST /auth/factor
       policyRequirement.value: string
       policyRequirement.deadline: DateTimeOffset
       passwordChangeRequired: boolean
+      continueTo: string
     application/json
       sameBrowser: boolean
       code: string
   202
   400 api.request.malformed
   403 auth.policy.graceexpired auth.session.csrfinvalid
-  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired identity.identifier.domainnotallowed integration.sms.balancefloor
+  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired identity.identifier.domainnotallowed
   429 auth.restriction.exceeded auth.throttled
 POST /auth/link
   request application/json
     identifier: string
   202
+    application/json
+      challengeId: string
   400 api.request.malformed
   403 auth.session.csrfinvalid
   429 auth.restriction.exceeded auth.throttled
@@ -1908,6 +1877,49 @@ GET /auth/providers/google/return
   303
     error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
   403 auth.session.csrfinvalid
+POST /auth/restore
+  request application/json
+    challengeId: string
+    factor: Factor
+    value: JsonElement?
+    linkToken: string
+    trustDevice: boolean
+    press: boolean
+  200
+    application/json
+      status: SignInStatus
+      assuranceLevel: AssuranceLevel
+      phishingResistant: boolean
+      required[]: Factor
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
+      webauthn.allowCredentials[].id: string
+      webauthn.allowCredentials[].transports[]: string
+      webauthn.userVerification: string
+      trustDeviceOffered: boolean
+      policyRequirement.field: PolicyField
+      policyRequirement.value: string
+      policyRequirement.deadline: DateTimeOffset
+      passwordChangeRequired: boolean
+      continueTo: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  422 auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired
+  429 auth.throttled
+POST /auth/restore/begin
+  200
+    application/json
+      challengeId: string
+      factors[]: Factor
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
+      webauthn.allowCredentials[].id: string
+      webauthn.allowCredentials[].transports[]: string
+      webauthn.userVerification: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  429 auth.throttled
 GET /auth/session
   200
     application/json
@@ -1917,6 +1929,7 @@ GET /auth/session
       lastStrongAuthAt: DateTimeOffset?
       expiresAt: DateTimeOffset
       landing: string
+      continueTo: string
   401 auth.session.expired
   403 auth.session.csrfinvalid
 GET /auth/signon
@@ -1951,11 +1964,12 @@ POST /auth/step-up
       policyRequirement.value: string
       policyRequirement.deadline: DateTimeOffset
       passwordChangeRequired: boolean
+      continueTo: string
   202
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required
-  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired identity.identifier.domainnotallowed integration.sms.balancefloor
+  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired identity.identifier.domainnotallowed
   429 auth.restriction.exceeded auth.throttled
 POST /auth/webauthn/register/begin
   request application/json
@@ -2017,18 +2031,34 @@ GET /callbacks/providers/google/return
   303
 POST /callbacks/providers/google/return
   303
-GET /callbacks/sms/dlr
+GET /enrol
   200
-  409 integration.callback.inprogress
-  422 integration.callback.rejected
-  429 integration.callback.rejected
+    application/json
+      username: string
+      password.set: boolean
+      password.changedAt: DateTimeOffset?
+      offers[]: Factor
+      mailboxLost: boolean
+      identifiers[].id: string
+      identifiers[].value: string
+      identifiers[].primary: boolean
+      expiresAt: DateTimeOffset
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
 POST /enrol/begin
   request application/json
     token: string
   200
     application/json
-      expiresAt: DateTimeOffset
+      username: string
+      password.set: boolean
+      password.changedAt: DateTimeOffset?
+      offers[]: Factor
       mailboxLost: boolean
+      identifiers[].id: string
+      identifiers[].value: string
+      identifiers[].primary: boolean
+      expiresAt: DateTimeOffset
   400 api.request.malformed
   403 auth.session.csrfinvalid
   422 auth.enrolment.tokeninvalid auth.recovery.tokenexpired
@@ -2389,7 +2419,7 @@ PUT /records/collection/phone
   401 auth.session.expired
   403 auth.session.csrfinvalid
   409 identity.collection.incomplete identity.record.signedin
-  422 identity.identifier.invalid integration.sms.balancefloor
+  422 identity.identifier.invalid
   429 auth.restriction.exceeded auth.throttled
 POST /records/collection/verify
   request application/json
@@ -2416,7 +2446,7 @@ POST /recovery/complete
   204
   400 api.request.malformed
   403 auth.session.csrfinvalid
-  422 auth.recovery.tokenexpired auth.recovery.tokeninvalid
+  422 auth.password.blocklisted auth.password.toolong auth.password.tooshort auth.recovery.tokenexpired auth.recovery.tokeninvalid
 POST /recovery/report-loss
   request application/json
     credentialId: string
@@ -2437,6 +2467,16 @@ POST /recovery/report-loss/{id}/cancel
   403 auth.session.csrfinvalid
   404 auth.credential.notfound
   409 auth.lossreport.notpermitted auth.lossreport.pending
+POST /recovery/username
+  request application/json
+    token: string
+  200
+    application/json
+      username: string
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  422 auth.recovery.tokenexpired auth.recovery.tokeninvalid
+  429 auth.throttled
 GET /register
   200
     application/json
@@ -2562,7 +2602,7 @@ POST /register/identifiers
   401 auth.session.expired
   403 auth.session.csrfinvalid
   409 identity.identifier.maximum identity.registration.incomplete
-  422 identity.identifier.domainnotallowed integration.sms.balancefloor
+  422 identity.identifier.domainnotallowed
   429 auth.restriction.exceeded auth.throttled
 DELETE /register/identifiers/{id}
   200
@@ -2600,7 +2640,7 @@ PUT /register/identifiers/{id}
   401 auth.session.expired
   403 auth.session.csrfinvalid
   409 identity.identifier.locked identity.registration.incomplete
-  422 identity.identifier.domainnotallowed integration.sms.balancefloor
+  422 identity.identifier.domainnotallowed
   429 auth.restriction.exceeded auth.throttled
 PUT /register/phone
   request application/json
@@ -2621,7 +2661,6 @@ PUT /register/phone
   401 auth.session.expired
   403 auth.session.csrfinvalid
   409 identity.registration.incomplete
-  422 integration.sms.balancefloor
   429 auth.restriction.exceeded auth.throttled
 POST /register/phone/skip
   200
@@ -2684,8 +2723,29 @@ POST /register/verify/{id}
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid
-  422 auth.code.expired auth.code.invalid integration.sms.balancefloor
+  422 auth.code.expired auth.code.invalid
   429 auth.restriction.exceeded auth.throttled
+GET /settings
+  200
+    application/json
+      registration.phone: AttributeRequirement
+      identifiers.emailMax: number
+      identifiers.phoneMax: number
+      identifiers.usernameEnabled: boolean
+      profile.legalName: AttributeRequirement
+      profile.dateOfBirth: AttributeRequirement
+      password.floorSingleFactor: number
+      password.floorWithMfa: number
+      password.maximum: number
+      providers[]: Factor
+      purposes[].purpose: string
+      purposes[].takes: string
+      purposes[].consentKind: ConsentKind?
+      purposes[].document: string
+      policy.requiredAssurance: AssuranceLevel
+      policy.loginFactors[]: Factor
+      policy.photos: boolean
+  403 auth.session.csrfinvalid
 pipeline
   Concealment
   ErrorTranslation

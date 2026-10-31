@@ -102,7 +102,6 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
                     _changes,
                     scope,
                     policies,
-                    new RelayRegistration(_configuration, _events, _clock),
                     _events,
                     _work,
                     _clock),

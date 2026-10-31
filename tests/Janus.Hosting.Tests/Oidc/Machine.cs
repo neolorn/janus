@@ -24,6 +24,12 @@ internal sealed class Machine(Deployment deployment)
     public IPAddress? From { get; init; }
 
     /// <summary>
+    /// Gets the host the request is addressed to, the provider's unless a test names
+    /// another.
+    /// </summary>
+    public string Host { get; init; } = "identity.example.test";
+
+    /// <summary>
     /// Posts a form to one of the library's machine routes.
     /// </summary>
     /// <param name="path">The path.</param>
@@ -123,7 +129,7 @@ internal sealed class Machine(Deployment deployment)
 
         context.Request.Method = body is null ? "GET" : "POST";
         context.Request.Scheme = "https";
-        context.Request.Host = new HostString("identity.example.test");
+        context.Request.Host = new HostString(Host);
         context.Request.Path = Path(path, out QueryString query);
         context.Request.QueryString = query;
         context.Connection.RemoteIpAddress = From;

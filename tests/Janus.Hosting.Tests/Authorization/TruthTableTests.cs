@@ -311,8 +311,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // check does, and a list the declaration does not reach is refused with the code the
     // check answers. The names chapter 10 section 5.29 reserves stop a deployment whose
     // host declares one, and decide nothing for a job declared under another, which the
-    // case named for it restates (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, AC7,
-    // PRIV-RIGHT-004 AC3, D-207, D-208, D-213).
+    // case named for it restates, and the one naming them as D-225 leaves them restates
+    // again (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, AC7, PRIV-RIGHT-004 AC3, D-207,
+    // D-208, D-213, D-225).
     private static readonly (string Scenario, Decided Decided)[] Jobs =
     [
         ("a declared job asking while a request is served through the browser profile", Decided.Denied),
@@ -322,6 +323,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a declared job asking a permission its declaration names, outside a request", Decided.Allowed),
         (
             "a declared job under a name no library principal takes, asking a permission its declaration names, outside a request",
+            Decided.Allowed),
+        (
+            "a declared job under a name no library principal takes as D-225 leaves them, asking a permission its declaration names, outside a request",
             Decided.Allowed),
         (
             "a declared job asking a modifying permission its declaration names, on a record whose data subject is restricted",

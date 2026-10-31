@@ -5,7 +5,7 @@ using Janus.Core;
 namespace Janus.Storage.Authentication.Alerting;
 
 /// <summary>
-/// The <c>raised_alerts</c> row: one condition waiting for the alert channels.
+/// The <c>raised_alerts</c> row: one condition waiting to be handed to the host's alert handler.
 /// </summary>
 /// <remarks>Implements OPS-ALERT-001 and CONV-DESIGN-002.</remarks>
 internal sealed class RaisedAlertRecord

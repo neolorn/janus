@@ -72,6 +72,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("at");
 
+                b.Property<Guid?>("Raise")
+                    .HasColumnType("uuid")
+                    .HasColumnName("raise");
+
+                b.Property<bool>("Unanswered")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false)
+                    .HasColumnName("unanswered");
+
                 b.HasKey("Key")
                     .HasName("pk_alerts");
 
@@ -1128,68 +1138,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
-        modelBuilder.Entity("Janus.Storage.Authentication.Maintenance.LicenceRecord", b =>
-            {
-                b.Property<Guid>("Id")
-                    .HasColumnType("uuid")
-                    .HasColumnName("id");
-
-                b.Property<DateTimeOffset>("ExpiresAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("expires_at");
-
-                b.Property<string>("Kind")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("kind");
-
-                b.Property<string>("Name")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("name");
-
-                b.Property<DateTimeOffset?>("RenewedAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("renewed_at");
-
-                b.HasKey("Id")
-                    .HasName("pk_licences");
-
-                b.ToTable("licences", "identity");
-            });
-
-        modelBuilder.Entity("Janus.Storage.Authentication.Maintenance.MaintenanceEntryRecord", b =>
-            {
-                b.Property<Guid>("Id")
-                    .HasColumnType("uuid")
-                    .HasColumnName("id");
-
-                b.Property<Guid>("Actor")
-                    .HasColumnType("uuid")
-                    .HasColumnName("actor");
-
-                b.Property<string>("Note")
-                    .HasColumnType("text")
-                    .HasColumnName("note");
-
-                b.Property<DateTimeOffset>("PerformedAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("performed_at");
-
-                b.Property<string>("Task")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("task");
-
-                b.HasKey("Id")
-                    .HasName("pk_maintenance_log");
-
-                b.ToTable("maintenance_log", "identity", t =>
-                    {
-                        t.HasCheckConstraint("ck_maintenance_log_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
-                    });
-            });
-
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.OidcAuthorizationRecord", b =>
             {
                 b.Property<Guid>("Id")
@@ -1439,6 +1387,59 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("oidc_tokens", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_oidc_tokens_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Oidc.PendingAuthorizationRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<byte[]>("Parameters")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("parameters");
+
+                b.Property<byte[]>("PreAuthentication")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("preauthentication");
+
+                b.Property<Guid?>("Session")
+                    .HasColumnType("uuid")
+                    .HasColumnName("session");
+
+                b.HasKey("Id")
+                    .HasName("pk_pending_authorizations");
+
+                b.HasIndex("ExpiresAt")
+                    .HasDatabaseName("ix_pending_authorizations_expires_at");
+
+                b.HasIndex("PreAuthentication")
+                    .IsUnique()
+                    .HasDatabaseName("ux_pending_authorizations_preauthentication")
+                    .HasFilter("preauthentication IS NOT NULL");
+
+                b.HasIndex("Session")
+                    .IsUnique()
+                    .HasDatabaseName("ux_pending_authorizations_session")
+                    .HasFilter("session IS NOT NULL");
+
+                b.ToTable("pending_authorizations", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_pending_authorizations_bound", "num_nonnulls(preauthentication, session) = 1");
+
+                        t.HasCheckConstraint("ck_pending_authorizations_expires_at", "expires_at > created_at");
                     });
             });
 
@@ -1768,6 +1769,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("enc_cancel");
 
+                b.Property<byte[]>("CancelFingerprint")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("cancel_fingerprint");
+
                 b.Property<DateTimeOffset?>("HeldAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("held_at");
@@ -1790,6 +1796,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Credential")
                     .HasName("pk_loss_reports");
+
+                b.HasIndex("CancelFingerprint")
+                    .IsUnique()
+                    .HasDatabaseName("ux_loss_reports_cancel_fingerprint");
 
                 b.HasIndex("InvalidatesAt")
                     .HasDatabaseName("ix_loss_reports_invalidates_at");
@@ -1980,23 +1990,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_registration_sessions_provisional_subject_not_max_uuid", "provisional_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
-            });
-
-        modelBuilder.Entity("Janus.Storage.Authentication.Sending.BalanceReadingRecord", b =>
-            {
-                b.Property<DateTimeOffset>("ReadAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("read_at");
-
-                b.Property<decimal>("Balance")
-                    .HasPrecision(18, 4)
-                    .HasColumnType("numeric(18,4)")
-                    .HasColumnName("balance");
-
-                b.HasKey("ReadAt")
-                    .HasName("pk_sms_balance_readings");
-
-                b.ToTable("sms_balance_readings", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.NoticeRecord", b =>
@@ -2205,6 +2198,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<int>("FingerprintVersion")
                     .HasColumnType("integer")
                     .HasColumnName("fingerprint_version");
+
+                b.Property<bool>("Released")
+                    .HasColumnType("boolean")
+                    .HasColumnName("released");
 
                 b.PrimitiveCollection<byte[][]>("Resend")
                     .IsRequired()
@@ -2529,6 +2526,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("handle");
 
+                b.Property<byte[]>("Browser")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("browser");
+
                 b.Property<DateTimeOffset>("CreatedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
@@ -2545,8 +2547,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("integer")
                     .HasColumnName("fingerprint_version");
 
+                b.Property<DateTimeOffset?>("HeldAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("held_at");
+
                 b.Property<byte[]>("Identifier")
-                    .IsRequired()
                     .HasMaxLength(32)
                     .HasColumnType("bytea")
                     .HasColumnName("identifier");
@@ -2568,6 +2573,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Handle")
                     .HasName("pk_signin_challenges");
 
+                b.HasIndex("Browser")
+                    .HasDatabaseName("ix_signin_challenges_browser");
+
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_signin_challenges_expires_at");
 
@@ -2576,9 +2584,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("signin_challenges", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_signin_challenges_browser", "browser IS NULL OR octet_length(browser) = 32");
+
                         t.HasCheckConstraint("ck_signin_challenges_handle", "octet_length(handle) = 32");
 
-                        t.HasCheckConstraint("ck_signin_challenges_identifier", "octet_length(identifier) = 32");
+                        t.HasCheckConstraint("ck_signin_challenges_identifier", "identifier IS NULL OR octet_length(identifier) = 32");
 
                         t.HasCheckConstraint("ck_signin_challenges_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
@@ -4827,6 +4837,21 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasForeignKey("Subject")
                     .OnDelete(DeleteBehavior.Cascade)
                     .HasConstraintName("fk_oidc_tokens_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Oidc.PendingAuthorizationRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authentication.Sessions.PreAuthenticationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("PreAuthentication")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .HasConstraintName("fk_pending_authorizations_preauthentication");
+
+                b.HasOne("Janus.Storage.Authentication.Sessions.SessionRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Session")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .HasConstraintName("fk_pending_authorizations_session");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Organizations.LockedDomainRecord", b =>

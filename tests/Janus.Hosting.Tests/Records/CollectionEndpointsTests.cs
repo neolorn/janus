@@ -26,7 +26,7 @@ public sealed class CollectionEndpointsTests : IAsyncDisposable
     private readonly Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment whose messages carry the code, as the shipped templates do.
+    /// A deployment whose messages carry the code among their values.
     /// </summary>
     public CollectionEndpointsTests() => Flow.Prepare(_deployment);
 

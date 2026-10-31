@@ -13,8 +13,8 @@ using Xunit;
 namespace Janus.Storage.Tests.Authentication;
 
 /// <summary>
-/// What waits between the transaction that raised a condition and the alert channels
-/// that carry it (OPS-ALERT-001, CONV-DESIGN-002).
+/// What waits between the transaction that raised a condition and the pass of
+/// <c>alert-dispatch</c> that hands it over (OPS-ALERT-001, CONV-DESIGN-002).
 /// </summary>
 /// <remarks>
 /// One database serves the class and the channels read every waiting row, so each

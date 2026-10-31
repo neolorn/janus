@@ -42,7 +42,7 @@ internal sealed class RestrictionAdministration(
     RestrictionKeySuppliers suppliers,
     IUnitOfWork work,
     IEvents events,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     private const string Edit = "restriction:edit";

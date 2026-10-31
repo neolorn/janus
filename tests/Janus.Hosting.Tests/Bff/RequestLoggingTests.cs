@@ -28,16 +28,11 @@ namespace Janus.Hosting.Tests.Bff;
 [Trait("kind", "unit")]
 public sealed class RequestLoggingTests : IAsyncDisposable
 {
-    private const string Language = "en";
     private const string Erasures = "/admin/erasures";
     private const string Wrong = "notthepasswordatall";
     private const string Renewed = "lemoncurdandbutter";
     private const string Unheld = "nobody@example.test";
     private const string UnheldNumber = "+441632960077";
-    private const string Operator = "ops@example.test";
-    private const string OperatorNumber = "+441632960098";
-    private const string Owner = "owner@example.test";
-    private const string OwnerNumber = "+441632960099";
 
     // The subscriber a manual completion appends the ledger's line through, which is
     // what the fault names and the answer withholds.
@@ -57,30 +52,9 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
     /// <summary>
     /// A deployment that can send every message a registration, a sign-in and a
-    /// recovery write, the links carrying their token as the shipped templates do.
+    /// recovery write, the links carrying their token.
     /// </summary>
-    public RequestLoggingTests()
-    {
-        Flow.Prepare(_deployment);
-
-        foreach (MessageKind message in new[]
-                 {
-                     MessageKind.SignInLink,
-                     MessageKind.RecoveryLink,
-                     MessageKind.SecurityNotice,
-                     MessageKind.NoAccount,
-                 })
-        {
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                _deployment.Templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{link}"));
-            }
-        }
-    }
+    public RequestLoggingTests() => Flow.Prepare(_deployment);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
@@ -235,9 +209,9 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
         Answer changed = await owner.SendAsync(
             "PUT",
-            "/admin/config/alerting.email.destinations",
-            ("value", new[] { Operator }),
-            ("reason", "The rota changed."));
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT6H"),
+            ("reason", "A support window."));
 
         Assert.Equal(ErrorCodes.FactorRejected.ToString(), failed.Text("code"));
         Assert.Equal(ErrorCodes.BreakGlassInvalid.ToString(), guessed.Text("code"));
@@ -266,7 +240,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
     /// <summary>
     /// CONV-LOG-005 AC1: with the host logging nothing at all, a handle that opens no
     /// sign-in, a wrong device-verification code (as that verification, naming no
-    /// factor), a pressed sign-in link that lands on no sign-in, an identity token that
+    /// factor), a pressed sign-in link token nothing issued, an identity token that
     /// does not hold up and an identity linked to no account are each recorded as a
     /// failed authentication, none of it through the log.
     /// </summary>
@@ -284,11 +258,6 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.EmailLink]),
             });
-        quiet.Templates.Set(
-            MessageKind.SignInLink,
-            SendKind.Email,
-            Language,
-            new MessageTemplate("link", "{code} {link}"));
 
         _ = await Flow.SignedInAsync(quiet);
 
@@ -316,7 +285,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             ("factor", "password"),
             ("value", Flow.Password));
 
-        string code = quiet.Mail.Taken[^1].Body.Split(' ')[0];
+        string code = quiet.Mail.Taken[^1].Values["code"];
 
         Answer wrongCode = await signing.SendAsync(
             "POST",
@@ -324,19 +293,15 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             ("challengeId", challenge),
             ("code", string.Equals(code, "000000", StringComparison.Ordinal) ? "111111" : "000000"));
 
-        // Every refusal here counts against the one address every browser shares, and
-        // the address the link goes to was just sent the code, so the clock moves past
-        // both before the next (AUTH-ABUSE-001, AUTH-ABUSE-004).
+        // Every refusal here counts against the one address every browser shares, so
+        // the clock moves past its delay before the next (AUTH-ABUSE-001).
         quiet.Clock.Advance(TimeSpan.FromMinutes(2));
-
-        _ = await signing.SendAsync("POST", "/auth/link", ("identifier", Flow.Address));
 
         Answer astray = await signing.SendAsync(
             "POST",
             "/auth/factor",
-            ("challengeId", "a-handle-nothing-opened"),
             ("factor", "emailLink"),
-            ("linkToken", Flow.Token(quiet, IdentifierKind.Email)),
+            ("linkToken", "a-token-nothing-issued"),
             ("press", true));
 
         quiet.Clock.Advance(TimeSpan.FromSeconds(10));
@@ -349,13 +314,13 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.FactorRejected.ToString(), nowhere.Text("code"));
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, wrongCode.Status);
-        Assert.Equal(ErrorCodes.FactorRejected.ToString(), astray.Text("code"));
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), astray.Text("code"));
         Assert.EndsWith("?error=" + ErrorCodes.FactorRejected, forged.Location, StringComparison.Ordinal);
         Assert.EndsWith("?error=" + ErrorCodes.FactorRejected, unlinked.Location, StringComparison.Ordinal);
         Assert.Equal<(SubjectId?, Factor)>(
             [
                 (null, Factor.Password),
-                (subject, Factor.EmailLink),
+                (null, Factor.EmailLink),
                 (null, Factor.Google),
                 (null, Factor.Google),
             ],
@@ -471,7 +436,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Answer recovered = await recovering.SendAsync(
             "POST",
             "/recovery/complete",
-            ("token", Landing.Token(_deployment.Mail.Taken[^1].Body)),
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Values["link"])),
             ("password", Renewed));
 
         Assert.Equal(ErrorCodes.FactorRejected.ToString(), refused.Text("code"));
@@ -501,17 +466,11 @@ public sealed class RequestLoggingTests : IAsyncDisposable
     }
 
     // A deployment administered by one organization, whose reserved account holds every
-    // permission there and whose operator the alerts a break-glass use raises reach.
+    // permission there.
     private static SubjectId Administered(Deployment deployment, RandomNumberGenerator randomness)
     {
         Flow.Prepare(deployment);
         deployment.Administers(Company);
-
-        deployment.Configuration.Set(Settings.AlertingEmailDestinations, [Operator]);
-        deployment.Configuration.Set(Settings.AlertingSmsDestinations, [OperatorNumber]);
-        deployment.Configuration.Set(Settings.AlertingOwnerEmail, Owner);
-        deployment.Configuration.Set(Settings.AlertingOwnerSms, OwnerNumber);
-        deployment.Configuration.Set(Settings.AlertingOwnerEnabled, false);
 
         var emergency = SubjectId.New(randomness);
 

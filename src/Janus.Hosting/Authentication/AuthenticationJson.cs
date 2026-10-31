@@ -14,10 +14,13 @@ namespace Janus.Hosting.Authentication;
 [JsonSerializable(typeof(SignInRequest))]
 [JsonSerializable(typeof(PresentFactorRequest))]
 [JsonSerializable(typeof(VerifyDeviceRequest))]
+[JsonSerializable(typeof(ResendDeviceRequest))]
 [JsonSerializable(typeof(AbandonLinkRequest))]
 [JsonSerializable(typeof(SignInChallengeView))]
+[JsonSerializable(typeof(RestoreChallengeView))]
 [JsonSerializable(typeof(SignInProgressView))]
 [JsonSerializable(typeof(SignInLandingView))]
+[JsonSerializable(typeof(RequestedLinkView))]
 [JsonSerializable(typeof(SessionDetailView))]
 [JsonSerializable(typeof(IReadOnlyList<DeviceView>))]
 internal sealed partial class AuthenticationJson : JsonSerializerContext;

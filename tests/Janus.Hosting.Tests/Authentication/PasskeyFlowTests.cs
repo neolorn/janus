@@ -26,8 +26,8 @@ public sealed class PasskeyFlowTests : IAsyncDisposable
     private readonly Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment whose messages carry the code and the link token, as the shipped
-    /// templates do.
+    /// A deployment whose messages carry the code and the link token among their
+    /// values.
     /// </summary>
     public PasskeyFlowTests() => Flow.Prepare(_deployment);
 

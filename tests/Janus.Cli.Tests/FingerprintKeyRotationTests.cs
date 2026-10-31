@@ -15,8 +15,8 @@ namespace Janus.Cli.Tests;
 
 /// <summary>
 /// What the <c>rotate-fingerprint-key</c> command does, in the shape of
-/// <c>rotate-kek</c>: it runs only under the maintenance credential, prints the escrow
-/// copy of the new version, retires the previous one once the copy is sealed, and
+/// <c>rotate-kek</c>: it runs only under the maintenance credential, prints no key,
+/// retires the previous version when <c>--retire</c> asks, and
 /// records each step (OPS-SEC-003 AC6). What it does to each fingerprint is tested
 /// where the fingerprints are written.
 /// </summary>
@@ -29,9 +29,7 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
 {
     private const string Command = "rotate-fingerprint-key";
 
-    private const string Sealed = "--sealed";
-
-    private const string Kind = "fingerprint-key";
+    private const string Retire = "--retire";
 
     private const string Maintenance = "identity_maintenance";
 
@@ -63,9 +61,9 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
     }
 
     /// <summary>
-    /// OPS-SEC-001: <c>rotate-fingerprint-key</c> reports as every command does. A seal
-    /// confirmed before any rotation is refused with exit code 1, one JSON line on
-    /// standard error and nothing on standard output; the rotation exits 0 with nothing
+    /// OPS-SEC-001: <c>rotate-fingerprint-key</c> reports as every command does. A
+    /// retirement asked for before any rotation is refused with exit code 1, one JSON line
+    /// on standard error and nothing on standard output; the rotation exits 0 with nothing
     /// on standard error.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -75,7 +73,7 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
         await using NpgsqlConnection connection = await ResetAsync();
         await CountedAsync(connection, 1);
 
-        Invocation refused = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation refused = await Invocation.PipedAsync([Command, Retire], Rotating());
         Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
 
         Assert.Equal("model.rotation.notready", Reported.Refusal(refused));
@@ -83,13 +81,13 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
     }
 
     /// <summary>
-    /// OPS-SEC-003 AC4, AC6: the command prints the escrow copy of the new version, the
-    /// rotation stays unretired until the seal is confirmed, and the confirmation retires
-    /// the previous version and forgets what was hashed under it.
+    /// OPS-SEC-003 AC4, AC6 (D-225): the run that rotates prints its report and no key,
+    /// the rotation stays unretired until <c>--retire</c> asks, and that retires the
+    /// previous version and forgets what was hashed under it.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_AC6_TheEscrowCopyIsPrintedAndTheRotationRetiresOnlyOnceItIsSealedAsync()
+    public async Task OPS_SEC_003_AC6_NoRunPrintsAKeyAndTheRotationRetiresOnlyWhenAskedAsync()
     {
         await using NpgsqlConnection connection = await ResetAsync();
         await CountedAsync(connection, 1);
@@ -97,26 +95,19 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
         Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
 
         Assert.Equal(0, rotated.ExitCode);
-        Assert.True(JsonNode.DeepEquals(
-            new JsonObject
-            {
-                ["fingerprintKeys"] = new JsonObject
-                {
-                    ["current"] = 2,
-                    ["versions"] = new JsonObject { ["2"] = Convert.ToBase64String(Next) },
-                },
-            },
-            JsonNode.Parse(Lines(rotated)[0])));
-        Assert.Equal("""{"version":2,"processed":0}""", Lines(rotated)[1]);
+        Assert.Equal("""{"version":2,"processed":0}""", rotated.Output.Trim());
         Assert.Null(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
 
         await CountedAsync(connection, 2);
         await SweptAsync(connection, 1);
 
-        Invocation sealedCopy = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation retired = await Invocation.PipedAsync([Command, Retire], Rotating());
 
-        Assert.Equal(0, sealedCopy.ExitCode);
-        Assert.Equal(await RetirementAsync(connection, (2, 0, 1)), sealedCopy.Output.Trim());
+        Assert.Equal(0, retired.ExitCode);
+        Assert.Equal("""{"version":2,"processed":0,"retired":[1]}""", retired.Output.Trim());
+        Assert.All(
+            [Previous, Next],
+            key => Assert.DoesNotContain(Convert.ToBase64String(key), rotated.Output + retired.Output, StringComparison.Ordinal));
         Assert.NotNull(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
         Assert.Equal(
             [2],
@@ -124,17 +115,17 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
     }
 
     /// <summary>
-    /// OPS-SEC-003 AC4, AC6: a seal confirmed before the command has produced a copy to
-    /// seal is refused and retires nothing.
+    /// OPS-SEC-003 AC4, AC6: a retirement asked for before the rotation completes is
+    /// refused and retires nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_AC6_ASealBeforeTheRotationCompletesIsRefusedAsync()
+    public async Task OPS_SEC_003_AC6_ARetirementBeforeTheRotationCompletesIsRefusedAsync()
     {
         await using NpgsqlConnection connection = await ResetAsync();
         await CountedAsync(connection, 1);
 
-        Invocation refused = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation refused = await Invocation.PipedAsync([Command, Retire], Rotating());
 
         Assert.Equal(1, refused.ExitCode);
         Assert.Equal("""{"code":"model.rotation.notready","details":{}}""", refused.Error.Trim());
@@ -154,7 +145,7 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
 
         await Invocation.PipedAsync([Command], Rotating());
         await SweptAsync(connection, 1);
-        await Invocation.PipedAsync([Command, Sealed], Rotating());
+        await Invocation.PipedAsync([Command, Retire], Rotating());
 
         IReadOnlyList<(string Action, string Principal, string Reason, Guid Acting, string Details)> recorded =
             [.. await connection.QueryAsync<(string, string, string, Guid, string)>(
@@ -203,33 +194,13 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
 
         await SweptAsync(connection, 1);
 
-        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Retire], Rotating())).ExitCode);
 
         Invocation again = await Invocation.PipedAsync([Command], Rotating());
 
         Assert.Equal(1, again.ExitCode);
         Assert.Equal(missing.Error, again.Error);
     }
-
-    // OPS-SEC-003, D-166 (317): the report of a retirement, which says until when the
-    // retired version is kept: the rotation's completion and the retention, which is
-    // backup.retention's default of 35 days where the operator names none longer.
-    private static async Task<string> RetirementAsync(
-        NpgsqlConnection connection,
-        (int Version, int Processed, int Retired) rotation,
-        int retentionDays = 35)
-    {
-        DateTime completed = await connection.ExecuteScalarAsync<DateTime>(
-            "SELECT completed_at FROM identity.key_rotations WHERE kind = @kind AND version = @version",
-            new { kind = Kind, version = rotation.Version });
-
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $$"""{"version":{{rotation.Version}},"processed":{{rotation.Processed}},"retired":[{{rotation.Retired}}],"keepUntil":{{JsonSerializer.Serialize(completed.AddDays(retentionDays))}}}""");
-    }
-
-    private static string[] Lines(Invocation invocation) =>
-        invocation.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     // A throttle counter hashed under the given version, as an application holding that
     // version as current counts one.
@@ -241,7 +212,7 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
             """,
             new { key = RandomNumberGenerator.GetBytes(32), version });
 
-    // D-166 (318): a seal waits while any line under a previous version stands, so the
+    // D-166 (318): a retirement waits while any line under a previous version stands, so the
     // cases that retire one first remove its lines, as the expiry sweep does once they
     // no longer count.
     private static async Task SweptAsync(NpgsqlConnection connection, int version) =>

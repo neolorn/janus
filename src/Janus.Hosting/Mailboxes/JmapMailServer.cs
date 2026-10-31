@@ -28,9 +28,11 @@ namespace Janus.Hosting.Mailboxes;
 /// account named by its address's local part in the domain of its address, and carries
 /// the library's identifier of the mailbox as its description; an account under that
 /// name that does not carry it is never adopted, changed or destroyed. A push changes the
-/// <c>authenticate</c> permission alone. The app-password calls carry the person's token
-/// and never the management key. Registered as its own type, never as
-/// <see cref="IMailServer"/>: the start chooses it (CONV-DESIGN-007).
+/// <c>authenticate</c> permission alone. The app-password calls present the management key
+/// on the account that carries the mailbox's identifier, found as a push finds it and
+/// named by each call's <c>accountId</c>, and fail where the server holds no such account
+/// (D-226). Registered as its own type, never as <see cref="IMailServer"/>: the start
+/// chooses it (CONV-DESIGN-007).
 /// </remarks>
 internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) : IMailServer
 {
@@ -172,23 +174,27 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
 
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<AppPassword>>> AppPasswordsAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(accessToken);
-
         Error? failure = null;
 
-        IReadOnlyList<JsonElement> answered = (await CalledAsync(
-                    accessToken,
-                    [
-                        new Call("x:AppPassword/get", new JsonObject
-                        {
-                            ["ids"] = null,
-                            ["properties"] = new JsonArray("description", "createdAt", "expiresAt"),
-                        }),
-                    ],
-                    cancellationToken)
+        (string token, string accountId) = (await HolderAsync(mailbox, address, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<(string, string)>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<IReadOnlyList<AppPassword>>(failure);
+        }
+
+        IReadOnlyList<JsonElement> listed = (await ListedAsync(
+                    token,
+                    "x:AppPassword",
+                    new JsonObject(),
+                    ["description", "createdAt", "expiresAt"],
+                    cancellationToken,
+                    accountId)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<IReadOnlyList<JsonElement>>(error, ref failure));
 
@@ -197,14 +203,9 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
             return Result.Failure<IReadOnlyList<AppPassword>>(failure);
         }
 
-        if (!answered[0].TryGetProperty("list", out JsonElement list) || list.ValueKind is not JsonValueKind.Array)
-        {
-            return Result.Failure<IReadOnlyList<AppPassword>>(Fault());
-        }
+        var held = new List<AppPassword>(listed.Count);
 
-        var held = new List<AppPassword>(list.GetArrayLength());
-
-        foreach (JsonElement entry in list.EnumerateArray())
+        foreach (JsonElement entry in listed)
         {
             // RFC 8620 section 1.2, INT-MAIL-001: an identifier outside the form of an Id
             // is an answer that does not read, as an absent one is.
@@ -224,21 +225,30 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
 
     /// <inheritdoc/>
     public async ValueTask<Result<IssuedAppPassword>> CreateAppPasswordAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         string label,
         DateTimeOffset? expiresAt,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(accessToken);
         ArgumentNullException.ThrowIfNull(label);
 
         Error? failure = null;
 
+        (string token, string accountId) = (await HolderAsync(mailbox, address, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<(string, string)>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<IssuedAppPassword>(failure);
+        }
+
         IReadOnlyList<JsonElement> answered = (await CalledAsync(
-                    accessToken,
+                    token,
                     [
                         new Call("x:AppPassword/set", new JsonObject
                         {
+                            ["accountId"] = accountId,
                             ["create"] = new JsonObject
                             {
                                 ["password"] = new JsonObject
@@ -274,18 +284,31 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
 
     /// <inheritdoc/>
     public async ValueTask<Result> RevokeAppPasswordAsync(
-        string accessToken,
+        MailboxId mailbox,
+        EmailAddress address,
         AppPasswordId id,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(accessToken);
-
         string named = id.ToString();
         Error? failure = null;
 
+        (string token, string accountId) = (await HolderAsync(mailbox, address, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<(string, string)>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
         IReadOnlyList<JsonElement> answered = (await CalledAsync(
-                    accessToken,
-                    [new Call("x:AppPassword/set", new JsonObject { ["destroy"] = new JsonArray(named) })],
+                    token,
+                    [
+                        new Call("x:AppPassword/set", new JsonObject
+                        {
+                            ["accountId"] = accountId,
+                            ["destroy"] = new JsonArray(named),
+                        }),
+                    ],
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<IReadOnlyList<JsonElement>>(error, ref failure));
@@ -301,7 +324,7 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
         }
 
         // INT-MAIL-010: an app password the server holds no more, or never held, for the
-        // person is not found.
+        // account is not found.
         return Result.Failure(Error.From(NotFound(answered[0], "notDestroyed", named)
             ? ErrorCodes.CredentialNotFound
             : ErrorCodes.SystemFault));
@@ -473,6 +496,17 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
             ["disabledPermissions"] = new JsonObject { [Authenticate] = true },
         };
 
+    // RFC 8620 section 5.1: a call names the account it acts on by its accountId.
+    private static JsonObject On(string? accountId, JsonObject arguments)
+    {
+        if (accountId is not null)
+        {
+            arguments["accountId"] = accountId;
+        }
+
+        return arguments;
+    }
+
     private static bool Listed(JsonElement answer, string outcome, string key) =>
         answer.TryGetProperty(outcome, out JsonElement entries)
         && entries.ValueKind is JsonValueKind.Object
@@ -504,6 +538,46 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
 
     private Result<string> Managed() =>
         ring.BorrowMailServerSecret(secret => Encoding.UTF8.GetString(secret.Span));
+
+    // INT-MAIL-010, D-226: the management key, and the account of the mailbox found as a
+    // push finds it; an account under the mailbox's name that does not carry its
+    // identifier, or none at all, is no account the call may act on, and the call fails.
+    private async ValueTask<Result<(string Token, string AccountId)>> HolderAsync(
+        MailboxId mailbox,
+        EmailAddress address,
+        CancellationToken cancellationToken)
+    {
+        string written = address.Value;
+        int at = written.LastIndexOf('@');
+        Error? failure = null;
+
+        string token = Managed().Match(value => value, error => Withheld<string>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<(string, string)>(failure);
+        }
+
+        string domainId = (await DomainAsync(token, written[(at + 1)..], cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<string>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<(string, string)>(failure);
+        }
+
+        Account? found = (await AccountAsync(token, written[..at], domainId, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Account?>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<(string, string)>(failure);
+        }
+
+        return found is not null && Carried(found.Element) == mailbox
+            ? Result.Success((token, found.Id))
+            : Result.Failure<(string, string)>(Fault());
+    }
 
     private async ValueTask<Result> AppliedAsync(
         string token,
@@ -694,13 +768,14 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
 
     // A query and, by result reference in the same request, a get of what it found,
     // page by page until a page finds nothing, so a server that pages its answers is
-    // read whole.
+    // read whole; on the account named, where one is, and otherwise on the key's own.
     private async ValueTask<Result<IReadOnlyList<JsonElement>>> ListedAsync(
         string token,
         string type,
         JsonObject filter,
         string[] properties,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? accountId = null)
     {
         var found = new List<JsonElement>();
         int position = 0;
@@ -718,12 +793,12 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
             IReadOnlyList<JsonElement> answered = (await CalledAsync(
                         token,
                         [
-                            new Call(type + "/query", new JsonObject
+                            new Call(type + "/query", On(accountId, new JsonObject
                             {
                                 ["filter"] = filter.DeepClone(),
                                 ["position"] = position,
-                            }),
-                            new Call(type + "/get", new JsonObject
+                            })),
+                            new Call(type + "/get", On(accountId, new JsonObject
                             {
                                 ["#ids"] = new JsonObject
                                 {
@@ -732,7 +807,7 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
                                     ["path"] = "/ids",
                                 },
                                 ["properties"] = read,
-                            }),
+                            })),
                         ],
                         cancellationToken)
                     .ConfigureAwait(false))

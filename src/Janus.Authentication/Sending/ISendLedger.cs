@@ -109,26 +109,29 @@ internal interface ISendLedger
     /// indicating failure, attempts spent, a row removed uncarried after erasure, a
     /// retry refused. Where it was the last message of its send still counted, every
     /// message of the send has failed for good, and what the send counted once against
-    /// the restrictions marked <c>resend</c> is taken back with it.
+    /// the restrictions marked <c>resend</c> is taken back with it. The message stays
+    /// known, released, until its send settles, and releasing it again changes nothing
+    /// (D-227).
     /// </summary>
     /// <param name="reference">The hash of the reference the message was counted under.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>
-    /// Whether a send was released; false where the reference is unknown or the send
-    /// is already settled.
+    /// Whether a counted message answers to the reference, released already or not;
+    /// false where the reference is unknown or the send is already settled.
     /// </returns>
     ValueTask<bool> ReleaseAsync(byte[] reference, CancellationToken cancellationToken);
 
     /// <summary>
     /// Takes a report that a message was delivered: where the message is of a send of
     /// purpose <c>secondfactor</c>, what the send counted once against the restrictions
-    /// marked <c>resend</c> is taken back, and nothing else changes for any send.
+    /// marked <c>resend</c> is taken back, and nothing else changes for any send; for a
+    /// message already released nothing changes (D-227).
     /// </summary>
     /// <param name="reference">The hash of the reference the report carried.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>
-    /// Whether a counted message answers to the reference; false where it is unknown or
-    /// the message is already settled.
+    /// Whether a counted message answers to the reference, released already or not;
+    /// false where it is unknown or the message is already settled.
     /// </returns>
     ValueTask<bool> DeliveredAsync(byte[] reference, CancellationToken cancellationToken);
 

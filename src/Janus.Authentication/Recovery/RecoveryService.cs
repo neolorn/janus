@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -30,6 +31,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="accounts">Where the account's standing is read.</param>
 /// <param name="authenticators">Where the account's credentials are read.</param>
 /// <param name="passwords">What screens and sets a password.</param>
+/// <param name="passwordStore">Whether the account holds a password, and since when.</param>
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="sessions">What ends the sessions a changed credential invalidates.</param>
 /// <param name="stepUp">What the approver's session has to have proved.</param>
@@ -66,6 +68,7 @@ internal sealed class RecoveryService(
     IAccountDirectory accounts,
     IAuthenticatorStore authenticators,
     PasswordService passwords,
+    IPasswordStore passwordStore,
     PolicyResolution policies,
     SessionService sessions,
     StepUpGuard stepUp,
@@ -76,12 +79,16 @@ internal sealed class RecoveryService(
     NonExistenceNotice nonExistence,
     PhoneSignals signals,
     ThrottleService throttle,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : IRecovery
 {
+    // 09 GET /enrol (D-224): the credentials an enrolment session may set, in the order
+    // the document names them.
+    private static readonly Factor[] Enrollable = [Factor.Password, Factor.Passkey, Factor.SecurityKey, Factor.Totp];
+
     private static readonly IReadOnlyDictionary<string, string> Nothing =
         new Dictionary<string, string>(capacity: 0, StringComparer.Ordinal);
 
@@ -254,6 +261,54 @@ internal sealed class RecoveryService(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Result<string>> UsernameAsync(
+        [NeverLogged] string token,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        ArgumentNullException.ThrowIfNull(source);
+
+        // FE-PM-002, AUTH-ABUSE-001 (D-224): a token names no identifier until it opens
+        // something, so every read is first held to the delay of the source that
+        // presents it, and one that opens nothing is counted against that source.
+        var reading = new ThrottleAttempt(source, Identifier: null);
+        Error? failure = null;
+
+        TimeSpan delay = (await throttle.DelayAsync(reading, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<string>(failure);
+        }
+
+        if (delay > TimeSpan.Zero)
+        {
+            return Result.Failure<string>(Error.Throttled(time.GetUtcNow() + delay));
+        }
+
+        RecoveryLink? link = token.Length > 0
+            ? await links.FindAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken).ConfigureAwait(false)
+            : null;
+
+        if (Unopened(link, RecoveryPurpose.SelfService, ErrorCodes.RecoveryTokenInvalid, time.GetUtcNow())
+            is Error refused)
+        {
+            return await UnreadAsync(reading, refused, cancellationToken).ConfigureAwait(false);
+        }
+
+        // REG-IDENT-001: an account always holds a verified email, its primary among
+        // them, so a link whose account holds none is a fault.
+        HeldIdentifier primary = (await identifiers.HeldAsync(link!.Subject, cancellationToken).ConfigureAwait(false))
+            .OfKind(IdentifierKind.Email)
+            .FirstOrDefault(email => email.IsPrimary)
+            ?? throw new InvalidOperationException("The account holds no primary email.");
+
+        return Result.Success(primary.Entered);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result<ApprovedRecovery>> ApproveAsync(
         AccessContext context,
         SessionId session,
@@ -389,6 +444,56 @@ internal sealed class RecoveryService(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Result<EnrolmentDocument>> ReadEnrolmentAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken)
+    {
+        RecoveryLink? link = await links.FindAsync(session, cancellationToken).ConfigureAwait(false);
+
+        if (link is null || link.HasExpired(time.GetUtcNow()))
+        {
+            return Result.Failure<EnrolmentDocument>(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(link.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<EnrolmentDocument>(failure);
+        }
+
+        IReadOnlyList<HeldIdentifier> emails =
+            (await identifiers.HeldAsync(link.Subject, cancellationToken).ConfigureAwait(false))
+                .OfKind(IdentifierKind.Email);
+        Password? password = await passwordStore.FindAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+
+        // FE-PM-002, REG-IDENT-001: the username is the primary email, which an account
+        // always holds, so a session whose account holds none is a fault.
+        HeldIdentifier primary = emails.FirstOrDefault(email => email.IsPrimary)
+            ?? throw new InvalidOperationException("The account holds no primary email.");
+
+        // FE-SEC-001 (D-224): the session offers the credentials the policy admits, and
+        // names the emails a replace may name only where the mailbox was recorded lost.
+        return Result.Success(new EnrolmentDocument(
+            primary.Entered,
+            new PasswordStatus(password is not null, password?.SetAt),
+            [.. Enrollable.Where(policy.LoginFactors.Contains)],
+            link.MailboxLost,
+            link.MailboxLost
+                ? [.. emails.Select(email => new IdentifierSummary(
+                    email.Id,
+                    email.Entered,
+                    email.IsVerified,
+                    email.IsPrimary,
+                    email.IsLocked || email.IsPersonal))]
+                : [],
+            link.ExpiresAt));
+    }
+
+    /// <inheritdoc/>
     public ValueTask<Result<LossReported>> ReportLossAsync(
         AccessContext context,
         AuthenticatorId credential,
@@ -484,6 +589,32 @@ internal sealed class RecoveryService(
                 .FindForUpdateAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken)
                 .ConfigureAwait(false)
             : null;
+
+    // AUTH-ABUSE-001, CONV-DESIGN-003: the count of a token that opens nothing stands,
+    // and the refusal writes nothing else; it is counted in an outermost unit of work
+    // the throttle's count joins.
+    private async ValueTask<Result<string>> UnreadAsync(
+        ThrottleAttempt reading,
+        Error refused,
+        CancellationToken cancellationToken)
+    {
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<string>(notBegun);
+        }
+
+        if ((await throttle.FailedAsync(reading, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error uncounted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<string>(uncounted);
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Failure<string>(refused), Result.Failure<string>);
+    }
 
     // What a link that does not open the endpoint consuming it is refused with: one
     // spent, of the other purpose or none at all is invalid, and one past its lifetime
@@ -588,10 +719,7 @@ internal sealed class RecoveryService(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            // AUTH-ABUSE-006: the gateway floor's refusal answers the ask as it would
-            // have been answered, as it does for a number no account holds, so the
-            // floor tells nothing of an account. Nothing else was written.
-            return failure.Code == ErrorCodes.SmsBalanceFloor ? Result.Success() : Result.Failure(failure);
+            return Result.Failure(failure);
         }
 
         // AUTH-ABUSE-004: the send is named by the link it carries, which is what
@@ -876,7 +1004,7 @@ internal sealed class RecoveryService(
 
         // AUTH-RECOV-002, AUTHZ-GATE-006, D-186: the link's send is undertaken in the
         // unit of work that writes the approval and its record, so the gate's second ask
-        // covers both, and a send a restriction or the gateway floor refuses leaves no
+        // covers both, and a send a restriction refuses leaves no
         // approval, no record of it and no send.
         if (linked
             && await LinkedAsync(approver, subject, channel, source, now, lifetime, cancellationToken)

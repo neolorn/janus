@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using Janus.Core;
 using Janus.Storage;
 
 namespace Janus.Hosting;
 
 /// <summary>
-/// What is kept in the log of a fault the library caught: the pipeline's, a background
-/// job's and a restore test step's alike.
+/// What is kept in the log of a fault the library caught: the pipeline's and a
+/// background job's alike.
 /// </summary>
 /// <remarks>
 /// Implements BFF-ERR-002 AC2. A fault is kept by its full type name and its stack
@@ -21,6 +22,21 @@ namespace Janus.Hosting;
 /// </remarks>
 internal static class FaultLog
 {
+    /// <summary>
+    /// The detail of a failure that holds the fault log entry of what was thrown.
+    /// </summary>
+    public const string Detail = "fault";
+
+    /// <summary>
+    /// The failure a caught fault becomes: <c>system.fault</c>, holding the fault's
+    /// entry, which is what is written down where the failure is.
+    /// </summary>
+    /// <param name="fault">What was thrown.</param>
+    /// <returns>The failure.</returns>
+    /// <exception cref="ArgumentNullException">The fault is absent.</exception>
+    public static Error Failure(Exception fault) =>
+        Error.From(ErrorCodes.SystemFault, Detail, JsonSerializer.SerializeToElement(Of(fault)));
+
     /// <summary>
     /// The entry a fault is kept in the log as.
     /// </summary>

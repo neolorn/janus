@@ -1099,26 +1099,11 @@ public static class ErrorCodes
     public static ErrorCode TruthTableDisagreement { get; } = ErrorCode.Parse("authz.truthtable.disagreement");
 
     /// <summary>
-    /// The change would leave an alert destination list empty. Add a destination
-    /// before removing the last one.
+    /// A callback was refused, or arrived faster than the callback rate allows. Where
+    /// <c>details.retryAt</c> is carried, call again once it has passed; otherwise correct
+    /// the callback before it is sent again.
     /// </summary>
-    /// <remarks>Implements OPS-ALERT-004a, chapter 10 section 1.5.</remarks>
-    public static ErrorCode ConfigurationLastDestination { get; } = ErrorCode.Parse("config.value.lastdestination");
-
-    /// <summary>
-    /// A change of an alert destination list found, under its row's lock, a value in
-    /// force other than the one whose destinations it had notified: another change
-    /// committed meanwhile. Nothing was changed. Read the list again and make the change
-    /// against what now stands.
-    /// </summary>
-    /// <remarks>Implements OPS-ALERT-004a, chapter 10 section 1.5.</remarks>
-    public static ErrorCode ConfigurationChangeSuperseded { get; } = ErrorCode.Parse("config.change.superseded");
-
-    /// <summary>
-    /// A callback carried an unknown correlation reference, or arrived faster than the
-    /// callback rate allows. Call again with the reference the send returned.
-    /// </summary>
-    /// <remarks>Implements INT-GEN-003, AUTH-ABUSE-007, chapter 10 section 1.6.</remarks>
+    /// <remarks>Implements INT-GEN-003, BFF-MACH-001, chapter 10 section 1.6.</remarks>
     public static ErrorCode CallbackRejected { get; } = ErrorCode.Parse("integration.callback.rejected");
 
     /// <summary>
@@ -1149,13 +1134,6 @@ public static class ErrorCodes
     /// <c>degradation</c> scoped <c>mailbox.conflict:&lt;mailbox id&gt;</c>.
     /// </remarks>
     public static ErrorCode MailServerConflict { get; } = ErrorCode.Parse("integration.mailserver.conflict");
-
-    /// <summary>
-    /// The gateway balance is below the configured floor, so ordinary sends are
-    /// refused. Top the account up; alert-class messages continue meanwhile.
-    /// </summary>
-    /// <remarks>Implements INT-SMS-004, AUTH-ABUSE-006, chapter 10 section 1.6.</remarks>
-    public static ErrorCode SmsBalanceFloor { get; } = ErrorCode.Parse("integration.sms.balancefloor");
 
     /// <summary>
     /// The processing needs a consent the subject has not given. Ask for it on the

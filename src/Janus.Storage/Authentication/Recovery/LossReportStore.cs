@@ -20,8 +20,9 @@ namespace Janus.Storage.Authentication.Recovery;
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-RECOV-007, PRIV-RIGHT-005a and CONV-DESIGN-003. The cancel token
-/// is held rather than fingerprinted, because every repeat of the notice carries the
-/// same link, so it is held under the account's own key.
+/// is held under the account's own key, because every repeat of the notice carries the
+/// same link, and its fingerprint beside it, by which the link's cancel finds the
+/// report (D-226).
 /// </remarks>
 internal sealed class LossReportStore(
     StoreContext context,
@@ -40,6 +41,21 @@ internal sealed class LossReportStore(
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
+    public async ValueTask<LossReport?> FindByCancelAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprint);
+
+        return await ReadAsync(
+                await context.LossReports
+                    .FirstOrDefaultAsync(report => report.CancelFingerprint == fingerprint, cancellationToken)
+                    .ConfigureAwait(false),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask AddAsync(LossReport report, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(report);
@@ -51,6 +67,7 @@ internal sealed class LossReportStore(
                     Credential = report.Credential,
                     Subject = report.Subject,
                     Cancel = await HeldAsync(report, cancellationToken).ConfigureAwait(false),
+                    CancelFingerprint = report.CancelFingerprint,
                     ReportedAt = report.ReportedAt,
                     InvalidatesAt = report.InvalidatesAt,
                     NotifiedAt = report.NotifiedAt,
@@ -164,6 +181,7 @@ internal sealed class LossReportStore(
             record.Credential,
             record.Subject,
             cancel,
+            record.CancelFingerprint,
             record.ReportedAt,
             record.InvalidatesAt,
             record.NotifiedAt,

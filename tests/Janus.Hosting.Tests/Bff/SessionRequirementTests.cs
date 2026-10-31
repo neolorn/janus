@@ -69,8 +69,6 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /admin/accounts/{subject}/takedown/",
         "GET /admin/audit",
         "GET /admin/break-glass",
-        "GET /admin/compliance/licences",
-        "GET /admin/compliance/maintenance",
         "GET /admin/config/{key}",
         "GET /admin/erasures/",
         "GET /admin/erasures/{id}",
@@ -126,7 +124,6 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /admin/accounts/{subject}/takedown/reverse",
         "POST /admin/accounts/{subject}/sessions/revoke",
         "POST /admin/break-glass/generate",
-        "POST /admin/compliance/maintenance",
         "POST /admin/documents/{document}/versions",
         "POST /admin/erasures/{id}/complete",
         "POST /admin/grants",
@@ -171,7 +168,6 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "PUT /account/secondstep/preferred",
         "PUT /admin/accounts/{subject}/preferences",
         "PUT /admin/compliance/assessments",
-        "PUT /admin/compliance/licences",
         "PUT /admin/config/{key}",
         "PUT /admin/organizations/{id}/memberships/{subject}/end",
         "PUT /admin/organizations/{id}/policy",
@@ -184,6 +180,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
     // method and path: the only routes on which stage 5 resolves one.
     private static readonly string[] Reached =
     [
+        "GET /enrol",
         "POST /account/factors/totp/begin",
         "POST /account/factors/totp/confirm",
         "POST /account/identifiers/{id}/verify",

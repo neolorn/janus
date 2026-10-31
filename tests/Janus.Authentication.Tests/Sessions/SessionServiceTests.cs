@@ -81,6 +81,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             _locations,
             new ConcurrentSessions(_sessions, _configuration, _alerts),
             new OidcClientStoreInMemory(),
+            new PendingAuthorizationStoreInMemory(),
             _events,
             _work,
             _clock,
@@ -462,6 +463,61 @@ public sealed class SessionServiceTests : IAsyncDisposable
                 [Factor.Passkey],
                 Somewhere,
                 TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC4 (D-224 item 13): a restore on an application's session
+    /// restores the record it stands on, rotates the secret the cookie carried, and
+    /// every application session bound to the record lives again; what the restore
+    /// admits is read without writing, and the session whose window has passed is not
+    /// admitted.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC4_ARestoreOnAnApplicationRestoresTheRecordAndEverySessionOnItAsync()
+    {
+        SubjectId subject = Staff();
+        IssuedSession record = await BegunAsync(subject, [Factor.Passkey]);
+        IssuedSession here = Value(await Service.DeriveAsync(
+            record.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+        IssuedSession elsewhere = Value(await Service.DeriveAsync(
+            record.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromHours(2));
+
+        DateTimeOffset idle = _sessions.Behind(here.Secret)!.IdleExpiry;
+        Session admitted = Value(await Service.RestorableAsync(here.Secret, TestContext.Current.CancellationToken));
+
+        Assert.Equal(here.Id, admitted.Id);
+        Assert.Equal(idle, _sessions.Behind(here.Secret)!.IdleExpiry);
+        Assert.Equal(ErrorCodes.SessionExpired, Refusal(await Service.RestorableAsync(null, TestContext.Current.CancellationToken)));
+
+        IssuedSession restored = Value(await Service.RestoreAsync(
+            here.Secret,
+            [Factor.Password],
+            Somewhere,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(here.Id, restored.Id);
+        Assert.Equal(
+            [null, null, null, ErrorCodes.SessionExpired],
+            [
+                await RefusalAsync(restored.Secret),
+                await RefusalAsync(record.Secret),
+                await RefusalAsync(elsewhere.Secret),
+                await RefusalAsync(here.Secret),
+            ]);
+
+        _clock.Advance(TimeSpan.FromHours(23));
+
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            Refusal(await Service.RestorableAsync(restored.Secret, TestContext.Current.CancellationToken)));
     }
 
     /// <summary>

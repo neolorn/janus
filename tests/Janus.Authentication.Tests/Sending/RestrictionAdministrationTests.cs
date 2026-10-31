@@ -47,13 +47,10 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     private readonly AdministrativeOrganizationInMemory _administrative = new();
 
     /// <summary>
-    /// A deployment that has named the one key with no default, administered by
-    /// whoever edits it here.
+    /// A deployment administered by whoever edits it here.
     /// </summary>
     public RestrictionAdministrationTests()
     {
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
-
         var administrative = OrganizationId.New(_clock);
         _administrative.Organization = administrative;
         _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
@@ -74,7 +71,6 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
                 _changes,
                 new AdministrativeScope(_gate, _administrative),
                 new PolicyResolution(new MembershipLookupInMemory(), _configuration, new PolicyRaiseStoreInMemory()),
-                new RelayRegistration(_configuration, _events, _clock),
                 _events,
                 _work,
                 _clock),
@@ -115,7 +111,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3: a restriction named outside the rule is refused with
+    /// INT-SMS-003 AC1: a restriction named outside the rule is refused with
     /// <c>config.value.notallowed</c> before a transaction is opened, and nothing is
     /// written.
     /// </summary>

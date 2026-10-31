@@ -55,7 +55,11 @@ internal sealed class ServerInMemory : IServer
                 // framework registered on the response's completion runs first, the
                 // disposal of the request's scope among it, and then the context is
                 // disposed.
-                await ((ResponseInMemory)features.Get<IHttpResponseFeature>()!).CompletedAsync();
+                if (features.Get<IHttpResponseFeature>() is ResponseInMemory response)
+                {
+                    await response.CompletedAsync();
+                }
+
                 application.DisposeContext(context, fault);
             }
         };
@@ -70,6 +74,21 @@ internal sealed class ServerInMemory : IServer
     public void Dispose()
     {
         // Nothing is held open: the server listens on nothing.
+    }
+
+    /// <summary>
+    /// Runs one request, as a caller wrote it, through the application the host started
+    /// the server with.
+    /// </summary>
+    /// <param name="features">The request and the response it is written to.</param>
+    /// <returns>The work of answering it.</returns>
+    /// <exception cref="InvalidOperationException">The host has not started the server.</exception>
+    public Task RunAsync(IFeatureCollection features)
+    {
+        Func<IFeatureCollection, Task> application = _application
+            ?? throw new InvalidOperationException("The host has not started the server.");
+
+        return application(features);
     }
 
     /// <summary>

@@ -78,6 +78,7 @@ internal sealed class SendLedger(StoreContext context, DataConnections connectio
              @at, @settles, @resend, @resendAt, @secondFactor, @answer)
         ON CONFLICT (reference) DO UPDATE
         SET admitted = TRUE,
+            released = FALSE,
             counted = EXCLUDED.counted,
             spent = EXCLUDED.spent,
             spent_versions = EXCLUDED.spent_versions,
@@ -119,9 +120,17 @@ internal sealed class SendLedger(StoreContext context, DataConnections connectio
         UPDATE identity.sends SET answer = @answer WHERE send = @send;
         """;
 
-    private const string Forgotten =
+    // INT-SMS-005 (D-227): a message failed for good is still one the library handed
+    // over, so its row stays until its send settles, holding no count.
+    private const string MarkedReleased =
         """
-        DELETE FROM identity.sends WHERE reference = @reference;
+        UPDATE identity.sends
+        SET released = TRUE,
+            admitted = FALSE,
+            counted = CAST(ARRAY[] AS bytea[]),
+            spent = CAST(ARRAY[] AS bytea[]),
+            spent_versions = CAST(ARRAY[] AS integer[])
+        WHERE reference = @reference;
         """;
 
     // A send is forgotten whole: a message of it stands while any other of the send
@@ -411,17 +420,35 @@ internal sealed class SendLedger(StoreContext context, DataConnections connectio
             return false;
         }
 
+        // INT-SMS-005 (D-227): a message already released is released once.
+        if (message.Released)
+        {
+            return true;
+        }
+
         // AUTH-ABUSE-004, INT-SMS-005: the last message of a send to fail for good takes
         // what the send counted once against the restrictions marked resend with it.
-        (byte[] Hashed, DateTimeOffset Sent)[] once = messages.Count == 1 ? CountedOnceBy(messages) : [];
+        bool last = messages.Count(one => !one.Released) == 1;
+        (byte[] Hashed, DateTimeOffset Sent)[] once = last ? CountedOnceBy(messages) : [];
 
         await TakenOutAsync(ambient, [.. CountedBy(message), .. once], cancellationToken).ConfigureAwait(false);
 
         await GivenBackAsync(ambient, message, cancellationToken).ConfigureAwait(false);
 
+        if (last)
+        {
+            _ = await ambient.Connection
+                .ExecuteAsync(new CommandDefinition(
+                    ReleasedOnce,
+                    new { sends = new[] { message.Send } },
+                    ambient.Transaction,
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
         _ = await ambient.Connection
             .ExecuteAsync(new CommandDefinition(
-                Forgotten,
+                MarkedReleased,
                 new { reference = message.Reference },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
@@ -445,8 +472,9 @@ internal sealed class SendLedger(StoreContext context, DataConnections connectio
         }
 
         // INT-SMS-005: a report of delivery releases what a send of purpose secondfactor
-        // counted once, and nothing else of any send.
-        if (message.SecondFactor)
+        // counted once, and nothing else of any send; one of a message already released
+        // changes nothing (D-227).
+        if (message.SecondFactor && !message.Released)
         {
             await ReleasedOnceAsync(ambient, messages, cancellationToken).ConfigureAwait(false);
         }

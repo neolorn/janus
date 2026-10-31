@@ -140,6 +140,44 @@ internal sealed class WebAuthnService(
     }
 
     /// <summary>
+    /// The request options of a restore in place, naming each active passkey of the
+    /// account, which is what may answer it.
+    /// </summary>
+    /// <param name="subject">Whose session is restored.</param>
+    /// <param name="challenge">The value the restore's challenge was opened with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The request options.</returns>
+    /// <exception cref="ArgumentNullException">The challenge is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-SESS-005 and D-224 item 13. The person is signed in already, so
+    /// naming what the account holds discloses nothing to them (AUTH-ABUSE-003).
+    /// </remarks>
+    public async ValueTask<WebAuthnRequestOptions> PasskeysAsync(
+        SubjectId subject,
+        string challenge,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+
+        RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<Authenticator> enrolled = await authenticators.OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new WebAuthnRequestOptions(
+            party.Id,
+            challenge,
+            [.. enrolled
+                .Where(credential => credential.IsUsable && credential.Factor == FactorCatalogue.Discoverable)
+                .Select(credential => credential.WebAuthn)
+                .OfType<WebAuthnMaterial>()
+                .Select(held => new WebAuthnCredentialDescriptor(
+                    Base64Url.EncodeToString(held.CredentialId.Span),
+                    held.Transports))]);
+    }
+
+    /// <summary>
     /// Records the credential a completed ceremony produced.
     /// </summary>
     /// <param name="subject">Whose credential.</param>

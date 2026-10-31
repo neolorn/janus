@@ -22,13 +22,15 @@ public sealed class SignInFlowTests : IAsyncDisposable
 {
     private const string Session = "__Host-identity-session";
     private const string Browsers = "__Host-identity-browser";
-    private const string Language = "en";
+
+    // An address no account holds.
+    private const string Nobody = "nobody@example.test";
 
     private readonly Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment that can send, whose messages carry the code and the token as the
-    /// shipped templates do, and whose policy admits the link a test asks for.
+    /// A deployment that can send, whose messages carry the code and the token among
+    /// their values, and whose policy admits the link a test asks for.
     /// </summary>
     public SignInFlowTests()
     {
@@ -41,15 +43,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
                 LoginFactors = new HashSet<Factor>(
                     [.. Policies.SystemDefault.LoginFactors, Factor.EmailLink]),
             });
-
-        foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-        {
-            _deployment.Templates.Set(
-                MessageKind.SignInLink,
-                kind,
-                Language,
-                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {link}"));
-        }
     }
 
     /// <inheritdoc/>
@@ -145,6 +138,173 @@ public sealed class SignInFlowTests : IAsyncDisposable
         Assert.Equal("complete", pressed.Text("status"));
         Assert.Equal("aal1", pressed.Text("assuranceLevel"));
         Assert.True(asking.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC6 (D-230): a link asked for from a browser holding no sign-in is
+    /// answered with the challengeId of the one its request opened, on which the code
+    /// the link shows in another browser completes the sign-in; asked from a browser that
+    /// began one with the identifier, an address nobody holds here, it is answered with
+    /// an empty object.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_003_AC6_TheLinkAnswerNamesTheSignInItsRequestOpenedAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        await RegisteredAsync();
+
+        var asking = new Browser(_deployment);
+        var beginning = new Browser(_deployment);
+
+        _ = await asking.SendAsync("GET", "/auth/session");
+        _ = await beginning.SendAsync("GET", "/auth/session");
+        _ = await beginning.SendAsync("POST", "/auth/begin", ("identifier", Nobody));
+
+        Answer holding = await beginning.SendAsync("POST", "/auth/link", ("identifier", Nobody));
+        Answer opening = await asking.SendAsync("POST", "/auth/link", ("identifier", Flow.Address));
+        string token = Flow.Token(_deployment, IdentifierKind.Email);
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/auth/session");
+
+        Answer opened = await elsewhere.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("factor", "emailLink"),
+            ("linkToken", token),
+            ("press", true));
+        Answer typed = await asking.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", opening.Text("challengeId")),
+            ("factor", "emailLink"),
+            ("value", opened.Text("code")));
+
+        Assert.Equal(StatusCodes.Status202Accepted, opening.Status);
+        Assert.NotEmpty(opening.Text("challengeId"));
+        Assert.Equal((StatusCodes.Status202Accepted, "{}"), (holding.Status, holding.Body));
+        Assert.Equal(StatusCodes.Status200OK, typed.Status);
+        Assert.Equal("complete", typed.Text("status"));
+        Assert.True(asking.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
+    /// FE-VER-001 AC8 and AUTH-FACT-003 AC4 (D-224, D-226): a sign-in link's press
+    /// carries no challengeId, the token naming its sign-in; it signs in only the
+    /// browser whose pre-authentication session that sign-in is bound to, and a
+    /// challengeId sent beside the token is not read.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_ASignInLinksPressCarriesNoChallengeIdAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        await RegisteredAsync();
+
+        var asking = new Browser(_deployment);
+        string challenge = await BegunAsync(asking);
+
+        _ = await asking.SendAsync("POST", "/auth/link", ("identifier", Flow.Address));
+
+        string token = Flow.Token(_deployment, IdentifierKind.Email);
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/auth/session");
+
+        Answer opened = await elsewhere.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "emailLink"),
+            ("linkToken", token),
+            ("press", true));
+        Answer pressed = await asking.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("factor", "emailLink"),
+            ("linkToken", token),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status200OK, opened.Status);
+        Assert.False(opened.Json().GetProperty("sameBrowser").GetBoolean());
+        Assert.False(elsewhere.Cookies.ContainsKey(Session));
+        Assert.Equal(StatusCodes.Status200OK, pressed.Status);
+        Assert.Equal("complete", pressed.Text("status"));
+        Assert.True(asking.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC9 (D-224 item 18): a resend while the email destination
+    /// restriction stands is answered <c>auth.restriction.exceeded</c> with
+    /// <c>retryAt</c>; one from a browser the held sign-in is not bound to is answered
+    /// <c>auth.code.expired</c>; one after <c>retryAt</c> from the browser it is bound to
+    /// sends a code, the one before it no longer verifies, and the new one completes the
+    /// sign-in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_016_AC9_AResendSendsANewCodeToTheBrowserTheSignInIsBoundToAsync()
+    {
+        await RegisteredAsync();
+
+        var browser = new Browser(_deployment);
+        string challenge = await BegunAsync(browser);
+
+        Answer held = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        Assert.Equal("deviceVerificationRequired", held.Text("status"));
+
+        string first = Emailed();
+
+        Answer early = await browser.SendAsync("POST", "/auth/device/resend", ("challengeId", challenge));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, early.Status);
+        Assert.Equal(ErrorCodes.RestrictionExceeded.ToString(), early.Text("code"));
+
+        DateTimeOffset retryAt = early.Json().GetProperty("details").GetProperty("retryAt").GetDateTimeOffset();
+
+        _deployment.Clock.Advance(retryAt - _deployment.Clock.GetUtcNow());
+
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/auth/session");
+
+        Answer astray = await elsewhere.SendAsync("POST", "/auth/device/resend", ("challengeId", challenge));
+        Answer resent = await browser.SendAsync("POST", "/auth/device/resend", ("challengeId", challenge));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, astray.Status);
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), astray.Text("code"));
+        Assert.Equal(StatusCodes.Status202Accepted, resent.Status);
+
+        string last = Emailed();
+
+        if (!string.Equals(first, last, StringComparison.Ordinal))
+        {
+            Assert.Equal(
+                StatusCodes.Status422UnprocessableEntity,
+                (await browser.SendAsync(
+                    "POST",
+                    "/auth/device/verify",
+                    ("challengeId", challenge),
+                    ("code", first))).Status);
+        }
+
+        Answer completed = await browser.SendAsync(
+            "POST",
+            "/auth/device/verify",
+            ("challengeId", challenge),
+            ("code", last));
+
+        Assert.Equal("complete", completed.Text("status"));
+        Assert.True(browser.Cookies.ContainsKey(Session));
     }
 
     /// <summary>
@@ -249,11 +409,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
             });
-        _deployment.Templates.Set(
-            MessageKind.SecondStepCode,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code}"));
 
         await RegisteredAsync();
 
@@ -294,7 +449,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
             "/auth/factor",
             ("challengeId", challenge),
             ("factor", "phoneCode"),
-            ("value", _deployment.Sms.Taken[^1].Text));
+            ("value", _deployment.Sms.Taken[^1].Values["code"]));
 
         Assert.Equal("factorRequired", first.Text("status"));
         Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
@@ -324,11 +479,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
             });
-        _deployment.Templates.Set(
-            MessageKind.SecondStepCode,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code}"));
 
         await RegisteredAsync();
 
@@ -365,7 +515,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
 
         Answer first = await AskedAsync();
         Answer paced = await AskedAsync();
-        string code = _deployment.Sms.Taken[^1].Text;
+        string code = _deployment.Sms.Taken[^1].Values["code"];
 
         held.Suspend(_deployment.Clock.GetUtcNow() + TimeSpan.FromDays(7));
 
@@ -622,11 +772,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
             });
-        clear.Templates.Set(
-            MessageKind.SecondStepCode,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code}"));
 
         _ = await Flow.SignedInAsync(clear);
 
@@ -934,11 +1079,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.EmailCode]),
             });
-        _deployment.Templates.Set(
-            MessageKind.SignInCode,
-            SendKind.Email,
-            Language,
-            new MessageTemplate("code", "{code}"));
         Browser owner = await Flow.SignedInAsync(_deployment);
         _deployment.Clock.Advance(TimeSpan.FromMinutes(5));
         Answer began = await owner.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
@@ -987,11 +1127,6 @@ public sealed class SignInFlowTests : IAsyncDisposable
             {
                 LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneLink]),
             });
-        risky.Templates.Set(
-            MessageKind.SignInLink,
-            SendKind.Sms,
-            Language,
-            new MessageTemplate(null, "{code} {token}"));
 
         _ = await Flow.SignedInAsync(risky);
 
@@ -1007,7 +1142,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status202Accepted, held.Status);
         Assert.Equal(held.Status, nobodys.Status);
-        Assert.Equal(held.Body, nobodys.Body);
+        Assert.Equal(held.Drawn(), nobodys.Drawn());
         Assert.Equal(sent, risky.Sms.Taken.Count);
     }
 
@@ -1047,7 +1182,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     // The code the last message carried, which is the one the step under test sent.
-    private string Emailed() => _deployment.Mail.Taken[^1].Body.Split(' ')[0];
+    private string Emailed() => _deployment.Mail.Taken[^1].Values["code"];
 
     // The account a sign-in is against, and the interval its registration messages
     // opened left behind (AUTH-ABUSE-004).

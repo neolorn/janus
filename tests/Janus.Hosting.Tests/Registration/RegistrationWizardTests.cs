@@ -24,6 +24,7 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 {
     private const string Short = "tenletters12";
     private const string Second = "other@example.test";
+    private const string Third = "another@example.test";
     private const string Client = "web";
     private const string Solved = "solved";
 
@@ -667,7 +668,7 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 
         DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(10);
 
-        while (DateTime.UtcNow < giveUp && written.Length is 0)
+        while (DateTime.UtcNow < giveUp && !written.Taken().Contains("event:", StringComparison.Ordinal))
         {
             await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
         }
@@ -688,6 +689,63 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 
         Assert.Contains("\"verified\":true", streamed, StringComparison.Ordinal);
         Assert.True(Proved(polled, IdentifierKind.Email));
+    }
+
+    /// <summary>
+    /// FE-VER-001 and D-224: the stream sends a comment line at once, before anything
+    /// has changed, and another once 30 seconds pass with nothing else sent, so a client
+    /// knows it is connected and an idle proxy keeps it open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_TheStreamSpeaksAtOnceAndAfterThirtySecondsOfSilenceAsync()
+    {
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+
+        using var abort = new CancellationTokenSource();
+
+        (Task running, ResponseBody written) = browser.Open("/register/events", abort.Token);
+
+        string first = await HeardAsync(written, 1);
+
+        _deployment.Clock.Advance(TimeSpan.FromSeconds(29));
+
+        await Task.Delay(TimeSpan.FromMilliseconds(1500), TestContext.Current.CancellationToken);
+
+        string quiet = written.Taken();
+
+        _deployment.Clock.Advance(TimeSpan.FromSeconds(1));
+
+        string second = await HeardAsync(written, 2);
+
+        await abort.CancelAsync();
+
+        try
+        {
+            await running;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Assert.Equal(":\n\n", first);
+        Assert.Equal(":\n\n", quiet);
+        Assert.Equal(":\n\n:\n\n", second);
+    }
+
+    // What the stream has written once it holds the given number of comment lines, or
+    // all it wrote within ten seconds.
+    private static async Task<string> HeardAsync(ResponseBody written, int comments)
+    {
+        DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (DateTime.UtcNow < giveUp
+            && written.Taken().Split(":\n\n").Length - 1 < comments)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        }
+
+        return written.Taken();
     }
 
     /// <summary>
@@ -729,6 +787,68 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
             "POST",
             "/account/identifiers/" + staged + "/abandon",
             ("linkToken", token));
+
+        Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
+        Assert.Empty(_deployment.Pending.All);
+    }
+
+    /// <summary>
+    /// FE-VER-001 AC8 and D-224: a registration link pressed from a landing that holds no
+    /// identifier, sending the nil UUID, verifies what its token names.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_ARegistrationLinkPressedUnderTheNilIdentifierVerifiesAsync()
+    {
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+
+        string token = Flow.Token(_deployment, IdentifierKind.Email);
+
+        Answer pressed = await browser.SendAsync(
+            "POST",
+            "/register/verify/" + Guid.Empty,
+            ("linkToken", token),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status204NoContent, pressed.Status);
+        Assert.True(Proved(await browser.SendAsync("GET", "/register"), IdentifierKind.Email));
+    }
+
+    /// <summary>
+    /// FE-VER-001 AC8 and D-224: an account's identifier link, pressed under the nil UUID,
+    /// verifies in the browser that added it and is abandoned from another, each by what
+    /// its token names.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_AnIdentifierLinkUnderTheNilIdentifierActsOnWhatItsTokenNamesAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _ = await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Second));
+
+        string first = Flow.Token(_deployment, IdentifierKind.Email);
+
+        Answer verified = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + Guid.Empty + "/verify",
+            ("linkToken", first),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status204NoContent, verified.Status);
+        Assert.Empty(_deployment.Pending.All);
+
+        _ = await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Third));
+
+        string second = Flow.Token(_deployment, IdentifierKind.Email);
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/register");
+
+        Answer ended = await elsewhere.SendAsync(
+            "POST",
+            "/account/identifiers/" + Guid.Empty + "/abandon",
+            ("linkToken", second));
 
         Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
         Assert.Empty(_deployment.Pending.All);

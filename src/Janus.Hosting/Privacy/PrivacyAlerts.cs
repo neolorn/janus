@@ -17,9 +17,9 @@ namespace Janus.Hosting.Privacy;
 /// <remarks>
 /// Implements OPS-ALERT-001, OPS-ALERT-002 and CONV-DESIGN-003. The severity of a
 /// condition and what it deduplicates under are the alert table's, so the area names
-/// the condition and this carries it to the one router every condition goes through.
+/// the condition and this raises it the one way every condition is raised.
 /// </remarks>
-internal sealed class PrivacyAlerts(IAlertChannels alerts, TimeProvider time) : IPrivacyAlerts
+internal sealed class PrivacyAlerts(IAlertRaising alerts, TimeProvider time) : IPrivacyAlerts
 {
     /// <inheritdoc/>
     public async ValueTask<Result> RaiseAsync(

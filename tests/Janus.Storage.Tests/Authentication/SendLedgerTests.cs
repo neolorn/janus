@@ -198,7 +198,9 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
     /// <summary>
     /// A send taken back out by a delivery report leaves no time behind it, and the
-    /// record goes with the last one (AUTH-ABUSE-004 AC2, INT-SMS-005).
+    /// record goes with the last one; a second report of it is still answered as one of
+    /// a message handed over, and a reference never issued is not (AUTH-ABUSE-004 AC2,
+    /// INT-SMS-005, D-227).
     /// </summary>
     [Fact]
     public async Task ReleaseAsync_TheOnlySendCounted_LeavesNoRecordAsync()
@@ -218,7 +220,8 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
         await using StoreContext reading = database.Context();
 
-        Assert.False(await Ledger(reading).ReleaseAsync(reference, TestContext.Current.CancellationToken));
+        Assert.True(await Ledger(reading).ReleaseAsync(reference, TestContext.Current.CancellationToken));
+        Assert.False(await Ledger(reading).ReleaseAsync(Reference(5), TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -328,8 +331,9 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
     /// <summary>
     /// AUTH-ABUSE-004 AC2, INT-SMS-005, CONV-DESIGN-003 AC6: two reports releasing one send
-    /// at once each read it under its lock, so it is released once and a time counted
-    /// at the same instant for another send stays.
+    /// at once each read it under its lock, so it is released once, each answered as a
+    /// report of a message handed over, and a time counted at the same instant for
+    /// another send stays (D-227).
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC2_ASendReleasedTwiceAtOnceIsReleasedOnceAsync()
@@ -342,7 +346,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
         bool[] released = await Task.WhenAll(ReleasedOnceAsync(reference), ReleasedOnceAsync(reference));
 
-        Assert.Equal(1, released.Count(answer => answer));
+        Assert.All(released, Assert.True);
         Assert.Equal([Noon], (await StandingAsync(destination, Noon - Day)).Sends);
     }
 
@@ -482,7 +486,41 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         Assert.True(await ReleasedOnceAsync(Reference(153)));
         Assert.Empty((await StandingAsync(each, Noon - Day)).Sends);
         Assert.Empty((await StandingAsync(once, Noon - Day)).Sends);
-        Assert.False(await ReleasedOnceAsync(Reference(153)));
+        Assert.True(await ReleasedOnceAsync(Reference(153)));
+    }
+
+    /// <summary>
+    /// INT-SMS-005 AC3 (D-227): a message reported failed is still one the library handed
+    /// over. Its row stays, marked released, until its send would have left the ledger
+    /// had no report come; a report on it is answered true and changes nothing, a
+    /// failure of the send's other message is still the last, and once the send settles
+    /// the reference is known no longer.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_SMS_005_AC3_AReportOfAReleasedMessageIsAnsweredAndChangesNothingAsync()
+    {
+        RestrictionKey each = Destination("+201001234589");
+        RestrictionKey once = Resend("+201001234589");
+
+        await SentAsync([Reference(170), Reference(171)], each, once, Noon, secondFactor: true);
+
+        Assert.True(await ReleasedOnceAsync(Reference(170)));
+        Assert.True(await ReleasedOnceAsync(Reference(170)));
+        Assert.True(await InWorkAsync(ledger => ledger.DeliveredAsync(Reference(170), TestContext.Current.CancellationToken)));
+
+        Assert.Equal([Noon], (await StandingAsync(each, Noon - Day)).Sends);
+        Assert.Equal([Noon], (await StandingAsync(once, Noon - Day)).Sends);
+        Assert.Equal(2, await SweptAsync(Reference(170), Noon));
+
+        Assert.True(await ReleasedOnceAsync(Reference(171)));
+        Assert.Empty((await StandingAsync(each, Noon - Day)).Sends);
+        Assert.Empty((await StandingAsync(once, Noon - Day)).Sends);
+        Assert.True(await InWorkAsync(ledger => ledger.DeliveredAsync(Reference(171), TestContext.Current.CancellationToken)));
+        Assert.Empty((await StandingAsync(once, Noon - Day)).Sends);
+
+        Assert.Equal(0, await SweptAsync(Reference(170), Noon + Day + Day));
+        Assert.False(await ReleasedOnceAsync(Reference(170)));
     }
 
     /// <summary>

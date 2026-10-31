@@ -11,7 +11,6 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
-using Janus.Hosting.Alerting;
 using Janus.Hosting.Privacy;
 using Janus.Privacy;
 
@@ -24,7 +23,6 @@ namespace Janus.Hosting.Configuration;
 /// <param name="guard">What the session's proof amounts to against a gate.</param>
 /// <param name="configuration">Where the values in force are read.</param>
 /// <param name="administration">The one operation a runtime setting is written through.</param>
-/// <param name="destinations">The one way the alert destinations change.</param>
 /// <param name="declaration">The categories of data the host declared, with their floors.</param>
 /// <param name="retention">How long a declared category is kept now.</param>
 /// <param name="codec">
@@ -36,7 +34,7 @@ namespace Janus.Hosting.Configuration;
 /// <param name="work">The one transaction a change runs in.</param>
 /// <remarks>
 /// Implements LIB-API-005, OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, OPS-CFG-005,
-/// OPS-ALERT-004a, PRIV-RET-001, PRIV-CONS-006a and chapter 09 section 8. The keys served are the
+/// PRIV-RET-001, PRIV-CONS-006a and chapter 09 section 8. The keys served are the
 /// deployment's own and the retention of every category the host declared; the named
 /// restriction set has its own operations and its own permission, and a key that
 /// exists once per organization is changed where that organization is.
@@ -46,7 +44,6 @@ internal sealed class ConfigurationService(
     StepUpGuard guard,
     IConfigurationStore configuration,
     ConfigurationAdministration administration,
-    AlertDestinationChange destinations,
     AuthorizationDeclaration declaration,
     CategoryRetention retention,
     ImageCodec? codec,
@@ -135,12 +132,6 @@ internal sealed class ConfigurationService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
-        if (key == Settings.AlertingEmailDestinations.Key || key == Settings.AlertingSmsDestinations.Key)
-        {
-            return await DestinationsAsync(key, value, reason, context, actor, session, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
         // IDN-ATTR-002, OPS-CFG-003: a system policy that shows photos needs the codec
         // the host declares, so it is refused while there is none.
         if (key == Settings.PolicyDefault.Key
@@ -210,46 +201,6 @@ internal sealed class ConfigurationService(
         }
 
         return Result.Success();
-    }
-
-    // OPS-ALERT-004a: the destination keys change through the one way that tells the
-    // destinations being replaced, behind their own gate (chapter 10 section 5).
-    private async ValueTask<Result> DestinationsAsync(
-        ConfigurationKey key,
-        JsonElement value,
-        string reason,
-        AccessContext context,
-        SubjectId actor,
-        SessionId session,
-        CancellationToken cancellationToken)
-    {
-        (TextListSetting setting, SendKind channel) = key == Settings.AlertingEmailDestinations.Key
-            ? (Settings.AlertingEmailDestinations, SendKind.Email)
-            : (Settings.AlertingSmsDestinations, SendKind.Sms);
-
-        Error? failure = null;
-
-        IReadOnlyList<string> replacement = setting.Received(value)
-            .Match(one => one, error => Held<IReadOnlyList<string>>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
-        }
-
-        StepUpChallenge challenge = (await guard
-                .ChallengeAsync(actor, session, StepUpAction.AlertingDestinations, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(one => one, error => Held<StepUpChallenge>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
-        }
-
-        return await destinations
-            .ChangeAsync(channel, replacement, reason, challenge, context, cancellationToken)
-            .ConfigureAwait(false);
     }
 
     // PRIV-RET-001 and chapter 09 section 8: a declared category's retention changes

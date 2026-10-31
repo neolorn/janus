@@ -15,6 +15,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Sending;
+using Janus.Testing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -29,7 +30,7 @@ namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
 /// What the checks that read the database decide over a deployment, and where they run
-/// (AUTHZ-MODEL-004, AUTHZ-DERIVE-004), and what they warn of (INT-MAIL-011).
+/// (AUTHZ-MODEL-004, AUTHZ-DERIVE-004).
 /// </summary>
 /// <param name="host">The deployment the checks read.</param>
 [Trait("kind", "integration")]
@@ -75,16 +76,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
     // The category the application of a test writes under as it handles a request.
     private const string Handling = "Handling";
-
-    private static readonly string Declaring =
-        "INSERT INTO identity.settings (key, value) VALUES ('"
-        + Settings.NotificationEmailRelayRegistered.Key
-        + "', '[\"mail.example.test\"]');";
-
-    private static readonly string Undeclaring =
-        "DELETE FROM identity.settings WHERE key = '"
-        + Settings.NotificationEmailRelayRegistered.Key
-        + "';";
 
     private static readonly string Undefaulted =
         "DELETE FROM identity.settings WHERE key = '"
@@ -190,28 +181,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// AUTH-ABUSE-005 AC3 and LIB-EXT-001: a deployment that has declared no message
-    /// catalogue answers out of the one the library ships, in the language it declared,
-    /// and starts. What the check refuses is a language with no words, not the absence
-    /// of a catalogue of the deployment's own.
-    /// </summary>
-    /// <returns>The work of running it.</returns>
-    [Fact]
-    public async Task AUTH_ABUSE_005_AC3_ADeploymentThatDeclaredNoMessagesStartsOnTheShippedOnesAsync()
-    {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-
-        using IHost deployment = Deployed(catalogue: false);
-
-        await deployment.StartAsync(cancellationToken);
-
-        _ = Assert.IsType<DefaultMessageTemplates>(
-            deployment.Services.GetRequiredService<IMessageTemplates>());
-
-        await deployment.StopAsync(cancellationToken);
-    }
-
-    /// <summary>
     /// PRIV-RIGHT-005b AC3: the deployment declares its documents sensitive, so a
     /// deployment that registered nothing to do the host-side work for them is
     /// stopped as it starts rather than at the erasure that would reach no one.
@@ -279,13 +248,13 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3: a subscriber's name fills the <c>outstanding</c> place, so one
+    /// INT-SMS-003 AC1: a subscriber's name fills the <c>outstanding</c> place, so one
     /// registered under a name outside the rule stops the deployment as it starts,
     /// naming it and its member; one inside the rule starts.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_SMS_003_AC3_ASubscriberNamedOutsideTheRuleIsRefusedAsync()
+    public async Task INT_SMS_003_AC1_ASubscriberNamedOutsideTheRuleIsRefusedAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -438,14 +407,14 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3, D-203: a purpose handler's name fills the <c>outstanding</c>
+    /// INT-SMS-003 AC1, D-203: a purpose handler's name fills the <c>outstanding</c>
     /// place as a subscriber's does, so one registered under a name outside the rule
     /// stops the deployment as it starts, naming it and its member; one inside the rule
     /// starts.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_SMS_003_AC3_APurposeHandlerNamedOutsideTheRuleIsRefusedAsync()
+    public async Task INT_SMS_003_AC1_APurposeHandlerNamedOutsideTheRuleIsRefusedAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -478,7 +447,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3, IDN-PRIN-001 (D-206): a job declared under a name outside the
+    /// INT-SMS-003 AC1, IDN-PRIN-001 (D-206): a job declared under a name outside the
     /// rule stops the deployment as it starts, naming <c>job.&lt;name&gt;</c> and
     /// <c>name</c>; one inside the rule starts.
     /// </summary>
@@ -489,7 +458,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     [InlineData("nightly--digest")]
     [InlineData("nightly-")]
     [InlineData("")]
-    public async Task INT_SMS_003_AC3_AJobNamedOutsideTheRuleIsRefusedAsync(string name)
+    public async Task INT_SMS_003_AC1_AJobNamedOutsideTheRuleIsRefusedAsync(string name)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -514,7 +483,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3 (D-206): an export contributor registered beside the deployment's
+    /// INT-SMS-003 AC1 (D-206): an export contributor registered beside the deployment's
     /// own under a name outside the rule, or under the name the deployment's own holds,
     /// stops the deployment as it starts with <c>model.startup.declarationinvalid</c>,
     /// naming <c>contributor.&lt;name&gt;</c> and its member; one under a name of its own
@@ -526,7 +495,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     [InlineData("Host Parcels")]
     [InlineData("host..parcels")]
     [InlineData("host")]
-    public async Task INT_SMS_003_AC3_AnExportContributorNamedOutsideTheRuleOrTwiceIsRefusedAsync(string name)
+    public async Task INT_SMS_003_AC1_AnExportContributorNamedOutsideTheRuleOrTwiceIsRefusedAsync(string name)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -611,13 +580,13 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// INT-SMS-003 AC3: a governing document's name fills the <c>document</c> place, so
+    /// INT-SMS-003 AC1: a governing document's name fills the <c>document</c> place, so
     /// a purpose that names one outside the rule stops the deployment as it starts,
     /// naming the purpose and its member; one inside the rule starts.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_SMS_003_AC3_AGoverningDocumentNamedOutsideTheRuleIsRefusedAsync()
+    public async Task INT_SMS_003_AC1_AGoverningDocumentNamedOutsideTheRuleIsRefusedAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -1102,67 +1071,57 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// INT-MAIL-010, LIB-HOST-001: the app passwords of a hosted mailbox are reached
-    /// with a token issued to the mail server's client, so a deployment that registers a
-    /// mail server and declares no client for it is stopped as it starts, and the same
-    /// deployment starts once it declares one.
+    /// AUTH-OIDC-001 AC4, INT-MAIL-010, D-226: the app passwords of a hosted mailbox are
+    /// reached with the mail server's management key and the library issues no token
+    /// for the mail server, so a deployment that registers a mail server starts with no
+    /// client declared for it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_MAIL_010_ADeploymentHostingMailDeclaresTheMailServersClientAsync()
+    public async Task AUTH_OIDC_001_AC4_ADeploymentHostingMailStartsWithNoClientDeclaredForItAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        using (IHost undeclared = Deployed(mail: true))
-        {
-            StartupException refused = await Assert.ThrowsAsync<StartupException>(
-                async () => await undeclared.StartAsync(cancellationToken));
-
-            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
-            Assert.Equal("mailServerClient.clientId", refused.Failure?.Details["key"].GetString());
-        }
-
-        using IHost declared = Deployed(mail: true, mailClient: true);
+        using IHost declared = Deployed(mail: true);
 
         await declared.StartAsync(cancellationToken);
         await declared.StopAsync(cancellationToken);
     }
 
     /// <summary>
-    /// INT-MAIL-008 AC3 and LIB-EXT-001, D-166 (270): a deployment sends mail and the
-    /// library ships no mail transport of its own, so one that registers none does not
-    /// start, and the refusal names the transport.
+    /// INT-SMS-006 AC2, INT-MAIL-008 and LIB-EXT-001, D-225: every message leaves the
+    /// library through the host's notification handler and the library ships none, so
+    /// a deployment that registers none does not start, and the refusal names it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_MAIL_008_AC3_ADeploymentWithNoMailTransportDoesNotStartAsync()
+    public async Task INT_SMS_006_AC2_ADeploymentWithNoNotificationHandlerDoesNotStartAsync()
     {
-        using IHost deployment = Deployed(mailTransport: false);
+        using IHost deployment = Deployed(notificationHandler: false);
 
         StartupException refused = await Assert.ThrowsAsync<StartupException>(
             async () => await deployment.StartAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
-        Assert.Equal("mailTransport", refused.Failure?.Details["key"].GetString());
+        Assert.Equal("notificationHandler", refused.Failure?.Details["key"].GetString());
     }
 
     /// <summary>
-    /// INT-SMS-006 AC2 and LIB-EXT-001, D-166 (270): every deployment sends text
-    /// messages, its alerts among them, and the library ships no SMS transport of its
-    /// own, so one that registers none does not start, and the refusal names the
-    /// transport.
+    /// OPS-ALERT-003 AC4 and LIB-HOST-001, D-225: the library delivers no alert itself,
+    /// so a deployment that registers no alert handler does not start, and the refusal
+    /// names the handler.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_SMS_006_AC2_ADeploymentWithNoSmsTransportDoesNotStartAsync()
+    public async Task OPS_ALERT_003_AC4_ADeploymentWithNoAlertHandlerDoesNotStartAsync()
     {
-        using IHost deployment = Deployed(smsTransport: false);
+        using IHost deployment = Deployed(alertHandler: false);
 
         StartupException refused = await Assert.ThrowsAsync<StartupException>(
             async () => await deployment.StartAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
-        Assert.Equal("smsTransport", refused.Failure?.Details["key"].GetString());
+        Assert.Equal("alertHandler", refused.Failure?.Details["key"].GetString());
     }
 
     /// <summary>
@@ -1414,7 +1373,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        using IHost deployment = Deployed(mail: registered, mailClient: registered);
+        using IHost deployment = Deployed(mail: registered);
         IMailServerInUse inUse = deployment.Services.GetRequiredService<IMailServerInUse>();
 
         Assert.Throws<InvalidOperationException>(() => inUse.Chosen());
@@ -1505,7 +1464,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             typeof(DeclarationValidationService),
             typeof(RedirectValidationService),
             typeof(ProviderStartService),
-            typeof(RelayValidationService),
             typeof(LawfulBasisStartService),
             typeof(DocumentSupersessionStartService),
             typeof(NoticeCookiesStartService),
@@ -1547,46 +1505,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         await UnmigratedAsync(Unserved, served);
 
         Assert.False(served.Started);
-    }
-
-    /// <summary>
-    /// INT-MAIL-011 AC1: a deployment in which Continue with Apple is a way in and whose
-    /// sending domain is not declared as registered with the relay starts, and warns as
-    /// it does, naming the domain; declaring it quiets the warning.
-    /// </summary>
-    /// <returns>The work of running it.</returns>
-    [Fact]
-    public async Task INT_MAIL_011_AC1_AnUndeclaredSendingDomainWarnsAsTheDeploymentStartsAsync()
-    {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-
-        int before = (await AnnouncedAsync()).Count;
-
-        using (IHost undeclared = Deployed())
-        {
-            await undeclared.StartAsync(cancellationToken);
-            await undeclared.StopAsync(cancellationToken);
-        }
-
-        IReadOnlyList<(string?, string?, string?)> warned = [.. (await AnnouncedAsync()).Skip(before)];
-
-        Assert.Equal([("relay-domain-unregistered", "normal", "mail.example.test")], warned);
-
-        await WriteAsync(Declaring, cancellationToken);
-
-        try
-        {
-            using IHost declared = Deployed();
-
-            await declared.StartAsync(cancellationToken);
-            await declared.StopAsync(cancellationToken);
-
-            Assert.Equal(before + 1, (await AnnouncedAsync()).Count);
-        }
-        finally
-        {
-            await WriteAsync(Undeclaring, cancellationToken);
-        }
     }
 
     /// <summary>
@@ -2059,7 +1977,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         + "';";
 
     private IHost Deployed(
-        bool catalogue = true,
         bool handlers = true,
         bool contributors = true,
         bool addresses = true,
@@ -2067,11 +1984,10 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool client = true,
         bool codec = false,
         bool mail = false,
-        bool mailClient = false,
         IReadOnlyList<SocialProvider>? providers = null,
         ISecretSource? secrets = null,
-        bool mailTransport = true,
-        bool smsTransport = true,
+        bool notificationHandler = true,
+        bool alertHandler = true,
         bool secretSource = true,
         bool resolver = false,
         string? document = null,
@@ -2083,7 +1999,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         new HostBuilder()
             .ConfigureServices(services => Declared(
                 services,
-                catalogue,
                 handlers,
                 contributors,
                 addresses,
@@ -2091,11 +2006,10 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 client,
                 codec,
                 mail,
-                mailClient,
                 providers: providers,
                 secrets: secrets,
-                mailTransport: mailTransport,
-                smsTransport: smsTransport,
+                notificationHandler: notificationHandler,
+                alertHandler: alertHandler,
                 secretSource: secretSource,
                 resolver: resolver,
                 document: document,
@@ -2107,10 +2021,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
-    // it, with the messages the deployment has written (LIB-HOST-001).
+    // it (LIB-HOST-001).
     private IServiceCollection Declared(
         IServiceCollection services,
-        bool catalogue = true,
         bool handlers = true,
         bool contributors = true,
         bool addresses = true,
@@ -2118,12 +2031,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool client = true,
         bool codec = false,
         bool mail = false,
-        bool mailClient = false,
         string? connection = null,
         IReadOnlyList<SocialProvider>? providers = null,
         ISecretSource? secrets = null,
-        bool mailTransport = true,
-        bool smsTransport = true,
+        bool notificationHandler = true,
+        bool alertHandler = true,
         bool secretSource = true,
         bool resolver = false,
         string? document = null,
@@ -2137,14 +2049,14 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     {
         Sourced(services, connection ?? host.ConnectionString, source);
 
-        if (mailTransport)
+        if (notificationHandler)
         {
-            services.AddSingleton<IMailTransport>(new MailTransportInMemory());
+            services.AddSingleton<INotificationHandler>(new InMemoryNotifications());
         }
 
-        if (smsTransport)
+        if (alertHandler)
         {
-            services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+            services.AddSingleton<IAlertHandler>(new InMemoryAlerts());
         }
 
         if (codec)
@@ -2160,16 +2072,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (mail)
         {
             services.AddSingleton<IMailServer>(new MailServerInMemory());
-        }
-
-        if (mailClient)
-        {
-            services.AddSingleton(new MailServerClient("mail-server"));
-        }
-
-        if (catalogue)
-        {
-            services.AddSingleton<IMessageTemplates>(new MessageTemplatesInMemory());
         }
 
         if (handlers)

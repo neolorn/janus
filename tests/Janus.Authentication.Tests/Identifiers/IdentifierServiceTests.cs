@@ -98,7 +98,6 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         _codes.Work = _work;
         _directory.Pending = _pending;
         _pending.Codes = _codes;
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, English);
         _person = SubjectId.New(_randomness);
         _passwords.Hold(_person, Noon);
@@ -4186,34 +4185,6 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-006 AC4: a number added below the gateway floor is refused with the
-    /// floor's code, as a restriction's refusal of its code would refuse it: nothing is
-    /// staged and nothing committed.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_ABUSE_006_AC4_AnAdditionWhoseCodeTheFloorRefusesIsRefusedAndRolledBackAsync()
-    {
-        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
-        _notifications.Refusal = Error.From(ErrorCodes.SmsBalanceFloor);
-        _notifications.RefusedChannel = SendKind.Sms;
-
-        Assert.Equal(
-            ErrorCodes.SmsBalanceFloor,
-            Refused(await Service.AddAsync(
-                Acting,
-                Stepped(),
-                IdentifierKind.Phone,
-                Number,
-                Source,
-                TestContext.Current.CancellationToken)));
-
-        Assert.False(_work.Open);
-        Assert.Equal(0, _work.OutermostCommitted);
-        Assert.Equal(1, _work.RolledBack);
-        Assert.Empty(_notifications.Carried);
-    }
-
-    /// <summary>
     /// CONV-DESIGN-003 AC5, AUTH-FACT-004: a wrong code is counted on the verification
     /// and that count is committed alone, with no rollback.
     /// </summary>
@@ -5782,7 +5753,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         _codes.All.Single(held => held.Holder.AsSpan().SequenceEqual(holder));
 
     // The undo the remaining channels were sent, which is what the removal notice
-    // carries for the deployment's template to put in its words.
+    // carries for the host to put in its words.
     private string Undo() =>
         _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Token();
 

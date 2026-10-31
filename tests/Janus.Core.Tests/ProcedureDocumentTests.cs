@@ -1,60 +1,30 @@
 using System;
-using System.IO;
 using Xunit;
 
 namespace Janus.Core.Tests;
 
 /// <summary>
 /// The criteria that are about an operator-facing document rather than a behaviour:
-/// the procedure exists, and the documents state the rule the item states
-/// (PRIV-BREACH-001, PRIV-MINOR-002). A test is what keeps a later edit from quietly
-/// taking the rule out.
+/// the documents state the rule the item states (PRIV-BREACH-001, PRIV-BREACH-003,
+/// INT-MAIL-005). A test is what keeps a later edit from quietly taking the rule out.
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class ProcedureDocumentTests
 {
     private const string Runbook = "docs/spec/11-runbook.md";
 
-    private const string Takedown = "docs/spec/14-takedown-procedure.md";
-
     private const string Risks = "docs/spec/13-risk-register.md";
 
     /// <summary>
-    /// PRIV-BREACH-001 AC4: both operator documents state the clock the item states,
-    /// with both deadlines and the instant they run from.
-    /// </summary>
-    [Fact]
-    public void PRIV_BREACH_001_AC4_TheOperatorDocumentsStateTheDetectionClock()
-    {
-        string runbook = Repository.ReadText(Runbook);
-
-        Assert.Contains("Clock starts at detection", runbook, StringComparison.Ordinal);
-        Assert.Contains("72 hours to the regulator", runbook, StringComparison.Ordinal);
-        Assert.Contains("three days to affected", runbook, StringComparison.Ordinal);
-
-        Assert.Contains(
-            "breach clock starts at detection",
-            Repository.ReadText(Takedown),
-            StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// PRIV-BREACH-001 AC3: neither document lets the clock wait for the conclusion
+    /// PRIV-BREACH-001 AC3: the runbook does not let the clock wait for the conclusion
     /// that an incident is notifiable, so no procedure defers its start.
     /// </summary>
     [Fact]
-    public void PRIV_BREACH_001_AC3_NoProcedureDefersTheClockPendingAssessment()
-    {
+    public void PRIV_BREACH_001_AC3_NoProcedureDefersTheClockPendingAssessment() =>
         Assert.Contains(
             "Not deferrable pending investigation",
             Repository.ReadText(Runbook),
             StringComparison.Ordinal);
-
-        Assert.Contains(
-            "not deferrable\npending investigation",
-            Repository.ReadText(Takedown).ReplaceLineEndings("\n"),
-            StringComparison.Ordinal);
-    }
 
     /// <summary>
     /// PRIV-BREACH-001 AC2: the clock the operator runs starts at detection, and the
@@ -89,16 +59,6 @@ public sealed class ProcedureDocumentTests
     }
 
     /// <summary>
-    /// IDN-LIFE-003 AC1: the takedown procedure exists as the item names it.
-    /// </summary>
-    [Fact]
-    public void IDN_LIFE_003_AC1_TheTakedownProcedureExists()
-    {
-        Assert.True(File.Exists(Path.Combine(Repository.Root, Takedown)));
-        Assert.Contains("# ", Repository.ReadText(Takedown), StringComparison.Ordinal);
-    }
-
-    /// <summary>
     /// INT-MAIL-005 AC2: the risk register records, as R-A02, that staff mail is
     /// reached with an app password and not a phishing-resistant factor.
     /// </summary>
@@ -113,15 +73,5 @@ public sealed class ProcedureDocumentTests
             StringComparison.Ordinal);
         Assert.Contains("INT-MAIL-005", register, StringComparison.Ordinal);
         Assert.Contains("App passwords", register, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// PRIV-MINOR-002 AC1: the takedown procedure exists as the item names it.
-    /// </summary>
-    [Fact]
-    public void PRIV_MINOR_002_AC1_TheTakedownProcedureExists()
-    {
-        Assert.True(File.Exists(Path.Combine(Repository.Root, Takedown)));
-        Assert.NotEmpty(Repository.ReadText(Takedown));
     }
 }

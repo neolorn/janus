@@ -34,14 +34,13 @@ public sealed class ClientRegistryTests : IAsyncDisposable
     public async ValueTask DisposeAsync() => await _work.DisposeAsync();
 
     /// <summary>
-    /// AUTH-OIDC-001 AC4, OPS-SEC-002: the mail-server client is registered from the
-    /// server with a secret the library draws, thirty-two bytes written base64url, issued
-    /// now, and the registration is recorded under the command's principal in one
-    /// transaction.
+    /// AUTH-OIDC-001, OPS-SEC-002: a protocol client is registered from the server with a
+    /// secret the library draws, thirty-two bytes written base64url, issued now, and the
+    /// registration is recorded under the command's principal in one transaction.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_OIDC_001_AC4_TheMailServerClientIsRegisteredFromTheServerAsync()
+    public async Task AUTH_OIDC_001_AProtocolClientIsRegisteredFromTheServerAsync()
     {
         Assert.Null(Refused(await RegisteredAsync(Mail)));
 

@@ -27,8 +27,6 @@ public sealed class RecordAccessTests : IAsyncDisposable
 
     private const string Number = "+441632960041";
 
-    private const string NoneSent = "none";
-
     private const string Language = "en";
 
     private static readonly RandomNumberGenerator Randomness = RandomNumberGenerator.Create();
@@ -72,8 +70,8 @@ public sealed class RecordAccessTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status202Accepted, held.Status);
         Assert.Equal((held.Status, held.Body), (none.Status, none.Body));
         Assert.Equal((held.Status, held.Body), (again.Status, again.Body));
-        Assert.Matches("^[0-9]{6}$", Assert.Single(_deployment.Mail.Taken, sent => sent.Destination.Value == Address).Body);
-        Assert.Equal(NoneSent, Assert.Single(_deployment.Mail.Taken, sent => sent.Destination.Value == unheld).Body);
+        Assert.Matches("^[0-9]{6}$", Assert.Single(_deployment.Mail.Taken, sent => sent.Destination == Address).Values["code"]);
+        Assert.Equal(MessageKind.RecordAccessNone, Assert.Single(_deployment.Mail.Taken, sent => sent.Destination == unheld).Kind);
     }
 
     /// <summary>
@@ -174,7 +172,7 @@ public sealed class RecordAccessTests : IAsyncDisposable
 
         _ = await _deployment.CarrySendsAsync();
 
-        Assert.Equal(NoneSent, Assert.Single(_deployment.Mail.Taken, sent => sent.Destination.Value == alone).Body);
+        Assert.Equal(MessageKind.RecordAccessNone, Assert.Single(_deployment.Mail.Taken, sent => sent.Destination == alone).Kind);
     }
 
     /// <summary>
@@ -446,21 +444,6 @@ public sealed class RecordAccessTests : IAsyncDisposable
     private static OrganizationId Prepared(Deployment deployment)
     {
         Flow.Prepare(deployment);
-
-        foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-        {
-            deployment.Templates.Set(
-                MessageKind.RecordAccessCode,
-                kind,
-                Language,
-                new MessageTemplate(kind is SendKind.Email ? "code" : null, "{code}"));
-        }
-
-        deployment.Templates.Set(
-            MessageKind.RecordAccessNone,
-            SendKind.Email,
-            Language,
-            new MessageTemplate("none", NoneSent));
 
         var shop = OrganizationId.New(deployment.Clock);
 

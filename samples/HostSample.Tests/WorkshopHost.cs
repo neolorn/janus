@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -24,8 +25,10 @@ namespace HostSample.Tests;
 /// <summary>
 /// A deployment of the kite workshop as its tests stand one up: an empty database
 /// prepared by the library's own commands, the workshop's tables beside the library's,
-/// the application started on a web server in memory with mail and SMS taken in memory,
-/// and its people signed in through the library's own endpoints: the first
+/// the application started on a web server in memory with the messages and alerts it
+/// owes taken in memory, in place of the workshop's post room and duty board, so the
+/// tests read the codes and links the messages carry, and its people signed in through
+/// the library's own endpoints: the first
 /// administrator, who publishes the notice and the terms, opens the organization that
 /// runs the workshop and gives it its first grant, and a technician of that
 /// organization, who opens it.
@@ -38,7 +41,10 @@ public sealed class WorkshopHost : IAsyncLifetime
     // The back channel the application reaches its provider on (BFF-SESS-006).
     private const string SignOnChannel = "identity-signon";
 
-    private const string FirstAdministrator = "administrator@kites.example.test";
+    /// <summary>
+    /// The address the deployment's bootstrap names its first administrator by.
+    /// </summary>
+    internal const string FirstAdministrator = "administrator@kites.example.test";
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
 
@@ -48,6 +54,8 @@ public sealed class WorkshopHost : IAsyncLifetime
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     private string _connectionString = string.Empty;
+
+    private FixedSecretSource? _secrets;
 
     private WebApplication? _application;
 
@@ -75,14 +83,14 @@ public sealed class WorkshopHost : IAsyncLifetime
     internal ShiftedClock Clock { get; } = new();
 
     /// <summary>
-    /// What went out by mail.
+    /// What the deployment handed over to be sent, as its notification handler took it.
     /// </summary>
-    public InMemoryMailTransport Mail { get; } = new();
+    public InMemoryNotifications Notifications { get; } = new();
 
     /// <summary>
-    /// What went out by SMS.
+    /// What the deployment raised, as its alert handler took it.
     /// </summary>
-    public InMemorySmsTransport Sms { get; } = new();
+    public InMemoryAlerts Alerts { get; } = new();
 
     /// <summary>
     /// The first administrator.
@@ -182,15 +190,83 @@ public sealed class WorkshopHost : IAsyncLifetime
     /// <param name="email">The customer's address.</param>
     /// <param name="cancellationToken">Abandons the registration.</param>
     /// <returns>The customer's session.</returns>
-    public async Task<TestSession> CustomerAsync(EmailAddress email, CancellationToken cancellationToken)
+    public Task<TestSession> CustomerAsync(EmailAddress email, CancellationToken cancellationToken) =>
+        CustomerAsync(email, Convert.ToHexString(RandomNumberGenerator.GetBytes(16)), cancellationToken);
+
+    /// <summary>
+    /// Registers a customer of the workshop under an address and a password the test
+    /// names, as <see cref="CustomerAsync(CancellationToken)"/> registers one, for a test
+    /// that signs the customer in itself.
+    /// </summary>
+    /// <param name="email">The customer's address.</param>
+    /// <param name="password">The customer's password.</param>
+    /// <param name="cancellationToken">Abandons the registration.</param>
+    /// <returns>The customer's session.</returns>
+    public async Task<TestSession> CustomerAsync(EmailAddress email, string password, CancellationToken cancellationToken)
     {
         int customer = Interlocked.Increment(ref _customers);
 
         return await People.CustomerAsync(
             email,
             Phone("+2010020" + customer.ToString("D5", CultureInfo.InvariantCulture)),
-            Convert.ToHexString(RandomNumberGenerator.GetBytes(16)),
+            password,
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Starts the workshop a second time on this deployment, from the same packages, at an
+    /// origin of its own, as a second application: a sign-on client of its own is
+    /// registered for it by the library's command-line tool with its exact return address,
+    /// and it declares this application's addresses as its authentication application's
+    /// and the deployment's landing origins as this one declares them (LIB-TEST-004,
+    /// BFF-SESS-006, D-229). Its back channel reaches this application.
+    /// </summary>
+    /// <param name="origin">The origin the second application answers at.</param>
+    /// <param name="client">The second application's client of the provider.</param>
+    /// <param name="cancellationToken">Abandons the registration and the start.</param>
+    /// <returns>The second application, started.</returns>
+    internal async Task<SecondApplication> SecondApplicationAsync(
+        Uri origin,
+        string client,
+        CancellationToken cancellationToken)
+    {
+        FixedSecretSource secrets = _secrets ?? throw new InvalidOperationException("The host has not started.");
+        Uri address = WorkshopApplication.Address(origin);
+
+        await RegisteredAsync(
+            secrets,
+            client,
+            new Uri(address.AbsoluteUri + "/auth/signon/return").AbsoluteUri,
+            cancellationToken);
+
+        ServerInMemory? server = new();
+        WebApplication? application = null;
+
+        try
+        {
+            application = Built(server, client, secrets);
+
+            await application.StartAsync(cancellationToken);
+
+            var second = new SecondApplication(
+                application,
+                server,
+                new TestPeople(address, new SignOnClient(client), Terms, server.Channel, Notifications, _randomness));
+
+            application = null;
+            server = null;
+
+            return second;
+        }
+        finally
+        {
+            if (application is not null)
+            {
+                await application.DisposeAsync();
+            }
+
+            server?.Dispose();
+        }
     }
 
     /// <summary>
@@ -255,50 +331,15 @@ public sealed class WorkshopHost : IAsyncLifetime
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {
-        await _container.StartAsync(CancellationToken.None);
+        _connectionString = await DatabaseAsync(_container);
 
-        // OPS-DB-001: the database is created under ICU before the first migration runs.
-        await using (var server = new NpgsqlConnection(_container.GetConnectionString()))
-        {
-            await server.OpenAsync(CancellationToken.None);
+        FixedSecretSource secrets = Secrets(_connectionString, _randomness);
 
-            await using NpgsqlCommand created = server.CreateCommand();
+        _secrets = secrets;
 
-            created.CommandText = "CREATE DATABASE workshop TEMPLATE template0 "
-                + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'";
+        TestDeployment deployment = await PreparedAsync(_connectionString, secrets);
 
-            _ = await created.ExecuteNonQueryAsync(CancellationToken.None);
-        }
-
-        _connectionString = new NpgsqlConnectionStringBuilder(_container.GetConnectionString()) { Database = "workshop" }
-            .ConnectionString;
-
-        // OPS-MIG-003a: the scheduled maintenance runs under the maintenance role.
-        var secrets = new FixedSecretSource(_randomness)
-        {
-            MaintenanceCredential = Encoding.UTF8.GetBytes(
-                new NpgsqlConnectionStringBuilder(_connectionString) { Options = "-c role=identity_maintenance" }.ConnectionString),
-        };
-
-        TestDeployment deployment = await TestDeployment.PrepareAsync(
-            WorkshopApplication.Address(Origin),
-            new SignOnClient(WorkshopApplication.Client),
-            secrets,
-            _connectionString,
-            _connectionString,
-            Bootstrapped(),
-            CancellationToken.None);
-
-        await using (DbConnection connection = await ConnectAsync(CancellationToken.None))
-        {
-            await using DbCommand created = connection.CreateCommand();
-
-            created.CommandText = WorkshopSchema.Creation;
-
-            _ = await created.ExecuteNonQueryAsync(CancellationToken.None);
-        }
-
-        _application = Built(secrets);
+        _application = Built(_server, WorkshopApplication.Client, secrets);
 
         await _application.StartAsync(CancellationToken.None);
 
@@ -312,8 +353,7 @@ public sealed class WorkshopHost : IAsyncLifetime
             new SignOnClient(WorkshopApplication.Client),
             Terms,
             _server.Channel,
-            Mail,
-            Sms,
+            Notifications,
             _randomness);
         _administrator = await _people.AdministratorAsync(deployment.EnrolmentLink, administrator, CancellationToken.None);
 
@@ -388,28 +428,124 @@ public sealed class WorkshopHost : IAsyncLifetime
         _randomness.Dispose();
     }
 
-    // The application as the workshop composes it, with what this deployment supplies
-    // of its own: the web server, the clock, the secret source, the transports and the
-    // stand-ins for the optional environment seams (LIB-TEST-003).
-    private WebApplication Built(FixedSecretSource secrets)
+    /// <summary>
+    /// Starts a deployment's database: an empty one, created under ICU, as OPS-DB-001
+    /// asks before the first migration runs.
+    /// </summary>
+    /// <param name="container">The database server.</param>
+    /// <returns>How the deployment reaches its database.</returns>
+    internal static async Task<string> DatabaseAsync(PostgreSqlContainer container)
+    {
+        await container.StartAsync(CancellationToken.None);
+
+        await using (var server = new NpgsqlConnection(container.GetConnectionString()))
+        {
+            await server.OpenAsync(CancellationToken.None);
+
+            await using NpgsqlCommand created = server.CreateCommand();
+
+            created.CommandText = "CREATE DATABASE workshop TEMPLATE template0 "
+                + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'";
+
+            _ = await created.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        return new NpgsqlConnectionStringBuilder(container.GetConnectionString()) { Database = "workshop" }
+            .ConnectionString;
+    }
+
+    /// <summary>
+    /// The deployment's secret source, whose maintenance credential runs the scheduled
+    /// maintenance under the maintenance role (OPS-MIG-003a).
+    /// </summary>
+    /// <param name="connectionString">How the deployment reaches its database.</param>
+    /// <param name="randomness">Where the keys are drawn from.</param>
+    /// <returns>The secret source.</returns>
+    internal static FixedSecretSource Secrets(string connectionString, RandomNumberGenerator randomness) =>
+        new(randomness)
+        {
+            MaintenanceCredential = Encoding.UTF8.GetBytes(
+                new NpgsqlConnectionStringBuilder(connectionString) { Options = "-c role=identity_maintenance" }.ConnectionString),
+        };
+
+    /// <summary>
+    /// Prepares the deployment's database by the library's own commands, then creates the
+    /// workshop's tables beside the library's.
+    /// </summary>
+    /// <param name="connectionString">How the deployment reaches its database.</param>
+    /// <param name="secrets">The deployment's secret source.</param>
+    /// <returns>The prepared deployment.</returns>
+    internal static async Task<TestDeployment> PreparedAsync(string connectionString, FixedSecretSource secrets)
+    {
+        TestDeployment deployment = await TestDeployment.PrepareAsync(
+            WorkshopApplication.Address(Origin),
+            new SignOnClient(WorkshopApplication.Client),
+            secrets,
+            connectionString,
+            connectionString,
+            Bootstrapped(),
+            CancellationToken.None);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+
+        await connection.OpenAsync(CancellationToken.None);
+
+        await using NpgsqlCommand created = connection.CreateCommand();
+
+        created.CommandText = WorkshopSchema.Creation;
+
+        _ = await created.ExecuteNonQueryAsync(CancellationToken.None);
+
+        return deployment;
+    }
+
+    /// <summary>
+    /// The application as the workshop composes it, as a client of the provider, with what
+    /// a deployment supplies of its own: the web server, the clock, the secret source and
+    /// the stand-ins for the optional environment seams (LIB-TEST-003). Its back channel
+    /// reaches the authentication application, the deployment's first.
+    /// </summary>
+    /// <param name="serving">The web server it is served on.</param>
+    /// <param name="channel">What reaches the authentication application.</param>
+    /// <param name="clock">The deployment's clock.</param>
+    /// <param name="secrets">The deployment's secret source.</param>
+    /// <param name="client">Which client of the provider it is.</param>
+    /// <param name="connectionString">How the deployment reaches its database.</param>
+    /// <returns>The application's builder, composed and not yet built.</returns>
+    internal static WebApplicationBuilder Composed(
+        ServerInMemory serving,
+        Func<HttpMessageHandler> channel,
+        TimeProvider clock,
+        FixedSecretSource secrets,
+        string client,
+        string connectionString)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
 
-        _ = builder.Services.AddSingleton<IServer>(_server);
-        _ = builder.Services.AddSingleton<TimeProvider>(Clock);
+        _ = builder.Services.AddSingleton<IServer>(serving);
+        _ = builder.Services.AddSingleton(clock);
         _ = builder.Services.AddSingleton<ISecretSource>(secrets);
-        _ = builder.Services.AddSingleton<IMailTransport>(Mail);
-        _ = builder.Services.AddSingleton<ISmsTransport>(Sms);
-        _ = builder.Services.AddSingleton<IClockReference>(new FixedClockReference());
-        _ = builder.Services.AddSingleton<ICertificateRenewal>(new SucceededCertificateRenewal());
-        _ = builder.Services.AddSingleton<ILocationSource>(new EmptyLocationSource(Clock));
-        _ = builder.Services.AddSingleton<IDatacenterRangeSource>(new EmptyDatacenterRangeSource(Clock));
+        _ = builder.Services.AddSingleton<ILocationSource>(new EmptyLocationSource(clock));
+        _ = builder.Services.AddSingleton<IDatacenterRangeSource>(new EmptyDatacenterRangeSource(clock));
 
-        WorkshopApplication.Register(builder.Services, Origin, _connectionString);
+        WorkshopApplication.Register(builder.Services, Origin, client, connectionString);
 
-        _ = builder.Services.AddHttpClient(SignOnChannel).ConfigurePrimaryHttpMessageHandler(_server.Channel);
+        _ = builder.Services.AddHttpClient(SignOnChannel).ConfigurePrimaryHttpMessageHandler(channel);
+
+        return builder;
+    }
+
+    // The application as the workshop composes it, as the client of the provider it is,
+    // its post room and duty board given way to the testing package's handlers, which
+    // take what the deployment owes in memory, as a host's tests do (LIB-TEST-003).
+    private WebApplication Built(ServerInMemory serving, string client, FixedSecretSource secrets)
+    {
+        WebApplicationBuilder builder = Composed(serving, _server.Channel, Clock, secrets, client, _connectionString);
+
+        _ = builder.Services.AddSingleton<INotificationHandler>(Notifications);
+        _ = builder.Services.AddSingleton<IAlertHandler>(Alerts);
 
         WebApplication application = builder.Build();
 
@@ -441,21 +577,72 @@ public sealed class WorkshopHost : IAsyncLifetime
             [Settings.WebAuthnOrigins.Key] = Settings.WebAuthnOrigins.Write([Origin.GetLeftPart(UriPartial.Authority)]),
             [Settings.HostingLocation.Key] = Settings.HostingLocation.Write(HostingLocation.Inside),
             [Settings.HostingEnvironment.Key] = Settings.HostingEnvironment.Write("a rented virtual machine"),
-            [Settings.AlertingEmailDestinations.Key] = Settings.AlertingEmailDestinations.Write(["operator@kites.example.test"]),
-            [Settings.AlertingSmsDestinations.Key] = Settings.AlertingSmsDestinations.Write(["+201000000101"]),
-            [Settings.AlertingOwnerEmail.Key] = Settings.AlertingOwnerEmail.Write("owner@kites.example.test"),
-            [Settings.AlertingOwnerSms.Key] = Settings.AlertingOwnerSms.Write("+201000000102"),
-            [Settings.AbuseSmsBalanceFloor.Key] = Settings.AbuseSmsBalanceFloor.Write(100m),
             [Settings.LegalGoverningLanguage.Key] = Settings.LegalGoverningLanguage.Write("en"),
             [Settings.PrivacyCalendarTimeZone.Key] = Settings.PrivacyCalendarTimeZone.Write("UTC"),
             [Settings.NotificationLanguages.Key] = Settings.NotificationLanguages.Write(["en"]),
-            [Settings.NotificationEmailSendingDomain.Key] = Settings.NotificationEmailSendingDomain.Write("mail.kites.example.test"),
         })
         {
             arguments.AddRange(["--" + key, value]);
         }
 
         return arguments;
+    }
+
+    // OPS-BOOT-001: a browser application registered by the library's command-line tool,
+    // as a host's pipeline registers each one it declares, the deployment's keys read
+    // from its standard input.
+    private async Task RegisteredAsync(
+        FixedSecretSource secrets,
+        string client,
+        string redirect,
+        CancellationToken cancellationToken)
+    {
+        var start = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+
+        foreach (string argument in (string[])
+            [
+                "tool", "run", "identity", "register-client",
+                "--client", client,
+                "--name", client,
+                "--kind", "browser-application",
+                "--redirect", redirect,
+                "--scopes", "openid",
+            ])
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using Process run = Process.Start(start) ?? throw new InvalidOperationException("The tool did not start.");
+
+        Task<string> output = run.StandardOutput.ReadToEndAsync(cancellationToken);
+        Task<string> error = run.StandardError.ReadToEndAsync(cancellationToken);
+        byte[] keys = secrets.KeyDocument(_connectionString);
+
+        try
+        {
+            await run.StandardInput.BaseStream.WriteAsync(keys, cancellationToken);
+            run.StandardInput.Close();
+        }
+        finally
+        {
+            Array.Clear(keys);
+        }
+
+        await run.WaitForExitAsync(cancellationToken);
+        _ = await output;
+
+        string refused = await error;
+
+        if (run.ExitCode is not 0)
+        {
+            throw new InvalidOperationException("register-client was refused: " + refused.Trim());
+        }
     }
 
     // A version of a legal document, published by the first administrator.

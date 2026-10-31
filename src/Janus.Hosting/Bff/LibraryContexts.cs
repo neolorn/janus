@@ -7,7 +7,6 @@ using Janus.Hosting.Authorization;
 using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
-using Janus.Hosting.Maintenance;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Records;
@@ -37,7 +36,6 @@ internal static class LibraryContexts
         RecordsJson.Default,
         AuthenticationJson.Default,
         BreakGlassJson.Default,
-        MaintenanceJson.Default,
         AccountJson.Default,
         RecoveryJson.Default,
         CredentialsJson.Default,

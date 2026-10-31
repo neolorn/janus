@@ -3,43 +3,32 @@ using System.Collections.Generic;
 namespace Janus.Core;
 
 /// <summary>
-/// One message the library has admitted and written to its outbox, as the handler that
-/// carries it receives it.
+/// One message the library has admitted and written to its outbox, as the host's
+/// notification handler receives it.
 /// </summary>
-/// <param name="Destination">Where it goes.</param>
-/// <param name="Message">What it is for.</param>
-/// <param name="Language">
-/// The language it goes out in, or nothing for a mail owed in every language the
-/// deployment declares, which is one message composed from each language's text. A text
-/// message always names its language.
+/// <param name="Reference">
+/// The send's reference, the same at every attempt, which the host's idempotency key and
+/// a later outcome report name.
 /// </param>
-/// <param name="Reference">The correlation reference it is carried under.</param>
+/// <param name="Kind">What the message is for (chapter 10 section 5.25).</param>
+/// <param name="Channel">The channel it goes out on.</param>
+/// <param name="Subject">Whose account the message is about, where it is about one.</param>
+/// <param name="Destination">The canonical address or number it goes to.</param>
+/// <param name="Languages">
+/// The one language it goes out in, or every language the deployment declares, in the
+/// order of <c>notification.languages</c>, for the host to compose into one message.
+/// </param>
+/// <param name="Values">The kind's places, each by name (chapter 10 section 5.26).</param>
 /// <remarks>
-/// Implements LIB-EXT-001, AUTH-ABUSE-004, INT-SMS-001, IDN-ATTR-001 and
-/// CONV-CONTENT-001. It carries none of the restrictions' inputs: the handler decides no
-/// restriction and counts nothing.
+/// Implements INT-SMS-006, LIB-EXT-001, AUTH-ABUSE-004, IDN-ATTR-001 and
+/// CONV-CONTENT-001 (D-225). It carries none of the restrictions' inputs: the handler
+/// decides no restriction and counts nothing, and its text is the host's.
 /// </remarks>
 public sealed record SendRequest(
-    SendDestination Destination,
-    MessageKind Message,
-    string? Language,
-    SendReference Reference)
-{
-    private static readonly IReadOnlyDictionary<string, string> Nothing =
-        new Dictionary<string, string>(capacity: 0);
-
-    /// <summary>
-    /// Whose account the destination belongs to, where it belongs to one.
-    /// </summary>
-    public SubjectId? Subject { get; init; }
-
-    /// <summary>
-    /// What the library puts in the template's places, by name.
-    /// </summary>
-    public IReadOnlyDictionary<string, string> Values { get; init; } = Nothing;
-
-    /// <summary>
-    /// The channel the message goes out on.
-    /// </summary>
-    public SendKind Kind => Destination.Kind;
-}
+    SendReference Reference,
+    MessageKind Kind,
+    SendKind Channel,
+    SubjectId? Subject,
+    string Destination,
+    IReadOnlyList<string> Languages,
+    IReadOnlyDictionary<string, string> Values);

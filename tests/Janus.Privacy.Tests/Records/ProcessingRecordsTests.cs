@@ -419,8 +419,8 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
 
         // The hosting provider is applied beside the two declared rows because every
         // deployment is hosted somewhere; the screening service is applied because
-        // the shipped default screens passwords online; the declared gateway stands
-        // in place of the shipped one.
+        // the shipped default screens passwords online; the gateway is the host's own
+        // row, since the library ships none for the providers that deliver its messages.
         Assert.Equal(
             ["sms gateway", "archive service", "hosting provider", "password screening"],
             register.Recipients.Select(recipient => recipient.Name));
@@ -478,8 +478,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     /// <summary>
     /// PRIV-ROPA-002: the rows the library itself makes true are in the register of a
     /// deployment that declared no recipient at all, because the library calls the
-    /// mail server, the SMS gateway and the screening service and the deployment is
-    /// hosted somewhere.
+    /// mail server and the screening service and the deployment is hosted somewhere.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -491,47 +490,45 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            ["mail server", "sms gateway", "hosting provider", "password screening"],
+            ["mail server", "hosting provider", "password screening"],
             register.Recipients.Select(recipient => recipient.Name));
 
         // Each ships with no agreement reference, so each processor among them is
         // flagged until the deployment gives it one.
         Assert.Equal(
-            ["mail server", "sms gateway", "hosting provider"],
+            ["mail server", "hosting provider"],
             register.Flags
                 .Where(flag => flag.Finding is RegisterFinding.AgreementMissing)
                 .Select(flag => flag.Subject));
     }
 
     /// <summary>
-    /// PRIV-ROPA-002, D-165: the shipped register is the four rows the library's own
-    /// processing makes true, in the order chapter 05 section 6 gives them, and no row
-    /// of a host's business.
+    /// PRIV-ROPA-002, D-165, D-225: the shipped register is the three rows the
+    /// library's own processing makes true, in the order chapter 05 section 6 gives them,
+    /// and no row of a host's business.
     /// </summary>
     [Fact]
-    public void PRIV_ROPA_002_TheShippedRegisterIsTheFourRowsTheLibraryMakesTrue() =>
+    public void PRIV_ROPA_002_TheShippedRegisterIsTheThreeRowsTheLibraryMakesTrue() =>
         Assert.Equal(
-            ["mail server", "sms gateway", "hosting provider", "password screening"],
+            ["mail server", "hosting provider", "password screening"],
             ProviderRegister.Default.Select(row => row.Name));
 
     /// <summary>
     /// PRIV-ROPA-002 and D-166 (270): a deployment that calls neither a mail server nor
     /// the online screening service reports neither of them, so the register states what
-    /// is true of that deployment and not of a shipped list; the address of a mail
-    /// transport the library does not ship makes no mail server row.
+    /// is true of that deployment and not of a shipped list.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task PRIV_ROPA_002_AnUncalledProviderIsNotInTheRegisterAsync()
     {
         _configuration.Set(Settings.PasswordBlocklistSource, BlocklistSource.SelfHosted);
-        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test/api");
 
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            ["sms gateway", "hosting provider"],
+            ["hosting provider"],
             register.Recipients.Select(recipient => recipient.Name));
     }
 
@@ -560,11 +557,11 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            ["Mail server", "sms gateway", "hosting provider", "password screening"],
+            ["Mail server", "hosting provider", "password screening"],
             register.Recipients.Select(recipient => recipient.Name));
 
         Assert.Equal(
-            ["sms gateway", "hosting provider"],
+            ["hosting provider"],
             register.Flags
                 .Where(flag => flag.Finding is RegisterFinding.AgreementMissing)
                 .Select(flag => flag.Subject));

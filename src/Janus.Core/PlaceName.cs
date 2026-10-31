@@ -7,11 +7,10 @@ namespace Janus.Core;
 /// </summary>
 /// <remarks>
 /// Implements INT-SMS-003 and LIB-HOST-001. A restriction's name, a governing
-/// document's and a subject-event subscriber's fill a message place, and a template
-/// is measured at startup with each place at its widest; bounding the value where it
-/// is written keeps every rendered text within the width it was measured at. The
-/// letters are those of the default text-message alphabet, <c>a</c> to <c>z</c>, so a
-/// name never moves a text into the wider alphabet and its smaller budget.
+/// document's and a subject-event subscriber's fill a message place, so the value is
+/// bounded where it is written, and the host that renders it meets no name wider than
+/// the rule allows. The letters are those of the default text-message alphabet,
+/// <c>a</c> to <c>z</c>, so a name never moves a text into the wider alphabet.
 /// </remarks>
 internal static class PlaceName
 {

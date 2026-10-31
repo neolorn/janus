@@ -13,9 +13,9 @@ namespace Janus.Cli.Migration;
 /// fail against rows a table already holds.
 /// </summary>
 /// <remarks>
-/// Implements OPS-MIG-001 AC5, OPS-DEP-001, OPS-DEP-002 and CONV-DESIGN-003, as D-206
-/// settles them. The scan is the one the library's own pipeline runs over the script it
-/// writes: <c>DROP</c>, <c>ALTER ... TYPE</c>, an added constraint, <c>TRUNCATE</c> and
+/// Implements OPS-MIG-001 AC5 and CONV-DESIGN-003, as D-206 and D-225 settle them. The
+/// scan is the one the library's own pipeline runs over the script it writes:
+/// <c>DROP</c>, <c>ALTER ... TYPE</c>, an added constraint, <c>TRUNCATE</c> and
 /// <c>DELETE FROM</c>, and, on a table the same migrations did not create or have
 /// filled, <c>SET NOT NULL</c>, a unique index and a column added <c>NOT NULL</c>
 /// without a default. Every statement is judged in the order the migrations apply, so a

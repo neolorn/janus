@@ -9,21 +9,20 @@ namespace Janus.Testing;
 /// </summary>
 /// <remarks>
 /// Implements LIB-TEST-003 and API-LAND-001. Every link the library sends is
-/// <c>&lt;origin&gt;/link#&lt;kind&gt;.&lt;token&gt;</c>, and the token is base64url, so
-/// it ends where its alphabet does; whatever text a template sets around the link is
-/// not read.
+/// <c>&lt;origin&gt;/link#&lt;kind&gt;.&lt;token&gt;</c>, carried in the place
+/// <c>link</c>, and the token is base64url, so it ends where its alphabet does.
 /// </remarks>
 internal static class Links
 {
     private const string Landing = "/link#";
 
     /// <summary>
-    /// The token of the last link of a kind that any of the texts carries.
+    /// The token of the last link of a kind among the links sent.
     /// </summary>
-    /// <param name="texts">The texts that were sent, in the order they were sent.</param>
+    /// <param name="texts">The links that were sent, in the order they were sent.</param>
     /// <param name="kind">The link kind, as chapter 10 spells it.</param>
     /// <returns>The token.</returns>
-    /// <exception cref="InvalidOperationException">No text carries a link of the kind.</exception>
+    /// <exception cref="InvalidOperationException">No link sent is of the kind.</exception>
     public static string Token(IEnumerable<string> texts, string kind)
     {
         string marker = Landing + kind + ".";

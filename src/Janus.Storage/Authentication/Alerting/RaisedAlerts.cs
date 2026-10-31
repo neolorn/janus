@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Storage.Authentication.Alerting;
 
 /// <summary>
-/// Where the raised conditions wait for the alert channels.
+/// Where the raised conditions wait to be handed to the host's alert handler.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
 /// <remarks>Implements OPS-ALERT-001, CONV-DESIGN-002 and CONV-DESIGN-003.</remarks>

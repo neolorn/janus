@@ -230,6 +230,42 @@ public sealed class SignOnTests
     }
 
     /// <summary>
+    /// REG-SESS-008 AC3 (D-224): the client a registration captured is the record's, so
+    /// the session another application signs on from that record answers the same
+    /// <c>landing</c> the authentication application does.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_008_AC3_ASessionSignedOnFromTheRecordAnswersItsLandingAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+        await deployment.Clients.AddAsync(
+            new OidcClient(
+                "web",
+                "web",
+                OidcClientKind.BrowserApplication,
+                "https://app.example.test:8443/signin/callback",
+                ["openid"]),
+            Encoding.UTF8.GetBytes(Secret),
+            deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+
+        _ = await SignedOnAsync(deployment, arriving, holder);
+
+        Answer here = await holder.SendAsync("GET", "/auth/session");
+        Answer there = await arriving.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status200OK, there.Status);
+        Assert.Equal("https://app.example.test:8443", here.Text("landing"));
+        Assert.Equal(here.Text("landing"), there.Text("landing"));
+    }
+
+    /// <summary>
     /// BFF-SESS-006, AUTH-SESS-012 AC3: a browser whose person holds no record is
     /// told `login_required` once, and the second attempt asks for a sign-in, which
     /// the provider answers by forwarding to the screen the deployment declared.

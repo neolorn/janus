@@ -227,6 +227,26 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-SEC-001 and D-224: <c>GET /account</c> says whether a password is set and when
+    /// it was last set, and lists no password among the credentials.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_TheAccountSaysWhetherAPasswordIsSetAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        JsonElement read = (await browser.SendAsync("GET", "/account")).Json();
+        JsonElement password = read.GetProperty("password");
+
+        Assert.True(password.GetProperty("set").GetBoolean());
+        Assert.Equal(_deployment.Clock.GetUtcNow(), password.GetProperty("changedAt").GetDateTimeOffset());
+        Assert.DoesNotContain(
+            read.GetProperty("credentials").EnumerateArray(),
+            credential => credential.GetProperty("kind").GetString() == "password");
+    }
+
+    /// <summary>
     /// FE-ACCT-001 AC3: an identifier says whether it is primary, verified and
     /// locked; a removal takes it out of the list at once and the undo the notice
     /// carries puts it back.
@@ -235,12 +255,6 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     [Fact]
     public async Task FE_ACCT_001_AC3_AnIdentifierIsRemovedAndTheUndoRestoresItAsync()
     {
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
-
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
         Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
@@ -270,6 +284,35 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// FE-VER-001 AC8 and D-224: the undo link pressed from a landing that holds no
+    /// identifier, sending the nil UUID, restores what its token names.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC8_AnUndoUnderTheNilIdentifierRestoresWhatItsTokenNamesAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+        Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
+
+        _ = await browser.SendAsync("DELETE", "/account/identifiers/" + going);
+
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/auth/session");
+
+        Answer restored = await elsewhere.SendAsync(
+            "POST",
+            "/account/identifiers/" + Guid.Empty + "/undo",
+            ("linkToken", Undo()));
+
+        Assert.Equal(StatusCodes.Status204NoContent, restored.Status);
+        Assert.Equal(
+            2,
+            Emails(await (await SignedInAgainAsync(subject)).SendAsync("GET", "/account")).GetArrayLength());
+    }
+
+    /// <summary>
     /// IDN-LIFE-008 AC4, REG-IDENT-006 AC11 and chapter 09 (D-190): the undo completes
     /// under no session, so it ends every session of the account: the browser that
     /// pressed the link while holding one, and one signed in elsewhere, are each
@@ -279,11 +322,6 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     [Fact]
     public async Task IDN_LIFE_008_AC4_AnUndoEndsEverySessionOfTheAccountAsync()
     {
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
         Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
@@ -499,11 +537,6 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         const string third = "third@example.test";
 
         _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 2);
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
 
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
@@ -549,11 +582,6 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         const string third = "third@example.test";
 
         _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 2);
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
 
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
@@ -830,7 +858,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
             [(several.Status, several.Text("code")), (unheld.Status, unheld.Text("code")), (locked.Status, locked.Text("code"))]);
         _ = await _deployment.CarrySendsAsync();
 
-        Assert.DoesNotContain(_deployment.Mail.Taken, mail => mail.Destination.Value == "replaced@example.test");
+        Assert.DoesNotContain(_deployment.Mail.Taken, mail => mail.Destination == "replaced@example.test");
     }
 
     /// <summary>
@@ -966,11 +994,11 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     // the address that went (REG-IDENT-006).
     private string Undo()
     {
-        foreach (MailMessage sent in _deployment.Mail.Taken)
+        foreach (SendRequest sent in _deployment.Mail.Taken)
         {
-            if (string.Equals(sent.Subject, "removed", StringComparison.Ordinal))
+            if (sent.Kind is MessageKind.IdentifierRemoved)
             {
-                return Landing.Token(sent.Body);
+                return Landing.Token(sent.Values["link"]);
             }
         }
 

@@ -3,7 +3,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -22,7 +21,7 @@ namespace HostSample.Tests;
 /// window, so it has a deployment of its own.
 /// </summary>
 /// <param name="host">The deployment.</param>
-public sealed partial class GuestTests(WorkshopHost host) : IClassFixture<WorkshopHost>
+public sealed class GuestTests(WorkshopHost host) : IClassFixture<WorkshopHost>
 {
     // The shipped email destination restriction, one send a minute to an address, which
     // the test waits out between two codes to one guest.
@@ -56,7 +55,7 @@ public sealed partial class GuestTests(WorkshopHost host) : IClassFixture<Worksh
 
         using TestVisitor guest = host.Guest();
 
-        int held = host.Mail.SentTo(email).Count;
+        int held = host.Notifications.SentTo(email).Count;
         Answered asked = await Exchanges.SendAsync(guest, HttpMethod.Post, "records/access", new { kind = "email", value = email.Value }, Cancellation);
         Answered opened = await Exchanges.SendAsync(guest, HttpMethod.Post, "records/access/verify", new { code = await CodeAfterAsync(email, held) }, Cancellation);
         Answered read = await Exchanges.SendAsync(guest, HttpMethod.Get, record, null, Cancellation);
@@ -125,18 +124,15 @@ public sealed partial class GuestTests(WorkshopHost host) : IClassFixture<Worksh
             ? address
             : throw new InvalidOperationException("The address " + entered + " does not read as one.");
 
-    [GeneratedRegex("[0-9]{6}")]
-    private static partial Regex SixDigits();
-
     // The code the latest message to the address carries, once a message beyond those
     // held before it was asked is delivered: a code goes out on its own, after the request
     // that asked it is answered.
     private async Task<string> CodeAfterAsync(EmailAddress email, int held)
     {
-        await Exchanges.UntilAsync(() => host.Mail.SentTo(email).Count > held, Cancellation);
+        await Exchanges.UntilAsync(() => host.Notifications.SentTo(email).Count > held, Cancellation);
 
-        return SixDigits().Match(host.Mail.SentTo(email)[^1].Body) is { Success: true } code
-            ? code.Value
+        return host.Notifications.SentTo(email)[^1].Values.TryGetValue("code", out string? code)
+            ? code
             : throw new InvalidOperationException("The latest message to " + email + " carries no code.");
     }
 
@@ -154,7 +150,7 @@ public sealed partial class GuestTests(WorkshopHost host) : IClassFixture<Worksh
         Answered terms = await Exchanges.SendAsync(counter, HttpMethod.Get, "privacy/documents/" + WorkshopHost.Terms, null, Cancellation);
         Answered begun = await Exchanges.SendAsync(counter, HttpMethod.Post, "records/collection", new { age = true }, Cancellation);
         Answered aged = await Exchanges.SendAsync(counter, HttpMethod.Put, "records/collection/age", new { dateOfBirth = "1990-01-01" }, Cancellation);
-        int held = host.Mail.SentTo(email).Count;
+        int held = host.Notifications.SentTo(email).Count;
         Answered staged = await Exchanges.SendAsync(counter, HttpMethod.Put, "records/collection/email", new { value = email.Value }, Cancellation);
         Answered verified = await Exchanges.SendAsync(
             counter,

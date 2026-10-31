@@ -10,56 +10,37 @@ namespace Janus.Authentication.Sending;
 
 /// <summary>
 /// What is checked once, at startup, so that nothing fails at the moment a person is
-/// waiting for a message: each channel has a transport, every message exists in every
-/// configured language, every text message fits one message in each of them, every
-/// restriction naming a host key has a supplier, and no declared endpoint is plaintext.
+/// waiting for a message: the deployment registered what takes its messages and its
+/// alerts, every restriction naming a host key has a supplier, and no declared endpoint
+/// is plaintext.
 /// </summary>
-/// <param name="configuration">Where the languages and the restrictions come from.</param>
-/// <param name="templates">
-/// The catalogue in force, the deployment's own or the one the library ships.
-/// </param>
+/// <param name="configuration">Where the restrictions and the endpoints come from.</param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
-/// <param name="places">
-/// The widths a text message's places are measured at for this deployment, or nothing
-/// where it declared no landing origins, without which no link can be measured.
+/// <param name="notificationHandler">
+/// What takes the deployment's messages, or nothing where it registered none.
 /// </param>
-/// <param name="mailTransport">
-/// What the deployment's mail leaves through, or nothing where it registered none.
-/// </param>
-/// <param name="smsTransport">
-/// What the deployment's text messages leave through, or nothing where it registered
-/// none.
+/// <param name="alertHandler">
+/// What takes the deployment's raised alerts, or nothing where it registered none.
 /// </param>
 /// <remarks>
-/// Implements AUTH-ABUSE-005, INT-SMS-003, INT-SMS-005a, INT-SMS-006, INT-MAIL-008,
-/// INT-GEN-001, INF-TLS-004, LIB-EXT-001 and LIB-HOST-001. Every deployment sends mail
-/// and text messages, alerts among them, and the library ships no transport of its own
-/// yet, so a deployment that registered none for a channel is refused here rather than
-/// at its first send (D-166, 270). A recipient is never resolved to a language the
-/// catalogue cannot answer in, because startup refuses that deployment. Declaring no
-/// catalogue is not itself a refusal: the library ships one, and what is checked is the
-/// catalogue in force, whichever it is (LIB-EXT-001).
+/// Implements INT-SMS-006, OPS-ALERT-003, INT-GEN-001, LIB-EXT-001 and LIB-HOST-001
+/// (D-225). The library sends no message and delivers no alert itself, so a deployment
+/// that registered nothing to take either is refused here rather than at its first send.
 /// </remarks>
 internal sealed class SendingValidation(
     IConfigurationStore configuration,
-    IMessageTemplates templates,
     RestrictionKeySuppliers suppliers,
-    MessagePlaceholders? places,
-    IMailTransport? mailTransport,
-    ISmsTransport? smsTransport)
+    INotificationHandler? notificationHandler,
+    IAlertHandler? alertHandler)
 {
-    private const string MailTransport = "mailTransport";
+    private const string NotificationHandler = "notificationHandler";
 
-    private const string SmsTransport = "smsTransport";
-
-    private const string Landing = "landingOrigins.authentication";
+    private const string AlertHandler = "alertHandler";
 
     // INT-GEN-001: the addresses the library itself calls out to, in the order the
     // start names the first that is not over TLS.
     private static readonly IReadOnlyList<TextSetting> Endpoints =
     [
-        Settings.IntegrationMailEndpoint,
-        Settings.IntegrationSmsEndpoint,
         Settings.IntegrationMailServerEndpoint,
         Settings.PasswordBlocklistSelfHostedAddress,
     ];
@@ -71,22 +52,16 @@ internal sealed class SendingValidation(
     /// <returns>Nothing, or the failure that stops startup.</returns>
     public async ValueTask<Result> ValidateAsync(CancellationToken cancellationToken)
     {
-        if (mailTransport is null)
+        // INT-SMS-006: every message leaves through the host's handler.
+        if (notificationHandler is null)
         {
-            return Result.Failure(Absent(MailTransport));
+            return Result.Failure(Absent(NotificationHandler));
         }
 
-        if (smsTransport is null)
+        // OPS-ALERT-003: every raised alert is delivered by the host's handler.
+        if (alertHandler is null)
         {
-            return Result.Failure(Absent(SmsTransport));
-        }
-
-        // LIB-HOST-001: the origins are the declaration check's to read in full; this
-        // check runs first and measures a link against them, so it names the same
-        // omission the declaration check would.
-        if (places is null)
-        {
-            return Result.Failure(Absent(Landing));
+            return Result.Failure(Absent(AlertHandler));
         }
 
         if (await InsecureAsync(configuration, cancellationToken).ConfigureAwait(false) is Error insecure)
@@ -95,11 +70,6 @@ internal sealed class SendingValidation(
         }
 
         Error? failure = null;
-
-        IReadOnlyList<string> languages = (await configuration
-                .ReadAsync(Settings.NotificationLanguages, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
 
         IReadOnlyList<Restriction> declared = (await configuration
                 .ReadAsync(Settings.Restrictions, cancellationToken)
@@ -111,12 +81,7 @@ internal sealed class SendingValidation(
             return Result.Failure(failure);
         }
 
-        if (Unsupplied(declared) is Error unsupplied)
-        {
-            return Result.Failure(unsupplied);
-        }
-
-        return Catalogued(languages, places) is Error missing ? Result.Failure(missing) : Result.Success();
+        return Unsupplied(declared) is Error unsupplied ? Result.Failure(unsupplied) : Result.Success();
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
@@ -141,11 +106,9 @@ internal sealed class SendingValidation(
     /// <returns>Nothing, or <c>integration.endpoint.insecure</c> naming the key.</returns>
     /// <remarks>
     /// Implements INT-GEN-001 and INF-TLS-004 for the start and for a change of a
-    /// protected key from the server (D-166, 319). The addresses are the mail and text
-    /// endpoints, the mail server adapter's endpoint and the corpus a deployment hosts
-    /// itself. A deployment that supplies a transport of its own leaves its endpoint
-    /// empty and calls its provider wherever it decides; nothing of the host's is
-    /// registered here.
+    /// protected key from the server (D-166, 319). The addresses are the mail server
+    /// adapter's endpoint and the corpus a deployment hosts itself; the library sends no
+    /// message, and a host's own integrations are the host's (D-162, D-225).
     /// </remarks>
     internal static async ValueTask<Error?> InsecureAsync(
         IConfigurationStore configuration,
@@ -225,68 +188,6 @@ internal sealed class SendingValidation(
                     ErrorCodes.StartupDeclarationMissing,
                     "supplier",
                     JsonSerializer.SerializeToElement(restriction.HostKeyName ?? restriction.Name));
-            }
-        }
-
-        return null;
-    }
-
-    private Error? Catalogued(IReadOnlyList<string> languages, MessagePlaceholders measured)
-    {
-        foreach (MessageKind message in MessageChannels.Messages)
-        {
-            foreach (SendKind kind in MessageChannels.Of(message))
-            {
-                foreach (string language in languages)
-                {
-                    MessageTemplate? template = templates
-                        .Find(message, kind, language)
-                        .Match(found => (MessageTemplate?)found, _ => null);
-
-                    if (template is null)
-                    {
-                        return Absent(WrittenName.Of(message) + "." + WrittenName.Of(kind) + "." + language);
-                    }
-
-                    if (kind is not SendKind.Sms)
-                    {
-                        continue;
-                    }
-
-                    // INT-SMS-003: the places are a closed set, and one with no width
-                    // cannot be measured, so the template is refused as written.
-                    if (measured.Unlisted(template.Text) is string unlisted)
-                    {
-                        return new Error(
-                            ErrorCodes.StartupDeclarationInvalid,
-                            new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
-                            {
-                                ["declaration"] = JsonSerializer.SerializeToElement(WrittenName.Of(message)),
-                                ["field"] = JsonSerializer.SerializeToElement(unlisted),
-                            });
-                    }
-
-                    // One character past the budget costs another message, which for
-                    // a non-Latin language is seventy characters in (AUTH-ABUSE-005).
-                    // The template is measured with every place it names at its widest,
-                    // because nothing is measured at the moment of a send, and one that
-                    // carries a link is given the two segments a link needs.
-                    string widest = measured.Widest(template.Text);
-                    bool linked = MessagePlaceholders.CarriesLink(template.Text);
-
-                    if (MessageBudget.Exceeds(widest, linked))
-                    {
-                        return new Error(
-                            ErrorCodes.ConfigurationValueNotAllowed,
-                            new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
-                            {
-                                ["key"] = JsonSerializer.SerializeToElement(
-                                    WrittenName.Of(message) + "." + WrittenName.Of(kind) + "." + language),
-                                ["allowed"] = JsonSerializer.SerializeToElement(
-                                    MessageBudget.Of(widest, linked)),
-                            });
-                    }
-                }
             }
         }
 

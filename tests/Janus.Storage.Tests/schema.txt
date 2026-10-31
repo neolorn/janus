@@ -48,6 +48,8 @@ table accounts
 table alerts
   column key character varying(256) not null
   column at timestamp with time zone not null
+  column raise uuid
+  column unanswered boolean not null default false
   constraint pk_alerts PRIMARY KEY (key)
 table ancestry
   column resource_type text not null
@@ -568,13 +570,6 @@ table legal_document_versions
   constraint ck_legal_document_versions_governing_text CHECK ((length(TRIM(BOTH FROM governing_text)) > 0))
   constraint pk_legal_document_versions PRIMARY KEY (document, version)
   index ix_legal_document_versions_current using btree (document, published_at)
-table licences
-  column id uuid not null
-  column kind text not null
-  column name text not null
-  column expires_at timestamp with time zone not null
-  column renewed_at timestamp with time zone
-  constraint pk_licences PRIMARY KEY (id)
 table lifecycle_links
   column token bytea not null
   column subject uuid not null
@@ -595,6 +590,7 @@ table loss_reports
   column notified_at timestamp with time zone not null
   column any_delivered boolean not null
   column held_at timestamp with time zone
+  column cancel_fingerprint bytea not null
   constraint ck_loss_reports_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_loss_reports_window CHECK ((invalidates_at > reported_at))
   constraint fk_loss_reports_credential FOREIGN KEY (credential) REFERENCES identity.authenticators(id) ON DELETE CASCADE
@@ -603,6 +599,7 @@ table loss_reports
   index ix_loss_reports_invalidates_at using btree (invalidates_at)
   index ix_loss_reports_notified_at using btree (notified_at)
   index ix_loss_reports_subject using btree (subject)
+  index ux_loss_reports_cancel_fingerprint unique using btree (cancel_fingerprint)
 table mailboxes
   column id uuid not null
   column fingerprint bytea not null
@@ -632,14 +629,6 @@ table mailboxes
   constraint pk_mailboxes PRIMARY KEY (id)
   index ix_mailboxes_holder using btree (holder)
   index ux_mailboxes_fingerprint unique using btree (fingerprint) WHERE ((fingerprint <> decode(repeat('00'::text, 32), 'hex'::text)) AND (removal_owed_at IS NULL))
-table maintenance_log
-  column id uuid not null
-  column task text not null
-  column performed_at timestamp with time zone not null
-  column actor uuid not null
-  column note text
-  constraint ck_maintenance_log_actor_not_max_uuid CHECK ((actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint pk_maintenance_log PRIMARY KEY (id)
 table memberships
   column id uuid not null
   column subject uuid not null
@@ -818,6 +807,21 @@ table passwords
   constraint ck_passwords_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_passwords_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_passwords PRIMARY KEY (subject)
+table pending_authorizations
+  column id uuid not null
+  column preauthentication bytea
+  column session uuid
+  column parameters bytea not null
+  column created_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  constraint ck_pending_authorizations_bound CHECK ((num_nonnulls(preauthentication, session) = 1))
+  constraint ck_pending_authorizations_expires_at CHECK ((expires_at > created_at))
+  constraint fk_pending_authorizations_preauthentication FOREIGN KEY (preauthentication) REFERENCES identity.preauthentication_sessions(fingerprint) ON DELETE CASCADE
+  constraint fk_pending_authorizations_session FOREIGN KEY (session) REFERENCES identity.sessions(id) ON DELETE CASCADE
+  constraint pk_pending_authorizations PRIMARY KEY (id)
+  index ix_pending_authorizations_expires_at using btree (expires_at)
+  index ux_pending_authorizations_preauthentication unique using btree (preauthentication) WHERE (preauthentication IS NOT NULL)
+  index ux_pending_authorizations_session unique using btree (session) WHERE (session IS NOT NULL)
 table pending_enrolments
   column subject uuid not null
   column factor text not null
@@ -1201,6 +1205,7 @@ table sends
   column resend_at timestamp with time zone
   column second_factor boolean not null default false
   column send bytea not null default '\x'::bytea
+  column released boolean not null default false
   constraint pk_sends PRIMARY KEY (reference)
   index ix_sends_answer using btree (answer)
   index ix_sends_send using btree (send)
@@ -1254,12 +1259,16 @@ table signin_challenges
   column presented text[] not null
   column email uuid
   column fingerprint_version integer not null
-  column identifier bytea not null
+  column identifier bytea
+  column browser bytea
+  column held_at timestamp with time zone
+  constraint ck_signin_challenges_browser CHECK (((browser IS NULL) OR (octet_length(browser) = 32)))
   constraint ck_signin_challenges_handle CHECK ((octet_length(handle) = 32))
-  constraint ck_signin_challenges_identifier CHECK ((octet_length(identifier) = 32))
+  constraint ck_signin_challenges_identifier CHECK (((identifier IS NULL) OR (octet_length(identifier) = 32)))
   constraint ck_signin_challenges_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_signin_challenges_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_signin_challenges PRIMARY KEY (handle)
+  index ix_signin_challenges_browser using btree (browser)
   index ix_signin_challenges_expires_at using btree (expires_at)
   index ix_signin_challenges_subject using btree (subject)
 table signin_links
@@ -1304,10 +1313,6 @@ table signing_keys
   index ix_signing_keys_retires_at using btree (retires_at)
   index ux_signing_keys_current unique using btree (is_current) WHERE is_current
   index ux_signing_keys_next unique using btree (is_next) WHERE is_next
-table sms_balance_readings
-  column read_at timestamp with time zone not null
-  column balance numeric(18,4) not null
-  constraint pk_sms_balance_readings PRIMARY KEY (read_at)
 table subject_keys
   column subject uuid not null
   column format_marker smallint not null

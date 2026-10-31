@@ -224,15 +224,6 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
                     [.. Janus.Core.Policies.SystemDefault.LoginFactors, Factor.EmailLink]),
             });
 
-        foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-        {
-            _deployment.Templates.Set(
-                MessageKind.SignInLink,
-                kind,
-                "en",
-                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {link}"));
-        }
-
         (Browser administrator, SubjectId member) = await AuthorisedAsync();
 
         _deployment.Memberships.Place(member, Branch);

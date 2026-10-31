@@ -9,16 +9,18 @@ namespace Janus.Core;
 /// <param name="State">Which of the account states it stands in.</param>
 /// <param name="Identifiers">What it is reached at.</param>
 /// <param name="Credentials">What signs in to it.</param>
+/// <param name="Password">Whether a password is set, and when it was last set.</param>
 /// <param name="RecoveryCodes">
 /// What its recovery codes stand at, absent where it holds none.
 /// </param>
 /// <param name="Profile">What it says about the person.</param>
 /// <param name="Preferences">What it has settled about how it is addressed.</param>
-/// <remarks>Implements REG-ACCT-001 and LIB-API-005.</remarks>
+/// <remarks>Implements REG-ACCT-001, LIB-API-005 and D-224.</remarks>
 public sealed record AccountDetail(
     AccountState State,
     AccountIdentifiers Identifiers,
     IReadOnlyList<CredentialSummary> Credentials,
+    PasswordStatus Password,
     RecoveryCodeStatus? RecoveryCodes,
     ProfileDetail Profile,
     PreferenceValues Preferences);

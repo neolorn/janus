@@ -33,11 +33,6 @@ namespace Janus.Hosting;
 /// Which client of the provider this application is, or nothing where the deployment
 /// registered none.
 /// </param>
-/// <param name="mail">The mail server in use, where the deployment has one.</param>
-/// <param name="mailClient">
-/// Which client of the provider the mail server is, or nothing where the deployment
-/// registered none.
-/// </param>
 /// <param name="codec">
 /// What the deployment reads uploaded images with, or nothing where it registered
 /// none.
@@ -69,15 +64,13 @@ namespace Janus.Hosting;
 /// codec is optional until a stored policy shows photos, the system's or an
 /// organization's, and required from then on, because the library reads no image
 /// itself; the DNS resolver likewise until a lock lists a domain, because the library
-/// looks up no record itself. The mail server's client is optional until a mail server
-/// is registered, and required from then on, because which protocol client the server
-/// trusts is the deployment's to say. A social provider is
-/// optional, and one declared is declared whole: named once, as a social provider, with
-/// the HTTPS address of its document and at least one client, since a declaration short
-/// of that would verify none of the events it was declared for; one that is malformed is
-/// refused as invalid rather than missing, naming the provider and the member at fault
-/// (D-175). A governing document's name and a subscriber's or a purpose handler's fill
-/// a message place measured at the width the name rule bounds, so one declared outside
+/// looks up no record itself. A social provider is optional, and one declared is
+/// declared whole: named once, as a social provider, with the HTTPS address of its
+/// document and at least one client, since a declaration short of that would verify
+/// none of the events it was declared for; one that is malformed is refused as invalid
+/// rather than missing, naming the provider and the member at fault (D-175). A governing
+/// document's name and a subscriber's or a purpose handler's fill a message place
+/// measured at the width the name rule bounds, so one declared outside
 /// the rule is refused here rather than carried into a text longer than the width it
 /// was measured at; a host job's name is held to the same rule (IDN-PRIN-001, D-206), and
 /// an export contributor to the same rule and to a name of its own, since contributors
@@ -99,8 +92,6 @@ internal sealed class DeclarationCoverage(
     AuthenticationAddresses? authentication,
     LandingOrigins? landing,
     SignOnClient? signOn,
-    IMailServerInUse mail,
-    MailServerClient? mailClient,
     ImageCodec? codec,
     IDnsResolver? dns,
     IEnumerable<SocialProvider> providers,
@@ -126,8 +117,6 @@ internal sealed class DeclarationCoverage(
     private const string Codec = "imageCodec";
 
     private const string Resolver = "dnsResolver";
-
-    private const string MailClient = "mailServerClient.clientId";
 
     private const string Social = "socialProvider";
 
@@ -196,13 +185,6 @@ internal sealed class DeclarationCoverage(
         if (signOn is null || signOn.ClientId.Length is 0)
         {
             return Missing(Client);
-        }
-
-        // INT-MAIL-010: the app passwords of a hosted mailbox are reached with a token
-        // issued to the mail server's client, and nothing else says which client it is.
-        if (mail.Chosen().Match(_ => true, _ => false) && (mailClient is null || mailClient.ClientId.Length is 0))
-        {
-            return Missing(MailClient);
         }
 
         if (Malformed() is (string declared, string field))

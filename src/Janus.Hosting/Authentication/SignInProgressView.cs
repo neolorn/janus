@@ -42,6 +42,14 @@ internal sealed record SignInProgressView(
     bool PasswordChangeRequired)
 {
     /// <summary>
+    /// The absolute address of the continuation, where the sign-in this answer
+    /// completes has an authorization waiting, and left out everywhere else
+    /// (AUTH-SESS-012, D-224).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ContinueTo { get; init; }
+
+    /// <summary>
     /// Reads what a step reached.
     /// </summary>
     /// <param name="progress">What the step reached.</param>

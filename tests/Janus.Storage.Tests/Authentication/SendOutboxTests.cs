@@ -17,7 +17,7 @@ namespace Janus.Storage.Tests.Authentication;
 
 /// <summary>
 /// What the outbox keeps between the transaction that undertook a message and the
-/// transport that carries it (D-022, IDN-PRIN-003).
+/// host that takes it (D-022, IDN-PRIN-003).
 /// </summary>
 /// <remarks>
 /// One database serves the class, so each test writes a message of its own.
@@ -60,16 +60,18 @@ public sealed class SendOutboxTests(DatabaseFixture database)
         Assert.Equal(RestrictionPurpose.SignIn, held.Requested.Purpose);
         Assert.Equal("198.51.100.7", held.Requested.Source);
         Assert.Equal("ar", held.Requested.Language);
+        Assert.Equal(["ar"], held.Languages);
         Assert.Equal(subject, held.Requested.Subject);
         Assert.Equal("482913", held.Requested.Values["code"]);
     }
 
     /// <summary>
-    /// IDN-ATTR-001: a message undertaken with no language of the recipient's known
-    /// reads back with none, so it is still carried in every declared language.
+    /// IDN-ATTR-001, INT-SMS-006: a message undertaken with no language of the
+    /// recipient's known reads back with none of its own, carrying every declared
+    /// language in the order it was admitted with.
     /// </summary>
     [Fact]
-    public async Task IDN_ATTR_001_AMessageInEveryLanguageReadsBackWithNoneAsync()
+    public async Task IDN_ATTR_001_AMessageInEveryLanguageReadsBackCarryingThemAllAsync()
     {
         SendDelivery undertaken = Delivery("every@example.test", subject: null, language: null);
 
@@ -82,6 +84,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
             ?? throw new Xunit.Sdk.XunitException("The message was not written.");
 
         Assert.Null(held.Requested.Language);
+        Assert.Equal(["en", "ar"], held.Languages);
     }
 
     /// <summary>
@@ -347,7 +350,8 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     /// AUTH-ABUSE-004, OPS-MIG-005: a row written before a send carried its reference
     /// holds none in its content. It reads with the reference made from its own
     /// identifier, the same at every read, and the statement the migration runs over
-    /// such rows writes that reference's hash, as the ledger keeps one.
+    /// such rows writes that reference's hash, as the ledger keeps one. It carries the
+    /// one language it names (INT-SMS-006).
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_ARowWrittenBeforeItCarriedAReferenceReadsWithOneOfItsOwnAsync()
@@ -405,6 +409,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
         Assert.Equal("before@example.test", first.Requested.Destination.Canonical);
         Assert.Equal(SendDeliveryStore.Unreferenced(id), first.Reference.Value);
         Assert.Equal(first.Reference.Value, again.Reference.Value);
+        Assert.Equal(["en"], first.Languages);
         Assert.Equal(SendReferences.Of(first.Reference), stored.Reference);
     }
 
@@ -467,6 +472,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
                 Subject = subject,
                 Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "482913" },
             },
+            language is string one ? [one] : ["en", "ar"],
             SendReference.Draw(_deployment.Randomness),
             Noon,
             held ?? TimeSpan.Zero);

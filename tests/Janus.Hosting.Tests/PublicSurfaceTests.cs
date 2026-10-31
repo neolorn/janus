@@ -76,9 +76,8 @@ public sealed class PublicSurfaceTests
     // service contract and is held to the rule.
     private static readonly Type[] NotServiceContracts =
     [
+        typeof(IAlertHandler), // LIB-EXT-001 and LIB-HOST-001: alert handling (OPS-ALERT-003).
         typeof(IAssuranceProvider), // LIB-HOST-004: assurance where authentication is not the library's.
-        typeof(ICertificateRenewal), // LIB-HOST-001, optional: an environment seam (INF-TLS-003).
-        typeof(IClockReference), // LIB-HOST-001, optional: an environment seam (INF-HOST-001).
         typeof(IDatacenterRangeSource), // LIB-HOST-001, optional: an environment seam (AUTH-ABUSE-008).
         typeof(IDnsResolver), // LIB-HOST-001, optional: an environment seam (REG-DOM-001).
         typeof(IErasureLedger), // LIB-HOST-001, optional: an environment seam (DR-016).
@@ -86,13 +85,9 @@ public sealed class PublicSurfaceTests
         typeof(IExportContributor), // LIB-API-001 and LIB-HOST-001: an export contributor (PRIV-RIGHT-003).
         typeof(ILocationSource), // LIB-HOST-001, optional: an environment seam (INT-GEN-006).
         typeof(IMailServer), // LIB-HOST-001, optional: an environment seam (INT-MAIL-001).
-        typeof(IMailTransport), // LIB-EXT-001 and LIB-HOST-001: mail delivery.
-        typeof(IMessageTemplates), // LIB-EXT-001: message and content templates.
-        typeof(INotificationHandler), // LIB-EXT-001: notification handling.
+        typeof(INotificationHandler), // LIB-EXT-001 and LIB-HOST-001: notification handling (INT-SMS-006).
         typeof(IPurposeHandler), // LIB-HOST-001: a purpose handler.
-        typeof(IRestoreTestInstance), // LIB-HOST-001, optional: an environment seam (DR-007).
         typeof(ISecretSource), // LIB-EXT-001 and LIB-HOST-001: the secret source.
-        typeof(ISmsTransport), // LIB-EXT-001 and LIB-HOST-001: SMS delivery.
         typeof(ISubjectEventSubscriber), // LIB-HOST-001: a subject-event handler.
     ];
 
@@ -785,9 +780,8 @@ public sealed class PublicSurfaceTests
     /// that project's own, which the entry point registers itself, and it reaches a
     /// member no public contract declares through an internal contract of exactly that
     /// member, which the implementation's own project declares, implements and registers
-    /// by its method: the settings restriction over the settings-change gate, and the
-    /// mail server's token over the token minting. Neither takes a class of another
-    /// project that stands behind a contract.
+    /// by its method: the settings restriction over the settings-change gate. It takes
+    /// no class of another project that stands behind a contract.
     /// </summary>
     [Fact]
     public void CONV_DESIGN_007_ABridgingTypeAsksTheContractTheImplementationsProjectDeclares()
@@ -799,11 +793,6 @@ public sealed class PublicSurfaceTests
                 typeof(Janus.Authorization.Gate.ISettingsChangeGate),
                 nameof(Janus.Authorization.Gate.ISettingsChangeGate.RequireSettingsChangeAsync),
                 "Janus.Authorization"),
-            (
-                typeof(Janus.Hosting.Oidc.MailServerTokens),
-                typeof(Janus.Authentication.Oidc.ITokenMinting),
-                nameof(Janus.Authentication.Oidc.ITokenMinting.MintAsync),
-                "Janus.Authentication"),
         ];
         Type?[] own = [.. Beyond().Select(Built)];
 
@@ -901,7 +890,7 @@ public sealed class PublicSurfaceTests
     /// CONV-DESIGN-007, CONV-CODE-007: a composition a job builds inside the application
     /// over another credential registers the key ring the start filled, as it stands,
     /// and calls the storage's method and never the core's, whose ring would be a
-    /// second, empty one. The audit retention and the restore test build the only two.
+    /// second, empty one. The audit retention builds the only one.
     /// </summary>
     [Fact]
     public void CONV_DESIGN_007_AJobsOwnCompositionRegistersTheFilledRingAndNeverCallsTheCoreMethod()
@@ -915,7 +904,7 @@ public sealed class PublicSurfaceTests
                 .OrderBy(file => file.Name, StringComparer.Ordinal),
         ];
 
-        Assert.Equal(["AuditRetention.cs", "RestoreTest.cs"], compositions.Select(file => file.Name));
+        Assert.Equal(["AuditRetention.cs"], compositions.Select(file => file.Name));
         Assert.All(compositions, file =>
         {
             Assert.Contains("IKeyRing ring", file.Text, StringComparison.Ordinal);

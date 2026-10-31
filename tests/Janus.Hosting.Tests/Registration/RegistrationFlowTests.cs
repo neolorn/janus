@@ -47,8 +47,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     private readonly Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment whose messages carry the code and the link token, as the
-    /// shipped templates do.
+    /// A deployment whose messages carry the code and the link token among their
+    /// values.
     /// </summary>
     public RegistrationFlowTests() => Flow.Prepare(_deployment);
 
@@ -111,12 +111,6 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     {
         const string second = "second@example.test";
 
-        _deployment.Templates.Set(
-            MessageKind.IdentifierRemoved,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("removed", "{link}"));
-
         Browser owner = await Flow.SignedInAsync(_deployment);
         SubjectId subject = _deployment.Directory.Created[^1].Subject;
         Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, second).Value;
@@ -126,8 +120,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
             (await owner.SendAsync("DELETE", "/account/identifiers/" + going)).Status);
 
         string undo = Landing.Token(_deployment.Mail.Taken
-            .Last(sent => string.Equals(sent.Subject, "removed", StringComparison.Ordinal))
-            .Body);
+            .Last(sent => sent.Kind is MessageKind.IdentifierRemoved)
+            .Values["link"]);
         int sent = _deployment.Mail.Taken.Count;
 
         Browser other = await Flow.BegunAsync(_deployment);
@@ -426,6 +420,47 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Assert.Equal(
             JsonValueKind.Null,
             account.Json().GetProperty("recoveryCodes").GetProperty("exportedAt").ValueKind);
+    }
+
+    /// <summary>
+    /// FE-SEC-001 (D-224 item 21): the export of the set a registration's security step
+    /// showed is not reported on the registration session, whose account does not yet
+    /// exist, and is reported on the session the terms step establishes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_SEC_001_TheExportOfARegistrationsSetIsReportedOnTheSessionTheTermsStepEstablishesAsync()
+    {
+        _deployment.Configuration.Set(Settings.ServiceName, "Example");
+        Browser browser = await Flow.ConfirmedAsync(_deployment);
+        _ = await browser.SendAsync("PUT", "/register/security", ("password", "tenletters12"));
+        Answer begun = await browser.SendAsync("POST", "/account/factors/totp/begin", ("label", "Authenticator"));
+        _ = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/confirm",
+            ("credentialId", begun.Text("id")),
+            ("code", Generated(begun.Text("secret"))));
+
+        Answer early = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+
+        _ = await browser.SendAsync(
+            "POST",
+            "/register/terms",
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
+        Flow.Carried(_deployment);
+        _deployment.Clock.Advance(TimeSpan.FromSeconds(5));
+        DateTimeOffset reported = _deployment.Clock.GetUtcNow();
+
+        Answer exported = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+        Answer account = await browser.SendAsync("GET", "/account");
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, early.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), early.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, exported.Status);
+        Assert.Equal(
+            reported,
+            account.Json().GetProperty("recoveryCodes").GetProperty("exportedAt").GetDateTimeOffset());
     }
 
     /// <summary>
@@ -866,17 +901,25 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     // fakes are the test's alone again.
     private static async Task SettledAsync(ResponseBody written)
     {
+        DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (DateTime.UtcNow < giveUp && written.Length is 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        }
+
         await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
 
-        Assert.Equal(0, written.Length);
+        // The comment line the stream opens with, and nothing since (D-224).
+        Assert.Equal(":\n\n", written.Taken());
     }
 
-    // What the stream sent, once it has sent something.
+    // What the stream sent, once it has sent an event.
     private static async Task<string> SentAsync(ResponseBody written)
     {
         DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(10);
 
-        while (DateTime.UtcNow < giveUp && written.Length is 0)
+        while (DateTime.UtcNow < giveUp && !written.Taken().Contains("data: ", StringComparison.Ordinal))
         {
             await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
         }

@@ -12,8 +12,8 @@ namespace Janus.Privacy.SubjectKeys;
 /// <summary>
 /// The fingerprint key's rotation: every stored fingerprint under a previous version is
 /// computed again under the current one, in batches that each commit with the progress
-/// they make, and the previous versions are retired once the escrow copy of the current
-/// one is sealed and no fingerprint still read stands under them.
+/// they make, and the previous versions are retired when the operator asks and no
+/// fingerprint still read stands under them.
 /// </summary>
 /// <param name="rotations">The progress, and whether the credential is the maintenance one.</param>
 /// <param name="store">The stored fingerprints.</param>
@@ -174,9 +174,8 @@ internal sealed class FingerprintKeyRotation(
     }
 
     /// <summary>
-    /// Retires the versions before the current one, once the operator has confirmed the
-    /// escrow copy of the current one sealed and no fingerprint still read stands under
-    /// them.
+    /// Retires the versions before the current one, once the rotation has completed and no
+    /// fingerprint still read stands under them.
     /// </summary>
     /// <param name="cancellationToken">Abandons the retirement, which then records nothing.</param>
     /// <returns>

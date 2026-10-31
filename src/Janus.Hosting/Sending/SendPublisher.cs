@@ -45,7 +45,7 @@ internal sealed class SendPublisher(
     SendAdmission admission,
     INotificationHandler handler,
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness,
@@ -240,7 +240,15 @@ internal sealed class SendPublisher(
             }
         }
 
-        bool taken = (await TakenAsync(delivery.Admitted, schedule.ClaimTimeout, cancellationToken)
+        SendRequest request = (await RequestedAsync(delivery, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<SendRequest>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<bool>(failure);
+        }
+
+        bool taken = (await TakenAsync(request, schedule.ClaimTimeout, cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => true, _ => false);
 
@@ -265,23 +273,22 @@ internal sealed class SendPublisher(
         CancellationToken cancellationToken)
     {
         Result<SendJudgement> judged = await admission
-            .JudgeAsync(delivery.Requested, weight: 1, delivery.Reference, now, cancellationToken)
+            .JudgeAsync(delivery.Requested, Weight(delivery), delivery.Reference, now, cancellationToken)
             .ConfigureAwait(false);
 
         if (judged.Match<SendJudgement?>(admitted => admitted, _ => null) is SendJudgement admitted)
         {
             await admission
-                .CountAsync([delivery.Reference], admitted, now, cancellationToken)
+                .CountAsync(delivery.Reference, admitted, now, cancellationToken)
                 .ConfigureAwait(false);
 
             return Result.Success(true);
         }
 
-        // AUTH-ABUSE-004 AC9: one the restrictions or the gateway floor refuse fails
-        // for good. Its row is removed uncarried under the claim, the count and the
-        // credit it held are released, and nothing is raised: no channel faulted.
-        if (judged.Match(_ => false, error => error.Code == ErrorCodes.RestrictionExceeded
-            || error.Code == ErrorCodes.SmsBalanceFloor))
+        // AUTH-ABUSE-004 AC9: one the restrictions refuse fails for good. Its row is
+        // removed uncarried under the claim, the count and the credit it held are
+        // released, and nothing is raised: no channel faulted.
+        if (judged.Match(_ => false, error => error.Code == ErrorCodes.RestrictionExceeded))
         {
             if (await outbox.RemoveAsync(claim, cancellationToken).ConfigureAwait(false))
             {
@@ -301,9 +308,35 @@ internal sealed class SendPublisher(
             .Match(() => Result.Success(false), Result.Failure<bool>);
     }
 
+    // INT-SMS-006, IDN-ATTR-001 (D-225): what the handler is given. A row written before a
+    // send carried its languages names one, or none for a mail in every declared
+    // language, which then goes out in every language declared now.
+    private async ValueTask<Result<SendRequest>> RequestedAsync(
+        SendDelivery delivery,
+        CancellationToken cancellationToken)
+    {
+        if (delivery.Languages.Count > 0)
+        {
+            return Result.Success(delivery.Admitted);
+        }
+
+        return (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(
+                declared => Result.Success((delivery with { Languages = [.. declared] }).Admitted),
+                Result.Failure<SendRequest>);
+    }
+
+    // AUTH-ABUSE-004, D-197: a retried text counts as many texts as it carries
+    // languages, as it did at its admission; a mail counts as one.
+    private static int Weight(SendDelivery delivery) =>
+        delivery.Requested.Kind is SendKind.Sms ? Math.Max(1, delivery.Languages.Count) : 1;
+
     // The handler is asked outside any transaction, for no longer than the claim
     // stands: an attempt still running then is abandoned as a failed attempt. A handler
-    // that throws did not take the message. Letting the fault out would leave the
+    // that throws did not take the message, and its fault is kept as every other fault
+    // the library catches is (BFF-ERR-002 AC2). Letting the fault out would leave the
     // attempt uncounted, so the message would be carried at every pass, never back off
     // and never spend its budget.
     private async ValueTask<Result> TakenAsync(
@@ -320,6 +353,8 @@ internal sealed class SendPublisher(
         }
         catch (Exception fault) when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            SendLog.HandlerFaulted(log, FaultLog.Of(fault));
+
             return Result.Failure(Error.From(ErrorCodes.SystemFault));
         }
     }

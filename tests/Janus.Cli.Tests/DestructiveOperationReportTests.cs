@@ -8,8 +8,8 @@ namespace Janus.Cli.Tests;
 
 /// <summary>
 /// The destructive-operation report <c>migrate --report</c> writes: one JSON line for
-/// each statement the scan matches, marked destructive exactly where OPS-DEP-001 names it
-/// (OPS-MIG-001, OPS-DEP-001, CONV-DESIGN-003, D-206).
+/// each statement the scan matches, marked destructive exactly where OPS-MIG-001 names it
+/// (OPS-MIG-001, CONV-DESIGN-003, D-206, D-225).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class DestructiveOperationReportTests
@@ -37,7 +37,7 @@ public sealed class DestructiveOperationReportTests
     [InlineData("ALTER TABLE identity.held ALTER COLUMN kind SET NOT NULL")]
     [InlineData("CREATE UNIQUE INDEX ux_held_kind ON identity.held (kind)")]
     [InlineData("ALTER TABLE identity.held ADD owner uuid NOT NULL")]
-    public void OPS_MIG_001_AC5_WhatOpsDep001NamesIsDestructive(string statement) =>
+    public void OPS_MIG_001_AC5_WhatTheValuesNameIsDestructive(string statement) =>
         Assert.Equal([(First, statement, true)], Lines([(First, statement)]));
 
     /// <summary>

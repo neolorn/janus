@@ -226,7 +226,7 @@ public sealed class BrowserProfileTests : IDisposable
             Carrying(context, secret);
         }
 
-        await new SynchronizerToken(Tokens(), log)
+        await new SynchronizerToken(Tokens(), new RequestSession(), log)
             .InvokeAsync(context, Endpoint);
 
         await AssertRefusedAsync(context);
@@ -245,7 +245,7 @@ public sealed class BrowserProfileTests : IDisposable
 
         Carrying(context, secret);
 
-        await new SynchronizerToken(Tokens(), new LogInMemory<SynchronizerToken>())
+        await new SynchronizerToken(Tokens(), new RequestSession(), new LogInMemory<SynchronizerToken>())
             .InvokeAsync(context, Endpoint);
 
         Assert.True(_reached);
@@ -260,7 +260,7 @@ public sealed class BrowserProfileTests : IDisposable
     {
         HttpContext context = Arriving("GET");
 
-        await new SynchronizerToken(Tokens(), new LogInMemory<SynchronizerToken>())
+        await new SynchronizerToken(Tokens(), new RequestSession(), new LogInMemory<SynchronizerToken>())
             .InvokeAsync(context, Endpoint);
 
         Assert.True(_reached);
@@ -550,7 +550,7 @@ public sealed class BrowserProfileTests : IDisposable
 
         Carrying(context, secret);
 
-        await new SynchronizerToken(Tokens(), log)
+        await new SynchronizerToken(Tokens(), new RequestSession(), log)
             .InvokeAsync(context, Endpoint);
 
         await AssertRefusedAsync(context);
@@ -567,7 +567,7 @@ public sealed class BrowserProfileTests : IDisposable
     {
         var log = new LogInMemory<SynchronizerToken>();
 
-        await new SynchronizerToken(Tokens(), log)
+        await new SynchronizerToken(Tokens(), new RequestSession(), log)
             .InvokeAsync(Arriving("POST"), Endpoint);
 
         Assert.Equal(LogLevel.Warning, Assert.Single(log.Entries).Level);
@@ -1363,7 +1363,7 @@ public sealed class BrowserProfileTests : IDisposable
 
     // The layer that needs the session, as the layer before it hands a request on.
     private RequestDelegate Token() => carried =>
-        new SynchronizerToken(Tokens(), new LogInMemory<SynchronizerToken>())
+        new SynchronizerToken(Tokens(), new RequestSession(), new LogInMemory<SynchronizerToken>())
             .InvokeAsync(carried, Endpoint);
 
     private RequestDelegate Mounted() => Mounted(
@@ -1424,6 +1424,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         services.AddSingleton<IAccessGate>(_gate);
         services.AddSingleton<IPreAuthenticationStore>(_contacts);
+        services.AddSingleton<IPendingAuthorizationStore, PendingAuthorizationStoreInMemory>();
         services.AddSingleton<IConfigurationStore>(_configuration);
         services.AddSingleton<IUnitOfWork, UnitOfWorkInMemory>();
         services.AddSingleton<TimeProvider>(_clock);
@@ -1433,7 +1434,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddScoped<PolicyResolution>();
         services.AddSingleton<IAdministrativeOrganization>(new AdministrativeOrganizationInMemory());
         services.AddScoped<AdministrativeScope>();
-        services.AddSingleton<IAlertChannels, EventsInMemory>();
+        services.AddSingleton<IAlertRaising, EventsInMemory>();
         services.AddSingleton<IEvents, EventsInMemory>();
         services.AddScoped<ConcurrentSessions>();
         services.AddSingleton<IOidcClientStore, OidcClientStoreInMemory>();

@@ -42,11 +42,20 @@ internal sealed class OidcService(
     IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,
-    TimeProvider time) : IOidc, ITokenMinting
+    TimeProvider time) : IOidc
 {
     private static readonly char[] Separator = [' '];
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// What a token minted from a session record may carry and how long it may last.
+    /// </summary>
+    /// <param name="session">The record the token stands on.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// What to mint from, or <c>auth.session.expired</c> where the record has been
+    /// revoked or has reached either of its expiries: no token is minted from a record
+    /// that no longer answers.
+    /// </returns>
     public async ValueTask<Result<MintedSession>> MintAsync(
         SessionId session,
         CancellationToken cancellationToken)

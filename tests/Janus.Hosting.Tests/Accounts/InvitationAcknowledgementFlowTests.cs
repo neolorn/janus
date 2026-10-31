@@ -93,6 +93,33 @@ public sealed class InvitationAcknowledgementFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-009, FE-API-004 (D-224): the acknowledgement's 204 ends no session and
+    /// sets no cookie; the session keeps reading, and its next request a gate asks a
+    /// step-up for is answered 403 <c>auth.stepup.required</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_009_TheAcknowledgementEndsNoSessionAndTheNextGatedRequestStepsUpAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        Invitation invitation = Attached(_deployment.Directory.Created[^1].Subject);
+
+        Answer acknowledged = await browser.SendAsync(
+            "POST",
+            "/account/invitation/acknowledge",
+            ("invitationId", invitation.Id.Value));
+
+        Answer read = await browser.SendAsync("GET", "/auth/session");
+        Answer gated = await browser.SendAsync("POST", "/account/delete");
+
+        Assert.Equal(StatusCodes.Status204NoContent, acknowledged.Status);
+        Assert.Empty(acknowledged.SetCookie);
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal(StatusCodes.Status403Forbidden, gated.Status);
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), gated.Text("code"));
+    }
+
+    /// <summary>
     /// Chapter 09 section 6a: the invitation acknowledged is named, and a request that
     /// names none is malformed; one that names an invitation the account does not hold
     /// is answered as one that does not exist.

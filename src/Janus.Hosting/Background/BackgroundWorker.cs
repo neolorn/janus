@@ -38,8 +38,6 @@ internal sealed class BackgroundWorker(
     TimeProvider time,
     ILogger<BackgroundWorker> log) : BackgroundService
 {
-    private const string Fault = "fault";
-
     // INF-BG-001 (D-209): the longest single delay the runtime's timer accepts, which is
     // the timer's own limit and no deployment's choice.
     private static readonly TimeSpan Longest = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
@@ -179,10 +177,7 @@ internal sealed class BackgroundWorker(
         catch (Exception fault)
             when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.SystemFault,
-                Fault,
-                JsonSerializer.SerializeToElement(FaultLog.Of(fault))));
+            return Result.Failure(FaultLog.Failure(fault));
         }
     }
 
@@ -196,7 +191,7 @@ internal sealed class BackgroundWorker(
     // What a failure is written down as: the fault log entry of what was thrown where
     // it was a fault, and its code otherwise.
     private static string Described(Error error) =>
-        error.Details.TryGetValue(Fault, out JsonElement fault)
+        error.Details.TryGetValue(FaultLog.Detail, out JsonElement fault)
             ? fault.GetString() ?? string.Empty
             : error.Code.ToString();
 
@@ -347,22 +342,12 @@ internal sealed class BackgroundWorker(
 
                     AlertRaised lapse = Alerts.Of(AlertCondition.BackgroundJobFailed, job.Name, now, Lapse(job));
 
-                    failure = (await services.GetRequiredService<IAlertChannels>()
-                            .RaiseAsync(lapse, cancellationToken)
+                    var raise = new RaisedAlert(RaisedAlertId.Of(now), lapse);
+
+                    failure = (await services.GetRequiredService<IAlertRaising>()
+                            .RaiseAsync(raise, cancellationToken)
                             .ConfigureAwait(false))
                         .Match(() => (Error?)null, error => error);
-
-                    // OPS-ALERT-001 AC4 and INF-BG-001 AC2 (D-166, 290): the carrier cannot
-                    // carry the news of its own stall, so its lapse is also delivered by the
-                    // router here; the row it raised is folded into this delivery by the
-                    // deduplication ledger once the carrier runs again.
-                    if (failure is null && job.Name == AlertDispatch.Job)
-                    {
-                        failure = (await services.GetRequiredService<AlertRouter>()
-                                .RaiseAsync(lapse, cancellationToken)
-                                .ConfigureAwait(false))
-                            .Match(_ => (Error?)null, error => error);
-                    }
 
                     if (failure is not null)
                     {
@@ -375,6 +360,18 @@ internal sealed class BackgroundWorker(
                         .Match<Error?>(() => null, error => error) is Error notCommitted)
                     {
                         return Result.Failure(notCommitted);
+                    }
+
+                    // OPS-ALERT-003 AC3 and INF-BG-001 AC2 (D-166, 290): the carrier cannot
+                    // carry the news of its own stall, so its lapse is also handed to the
+                    // host's alert handler here, once the raise has committed, as the raise
+                    // it wrote: the row is folded into this hand-over by the deduplication
+                    // ledger once the carrier runs again, where the handler took it here.
+                    if (job.Name == AlertDispatch.Job)
+                    {
+                        return await services.GetRequiredService<AlertDispatch>()
+                            .HandOverAsync(raise, cancellationToken)
+                            .ConfigureAwait(false);
                     }
 
                     return Result.Success();

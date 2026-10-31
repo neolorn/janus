@@ -35,7 +35,6 @@ namespace Janus.Hosting.Tests.Credentials;
 [Trait("kind", "unit")]
 public sealed class ProviderSignInTests : IAsyncDisposable
 {
-    private const string Language = "en";
     private const string Page = "/account/profile";
 
     // FE-API-006: a route as the address serializes it, its own characters
@@ -63,19 +62,6 @@ public sealed class ProviderSignInTests : IAsyncDisposable
         Flow.Prepare(_deployment);
 
         _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
-
-        foreach (MessageKind message in new[]
-            { MessageKind.SecurityNotice, MessageKind.CredentialEnrolled })
-        {
-            foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-            {
-                _deployment.Templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "notice" : null, "body"));
-            }
-        }
     }
 
     /// <inheritdoc/>

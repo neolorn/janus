@@ -77,9 +77,9 @@ internal sealed class GovernedSend(
     /// <exception cref="ArgumentNullException">The message is absent.</exception>
     /// <remarks>
     /// AUTH-ABUSE-002 AC3: the send is judged exactly as <see cref="UndertakeAsync"/>
-    /// judges the message it stands for, the gateway floor included, and counted as it
-    /// would have been, once for each message and the send once against a restriction
-    /// marked <c>resend</c>, each message under a reference no delivery report will ever
+    /// judges the message it stands for, and counted as it
+    /// would have been, as many texts as it would carry languages and the send once against
+    /// a restriction marked <c>resend</c>, under a reference no outcome report will ever
     /// name and no code or link answers, so what it counts is kept until its buckets are
     /// empty.
     /// </remarks>
@@ -90,8 +90,8 @@ internal sealed class GovernedSend(
         DateTimeOffset now = time.GetUtcNow();
         Error? failure = null;
 
-        IReadOnlyList<string?> owed = (await OwedAsync(message, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<string?>>(error, ref failure));
+        IReadOnlyList<string> owed = (await OwedAsync(message, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
 
         if (failure is not null)
         {
@@ -99,7 +99,7 @@ internal sealed class GovernedSend(
         }
 
         SendJudgement judged = (await admission
-                .JudgeAsync(message, owed.Count, setAside: null, now, cancellationToken)
+                .JudgeAsync(message, Weight(message, owed), setAside: null, now, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<SendJudgement>(error, ref failure));
 
@@ -109,7 +109,7 @@ internal sealed class GovernedSend(
         }
 
         await admission
-            .CountAsync([.. owed.Select(_ => SendReference.Draw(randomness))], judged, now, cancellationToken)
+            .CountAsync(SendReference.Draw(randomness), judged, now, cancellationToken)
             .ConfigureAwait(false);
 
         return Result.Success();
@@ -128,9 +128,8 @@ internal sealed class GovernedSend(
     public ValueTask AnsweredAsync([NeverLogged] byte[] answer, CancellationToken cancellationToken) =>
         admission.AnsweredAsync(answer, cancellationToken);
 
-    // One message undertaken inside the unit of work in progress: what was written to
-    // the outbox for it, one row, or one for each declared language of a text message
-    // owed in every one of them.
+    // One message undertaken inside the unit of work in progress: the one row written to
+    // the outbox for it, carrying every language it goes out in (INT-SMS-006, D-225).
     private async ValueTask<Result<IReadOnlyList<SendDelivery>>> AdmittedAsync(
         OutboundMessage message,
         CancellationToken cancellationToken)
@@ -140,8 +139,8 @@ internal sealed class GovernedSend(
         DateTimeOffset now = time.GetUtcNow();
         Error? failure = null;
 
-        IReadOnlyList<string?> owed = (await OwedAsync(message, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<string?>>(error, ref failure));
+        IReadOnlyList<string> owed = (await OwedAsync(message, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
 
         TimeSpan initial = (await configuration
                 .ReadAsync(Settings.OutboxRetryInitial, cancellationToken).ConfigureAwait(false))
@@ -153,7 +152,7 @@ internal sealed class GovernedSend(
         }
 
         SendJudgement judged = (await admission
-                .JudgeAsync(message, owed.Count, setAside: null, now, cancellationToken)
+                .JudgeAsync(message, Weight(message, owed), setAside: null, now, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<SendJudgement>(error, ref failure));
 
@@ -168,44 +167,34 @@ internal sealed class GovernedSend(
         await signals.ConsiderAsync(message, cancellationToken).ConfigureAwait(false);
 
         // AUTH-ABUSE-003: an ask of a sign-in link, an email code or a recovery is
-        // answered before any transport is called, so its message is left to the
+        // answered before the handler is called, so its message is left to the
         // publisher and is due at once. Every other message has one attempt after the
         // commit: its row is written due the first retry delay after its admission, with
         // no jitter, so that no pass takes it before that attempt has had its chance
         // (CONV-DESIGN-003, AUTH-ABUSE-004, D-188).
         bool attempted = !MessageChannels.AnsweredFirst.Contains(message.Message);
-        var admitted = new List<SendDelivery>(owed.Count);
+        var delivery = SendDelivery.Of(
+            message,
+            owed,
+            SendReference.Draw(randomness),
+            now,
+            attempted ? initial : TimeSpan.Zero);
 
-        for (int index = 0; index < owed.Count; index++)
+        await outbox.AddAsync(delivery, cancellationToken).ConfigureAwait(false);
+
+        if (attempted)
         {
-            var reference = SendReference.Draw(randomness);
+            SendDeliveryId written = delivery.Id;
 
-            var delivery = SendDelivery.Of(
-                message with { Language = owed[index] },
-                reference,
-                now,
-                attempted ? initial : TimeSpan.Zero);
-
-            await outbox.AddAsync(delivery, cancellationToken).ConfigureAwait(false);
-
-            if (attempted)
-            {
-                SendDeliveryId written = delivery.Id;
-
-                work.AfterCommit(token => AttemptedAsync(written, token))
-                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
-            }
-
-            admitted.Add(delivery);
+            work.AfterCommit(token => AttemptedAsync(written, token))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
 
-        // AUTH-ABUSE-004: the send counts from its admission, each message against the
-        // restrictions that count each and the send once against those marked resend.
-        await admission
-            .CountAsync([.. admitted.Select(one => one.Reference)], judged, now, cancellationToken)
-            .ConfigureAwait(false);
+        // AUTH-ABUSE-004: the send counts from its admission, against the restrictions
+        // that count each text and once against those marked resend.
+        await admission.CountAsync(delivery.Reference, judged, now, cancellationToken).ConfigureAwait(false);
 
-        return Result.Success<IReadOnlyList<SendDelivery>>(admitted);
+        return Result.Success<IReadOnlyList<SendDelivery>>([delivery]);
     }
 
     private async ValueTask AttemptedAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
@@ -223,16 +212,16 @@ internal sealed class GovernedSend(
         return default!;
     }
 
-    // IDN-ATTR-001, AUTH-ABUSE-004: a message whose recipient's language is known is one
-    // message in it. Where none is known, a mail is one message carrying every declared
-    // language, and a text message is one message for each of them.
-    private async ValueTask<Result<IReadOnlyList<string?>>> OwedAsync(
+    // IDN-ATTR-001, INT-SMS-006: a message whose recipient's language is known goes out in
+    // it; where none is known, it carries every declared language, in the order of
+    // notification.languages, for the host to compose.
+    private async ValueTask<Result<IReadOnlyList<string>>> OwedAsync(
         OutboundMessage message,
         CancellationToken cancellationToken)
     {
-        if (message.Language is not null || message.Kind is SendKind.Email)
+        if (message.Language is string language)
         {
-            return Result.Success<IReadOnlyList<string?>>([message.Language]);
+            return Result.Success<IReadOnlyList<string>>([language]);
         }
 
         return (await configuration
@@ -240,10 +229,15 @@ internal sealed class GovernedSend(
                 .ConfigureAwait(false))
             .Match(
                 declared => declared.Count == 0
-                    ? Result.Failure<IReadOnlyList<string?>>(Undeclared())
-                    : Result.Success<IReadOnlyList<string?>>([.. declared]),
-                Result.Failure<IReadOnlyList<string?>>);
+                    ? Result.Failure<IReadOnlyList<string>>(Undeclared())
+                    : Result.Success<IReadOnlyList<string>>([.. declared]),
+                Result.Failure<IReadOnlyList<string>>);
     }
+
+    // AUTH-ABUSE-004, D-197: by email a message is one whatever it carries; by SMS it
+    // counts as many texts as it carries languages.
+    private static int Weight(OutboundMessage message, IReadOnlyList<string> languages) =>
+        message.Kind is SendKind.Sms ? languages.Count : 1;
 
     private static Error Undeclared() =>
         Error.From(

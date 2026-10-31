@@ -50,6 +50,7 @@ internal sealed class LossReportConfiguration : IEntityTypeConfiguration<LossRep
             .HasConversion(subject => subject.Value, value => new SubjectId(value));
 
         builder.Property(report => report.Cancel).HasColumnName(CancelColumn);
+        builder.Property(report => report.CancelFingerprint).HasColumnName("cancel_fingerprint");
         builder.Property(report => report.ReportedAt).HasColumnName("reported_at");
         builder.Property(report => report.InvalidatesAt).HasColumnName("invalidates_at");
         builder.Property(report => report.NotifiedAt).HasColumnName("notified_at");
@@ -65,6 +66,12 @@ internal sealed class LossReportConfiguration : IEntityTypeConfiguration<LossRep
 
         builder.HasIndex(report => report.Subject)
             .HasDatabaseName("ix_loss_reports_subject");
+
+        // D-226: a cancel by the link finds its report by the token's fingerprint, and
+        // no two reports share one.
+        builder.HasIndex(report => report.CancelFingerprint)
+            .IsUnique()
+            .HasDatabaseName("ux_loss_reports_cancel_fingerprint");
 
         builder.HasOne<AuthenticatorRecord>()
             .WithMany()

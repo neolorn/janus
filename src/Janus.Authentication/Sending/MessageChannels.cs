@@ -5,59 +5,14 @@ using Janus.Core;
 namespace Janus.Authentication.Sending;
 
 /// <summary>
-/// Which channels each message goes out on, which is what the catalogue has to hold
-/// a template for in every configured language.
+/// Which messages are notices, which carry a factor, and which answer an ask before
+/// they are attempted.
 /// </summary>
 /// <remarks>
-/// Implements INT-SMS-001, AUTH-ABUSE-003, AUTH-ABUSE-005, REG-MAIL-001 and REC-ACC-001.
-/// Four messages are mail alone: the answer to a request made for an address no account
-/// holds, and to an ask of a record access code for an address no reachable person
-/// record holds, each sent to an address and never to a number (AUTH-ABUSE-003), an
-/// invitation's link, which goes to the email the invitation binds, and the
-/// <c>emailCode</c> sign-in code, which is not among the uses INT-SMS-001 admits.
+/// Implements AUTH-ABUSE-003, AUTH-ABUSE-004, AUTH-FACT-016, REG-MAIL-001 and REC-ACC-001.
 /// </remarks>
 internal static class MessageChannels
 {
-    private static readonly SendKind[] Both = [SendKind.Email, SendKind.Sms];
-
-    private static readonly SendKind[] MailAlone = [SendKind.Email];
-
-    /// <summary>
-    /// Every message the library sends.
-    /// </summary>
-    public static IReadOnlyList<MessageKind> Messages { get; } =
-    [
-        MessageKind.VerificationCode,
-        MessageKind.VerificationLink,
-        MessageKind.SignInLink,
-        MessageKind.SecondStepCode,
-        MessageKind.SecurityNotice,
-        MessageKind.EnrolmentLink,
-        MessageKind.Alert,
-        MessageKind.NoAccount,
-        MessageKind.AccountExists,
-        MessageKind.IdentifierAdded,
-        MessageKind.IdentifierRemoved,
-        MessageKind.IdentifierDetached,
-        MessageKind.IdentifierSettingsChanged,
-        MessageKind.CredentialEnrolled,
-        MessageKind.IdentifierChangeConfirm,
-        MessageKind.RecoveryLink,
-        MessageKind.PrivacyRequestReceived,
-        MessageKind.PrivacyRequestLapsed,
-        MessageKind.DeactivationNotice,
-        MessageKind.DeletionNotice,
-        MessageKind.InvitationLink,
-        MessageKind.RecoveryCodesReminder,
-        MessageKind.SignInCode,
-        MessageKind.CredentialSuspended,
-        MessageKind.OobDeletionNotice,
-        MessageKind.CredentialUnbound,
-        MessageKind.RecordAccessCode,
-        MessageKind.RecordAccessNone,
-        MessageKind.RecordDeletionNotice,
-    ];
-
     /// <summary>
     /// The messages that tell an account holder something happened to their account,
     /// and a person record's existing holder, its notice contacts, that its deletion
@@ -105,9 +60,9 @@ internal static class MessageChannels
     /// <summary>
     /// The messages that answer an ask of a sign-in link, an email code, a recovery or
     /// a record access code, the notices to an address nothing is held for among them.
-    /// The ask is answered before any transport is called, whether its message is sent
-    /// or not, so none of these has an attempt inside the request: the outbox publisher
-    /// carries each (AUTH-ABUSE-003, AUTH-ABUSE-004, REC-ACC-001).
+    /// The ask is answered before the host is handed anything, whether its message is
+    /// sent or not, so none of these has an attempt inside the request: the outbox
+    /// publisher carries each (AUTH-ABUSE-003, AUTH-ABUSE-004, REC-ACC-001).
     /// </summary>
     public static FrozenSet<MessageKind> AnsweredFirst { get; } = FrozenSet.ToFrozenSet(
     [
@@ -118,15 +73,4 @@ internal static class MessageChannels
         MessageKind.RecordAccessCode,
         MessageKind.RecordAccessNone,
     ]);
-
-    /// <summary>
-    /// The channels one message goes out on.
-    /// </summary>
-    /// <param name="message">The message.</param>
-    /// <returns>Its channels.</returns>
-    public static IReadOnlyList<SendKind> Of(MessageKind message) =>
-        message is MessageKind.NoAccount or MessageKind.RecordAccessNone or MessageKind.InvitationLink
-            or MessageKind.SignInCode
-            ? MailAlone
-            : Both;
 }

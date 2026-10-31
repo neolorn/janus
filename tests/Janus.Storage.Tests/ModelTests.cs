@@ -126,9 +126,12 @@ public sealed class ModelTests
             "accounts.terms_version",
 
             // Not an account field: the alert ledger of OPS-ALERT-002, holding one row
-            // per condition told and when it last went out.
+            // per condition told, when it last went out, and the raise it was claimed
+            // for and whether the handler took it (OPS-ALERT-003).
             "alerts.at",
             "alerts.key",
+            "alerts.raise",
+            "alerts.unanswered",
 
             // Authorization: the ancestry closure of AUTHZ-INHERIT-002, which is what a
             // permission query joins instead of walking the tree.
@@ -470,14 +473,6 @@ public sealed class ModelTests
             "legal_document_versions.published_at",
             "legal_document_versions.version",
 
-            // Not an account field: the licences and permits whose expiry is warned of
-            // (OPS-MAINT-001).
-            "licences.expires_at",
-            "licences.id",
-            "licences.kind",
-            "licences.name",
-            "licences.renewed_at",
-
             // Not an account field: the one link an account's own deactivation or
             // deletion notice carried, held by its fingerprint (IDN-LIFE-013,
             // IDN-LIFE-014).
@@ -487,9 +482,10 @@ public sealed class ModelTests
             "lifecycle_links.token",
 
             // Not an account field: a credential its holder reported lost, the window
-            // AUTH-RECOV-007 invalidates it at the end of, and what the notices across
-            // that window have reached.
+            // AUTH-RECOV-007 invalidates it at the end of, what the notices across that
+            // window have reached, and the fingerprint its link finds it by (D-226).
             "loss_reports.any_delivered",
+            "loss_reports.cancel_fingerprint",
             "loss_reports.credential",
             "loss_reports.enc_cancel",
             "loss_reports.held_at",
@@ -519,14 +515,6 @@ public sealed class ModelTests
             "mailboxes.reserved_at",
             "mailboxes.retired_at",
             "mailboxes.wrapped_key",
-
-            // Not an account field: the maintenance log, each entry naming the subject
-            // who performed the task by identifier alone (OPS-MAINT-001).
-            "maintenance_log.actor",
-            "maintenance_log.id",
-            "maintenance_log.note",
-            "maintenance_log.performed_at",
-            "maintenance_log.task",
 
             // Standing: the membership record of IDN-MEM-001, with its own beginning
             // and end, the end an administrator set it to reach (D-213) and the invitation
@@ -654,6 +642,16 @@ public sealed class ModelTests
             "passwords.meets_single_factor_floor",
             "passwords.set_at",
             "passwords.subject",
+
+            // Not an account field: an authorization request waiting for the sign-in
+            // that answers it, bound to a browser or to the record its sign-in
+            // established, its parameters under the deployment's key (AUTH-SESS-012).
+            "pending_authorizations.created_at",
+            "pending_authorizations.expires_at",
+            "pending_authorizations.id",
+            "pending_authorizations.parameters",
+            "pending_authorizations.preauthentication",
+            "pending_authorizations.session",
 
             // Credentials: a text code's enrolment its code has yet to confirm, with
             // the number it would be bound to and the code under the key (AUTH-FACT-002).
@@ -785,8 +783,8 @@ public sealed class ModelTests
             "provider_attempts.state",
             "provider_attempts.verifier",
 
-            // Not an account field: a raised condition waiting for the alert channels,
-            // removed once they carry it (OPS-ALERT-001).
+            // Not an account field: a raised condition waiting for alert-dispatch,
+            // removed once it is handed over (OPS-ALERT-001).
             "raised_alerts.claimed_until",
             "raised_alerts.condition",
             "raised_alerts.details",
@@ -931,9 +929,9 @@ public sealed class ModelTests
             "send_outbox.subject",
             "send_outbox.wrapped_key",
 
-            // Not an account field: the message a transport took (AUTH-ABUSE-004,
-            // INT-SMS-005), held by the hash of its correlation reference so that a
-            // delivery report can take its counts back out, with the send it is of, what
+            // Not an account field: the message the host took (AUTH-ABUSE-004,
+            // INT-SMS-005), held by the hash of its correlation reference so that the
+            // host's report of its outcome can take its counts back out, with the send it is of, what
             // that send counts once against the restrictions marked resend, and what
             // names the code or the link whose answer releases it (10 section 5.16a).
             "sends.admitted",
@@ -941,6 +939,7 @@ public sealed class ModelTests
             "sends.counted",
             "sends.fingerprint_version",
             "sends.reference",
+            "sends.released",
             "sends.resend",
             "sends.resend_at",
             "sends.second_factor",
@@ -990,12 +989,16 @@ public sealed class ModelTests
             // hashes to and carrying what it has presented so far (AUTH-FACT-001), the
             // email it was opened with, which a domain lock is judged on (REG-DOM-001),
             // and the keyed hash of the identifier it was opened with, with its version,
-            // which a refused factor is counted against (AUTH-ABUSE-001).
+            // which a refused factor is counted against (AUTH-ABUSE-001); what the
+            // pre-authentication session it is bound to hashes to, and when the
+            // new-device check held it (D-226).
+            "signin_challenges.browser",
             "signin_challenges.created_at",
             "signin_challenges.email",
             "signin_challenges.expires_at",
             "signin_challenges.fingerprint_version",
             "signin_challenges.handle",
+            "signin_challenges.held_at",
             "signin_challenges.identifier",
             "signin_challenges.presented",
             "signin_challenges.subject",
@@ -1033,11 +1036,6 @@ public sealed class ModelTests
             "signing_keys.retires_at",
             "signing_keys.signing_from",
             "signing_keys.superseded_at",
-
-            // Not an account field: what the gateway last said its prepaid account stood
-            // at (INT-SMS-004, AUTH-ABUSE-006).
-            "sms_balance_readings.balance",
-            "sms_balance_readings.read_at",
 
             // Not an account field: the wrapped key of PRIV-RIGHT-005a, which every
             // column marked Key is written under.

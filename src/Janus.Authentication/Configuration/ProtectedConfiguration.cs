@@ -37,7 +37,7 @@ internal sealed class ProtectedConfiguration(
     IConfigurationStore configuration,
     IProtectedSettings settings,
     IConfigurationAudit audit,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     RedirectValidation redirects,
     IUnitOfWork work,
     TimeProvider time)

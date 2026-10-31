@@ -76,7 +76,7 @@ internal static class RegistrationEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete, ErrorCodes.Throttled,
-                    ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+                    ErrorCodes.RestrictionExceeded))
             .Accepts<IdentifierValueRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
         _ = group.MapPost("/phone/skip", SkipPhoneAsync)
@@ -89,7 +89,7 @@ internal static class RegistrationEndpoints
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
                     ErrorCodes.IdentifierMaximum, ErrorCodes.IdentifierDomainNotAllowed,
-                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
             .Accepts<AddIdentifierRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
         _ = group.MapPut("/identifiers/{id}", ChangeAsync)
@@ -97,7 +97,7 @@ internal static class RegistrationEndpoints
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
                     ErrorCodes.IdentifierLocked, ErrorCodes.IdentifierDomainNotAllowed,
-                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded)
                 .Binding<IdentifierId>("id"))
             .Accepts<IdentifierValueRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
@@ -133,7 +133,7 @@ internal static class RegistrationEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired,
-                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded)
                 .Binding<IdentifierId>("id"))
             .Accepts<VerifyRequest>(MediaTypeNames.Application.Json)
             .Produces<LinkLandingView>()
@@ -564,6 +564,7 @@ internal static class RegistrationEndpoints
         RequestSession browser,
         IRegistrationSignals signals,
         IConfigurationStore configuration,
+        TimeProvider time,
         HttpContext context,
         CancellationToken cancellationToken) =>
         Carried(browser) is not RegistrationSessionId session
@@ -573,6 +574,7 @@ internal static class RegistrationEndpoints
                 session,
                 signals,
                 configuration,
+                time,
                 context,
                 cancellationToken);
 

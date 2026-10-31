@@ -6,13 +6,14 @@ using System.Threading.Tasks;
 namespace Janus.Core;
 
 /// <summary>
-/// The mail app passwords of the signed-in person, managed at the mail server through
-/// the library's first-party client for it. The library stores nothing about them.
+/// The mail app passwords of the signed-in person, managed at the mail server with its
+/// management key on the account of the mailbox they hold. The library stores nothing
+/// about them.
 /// </summary>
 /// <remarks>
-/// Implements LIB-API-005, REG-MAIL-002 and INT-MAIL-010. Each operation obtains a
-/// token for the person from the session named and makes one call to the server with
-/// it. Creation and revocation are the <c>mailcredential:create</c> and
+/// Implements LIB-API-005, REG-MAIL-002 and INT-MAIL-010. Each operation makes one call
+/// to the server on the account that carries the identifier of the mailbox the account
+/// holds, and the library issues no token for it (D-226). Creation and revocation are the <c>mailcredential:create</c> and
 /// <c>mailcredential:revoke</c> step-up actions, each notified to the security-notice
 /// set and audited; listing is neither. Every operation answers
 /// <c>identity.mailbox.notfound</c> where the account holds no mailbox the mail server
@@ -29,12 +30,10 @@ public interface IAppPasswords
     /// What the mail server holds for the person, read from it each time.
     /// </summary>
     /// <param name="context">Who is asking.</param>
-    /// <param name="session">The session the request came in under.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The app passwords, or the refusal or the server's failure.</returns>
     ValueTask<Result<IReadOnlyList<AppPassword>>> ListAsync(
         AccessContext context,
-        SessionId session,
         CancellationToken cancellationToken);
 
     /// <summary>

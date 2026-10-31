@@ -324,7 +324,7 @@ internal sealed class LossReports(
     /// carried, and returns the credential to active.
     /// </summary>
     /// <param name="context">Who is asking, which is nobody where a link is presented.</param>
-    /// <param name="credential">Which credential.</param>
+    /// <param name="credential">Which credential, read only where no token is presented.</param>
     /// <param name="cancelToken">The token the notice carried, or nothing.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the refusal that tells an outsider nothing.</returns>
@@ -335,21 +335,29 @@ internal sealed class LossReports(
         string? cancelToken,
         CancellationToken cancellationToken)
     {
-        LossReport? report = await reports.FindAsync(credential, cancellationToken)
-            .ConfigureAwait(false);
+        // D-224 item 19, D-226: a link's token names its report by its fingerprint and
+        // the credential is not read; without one, the credential names it.
+        bool linked = cancelToken is { Length: > 0 };
+        LossReport? report = cancelToken is { Length: > 0 } presented
+            ? await reports.FindByCancelAsync(OpaqueToken.Of(presented).Fingerprint(), cancellationToken)
+                .ConfigureAwait(false)
+            : await reports.FindAsync(credential, cancellationToken).ConfigureAwait(false);
 
         // LIB-SEAM-002: the effective identity is read once and compared as a value,
         // which is the one way a feature asks whose account it is.
-        bool holder = report is not null
+        bool holder = !linked
+            && report is not null
             && context?.Effective is SubjectId subject
             && report.Subject == subject;
 
         // One refusal answers an unknown credential, a report that is not running and
         // a token that is not the one: none of them tells the caller which it was.
-        if (report is null || !(holder || report.Matches(cancelToken)))
+        if (report is null || !(holder || linked))
         {
             return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
         }
+
+        AuthenticatorId reported = report.Credential;
 
         DateTimeOffset now = time.GetUtcNow();
 
@@ -362,7 +370,7 @@ internal sealed class LossReports(
         // D-166 X3: the credential is read under its lock, so of a cancellation and the
         // invalidation at the window's end only the first stands; a credential the
         // window already invalidated has no report left to cancel.
-        Authenticator? held = await authenticators.FindForUpdateAsync(credential, cancellationToken)
+        Authenticator? held = await authenticators.FindForUpdateAsync(reported, cancellationToken)
             .ConfigureAwait(false);
 
         // AUTH-RECOV-007 (D-197): a texted second step whose number left the account is
@@ -381,9 +389,9 @@ internal sealed class LossReports(
             await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);
         }
 
-        await reports.RemoveAsync(credential, cancellationToken).ConfigureAwait(false);
+        await reports.RemoveAsync(reported, cancellationToken).ConfigureAwait(false);
         await audit
-            .RecordedAsync(Cancelled, report.Subject, credential, now, cancellationToken)
+            .RecordedAsync(Cancelled, report.Subject, reported, now, cancellationToken)
             .ConfigureAwait(false);
 
         // AUTH-RECOV-007: a report is cancelled whether or not the credential is
@@ -396,8 +404,8 @@ internal sealed class LossReports(
             && await AnnouncedAsync(
                 new CredentialRestored(
                     now,
-                    Key(Ended, credential, now),
-                    credential,
+                    Key(Ended, reported, now),
+                    reported,
                     held.Factor)
                 {
                     Subject = report.Subject,
