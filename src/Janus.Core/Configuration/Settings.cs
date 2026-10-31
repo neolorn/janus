@@ -474,29 +474,6 @@ public static class Settings
     public static FlagSetting ExfiltrationExportAuditing { get; } =
         new("exfiltration.export.auditing", SettingScope.Protected, true);
 
-    /// <summary>Where alerts are emailed. The deployment names at least one.</summary>
-    public static TextListSetting AlertingEmailDestinations { get; } =
-        new("alerting.email.destinations", SettingScope.Runtime, minimum: 1);
-
-    /// <summary>Where high-severity alerts are texted. The deployment names at least one.</summary>
-    public static TextListSetting AlertingSmsDestinations { get; } =
-        new("alerting.sms.destinations", SettingScope.Runtime, minimum: 1);
-
-    /// <summary>
-    /// Whether routine alerts reach the owner. Break-glass events reach them either
-    /// way.
-    /// </summary>
-    public static FlagSetting AlertingOwnerEnabled { get; } =
-        new("alerting.owner.enabled", SettingScope.Runtime, false);
-
-    /// <summary>The owner's email destination. The deployment names it.</summary>
-    public static TextSetting AlertingOwnerEmail { get; } =
-        new("alerting.owner.email", SettingScope.Runtime);
-
-    /// <summary>The owner's SMS destination. The deployment names it.</summary>
-    public static TextSetting AlertingOwnerSms { get; } =
-        new("alerting.owner.sms", SettingScope.Runtime);
-
     /// <summary>The window a read-volume baseline is drawn from.</summary>
     public static DurationSetting ExfiltrationReadVolumeBaselineWindow { get; } =
         new("exfiltration.readvolume.baselinewindow", SettingScope.Runtime, "P30D");
@@ -567,14 +544,6 @@ public static class Settings
     /// <summary>How long one condition is reported once.</summary>
     public static DurationSetting AlertingDedupeWindow { get; } =
         new("alerting.dedupe.window", SettingScope.Runtime, "PT1H");
-
-    /// <summary>The severity at which an alert is also texted.</summary>
-    public static ChoiceSetting<AlertSeverity> AlertingSmsSeverityThreshold { get; } =
-        new(
-            "alerting.sms.severitythreshold",
-            SettingScope.Runtime,
-            AlertSeverity.High,
-            Enum.GetValues<AlertSeverity>().ToFrozenSet());
 
     /// <summary>How far ahead an expiry on the maintenance log is warned about.</summary>
     public static DurationSetting MaintenanceExpiryWarningLead { get; } =
@@ -1087,11 +1056,6 @@ public static class Settings
         ExfiltrationExportStepUpRequired,
         ExfiltrationExportRateLimit,
         ExfiltrationExportAuditing,
-        AlertingEmailDestinations,
-        AlertingSmsDestinations,
-        AlertingOwnerEnabled,
-        AlertingOwnerEmail,
-        AlertingOwnerSms,
         ExfiltrationReadVolumeBaselineWindow,
         ExfiltrationReadVolumeFactor,
         ExfiltrationReadVolumeMinimum,
@@ -1104,7 +1068,6 @@ public static class Settings
         AlertingNonexistentThreshold,
         AlertingCallbackThreshold,
         AlertingDedupeWindow,
-        AlertingSmsSeverityThreshold,
         MaintenanceExpiryWarningLead,
         AuthzReverseLookupBudget,
         AuthzHandoutByHolding,

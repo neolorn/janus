@@ -24,4 +24,15 @@ internal interface IAlertLedger
         DateTimeOffset at,
         TimeSpan window,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gives back the claim on a key whose alert the host's handler did not take, so its
+    /// next hand-over is the first of its window again, by one statement that changes
+    /// nothing where another raise has claimed the key since.
+    /// </summary>
+    /// <param name="key">The deduplication key.</param>
+    /// <param name="at">When the alert whose claim it is fired.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether the claim was given back.</returns>
+    ValueTask<bool> ForgetAsync(string key, DateTimeOffset at, CancellationToken cancellationToken);
 }

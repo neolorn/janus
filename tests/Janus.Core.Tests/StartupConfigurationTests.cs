@@ -30,11 +30,11 @@ public sealed class StartupConfigurationTests
     public void LIB_HOST_001_AC2_AMissingDeclarationNamesTheKey()
     {
         StartupException fault = Assert.Throws<StartupException>(
-            () => Start(Named(without: Settings.AlertingOwnerSms.Key)));
+            () => Start(Named(without: Settings.PrivacyCalendarTimeZone.Key)));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, fault.Failure?.Code);
         Assert.Equal(
-            "alerting.owner.sms",
+            "privacy.calendar.timezone",
             fault.Failure?.Details["key"].GetString());
     }
 

@@ -13,7 +13,7 @@ namespace Janus.Core;
 /// <remarks>
 /// Implements LIB-EXT-001 and INF-TLS-003 AC2. The library asks every hour and raises
 /// <c>certificate-renewal-failed</c> for a failed renewal, so a failure reaches the
-/// alert channels the day it happens without anyone checking. The expiry of the
+/// host's alert handler the day it happens without anyone checking. The expiry of the
 /// certificate served is watched apart from this and from whatever renews it
 /// (INF-TLS-003 AC1, AC3), which is the environment's.
 /// </remarks>

@@ -63,7 +63,7 @@ public sealed class DatacenterRangesTests
             .GetParameters();
 
         Assert.Equal(
-            [typeof(DatacenterRangeCopy), typeof(IDatacenterRangeSource), typeof(IConfigurationStore), typeof(IAlertChannels), typeof(TimeProvider)],
+            [typeof(DatacenterRangeCopy), typeof(IDatacenterRangeSource), typeof(IConfigurationStore), typeof(IAlertRaising), typeof(TimeProvider)],
             held.Select(parameter => parameter.ParameterType));
     }
 
@@ -113,7 +113,7 @@ public sealed class DatacenterRangesTests
     /// AUTH-ABUSE-008 AC3, LIB-HOST-001 AC7: with no range source declared the signal
     /// does not fire and <c>degradation</c> is raised under
     /// <c>botdefence.ranges.absent</c> (chapter 10 section 5.23), each time it is asked,
-    /// so the router carries it once a window.
+    /// so it is handed over once a window.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]

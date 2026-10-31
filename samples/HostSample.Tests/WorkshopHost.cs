@@ -85,6 +85,11 @@ public sealed class WorkshopHost : IAsyncLifetime
     public InMemorySmsTransport Sms { get; } = new();
 
     /// <summary>
+    /// What the deployment raised, as its alert handler took it.
+    /// </summary>
+    public InMemoryAlerts Alerts { get; } = new();
+
+    /// <summary>
     /// The first administrator.
     /// </summary>
     public TestSession Administrator => _administrator ?? throw new InvalidOperationException("The host has not started.");
@@ -402,6 +407,7 @@ public sealed class WorkshopHost : IAsyncLifetime
         _ = builder.Services.AddSingleton<ISecretSource>(secrets);
         _ = builder.Services.AddSingleton<IMailTransport>(Mail);
         _ = builder.Services.AddSingleton<ISmsTransport>(Sms);
+        _ = builder.Services.AddSingleton<IAlertHandler>(Alerts);
         _ = builder.Services.AddSingleton<IClockReference>(new FixedClockReference());
         _ = builder.Services.AddSingleton<ICertificateRenewal>(new SucceededCertificateRenewal());
         _ = builder.Services.AddSingleton<ILocationSource>(new EmptyLocationSource(Clock));
@@ -441,10 +447,6 @@ public sealed class WorkshopHost : IAsyncLifetime
             [Settings.WebAuthnOrigins.Key] = Settings.WebAuthnOrigins.Write([Origin.GetLeftPart(UriPartial.Authority)]),
             [Settings.HostingLocation.Key] = Settings.HostingLocation.Write(HostingLocation.Inside),
             [Settings.HostingEnvironment.Key] = Settings.HostingEnvironment.Write("a rented virtual machine"),
-            [Settings.AlertingEmailDestinations.Key] = Settings.AlertingEmailDestinations.Write(["operator@kites.example.test"]),
-            [Settings.AlertingSmsDestinations.Key] = Settings.AlertingSmsDestinations.Write(["+201000000101"]),
-            [Settings.AlertingOwnerEmail.Key] = Settings.AlertingOwnerEmail.Write("owner@kites.example.test"),
-            [Settings.AlertingOwnerSms.Key] = Settings.AlertingOwnerSms.Write("+201000000102"),
             [Settings.AbuseSmsBalanceFloor.Key] = Settings.AbuseSmsBalanceFloor.Write(100m),
             [Settings.LegalGoverningLanguage.Key] = Settings.LegalGoverningLanguage.Write("en"),
             [Settings.PrivacyCalendarTimeZone.Key] = Settings.PrivacyCalendarTimeZone.Write("UTC"),

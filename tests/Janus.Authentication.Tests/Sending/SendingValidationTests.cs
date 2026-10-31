@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Alerting;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Xunit;
@@ -24,6 +25,7 @@ public sealed class SendingValidationTests
     private readonly MessageTemplatesInMemory _templates = new();
     private readonly MailTransportInMemory _mailTransport = new();
     private readonly SmsTransportInMemory _smsTransport = new();
+    private readonly AlertHandlerInMemory _alertHandler = new();
 
     private RestrictionKeySuppliers _suppliers = RestrictionKeySuppliers.None;
 
@@ -36,7 +38,7 @@ public sealed class SendingValidationTests
         _configuration.Set(Settings.NotificationLanguages, Languages);
 
     private SendingValidation Validation =>
-        new(_configuration, _templates, _suppliers, _places, _mailTransport, _smsTransport);
+        new(_configuration, _templates, _suppliers, _places, _mailTransport, _smsTransport, _alertHandler);
 
     /// <summary>
     /// AUTH-ABUSE-005 AC3 and INT-SMS-003 AC1: a text message over its language's
@@ -134,7 +136,8 @@ public sealed class SendingValidationTests
                     _suppliers,
                     places: null,
                     _mailTransport,
-                    _smsTransport)
+                    _smsTransport,
+                    _alertHandler)
                 .ValidateAsync(TestContext.Current.CancellationToken))
             .Match(() => throw new Xunit.Sdk.XunitException("Startup was not refused."), error => error);
 
@@ -192,35 +195,6 @@ public sealed class SendingValidationTests
 
         Assert.Equal("signin-link.sms.ar", refusal.Details["key"].GetString());
         Assert.Equal(134, refusal.Details["allowed"].GetInt32());
-    }
-
-    /// <summary>
-    /// INT-SMS-003 AC3: <c>outstanding</c> is measured at the joined width of the
-    /// registered required subscribers' names, as the alert carries them, so a text
-    /// that fits with short names and not with longer ones is refused only for the
-    /// deployment that registered the longer.
-    /// </summary>
-    [Fact]
-    public async Task INT_SMS_003_AC1_TheSubscribersAreMeasuredAtTheirJoinedWidthAsync()
-    {
-        string written = new string('a', 140) + "{outstanding}";
-        string[] longer = [new('x', 10), new('y', 10)];
-
-        _templates.Set(MessageKind.Alert, SendKind.Sms, "en", new MessageTemplate(null, written));
-        _places = new MessagePlaceholders(["a", "b"], [], [], Landing.Origins);
-
-        Assert.Equal("[\"a\",\"b\"]".Length, _places.Widths["outstanding"]);
-
-        await PassedAsync();
-
-        _places = new MessagePlaceholders(longer, [], [], Landing.Origins);
-
-        Assert.Equal(("[\"" + longer[0] + "\",\"" + longer[1] + "\"]").Length, _places.Widths["outstanding"]);
-
-        Error refusal = await RefusedAsync();
-
-        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
-        Assert.Equal("alert.sms.en", refusal.Details["key"].GetString());
     }
 
     /// <summary>

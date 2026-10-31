@@ -15,6 +15,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Sending;
+using Janus.Testing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -1148,9 +1149,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
     /// <summary>
     /// INT-SMS-006 AC2 and LIB-EXT-001, D-166 (270): every deployment sends text
-    /// messages, its alerts among them, and the library ships no SMS transport of its
-    /// own, so one that registers none does not start, and the refusal names the
-    /// transport.
+    /// messages and the library ships no SMS transport of its own, so one that
+    /// registers none does not start, and the refusal names the transport.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -1163,6 +1163,24 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
         Assert.Equal("smsTransport", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// OPS-ALERT-003 AC4 and LIB-HOST-001, D-225: the library delivers no alert itself,
+    /// so a deployment that registers no alert handler does not start, and the refusal
+    /// names the handler.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AC4_ADeploymentWithNoAlertHandlerDoesNotStartAsync()
+    {
+        using IHost deployment = Deployed(alertHandler: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("alertHandler", refused.Failure?.Details["key"].GetString());
     }
 
     /// <summary>
@@ -2072,6 +2090,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         ISecretSource? secrets = null,
         bool mailTransport = true,
         bool smsTransport = true,
+        bool alertHandler = true,
         bool secretSource = true,
         bool resolver = false,
         string? document = null,
@@ -2096,6 +2115,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 secrets: secrets,
                 mailTransport: mailTransport,
                 smsTransport: smsTransport,
+                alertHandler: alertHandler,
                 secretSource: secretSource,
                 resolver: resolver,
                 document: document,
@@ -2124,6 +2144,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         ISecretSource? secrets = null,
         bool mailTransport = true,
         bool smsTransport = true,
+        bool alertHandler = true,
         bool secretSource = true,
         bool resolver = false,
         string? document = null,
@@ -2145,6 +2166,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (smsTransport)
         {
             services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+        }
+
+        if (alertHandler)
+        {
+            services.AddSingleton<IAlertHandler>(new InMemoryAlerts());
         }
 
         if (codec)

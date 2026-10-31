@@ -182,7 +182,6 @@ public static class HostingRegistration
         // IDN-LIFE-012, REG-IDENT-008: this application is the providers' client, on
         // the same connection their documents are read on.
         services.AddScoped<ProviderSignIn>();
-        services.AddScoped<AlertRouter>();
         services.AddScoped<AlertDispatch>();
 
         // LIB-API-001, CONV-DESIGN-002: a committed event is offered to the consumers
@@ -199,7 +198,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IPrivacyAudit>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<RestoreTest>>()));
@@ -212,8 +211,6 @@ public static class HostingRegistration
             provider.GetRequiredService<IPrivacyAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
-        services.AddScoped<AlertDestinationChange>();
-        services.AddScoped<IAlertLog, AlertLog>();
 
         // IDN-ATTR-002, OPS-CFG-003: a system policy that shows photos is refused where
         // the deployment declared no codec, so what changes it takes the codec as it was
@@ -223,7 +220,6 @@ public static class HostingRegistration
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<ConfigurationAdministration>(),
-            provider.GetRequiredService<AlertDestinationChange>(),
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetRequiredService<CategoryRetention>(),
             provider.GetService<ImageCodec>(),
@@ -258,7 +254,7 @@ public static class HostingRegistration
             provider.GetRequiredService<LocationCopy>(),
             provider.GetService<ILocationSource>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<ILocationResolver>(provider => provider.GetRequiredService<LocationDatabase>());
 
@@ -269,7 +265,7 @@ public static class HostingRegistration
             provider.GetRequiredService<DatacenterRangeCopy>(),
             provider.GetService<IDatacenterRangeSource>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IDatacenterRanges>(provider => provider.GetRequiredService<DatacenterRanges>());
 

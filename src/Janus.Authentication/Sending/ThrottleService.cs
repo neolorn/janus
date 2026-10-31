@@ -27,7 +27,7 @@ internal sealed class ThrottleService(
     IConfigurationStore configuration,
     IThrottleLedger ledger,
     IUnitOfWork work,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     /// <summary>

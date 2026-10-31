@@ -30,7 +30,7 @@ namespace Janus.Hosting.Privacy;
 internal sealed class NoticeCookieCheck(
     ILegalDocumentStore documents,
     IDeploymentCookies cookies,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     /// <summary>

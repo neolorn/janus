@@ -149,33 +149,33 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 
     /// <summary>
     /// OPS-CFG-002 AC3: a key with no direction is classified as loosening whichever
-    /// way it moves, so replacing the alert destinations costs the gate and a reason.
+    /// way it moves, so replacing the related origins costs the gate and a reason.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
     public async Task OPS_CFG_002_AC3_AChangeWithNoDirectionRequiresStepUpAndAReasonAsync()
     {
-        _configuration.Set(Settings.AlertingEmailDestinations, ["one@example.test"]);
+        _configuration.Set(Settings.WebAuthnRelatedOrigins, ["https://one.example.test"]);
 
         Assert.Equal(
             ErrorCodes.StepUpRequired,
             (await RefusedAsync(
-                Settings.AlertingEmailDestinations,
-                ["two@example.test"],
+                Settings.WebAuthnRelatedOrigins,
+                ["https://two.example.test"],
                 "an incident",
                 Wanting)).Code);
 
         Assert.Equal(
             ErrorCodes.ConfigurationChangeReasonRequired,
             (await RefusedAsync(
-                Settings.AlertingEmailDestinations,
-                ["two@example.test"],
+                Settings.WebAuthnRelatedOrigins,
+                ["https://two.example.test"],
                 reason: null,
                 Satisfied)).Code);
 
         await ChangedAsync(
-            Settings.AlertingEmailDestinations,
-            ["two@example.test"],
+            Settings.WebAuthnRelatedOrigins,
+            ["https://two.example.test"],
             "an incident",
             Satisfied);
 

@@ -6,18 +6,18 @@ using Janus.Core;
 namespace Janus.Authentication.Alerting;
 
 /// <summary>
-/// The one path every raised condition takes: written for the alert channels inside
+/// The one path every raised condition takes: written for <c>alert-dispatch</c> inside
 /// the transaction that raised it, and announced to the host.
 /// </summary>
-/// <param name="alerts">Where the condition waits for the channels.</param>
+/// <param name="alerts">Where the condition waits to be handed over.</param>
 /// <param name="events">Where the host is told of it.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <remarks>
-/// Implements OPS-ALERT-001, CONV-DESIGN-002 and chapter 10 section 5b. The channels
-/// carry the condition from the committed row, so an operation that rolls back raises
-/// nothing, and nothing the channels need is built while the operation runs.
+/// Implements OPS-ALERT-001, CONV-DESIGN-002 and chapter 10 section 5b. The condition
+/// is handed over from the committed row, so an operation that rolls back raises
+/// nothing, and nothing the hand-over needs is built while the operation runs.
 /// </remarks>
-internal sealed class AlertChannels(IRaisedAlerts alerts, IEvents events, IUnitOfWork work) : IAlertChannels
+internal sealed class AlertRaising(IRaisedAlerts alerts, IEvents events, IUnitOfWork work) : IAlertRaising
 {
     /// <inheritdoc/>
     public async ValueTask<Result> RaiseAsync(AlertRaised raised, CancellationToken cancellationToken)

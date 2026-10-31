@@ -23,7 +23,7 @@ namespace Janus.Authentication.Alerting;
 /// </remarks>
 internal sealed class CertificateRenewalWatch(
     ICertificateRenewal? renewal,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     private const string Absent = "certificate.renewal.absent";

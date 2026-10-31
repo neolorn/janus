@@ -150,7 +150,7 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
 
     /// <summary>
     /// OPS-BOOT-001 AC3 and D-133: the command emits no break-glass credential, and the
-    /// alert that none exists is raised on the alert channels at once.
+    /// alert that none exists is raised at once.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -741,7 +741,7 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
 
     /// <summary>
     /// OPS-ALERT-001 and OPS-BOOT-001 AC3: that no emergency credential exists is raised
-    /// through the alert channels, so the <c>AlertRaised</c> event is written with the
+    /// through the alert raising, so the <c>AlertRaised</c> event is written with the
     /// raised row, in bootstrap's transaction.
     /// </summary>
     /// <returns>The work of the test.</returns>

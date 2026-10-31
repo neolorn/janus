@@ -16,6 +16,7 @@ using Janus.Hosting.Alerting;
 using Janus.Hosting.Background;
 using Janus.Hosting.Tests.Sending;
 using Janus.Storage.Tests;
+using Janus.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -39,6 +40,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     private readonly JobRunsInMemory _runs = new();
     private readonly EventsInMemory _alerts = new();
     private readonly NotificationHandlerInMemory _sent = new();
+    private readonly InMemoryAlerts _handler = new();
     private readonly SendOutboxInMemory _outbox = new();
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly LogsInMemory _logs = new();
@@ -59,7 +61,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
         services.AddSingleton<IConfigurationStore>(_configuration);
         services.AddSingleton<IJobRuns>(_runs);
-        services.AddSingleton<IAlertChannels>(_alerts);
+        services.AddSingleton<IAlertRaising>(_alerts);
         services.AddSingleton<ISendOutbox>(_outbox);
         services.AddScoped(provider => new SendingPath(
             _configuration,
@@ -78,8 +80,10 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         }.Send);
         services.AddScoped<IFollowedSend>(provider => provider.GetRequiredService<GovernedSend>());
         services.AddSingleton<IAlertLedger, AlertLedgerInMemory>();
-        services.AddSingleton<IAlertLog, AlertLogInMemory>();
-        services.AddScoped<AlertRouter>();
+        services.AddSingleton<IRaisedAlerts, RaisedAlertsInMemory>();
+        services.AddSingleton<IAlertHandler>(_handler);
+        services.AddSingleton<TimeProvider>(_clock);
+        services.AddScoped<AlertDispatch>();
         services.AddScoped<IUnitOfWork>(_ => Begun());
 
         _services = services.BuildServiceProvider();
@@ -290,27 +294,22 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-ALERT-001 AC4 and INF-BG-001 AC2: with <c>alert-dispatch</c> stalled, its
-    /// lapse is still raised through the channels and is also delivered by the router
-    /// straight from the worker, so it reaches the destinations; the lapse of any other
-    /// job waits for the carrier.
+    /// OPS-ALERT-003 AC3 and INF-BG-001 AC2: with <c>alert-dispatch</c> stalled, its
+    /// lapse is still raised and is also handed to the host's alert handler straight
+    /// from the worker; the lapse of any other job waits for the carrier.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_001_AC4_TheLapseOfAStalledCarrierReachesTheDestinationsAsync()
+    public async Task OPS_ALERT_003_AC3_TheLapseOfAStalledCarrierReachesTheHandlerAsync()
     {
-        _configuration.Set<IReadOnlyList<string>>(Settings.AlertingEmailDestinations, ["ops@example.test"]);
-        _configuration.Set<IReadOnlyList<string>>(Settings.AlertingSmsDestinations, ["+201001234567"]);
-
         using BackgroundWorker worker = Worker(Failing(AlertDispatch.Job), Failing("stopped"));
 
         await TurnsAsync(worker, 4);
 
-        SendRequest delivered = Assert.Single(_sent.Mail);
+        AlertRaised handed = Assert.Single(_handler.Taken);
 
-        Assert.Equal(MessageKind.Alert, delivered.Message);
-        Assert.Equal("background-job-failed", delivered.Values["condition"]);
-        Assert.Equal(AlertDispatch.Job, delivered.Values["job"]);
+        Assert.Equal(AlertCondition.BackgroundJobFailed, handed.Condition);
+        Assert.Equal(AlertDispatch.Job, handed.Details["job"].GetString());
         Assert.Equal(
             [AlertDispatch.Job, "stopped"],
             _alerts.Of<AlertRaised>().Select(raised => raised.Details["job"].GetString()).Order(StringComparer.Ordinal));

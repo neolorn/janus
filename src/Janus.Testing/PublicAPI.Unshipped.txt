@@ -60,3 +60,10 @@ Janus.Testing.TestDeployment.EnrolmentLink.get -> System.Uri!
 static Janus.Testing.TestDeployment.PrepareAsync(System.Uri! address, Janus.Core.SignOnClient! client, Janus.Testing.FixedSecretSource! secrets, string! migrationConnection, string! applicationConnection, System.Collections.Generic.IReadOnlyList<string!>! bootstrap, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestDeployment!>
 Janus.Testing.TestPeople.Visitor() -> Janus.Testing.TestVisitor!
 Janus.Testing.TestVisitor
+Janus.Testing.InMemoryAlerts
+Janus.Testing.InMemoryAlerts.InMemoryAlerts() -> void
+Janus.Testing.InMemoryAlerts.Taken.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.AlertRaised!>!
+Janus.Testing.InMemoryAlerts.Of(Janus.Core.AlertCondition condition) -> System.Collections.Generic.IReadOnlyList<Janus.Core.AlertRaised!>!
+Janus.Testing.InMemoryAlerts.FailHandOvers() -> void
+Janus.Testing.InMemoryAlerts.AcceptHandOvers() -> void
+Janus.Testing.InMemoryAlerts.TakeAsync(Janus.Core.AlertRaised! alert, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>

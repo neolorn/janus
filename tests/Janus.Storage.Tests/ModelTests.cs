@@ -785,8 +785,8 @@ public sealed class ModelTests
             "provider_attempts.state",
             "provider_attempts.verifier",
 
-            // Not an account field: a raised condition waiting for the alert channels,
-            // removed once they carry it (OPS-ALERT-001).
+            // Not an account field: a raised condition waiting for alert-dispatch,
+            // removed once it is handed over (OPS-ALERT-001).
             "raised_alerts.claimed_until",
             "raised_alerts.condition",
             "raised_alerts.details",

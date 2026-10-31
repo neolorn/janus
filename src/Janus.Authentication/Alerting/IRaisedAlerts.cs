@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace Janus.Authentication.Alerting;
 
 /// <summary>
-/// Where the raised conditions wait for the alert channels.
+/// Where the raised conditions wait to be handed to the host's alert handler.
 /// </summary>
 /// <remarks>
 /// Implements OPS-ALERT-001, CONV-DESIGN-002 and CONV-DESIGN-003. A condition is added
@@ -40,7 +40,7 @@ internal interface IRaisedAlerts
     /// <summary>
     /// Claims one condition for a pass, by one update that succeeds only where the row
     /// is unclaimed or its claim has timed out. The caller commits it on its own before
-    /// the router is called.
+    /// the handler is called.
     /// </summary>
     /// <param name="alert">What it is held under.</param>
     /// <param name="now">The instant of the claim.</param>
@@ -57,7 +57,7 @@ internal interface IRaisedAlerts
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Removes a condition the alert channels have carried, by one statement that
+    /// Removes a condition the host's alert handler has taken, by one statement that
     /// changes nothing where the claim has been taken over.
     /// </summary>
     /// <param name="alert">What it is held under.</param>
@@ -67,7 +67,7 @@ internal interface IRaisedAlerts
     ValueTask<bool> RemoveAsync(RaisedAlertId alert, DateTimeOffset claim, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Gives up the claim on a condition the router refused, so the next pass takes it,
+    /// Gives up the claim on a condition the handler did not take, so the next pass takes it,
     /// by one update that changes nothing where the claim has been taken over.
     /// </summary>
     /// <param name="alert">What it is held under.</param>

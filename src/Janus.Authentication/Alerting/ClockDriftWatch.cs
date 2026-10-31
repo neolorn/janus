@@ -28,7 +28,7 @@ namespace Janus.Authentication.Alerting;
 internal sealed class ClockDriftWatch(
     IClockReference? reference,
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     private const string Absent = "clock.reference.absent";

@@ -61,7 +61,7 @@ internal sealed class SendingPath(
     /// Where a spent retry budget's alert goes, the events unless a test stands in a
     /// channel that refuses.
     /// </summary>
-    public IAlertChannels Alerts { get; set; } = events;
+    public IAlertRaising Alerts { get; set; } = events;
 
     /// <summary>
     /// Where the publisher logs a fault of its immediate attempt, nowhere unless a test

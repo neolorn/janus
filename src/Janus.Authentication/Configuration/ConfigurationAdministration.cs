@@ -37,7 +37,7 @@ internal sealed class ConfigurationAdministration(
     AdministrativeScope scope,
     PolicyResolution policies,
     RelayRegistration relay,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IUnitOfWork work,
     TimeProvider time)
 {

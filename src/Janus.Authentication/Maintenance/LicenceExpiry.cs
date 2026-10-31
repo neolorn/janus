@@ -26,7 +26,7 @@ namespace Janus.Authentication.Maintenance;
 internal sealed class LicenceExpiry(
     IMaintenanceStore store,
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     /// <summary>

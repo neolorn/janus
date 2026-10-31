@@ -26,6 +26,11 @@ internal sealed class AlertLedger(DataConnections connections) : IAlertLedger
         WHERE identity.alerts.at <= @standing;
         """;
 
+    private const string Forget =
+        """
+        DELETE FROM identity.alerts WHERE key = @key AND at = @at;
+        """;
+
     /// <inheritdoc/>
     public async ValueTask<bool> FirstAsync(
         string key,
@@ -46,5 +51,23 @@ internal sealed class AlertLedger(DataConnections connections) : IAlertLedger
             .ConfigureAwait(false);
 
         return claimed > 0;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ForgetAsync(string key, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        int forgotten = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Forget,
+                new { key, at = at.ToUniversalTime() },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        return forgotten > 0;
     }
 }

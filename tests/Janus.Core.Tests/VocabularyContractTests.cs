@@ -88,7 +88,6 @@ public sealed class VocabularyContractTests
         "breakglass-used",
         "breakglass-generated",
         "protected-setting-changed",
-        "alert-destination-changed",
         "stepup-policy-weakened",
         "concurrent-sessions-implausible",
         "denial-spike",

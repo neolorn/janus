@@ -47,7 +47,7 @@ internal sealed class MailboxPublisher(
     IMailboxStore mailboxes,
     IMailServerInUse inUse,
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness)

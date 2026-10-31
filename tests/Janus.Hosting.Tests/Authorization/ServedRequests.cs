@@ -120,6 +120,7 @@ internal sealed class ServedRequests : IAsyncDisposable
         {
             builder.Services.AddSingleton<IMailTransport>(new MailTransportInMemory());
             builder.Services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+            builder.Services.AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts());
             builder.Services.AddSingleton(new LandingOrigins("https://identity.example.test", "https://accounts.example.test"));
         }
 

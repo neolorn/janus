@@ -1145,9 +1145,8 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-ABUSE-004 AC17: with no balance yet recorded a text message is not refused
-    /// by the floor; with a recorded balance below it, a text message other than an
-    /// alert is refused and an alert is not; and the gateway is never asked for its
-    /// balance by the send.
+    /// by the floor; with a recorded balance below it, a text message is refused; and
+    /// the gateway is never asked for its balance by the send.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC17_TheFloorIsJudgedOnTheRecordedBalanceAndNeverOnTheGatewayAsync()
@@ -1162,10 +1161,8 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Result<SendReference> ordinary = await SendAsync(Texted(), TestContext.Current.CancellationToken);
 
-        _ = await SentAsync(Texted() with { Message = MessageKind.Alert });
-
         Assert.Equal(ErrorCodes.SmsBalanceFloor, Refusal(ordinary));
-        Assert.Equal(2, _sms.Taken.Count);
+        _ = Assert.Single(_sms.Taken);
         Assert.Equal(0, _sms.Reads);
         Assert.Single(_balances.Readings);
     }
@@ -1192,141 +1189,6 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Empty(_outbox.Waiting);
         Assert.Empty(_ledger.Keys);
         Assert.Empty(_events.Of<AlertRaised>());
-    }
-
-    /// <summary>
-    /// OPS-ALERT-003 AC3: an alert-class send continues below the floor, because a
-    /// drained account must not be able to silence the alerting.
-    /// </summary>
-    [Fact]
-    public async Task OPS_ALERT_003_AC3_AnAlertIsSentBelowTheFloorAsync()
-    {
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
-        _balances.Given(new BalanceReading(Noon, 0m));
-
-        await SentAsync(new OutboundMessage(
-            SendDestination.Of(Phone),
-            MessageKind.Alert,
-            RestrictionPurpose.Notification,
-            Source: null,
-            "en"));
-
-        Assert.Single(_sms.Taken);
-    }
-
-    /// <summary>
-    /// OPS-ALERT-003: an alert is outside the destination restrictions as well, so
-    /// an exhausted operator number is not a silenced channel.
-    /// </summary>
-    [Fact]
-    public async Task SendAsync_AnAlertToAnExhaustedNumber_IsSentAsync()
-    {
-        _ledger.Given(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), Noon, Noon, Noon);
-
-        await SentAsync(new OutboundMessage(
-            SendDestination.Of(Phone),
-            MessageKind.Alert,
-            RestrictionPurpose.Notification,
-            Source: null,
-            "en"));
-
-        Assert.Single(_sms.Taken);
-    }
-
-    /// <summary>
-    /// OPS-ALERT-003 AC5: an alert is outside every restriction, so it is
-    /// carried with every bucket of every restriction that could count it full, and
-    /// counts under none (D-166, 342).
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public Task OPS_ALERT_003_AC5_AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync() =>
-        AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync();
-
-    /// <summary>
-    /// AUTH-ABUSE-004 AC13: an alert is sent whatever the buckets of every restriction
-    /// hold, and is counted under none of them.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public Task AUTH_ABUSE_004_AC13_AnAlertIsSentWhateverTheBucketsOfEveryRestrictionHoldAsync() =>
-        AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync();
-
-    private async Task AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync()
-    {
-        _configuration.Set(
-            Settings.Restrictions,
-            [
-                .. Settings.Restrictions.Default,
-                new Restriction(
-                    "every.send",
-                    RestrictionKeyKind.Global,
-                    null,
-                    RestrictionPurpose.Any,
-                    [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
-                new Restriction(
-                    "every.notice",
-                    RestrictionKeyKind.Global,
-                    null,
-                    RestrictionPurpose.Notification,
-                    [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
-            ]);
-
-        foreach (RestrictionKey full in new RestrictionKey[]
-        {
-            new("sms.destination", RestrictionKeyKind.Destination, Phone.Value),
-            new("notification.destination", RestrictionKeyKind.Destination, Phone.Value),
-            new("every.send", RestrictionKeyKind.Global, "every.send"),
-            new("every.notice", RestrictionKeyKind.Global, "every.notice"),
-        })
-        {
-            _ledger.Given(full, Noon, Noon, Noon, Noon, Noon);
-        }
-
-        IReadOnlyCollection<RestrictionKey> before = [.. _ledger.Keys];
-
-        _ = await SentAsync(new OutboundMessage(
-            SendDestination.Of(Phone),
-            MessageKind.Alert,
-            RestrictionPurpose.Notification,
-            Source: null,
-            "en"));
-
-        Assert.Single(_sms.Taken);
-        Assert.Equal(before, _ledger.Keys);
-        Assert.All(_ledger.Keys, key => Assert.Equal(5, _ledger.Sends(key).Count));
-    }
-
-    /// <summary>
-    /// INT-SMS-001 AC5: an alert by text is refused by no restriction and counted under
-    /// none: with every shipped restriction a text to the phone could count under full,
-    /// the alert is carried, and carried again, and no count moves.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task INT_SMS_001_AC5_AnAlertIsCountedAndRefusedByNoRestrictionAsync()
-    {
-        var noticed = new RestrictionKey("notification.destination", RestrictionKeyKind.Destination, Phone.Value);
-
-        foreach (RestrictionKey full in new[] { Each, Once, noticed })
-        {
-            _ledger.Given(full, Noon, Noon, Noon, Noon, Noon);
-        }
-
-        IReadOnlyCollection<RestrictionKey> before = [.. _ledger.Keys];
-        var alert = new OutboundMessage(
-            SendDestination.Of(Phone),
-            MessageKind.Alert,
-            RestrictionPurpose.Notification,
-            Source: null,
-            "en");
-
-        _ = await SentAsync(alert);
-        _ = await SentAsync(alert);
-
-        Assert.Equal(2, _sms.Taken.Count);
-        Assert.Equal(before, _ledger.Keys);
-        Assert.All(_ledger.Keys, key => Assert.Equal(5, _ledger.Sends(key).Count));
     }
 
     /// <summary>
@@ -1526,7 +1388,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     /// still governed. With one that takes everything, the fourth text message to one
     /// number inside a day is refused with <c>retryAt</c> and the handler saw three, each
     /// an admitted message carrying its reference and none of the restrictions' inputs;
-    /// below the gateway floor it is asked to carry nothing but an alert.
+    /// below the gateway floor it is asked to carry nothing.
     /// </summary>
     [Fact]
     public async Task LIB_EXT_001_AC4_AReplacedHandlerIsStillGovernedAsync()
@@ -1558,11 +1420,6 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             ErrorCodes.SmsBalanceFloor,
             Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
         Assert.Equal(3, replaced.Asked);
-
-        _ = await SentAsync(Texted() with { Message = MessageKind.Alert });
-
-        Assert.Equal(4, replaced.Asked);
-        Assert.Equal(MessageKind.Alert, replaced.Taken[3].Message);
     }
 
     /// <summary>

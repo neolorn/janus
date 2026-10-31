@@ -36,7 +36,7 @@ namespace Janus.Authentication.Sessions;
 internal sealed class ConcurrentSessions(
     ISessionStore sessions,
     IConfigurationStore configuration,
-    IAlertChannels alerts)
+    IAlertRaising alerts)
 {
     /// <summary>
     /// Looks at one use of a session against the account's other sessions.

@@ -726,9 +726,14 @@ internal sealed class Deployment : IAsyncDisposable
     public AlertLedgerInMemory Alerts { get; } = new();
 
     /// <summary>
-    /// The raised conditions the alert channels have not yet carried.
+    /// The raised conditions not yet handed to the host's alert handler.
     /// </summary>
     public RaisedAlertsInMemory Raised { get; } = new();
+
+    /// <summary>
+    /// The host's alert handler, holding every alert handed to it.
+    /// </summary>
+    public Janus.Testing.InMemoryAlerts AlertHandler { get; } = new();
 
     /// <summary>
     /// The compromised-password corpora screening asks, which a test can make
@@ -909,7 +914,7 @@ internal sealed class Deployment : IAsyncDisposable
     public AsyncServiceScope Scope() => _application.Services.CreateAsyncScope();
 
     /// <summary>
-    /// Runs one pass of the alert channels, in a scope of its own as the worker would.
+    /// Runs one pass of <c>alert-dispatch</c>, in a scope of its own as the worker would.
     /// </summary>
     /// <returns>How many raised conditions were carried.</returns>
     public async Task<int> CarryAlertsAsync()
@@ -923,7 +928,7 @@ internal sealed class Deployment : IAsyncDisposable
                     CancellationToken.None))
             .Match(
                 carried => carried,
-                error => throw new InvalidOperationException("The alert channels refused: " + error.Code + "."));
+                error => throw new InvalidOperationException("The alert dispatch refused: " + error.Code + "."));
     }
 
     /// <summary>
@@ -1308,9 +1313,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IConfigurationAudit>(Changes);
         _ = services.AddScoped<ConfigurationAdministration>();
         _ = services.AddSingleton<IAlertLedger>(Alerts);
-        _ = services.AddSingleton<IAlertLog, AlertLogInMemory>();
-        _ = services.AddScoped<AlertRouter>();
-        _ = services.AddScoped<IAlertChannels, AlertChannels>();
+        _ = services.AddSingleton<IAlertHandler>(AlertHandler);
+        _ = services.AddScoped<IAlertRaising, AlertRaising>();
         _ = services.AddSingleton<IRaisedAlerts>(Raised);
         _ = services.AddScoped<AlertDispatch>();
         _ = services.AddSingleton<Janus.Authentication.BreakGlass.IEmergencyAccount>(Emergency);
@@ -1319,13 +1323,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<Janus.Authentication.BreakGlass.BreakGlassService>();
         _ = services.AddScoped<IBreakGlass>(
             provider => provider.GetRequiredService<Janus.Authentication.BreakGlass.BreakGlassService>());
-        _ = services.AddScoped<AlertDestinationChange>();
         _ = services.AddScoped<IConfigurationAdministration>(provider => new ConfigurationService(
             provider.GetRequiredService<AdministrativeScope>(),
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<ConfigurationAdministration>(),
-            provider.GetRequiredService<AlertDestinationChange>(),
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetRequiredService<Janus.Privacy.CategoryRetention>(),
             provider.GetService<ImageCodec>(),
@@ -1372,7 +1374,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<ConfigurationAdministration>(),
             provider.GetRequiredService<PolicyResolution>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<IEvents>(),
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<Janus.Authentication.Organizations.OrganizationReads>(),
@@ -1392,7 +1394,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<Janus.Authentication.Organizations.IDomainStore>(),
             provider.GetService<IDnsResolver>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<IOrganizationDomains>(provider => new Janus.Authentication.Organizations.OrganizationDomainService(
@@ -1404,7 +1406,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<ConfigurationAdministration>(),
             provider.GetService<IDnsResolver>(),
             provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationAudit>(),
-            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));

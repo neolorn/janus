@@ -46,7 +46,7 @@ internal sealed class RestoreTest(
     IKeyRing ring,
     IConfigurationStore configuration,
     IPrivacyAudit audit,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IUnitOfWork work,
     TimeProvider time,
     ILogger<RestoreTest> log)

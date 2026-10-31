@@ -41,125 +41,119 @@ public enum MessageKind
     EnrolmentLink = 4,
 
     /// <summary>
-    /// A condition the operator has to see.
-    /// </summary>
-    [JsonStringEnumMemberName("alert")]
-    Alert = 5,
-
-    /// <summary>
     /// The answer to a request made for an address no account holds.
     /// </summary>
     [JsonStringEnumMemberName("no-account")]
-    NoAccount = 6,
+    NoAccount = 5,
 
     /// <summary>
     /// The answer to a registration or a change made with an address an account
     /// already holds, sent to the holder and never to the person who tried.
     /// </summary>
     [JsonStringEnumMemberName("account-exists")]
-    AccountExists = 7,
+    AccountExists = 6,
 
     /// <summary>
     /// An identifier was added to the account.
     /// </summary>
     [JsonStringEnumMemberName("identifier-added")]
-    IdentifierAdded = 8,
+    IdentifierAdded = 7,
 
     /// <summary>
     /// An identifier was removed, sent to the members of the security-notice set that
     /// remain and carrying the link that undoes it.
     /// </summary>
     [JsonStringEnumMemberName("identifier-removed")]
-    IdentifierRemoved = 9,
+    IdentifierRemoved = 8,
 
     /// <summary>
     /// The identifier that was removed no longer reaches the account. It carries no
     /// link and no powers.
     /// </summary>
     [JsonStringEnumMemberName("identifier-detached")]
-    IdentifierDetached = 10,
+    IdentifierDetached = 9,
 
     /// <summary>
     /// The primary identifier of a kind, or the kind's backup setting, changed.
     /// </summary>
     [JsonStringEnumMemberName("identifier-settings-changed")]
-    IdentifierSettingsChanged = 11,
+    IdentifierSettingsChanged = 10,
 
     /// <summary>
     /// A credential was enrolled on the account.
     /// </summary>
     [JsonStringEnumMemberName("credential-enrolled")]
-    CredentialEnrolled = 12,
+    CredentialEnrolled = 11,
 
     /// <summary>
     /// The address being displaced by a change is asked to confirm it, which is asked
     /// only where the account has no other channel at all.
     /// </summary>
     [JsonStringEnumMemberName("identifier-change-confirm")]
-    IdentifierChangeConfirm = 13,
+    IdentifierChangeConfirm = 12,
 
     /// <summary>
     /// The link a person asked for to set a new password, which restores nothing else
     /// and removes no factor.
     /// </summary>
     [JsonStringEnumMemberName("recovery-link")]
-    RecoveryLink = 14,
+    RecoveryLink = 13,
 
     /// <summary>
     /// The automatic receipt a data subject request gets the moment it enters the
     /// queue, which is not a decision and starts nothing (PRIV-RIGHT-002).
     /// </summary>
     [JsonStringEnumMemberName("privacy-request-received")]
-    PrivacyRequestReceived = 15,
+    PrivacyRequestReceived = 14,
 
     /// <summary>
     /// The honest word to a subject whose out-of-band erasure request reached its
     /// deadline undecided (PRIV-RIGHT-002).
     /// </summary>
     [JsonStringEnumMemberName("privacy-request-lapsed")]
-    PrivacyRequestLapsed = 16,
+    PrivacyRequestLapsed = 15,
 
     /// <summary>
     /// The word to an account that has just deactivated itself, carrying the link
     /// that stands it back up (IDN-LIFE-013).
     /// </summary>
     [JsonStringEnumMemberName("deactivation-notice")]
-    DeactivationNotice = 17,
+    DeactivationNotice = 16,
 
     /// <summary>
     /// The word to an account whose deletion grace window has begun, carrying the
     /// link that cancels it where the deletion is the account's own (IDN-LIFE-014).
     /// </summary>
     [JsonStringEnumMemberName("deletion-notice")]
-    DeletionNotice = 18,
+    DeletionNotice = 17,
 
     /// <summary>
     /// The link an invitation into an organization carries, sent to the email the
     /// invitation binds (IDN-LIFE-009a, REG-MAIL-001).
     /// </summary>
     [JsonStringEnumMemberName("invitation-link")]
-    InvitationLink = 19,
+    InvitationLink = 18,
 
     /// <summary>
     /// The one reminder a recovery-code set gets once it is older than
     /// <c>recovery.codes.reminder</c>, sent to the security-notice set (AUTH-FACT-008).
     /// </summary>
     [JsonStringEnumMemberName("recovery-codes-reminder")]
-    RecoveryCodesReminder = 20,
+    RecoveryCodesReminder = 19,
 
     /// <summary>
     /// The <c>emailCode</c> sign-in code, an authentication code and never a
     /// verification code (AUTH-FACT-004).
     /// </summary>
     [JsonStringEnumMemberName("sign-in-code")]
-    SignInCode = 21,
+    SignInCode = 20,
 
     /// <summary>
     /// A code and a link that prove control of an address or a number being
     /// registered, added or replaced (REG-SESS-003).
     /// </summary>
     [JsonStringEnumMemberName("verification-link")]
-    VerificationLink = 22,
+    VerificationLink = 21,
 
     /// <summary>
     /// A credential was suspended by a loss report, or by a removal that would lower the
@@ -167,7 +161,7 @@ public enum MessageKind
     /// (AUTH-RECOV-007).
     /// </summary>
     [JsonStringEnumMemberName("credential-suspended")]
-    CredentialSuspended = 23,
+    CredentialSuspended = 22,
 
     /// <summary>
     /// An erasure request received out of band was fulfilled and the deletion grace
@@ -175,7 +169,7 @@ public enum MessageKind
     /// (IDN-LIFE-003).
     /// </summary>
     [JsonStringEnumMemberName("oob-deletion-notice")]
-    OobDeletionNotice = 24,
+    OobDeletionNotice = 23,
 
     /// <summary>
     /// A suspended credential's number left the account, whatever suspended it: sent
@@ -183,7 +177,7 @@ public enum MessageKind
     /// link, since no cancel returns that credential (AUTH-RECOV-007, AUTH-FACT-002).
     /// </summary>
     [JsonStringEnumMemberName("credential-unbound")]
-    CredentialUnbound = 25,
+    CredentialUnbound = 24,
 
     /// <summary>
     /// The code that opens a record access session, an authentication code sent to an
@@ -191,7 +185,7 @@ public enum MessageKind
     /// (REC-ACC-001).
     /// </summary>
     [JsonStringEnumMemberName("record-access-code")]
-    RecordAccessCode = 26,
+    RecordAccessCode = 25,
 
     /// <summary>
     /// The answer to an ask of a record access code for an address no reachable person
@@ -199,7 +193,7 @@ public enum MessageKind
     /// value (REC-ACC-001).
     /// </summary>
     [JsonStringEnumMemberName("record-access-none")]
-    RecordAccessNone = 27,
+    RecordAccessNone = 26,
 
     /// <summary>
     /// A person record's own deletion began its grace window, sent to the record's
@@ -207,5 +201,5 @@ public enum MessageKind
     /// (REC-ACC-002).
     /// </summary>
     [JsonStringEnumMemberName("record-deletion-notice")]
-    RecordDeletionNotice = 28,
+    RecordDeletionNotice = 27,
 }

@@ -57,7 +57,8 @@ internal static class DeliveryRegistration
             provider.GetRequiredService<RestrictionKeySuppliers>(),
             Measured(provider),
             provider.GetService<IMailTransport>(),
-            provider.GetService<ISmsTransport>()));
+            provider.GetService<ISmsTransport>(),
+            provider.GetService<IAlertHandler>()));
 
         return services;
     }

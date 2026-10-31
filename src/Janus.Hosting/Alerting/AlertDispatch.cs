@@ -9,30 +9,37 @@ using Janus.Core.Configuration;
 namespace Janus.Hosting.Alerting;
 
 /// <summary>
-/// One pass of the alert channels: the conditions raised in transactions that have
-/// committed, carried by the router to the destinations, oldest first.
+/// One pass of <c>alert-dispatch</c>: the conditions raised in transactions that have
+/// committed, handed to the host's alert handler, oldest first, one alert per condition
+/// per window rather than one per occurrence.
 /// </summary>
 /// <param name="alerts">Where the raised conditions wait.</param>
-/// <param name="router">What carries one to the destinations.</param>
-/// <param name="configuration">Where the claim's timeout is read.</param>
+/// <param name="ledger">What remembers which conditions were already handed over.</param>
+/// <param name="handler">The host's alert handler, which delivers what it takes.</param>
+/// <param name="configuration">Where the claim's timeout and the window are read.</param>
 /// <param name="work">The transactions a claim and an outcome are each written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements OPS-ALERT-001, CONV-DESIGN-002, CONV-DESIGN-003, INF-BG-001 and chapter 10
-/// section 5b. Every raised condition is claimed before the router is called, by one
-/// conditional update committed on its own, and leaves the table by one statement
-/// conditional on that claim, so passes in any number of processes carry each once. A
-/// condition the router refused gives up its claim and is carried on a later pass.
+/// Implements OPS-ALERT-001, OPS-ALERT-002, OPS-ALERT-003, CONV-DESIGN-002,
+/// CONV-DESIGN-003, INF-BG-001 and chapter 10 section 5b. Every raised condition is
+/// claimed before the handler is called, by one conditional update committed on its own,
+/// and leaves the table by one statement conditional on that claim, so passes in any
+/// number of processes carry each once. Its deduplication key is claimed the same way
+/// before the handler is called, so two passes that reach one condition inside one
+/// window hand it over once. A condition the handler did not take gives the key back and
+/// its claim up, and is handed over again on a later pass. The library delivers no alert
+/// itself.
 /// </remarks>
 internal sealed class AlertDispatch(
     IRaisedAlerts alerts,
-    AlertRouter router,
+    IAlertLedger ledger,
+    IAlertHandler handler,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time)
 {
     /// <summary>
-    /// The name of the job that runs the passes, whose own lapse the worker delivers
+    /// The name of the job that runs the passes, whose own lapse the worker hands over
     /// without waiting for it.
     /// </summary>
     public const string Job = "alert-dispatch";
@@ -76,7 +83,7 @@ internal sealed class AlertDispatch(
         foreach (RaisedAlert alert in waiting)
         {
             // CONV-DESIGN-003: the claim is one conditional update committed on its own,
-            // before the router is called; a row another pass holds is that pass's.
+            // before the handler is called; a row another pass holds is that pass's.
             DateTimeOffset now = time.GetUtcNow();
 
             DateTimeOffset? claimed = (await InUnitAsync(
@@ -97,15 +104,12 @@ internal sealed class AlertDispatch(
                 continue;
             }
 
-            // D-022: the router commits its deduplication claim and carries the condition
-            // outside any transaction.
-            Result<AlertDelivery> delivered = await router.RaiseAsync(alert.Raised, cancellationToken)
-                .ConfigureAwait(false);
+            Result handed = await HandOverAsync(alert.Raised, cancellationToken).ConfigureAwait(false);
 
-            bool refused = delivered.Match(_ => false, _ => true);
+            bool refused = handed.Match(() => false, _ => true);
 
             // The outcome is written under the claim: a condition carried leaves the
-            // table, and one the router refused gives up its claim for the next pass.
+            // table, and one the handler did not take gives up its claim for the next pass.
             bool settled = (await InUnitAsync(
                     async () => Result.Success(refused
                         ? await alerts.ReleaseAsync(alert.Id, claim, cancellationToken).ConfigureAwait(false)
@@ -119,9 +123,9 @@ internal sealed class AlertDispatch(
                 return Result.Failure<int>(failure);
             }
 
-            if (delivered.Match(_ => (Error?)null, error => error) is Error undelivered)
+            if (handed.Match(() => (Error?)null, error => error) is Error untaken)
             {
-                return Result.Failure<int>(undelivered);
+                return Result.Failure<int>(untaken);
             }
 
             if (settled)
@@ -131,6 +135,78 @@ internal sealed class AlertDispatch(
         }
 
         return Result.Success(carried);
+    }
+
+    /// <summary>
+    /// Hands one raised condition to the host's alert handler, unless one under its
+    /// deduplication key was handed over inside the window.
+    /// </summary>
+    /// <param name="raised">What fired.</param>
+    /// <param name="cancellationToken">Abandons the hand-over.</param>
+    /// <returns>
+    /// Nothing where the handler took it or it was folded into one already handed over,
+    /// or the failure where the handler did not take it.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The alert is absent.</exception>
+    /// <remarks>
+    /// OPS-ALERT-002, D-022: the key is claimed by one conditional write committed before
+    /// the handler is called, since no handler is called while a transaction is open, and
+    /// is given back where the handler did not take the alert, so its next hand-over is
+    /// the first of the window again. The worker hands the lapse of this job over here
+    /// directly, so a stalled carrier still reports itself (OPS-ALERT-003 AC3).
+    /// </remarks>
+    public async ValueTask<Result> HandOverAsync(AlertRaised raised, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(raised);
+
+        Error? failure = null;
+
+        TimeSpan window = (await configuration
+                .ReadAsync(Settings.AlertingDedupeWindow, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        string key = Alerts.Deduplication(raised.IdempotencyKey);
+
+        bool first = (await InUnitAsync(
+                async () => Result.Success(await ledger
+                    .FirstAsync(key, raised.RaisedAt, window, cancellationToken)
+                    .ConfigureAwait(false)),
+                cancellationToken)
+            .ConfigureAwait(false))
+            .Match(value => value, error => Held<bool>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        if (!first)
+        {
+            return Result.Success();
+        }
+
+        Result taken = await handler.TakeAsync(raised, cancellationToken).ConfigureAwait(false);
+
+        if (taken.Match(() => (Error?)null, error => error) is not Error untaken)
+        {
+            return Result.Success();
+        }
+
+        _ = (await InUnitAsync(
+                async () => Result.Success(await ledger
+                    .ForgetAsync(key, raised.RaisedAt, cancellationToken)
+                    .ConfigureAwait(false)),
+                cancellationToken)
+            .ConfigureAwait(false))
+            .Match(value => value, error => Held<bool>(error, ref failure));
+
+        return Result.Failure(failure ?? untaken);
     }
 
     // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named

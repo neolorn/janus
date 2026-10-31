@@ -29,7 +29,7 @@ internal sealed class SmsBalance(
     ISmsTransport sms,
     ISmsBalanceLedger readings,
     IUnitOfWork work,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     private static readonly TimeSpan Baseline = TimeSpan.FromDays(7);

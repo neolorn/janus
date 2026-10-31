@@ -1103,14 +1103,14 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
     /// CONV-DESIGN-003 AC13: each change of configuration with a step-up asks it, and
     /// through it the signal, with no unit of work begun, and the record of the signal's
     /// <c>risk</c> stands after the step-up refuses, nothing written: a key loosened and
-    /// the alert destinations replaced.
+    /// the related origins replaced.
     /// </summary>
     /// <param name="key">The key changed.</param>
     /// <param name="value">The value it is changed to, as JSON.</param>
     /// <returns>The work of the test.</returns>
     [Theory]
     [InlineData("session.aal2.inactivity", "\"PT2H\"")]
-    [InlineData("alerting.email.destinations", "[\"elsewhere@example.test\"]")]
+    [InlineData("webauthn.relatedorigins", "[\"https://elsewhere.example.test\"]")]
     public async Task CONV_DESIGN_003_AC13_AConfigurationChangeAsksTheSignalWithNoUnitOfWorkBegunAsync(
         string key,
         string value)

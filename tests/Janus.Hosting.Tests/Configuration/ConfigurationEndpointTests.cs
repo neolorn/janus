@@ -30,12 +30,6 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
     private static readonly OrganizationId Owned =
         new(Guid.Parse("44444444-4444-4444-8444-444444444444"));
 
-    private static readonly string[] Operations = ["ops@example.test"];
-
-    private static readonly string[] OneLanguage = ["en"];
-
-    private static readonly string[] Elsewhere = ["elsewhere@example.test"];
-
     private readonly Deployment _deployment = new();
 
     /// <summary>
@@ -606,74 +600,6 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status400BadRequest, read.Status);
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), read.Text("code"));
         Assert.Equal("key", read.Json().GetProperty("details").GetProperty("member").GetString());
-    }
-
-    /// <summary>
-    /// OPS-ALERT-004a AC1: the destination keys change through the one way that tells
-    /// the destinations being replaced, and the change is written down.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task OPS_ALERT_004a_AC1_ADestinationChangeTellsThePreviousDestinationsAsync()
-    {
-        _deployment.Configuration.Set(Settings.NotificationLanguages, OneLanguage);
-        _deployment.Configuration.Set(Settings.AlertingEmailDestinations, Operations);
-
-        Browser administrator = await AuthorisedAsync(
-            Permissions.ConfigurationManage,
-            Permissions.SystemAdminister);
-
-        int before = _deployment.Mail.Taken.Count;
-
-        Answer changed = await administrator.SendAsync(
-            "PUT",
-            "/admin/config/alerting.email.destinations",
-            ("value", Elsewhere),
-            ("reason", "a new rota"));
-
-        Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
-        Assert.Contains(
-            _deployment.Mail.Taken.Skip(before),
-            mail => string.Equals(mail.Destination.Value, Operations[0], StringComparison.Ordinal));
-        Assert.Equal(
-            Settings.AlertingEmailDestinations.Key,
-            Assert.Single(_deployment.Changes.Written).Key);
-    }
-
-    /// <summary>
-    /// OPS-ALERT-004a AC8 and AUTHZ-GATE-006: a restriction of the caller committed after
-    /// the gate step refuses a destination change 403 <c>authz.restricted</c> inside its
-    /// unit of work. The list in force is unchanged, no change is written down, and the
-    /// destinations it would have replaced were told of the change requested.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task OPS_ALERT_004a_AC8_ADestinationChangeRefusedAtTheSecondAskLeavesItsNoticeStandingAsync()
-    {
-        _deployment.Configuration.Set(Settings.NotificationLanguages, OneLanguage);
-        _deployment.Configuration.Set(Settings.AlertingEmailDestinations, Operations);
-
-        Browser administrator = await AuthorisedAsync(
-            Permissions.ConfigurationManage,
-            Permissions.SystemAdminister);
-
-        int before = _deployment.Mail.Taken.Count;
-        int raised = _deployment.Events.Of<AlertRaised>().Count;
-
-        await RestrictedSinceTheGateStep.RefusesAsync(
-            _deployment,
-            () => administrator.SendAsync(
-                "PUT",
-                "/admin/config/alerting.email.destinations",
-                ("value", Elsewhere),
-                ("reason", "a new rota")));
-
-        Assert.Contains(
-            _deployment.Mail.Taken.Skip(before),
-            mail => string.Equals(mail.Destination.Value, Operations[0], StringComparison.Ordinal));
-        Assert.Equal(Operations, await InForceAsync(Settings.AlertingEmailDestinations));
-        Assert.Empty(_deployment.Changes.Written);
-        Assert.Equal(raised, _deployment.Events.Of<AlertRaised>().Count);
     }
 
     /// <summary>

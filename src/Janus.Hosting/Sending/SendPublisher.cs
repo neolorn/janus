@@ -45,7 +45,7 @@ internal sealed class SendPublisher(
     SendAdmission admission,
     INotificationHandler handler,
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness,

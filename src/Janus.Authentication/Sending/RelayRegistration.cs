@@ -27,7 +27,7 @@ namespace Janus.Authentication.Sending;
 /// </remarks>
 internal sealed class RelayRegistration(
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     /// <summary>

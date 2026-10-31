@@ -30,6 +30,9 @@ namespace Janus.Authentication.Sending;
 /// What the deployment's text messages leave through, or nothing where it registered
 /// none.
 /// </param>
+/// <param name="alertHandler">
+/// What takes the deployment's raised alerts, or nothing where it registered none.
+/// </param>
 /// <remarks>
 /// Implements AUTH-ABUSE-005, INT-SMS-003, INT-SMS-005a, INT-SMS-006, INT-MAIL-008,
 /// INT-GEN-001, INF-TLS-004, LIB-EXT-001 and LIB-HOST-001. Every deployment sends mail
@@ -46,9 +49,12 @@ internal sealed class SendingValidation(
     RestrictionKeySuppliers suppliers,
     MessagePlaceholders? places,
     IMailTransport? mailTransport,
-    ISmsTransport? smsTransport)
+    ISmsTransport? smsTransport,
+    IAlertHandler? alertHandler)
 {
     private const string MailTransport = "mailTransport";
+
+    private const string AlertHandler = "alertHandler";
 
     private const string SmsTransport = "smsTransport";
 
@@ -79,6 +85,13 @@ internal sealed class SendingValidation(
         if (smsTransport is null)
         {
             return Result.Failure(Absent(SmsTransport));
+        }
+
+        // OPS-ALERT-003: the library delivers no alert itself, so a deployment that
+        // registered nothing to take them is refused here.
+        if (alertHandler is null)
+        {
+            return Result.Failure(Absent(AlertHandler));
         }
 
         // LIB-HOST-001: the origins are the declaration check's to read in full; this

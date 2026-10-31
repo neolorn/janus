@@ -10,9 +10,9 @@ namespace Janus.Authentication.Tests;
 /// <summary>
 /// Where the emitted events go, holding them in order so a test can read what an
 /// operation announced and what it did not. A raised condition is held as the
-/// <see cref="AlertRaised"/> event the alert channels announce it by.
+/// <see cref="AlertRaised"/> event the alert raising announces it by.
 /// </summary>
-internal sealed class EventsInMemory : IEvents, IAlertChannels
+internal sealed class EventsInMemory : IEvents, IAlertRaising
 {
     private readonly Lock _gate = new();
 

@@ -2,7 +2,7 @@ namespace Janus.Core.Configuration;
 
 /// <summary>
 /// A setting whose value is free text the library does not constrain further: a
-/// hosting location, an alert destination, a governing language.
+/// hosting environment, a governing language.
 /// </summary>
 /// <remarks>Implements chapter 10 section 4 value types, LIB-HOST-001.</remarks>
 public sealed class TextSetting : Setting<string>

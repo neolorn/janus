@@ -1099,22 +1099,6 @@ public static class ErrorCodes
     public static ErrorCode TruthTableDisagreement { get; } = ErrorCode.Parse("authz.truthtable.disagreement");
 
     /// <summary>
-    /// The change would leave an alert destination list empty. Add a destination
-    /// before removing the last one.
-    /// </summary>
-    /// <remarks>Implements OPS-ALERT-004a, chapter 10 section 1.5.</remarks>
-    public static ErrorCode ConfigurationLastDestination { get; } = ErrorCode.Parse("config.value.lastdestination");
-
-    /// <summary>
-    /// A change of an alert destination list found, under its row's lock, a value in
-    /// force other than the one whose destinations it had notified: another change
-    /// committed meanwhile. Nothing was changed. Read the list again and make the change
-    /// against what now stands.
-    /// </summary>
-    /// <remarks>Implements OPS-ALERT-004a, chapter 10 section 1.5.</remarks>
-    public static ErrorCode ConfigurationChangeSuperseded { get; } = ErrorCode.Parse("config.change.superseded");
-
-    /// <summary>
     /// A callback carried an unknown correlation reference, or arrived faster than the
     /// callback rate allows. Call again with the reference the send returned.
     /// </summary>

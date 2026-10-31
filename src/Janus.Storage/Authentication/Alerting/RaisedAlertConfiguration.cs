@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace Janus.Storage.Authentication.Alerting;
 
 /// <summary>
-/// How a raised condition waits for the alert channels.
+/// How a raised condition waits to be handed to the host's alert handler.
 /// </summary>
 /// <remarks>
 /// Implements OPS-ALERT-001 and CONV-DESIGN-002. The severity is not kept: it is the

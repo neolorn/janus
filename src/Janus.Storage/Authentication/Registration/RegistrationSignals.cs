@@ -122,7 +122,7 @@ internal sealed class RegistrationSignals(
     }
 
     // OPS-OBS-002: the loss is raised in a scope and unit of work of its own, which the
-    // alert channels begin and commit, and the window of OPS-ALERT-002 folds one raised
+    // alert raising begins and commits, and the window of OPS-ALERT-002 folds one raised
     // by every wait of every stream into one alert.
     private async ValueTask LostAsync(CancellationToken cancellationToken)
     {
@@ -131,7 +131,7 @@ internal sealed class RegistrationSignals(
         await using (scope.ConfigureAwait(false))
         {
             Result raised = await scope.ServiceProvider
-                .GetRequiredService<IAlertChannels>()
+                .GetRequiredService<IAlertRaising>()
                 .RaiseAsync(
                     Alerts.Of(
                         AlertCondition.Degradation,

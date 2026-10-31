@@ -71,7 +71,7 @@ internal sealed class ProviderSignIn(
     RequestSession browser,
     IHttpClientFactory channel,
     IKeyRing ring,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time,
     RandomNumberGenerator randomness,
     ILogger<ProviderSignIn> log)

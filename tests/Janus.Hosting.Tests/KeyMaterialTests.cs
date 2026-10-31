@@ -370,6 +370,7 @@ public sealed class KeyMaterialTests
         new ServiceCollection()
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
+            .AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))

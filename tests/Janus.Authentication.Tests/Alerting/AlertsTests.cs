@@ -28,7 +28,6 @@ public sealed class AlertsTests
         "breakglass-used",
         "breakglass-generated",
         "protected-setting-changed",
-        "alert-destination-changed",
         "stepup-policy-weakened",
         "concurrent-sessions-implausible",
         "denial-spike",
@@ -64,7 +63,6 @@ public sealed class AlertsTests
         AlertCondition.BreakGlassUsed,
         AlertCondition.BreakGlassGenerated,
         AlertCondition.ProtectedSettingChanged,
-        AlertCondition.AlertDestinationChanged,
         AlertCondition.StepUpPolicyWeakened,
         AlertCondition.ConcurrentSessionsImplausible,
         AlertCondition.ErasureDeliveryExhausted,
@@ -89,14 +87,16 @@ public sealed class AlertsTests
                 .Select(field => Alerts.Key((AlertCondition)field.GetValue(null)!, scope: null, named: null)));
 
     /// <summary>
-    /// D-166 (291): a condition is never renumbered; the one added for a generated
-    /// break-glass credential takes the next free value.
+    /// D-225: with the conditions it retired gone, the values run from zero in the order
+    /// of the table, the generated break-glass credential's beside its use.
     /// </summary>
     [Fact]
-    public void OPS_ALERT_001_AGeneratedBreakGlassCredentialTakesTheNextFreeValue() =>
+    public void OPS_ALERT_001_TheValuesRunInTheOrderOfTheTable() =>
         Assert.Equal(
-            AlertCondition.BreakGlassGenerated,
-            Enum.GetValues<AlertCondition>().Max());
+            Enumerable.Range(0, Identifiers.Length),
+            typeof(AlertCondition)
+                .GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Select(field => (int)(AlertCondition)field.GetValue(null)!));
 
     /// <summary>
     /// The severity of a condition is the table's and not the caller's, so two

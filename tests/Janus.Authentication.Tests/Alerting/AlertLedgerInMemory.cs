@@ -35,4 +35,18 @@ internal sealed class AlertLedgerInMemory : IAlertLedger
             return ValueTask.FromResult(true);
         }
     }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> ForgetAsync(string key, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (_raised.TryGetValue(key, out DateTimeOffset standing) && standing == at)
+            {
+                return ValueTask.FromResult(_raised.Remove(key));
+            }
+
+            return ValueTask.FromResult(false);
+        }
+    }
 }

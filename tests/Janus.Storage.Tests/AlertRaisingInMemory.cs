@@ -7,9 +7,9 @@ using Janus.Core;
 namespace Janus.Storage.Tests;
 
 /// <summary>
-/// The alert channels as a test reads them, keeping each condition raised.
+/// The alert raising as a test reads it, keeping each condition raised.
 /// </summary>
-internal sealed class AlertChannelsInMemory : IAlertChannels
+internal sealed class AlertRaisingInMemory : IAlertRaising
 {
     /// <summary>
     /// Every condition raised, in order.

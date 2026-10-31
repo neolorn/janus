@@ -30,15 +30,6 @@ internal static class Restrictions
         ArgumentNullException.ThrowIfNull(restriction);
         ArgumentNullException.ThrowIfNull(request);
 
-        // An alert answers to deduplication and to nothing else: an attacker able to
-        // spend any bucket an alert counted under would otherwise silence the
-        // alerting, which is the blackout two channels exist to prevent (OPS-ALERT-002,
-        // OPS-ALERT-003).
-        if (request.IsAlert)
-        {
-            return false;
-        }
-
         if (restriction.Channel is not RestrictionChannel.Any && !Carries(restriction.Channel, request.Kind))
         {
             return false;

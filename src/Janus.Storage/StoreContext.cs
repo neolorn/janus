@@ -371,7 +371,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<AlertRecord> Alerts => Set<AlertRecord>();
 
     /// <summary>
-    /// The conditions raised and not yet carried by the alert channels.
+    /// The conditions raised and not yet handed to the host's alert handler.
     /// </summary>
     public DbSet<RaisedAlertRecord> RaisedAlerts => Set<RaisedAlertRecord>();
 

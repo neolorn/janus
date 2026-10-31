@@ -51,7 +51,7 @@ internal sealed class DeploymentBootstrap(
     IIdentifierDirectory identifiers,
     IMailboxStore mailboxes,
     IRecoveryLinkStore links,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,

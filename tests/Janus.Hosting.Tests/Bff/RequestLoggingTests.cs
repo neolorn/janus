@@ -34,10 +34,6 @@ public sealed class RequestLoggingTests : IAsyncDisposable
     private const string Renewed = "lemoncurdandbutter";
     private const string Unheld = "nobody@example.test";
     private const string UnheldNumber = "+441632960077";
-    private const string Operator = "ops@example.test";
-    private const string OperatorNumber = "+441632960098";
-    private const string Owner = "owner@example.test";
-    private const string OwnerNumber = "+441632960099";
 
     // The subscriber a manual completion appends the ledger's line through, which is
     // what the fault names and the answer withholds.
@@ -235,9 +231,9 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
         Answer changed = await owner.SendAsync(
             "PUT",
-            "/admin/config/alerting.email.destinations",
-            ("value", new[] { Operator }),
-            ("reason", "The rota changed."));
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT6H"),
+            ("reason", "A support window."));
 
         Assert.Equal(ErrorCodes.FactorRejected.ToString(), failed.Text("code"));
         Assert.Equal(ErrorCodes.BreakGlassInvalid.ToString(), guessed.Text("code"));
@@ -501,17 +497,11 @@ public sealed class RequestLoggingTests : IAsyncDisposable
     }
 
     // A deployment administered by one organization, whose reserved account holds every
-    // permission there and whose operator the alerts a break-glass use raises reach.
+    // permission there.
     private static SubjectId Administered(Deployment deployment, RandomNumberGenerator randomness)
     {
         Flow.Prepare(deployment);
         deployment.Administers(Company);
-
-        deployment.Configuration.Set(Settings.AlertingEmailDestinations, [Operator]);
-        deployment.Configuration.Set(Settings.AlertingSmsDestinations, [OperatorNumber]);
-        deployment.Configuration.Set(Settings.AlertingOwnerEmail, Owner);
-        deployment.Configuration.Set(Settings.AlertingOwnerSms, OwnerNumber);
-        deployment.Configuration.Set(Settings.AlertingOwnerEnabled, false);
 
         var emergency = SubjectId.New(randomness);
 

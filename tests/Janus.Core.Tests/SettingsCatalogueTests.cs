@@ -27,16 +27,12 @@ public sealed class SettingsCatalogueTests
     // The capital that begins each word of a name after the first.
     private static readonly Regex Words = new("(?<=.)([A-Z])", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
-    // The twelve keys of LIB-HOST-001 that name the deployment, and the three held
+    // The eight keys of LIB-HOST-001 that name the deployment, and the three held
     // with no default that are named only where their condition holds: the basis of a
     // transfer and the two password screening sources.
     private static readonly string[] NamedByTheDeployment =
     [
         "abuse.sms.balancefloor",
-        "alerting.email.destinations",
-        "alerting.owner.email",
-        "alerting.owner.sms",
-        "alerting.sms.destinations",
         "hosting.crossborderbasis",
         "hosting.environment",
         "hosting.location",
@@ -191,7 +187,7 @@ public sealed class SettingsCatalogueTests
     public void Loosening_ABoolean_LoosensAwayFromItsDefault()
     {
         Assert.Equal(SettingDirection.Decrease, Settings.AbuseThrottleEnabled.Loosening);
-        Assert.Equal(SettingDirection.Increase, Settings.AlertingOwnerEnabled.Loosening);
+        Assert.Equal(SettingDirection.Increase, Settings.AuthzHandoutByHolding.Loosening);
     }
 
     /// <summary>

@@ -347,22 +347,10 @@ internal sealed class BackgroundWorker(
 
                     AlertRaised lapse = Alerts.Of(AlertCondition.BackgroundJobFailed, job.Name, now, Lapse(job));
 
-                    failure = (await services.GetRequiredService<IAlertChannels>()
+                    failure = (await services.GetRequiredService<IAlertRaising>()
                             .RaiseAsync(lapse, cancellationToken)
                             .ConfigureAwait(false))
                         .Match(() => (Error?)null, error => error);
-
-                    // OPS-ALERT-001 AC4 and INF-BG-001 AC2 (D-166, 290): the carrier cannot
-                    // carry the news of its own stall, so its lapse is also delivered by the
-                    // router here; the row it raised is folded into this delivery by the
-                    // deduplication ledger once the carrier runs again.
-                    if (failure is null && job.Name == AlertDispatch.Job)
-                    {
-                        failure = (await services.GetRequiredService<AlertRouter>()
-                                .RaiseAsync(lapse, cancellationToken)
-                                .ConfigureAwait(false))
-                            .Match(_ => (Error?)null, error => error);
-                    }
 
                     if (failure is not null)
                     {
@@ -375,6 +363,18 @@ internal sealed class BackgroundWorker(
                         .Match<Error?>(() => null, error => error) is Error notCommitted)
                     {
                         return Result.Failure(notCommitted);
+                    }
+
+                    // OPS-ALERT-003 AC3 and INF-BG-001 AC2 (D-166, 290): the carrier cannot
+                    // carry the news of its own stall, so its lapse is also handed to the
+                    // host's alert handler here, once the raise has committed; the row it
+                    // raised is folded into this hand-over by the deduplication ledger once
+                    // the carrier runs again.
+                    if (job.Name == AlertDispatch.Job)
+                    {
+                        return await services.GetRequiredService<AlertDispatch>()
+                            .HandOverAsync(lapse, cancellationToken)
+                            .ConfigureAwait(false);
                     }
 
                     return Result.Success();

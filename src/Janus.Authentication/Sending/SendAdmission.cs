@@ -64,11 +64,8 @@ internal sealed class SendAdmission(
         ArgumentNullException.ThrowIfNull(message);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(weight);
 
-        // AUTH-ABUSE-006: an alert is exempt from the hard stop, since a low balance
-        // that silenced the alerting would turn one outage into a blackout
-        // (OPS-ALERT-003).
+        // AUTH-ABUSE-006: a text message is held to the gateway floor.
         if (message.Kind is SendKind.Sms
-            && !message.IsAlert
             && (await balance.BelowFloorAsync(cancellationToken).ConfigureAwait(false))
                 .Match(below => below ? Error.From(ErrorCodes.SmsBalanceFloor) : null, error => error)
                 is Error floored)

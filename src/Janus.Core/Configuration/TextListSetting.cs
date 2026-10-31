@@ -5,8 +5,8 @@ using System.Linq;
 namespace Janus.Core.Configuration;
 
 /// <summary>
-/// A setting whose value is a list of text: relying party origins, alert destination
-/// lists, and the other bracketed lists of chapter 10 section 4.
+/// A setting whose value is a list of text: relying party origins and the other
+/// bracketed lists of chapter 10 section 4.
 /// </summary>
 /// <remarks>Implements chapter 10 section 4 value types, LIB-HOST-001.</remarks>
 public sealed class TextListSetting : Setting<IReadOnlyList<string>>

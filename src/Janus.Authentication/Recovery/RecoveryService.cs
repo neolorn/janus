@@ -79,7 +79,7 @@ internal sealed class RecoveryService(
     NonExistenceNotice nonExistence,
     PhoneSignals signals,
     ThrottleService throttle,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time,

@@ -190,6 +190,11 @@ public sealed class SampleHost : IAsyncLifetime
     public InMemorySmsTransport Sms { get; } = new();
 
     /// <summary>
+    /// What the deployment raised, as its alert handler took it.
+    /// </summary>
+    public InMemoryAlerts Alerts { get; } = new();
+
+    /// <summary>
     /// The people of the deployment, signed in through the library's own endpoints.
     /// </summary>
     public TestPeople People => _people
@@ -520,6 +525,7 @@ public sealed class SampleHost : IAsyncLifetime
         builder.Services.AddSingleton<IServer>(server);
         builder.Services.AddSingleton<IMailTransport>(Mail);
         builder.Services.AddSingleton<ISmsTransport>(Sms);
+        builder.Services.AddSingleton<IAlertHandler>(Alerts);
 
         // LIB-HOST-001: the frontend's pages, the host's sign-in screen and the
         // provider, and which client of the provider this application is.
@@ -633,10 +639,6 @@ public sealed class SampleHost : IAsyncLifetime
             [Settings.WebAuthnOrigins.Key] = Settings.WebAuthnOrigins.Write([Origin.GetLeftPart(UriPartial.Authority)]),
             [Settings.HostingLocation.Key] = Settings.HostingLocation.Write(HostingLocation.Inside),
             [Settings.HostingEnvironment.Key] = Settings.HostingEnvironment.Write("a rented virtual machine"),
-            [Settings.AlertingEmailDestinations.Key] = Settings.AlertingEmailDestinations.Write(["operator@sample.example.test"]),
-            [Settings.AlertingSmsDestinations.Key] = Settings.AlertingSmsDestinations.Write(["+201000000001"]),
-            [Settings.AlertingOwnerEmail.Key] = Settings.AlertingOwnerEmail.Write("owner@sample.example.test"),
-            [Settings.AlertingOwnerSms.Key] = Settings.AlertingOwnerSms.Write("+201000000002"),
             [Settings.AbuseSmsBalanceFloor.Key] = Settings.AbuseSmsBalanceFloor.Write(100m),
             [Settings.LegalGoverningLanguage.Key] = Settings.LegalGoverningLanguage.Write("en"),
             [Settings.PrivacyCalendarTimeZone.Key] = Settings.PrivacyCalendarTimeZone.Write("UTC"),

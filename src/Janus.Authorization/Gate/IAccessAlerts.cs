@@ -12,7 +12,7 @@ namespace Janus.Authorization.Gate;
 /// condition and nothing else.
 /// </summary>
 /// <remarks>
-/// Implements OPS-ALERT-001, AUTHZ-GATE-004 and CONV-DESIGN-003. The router every
+/// Implements OPS-ALERT-001, AUTHZ-GATE-004 and CONV-DESIGN-003. The raising every
 /// condition goes through is identity's; this port is the narrow view of it the gate
 /// needs, because an area project reaches no other area project (CONV-LAYOUT-001).
 /// </remarks>

@@ -32,14 +32,6 @@ namespace Janus.Hosting.Tests.BreakGlass;
 [Trait("kind", "unit")]
 public sealed class BreakGlassEndpointTests : IAsyncDisposable
 {
-    private const string Owner = "owner@example.test";
-
-    private const string OwnerNumber = "+441632960099";
-
-    private const string Operator = "ops@example.test";
-
-    private const string OperatorNumber = "+441632960098";
-
     private const string Present = "/auth/break-glass";
 
     private const string Generate = "/admin/break-glass/generate";
@@ -55,7 +47,6 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
     private static readonly RoleName SystemAdministrator = RoleName.Parse("system-administrator");
 
-    private static readonly string[] Rota = ["rota@example.test"];
 
     private static readonly Guid Holder = Guid.Parse("55555555-5555-4555-8555-555555555555");
 
@@ -66,19 +57,13 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     /// <summary>
     /// A deployment administered by one organization, whose reserved account is a member
     /// there, as bootstrap makes it, under a policy that requires AAL2 and names
-    /// <c>google</c> among its ways in, holds the system administrator's permissions
-    /// there, and whose owner has routine alerts turned off.
+    /// <c>google</c> among its ways in, and holds the system administrator's permissions
+    /// there.
     /// </summary>
     public BreakGlassEndpointTests()
     {
         Flow.Prepare(_deployment);
         _deployment.Administers(Administration);
-
-        _deployment.Configuration.Set(Settings.AlertingEmailDestinations, [Operator]);
-        _deployment.Configuration.Set(Settings.AlertingSmsDestinations, [OperatorNumber]);
-        _deployment.Configuration.Set(Settings.AlertingOwnerEmail, Owner);
-        _deployment.Configuration.Set(Settings.AlertingOwnerSms, OwnerNumber);
-        _deployment.Configuration.Set(Settings.AlertingOwnerEnabled, false);
 
         _emergency = SubjectId.New(_randomness);
         _deployment.Reserves(_emergency);
@@ -221,27 +206,22 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-002 AC3: use is raised at once on every channel, to the operator and
-    /// to the owner, with the owner's routine alerts turned off.
+    /// OPS-BOOT-002 AC3: use raises <c>breakglass-used</c> at once, and the next pass
+    /// hands it to the host's alert handler.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_AC3_UseReachesTheOwnerWithOwnerAlertsOffAsync()
+    public async Task OPS_BOOT_002_AC3_UseIsHandedToTheAlertHandlerAsync()
     {
         string credential = await GeneratedAsync();
 
         _ = await _deployment.CarryAlertsAsync();
-        _deployment.Mail.Taken.Clear();
-        _deployment.Sms.Taken.Clear();
 
         Assert.Equal(StatusCodes.Status200OK, (await PresentedAsync(new Browser(_deployment), credential)).Status);
         Assert.Equal(1, await _deployment.CarryAlertsAsync());
         Assert.Equal(
-            [Operator, Owner],
-            _deployment.Mail.Taken.Select(mail => mail.Destination.Value).Order(StringComparer.Ordinal));
-        Assert.Equal(
-            [OperatorNumber, OwnerNumber],
-            _deployment.Sms.Taken.Select(message => message.Destination.Value).Order(StringComparer.Ordinal));
+            AlertCondition.BreakGlassUsed,
+            Assert.Single(_deployment.AlertHandler.Of(AlertCondition.BreakGlassUsed)).Condition);
 
         AlertRaised used = Raised(AlertCondition.BreakGlassUsed);
 
@@ -317,8 +297,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-STEP-004 AC1 and AC2: the session changes the alert destinations with no
-    /// further step-up, and the change is written down as the reserved account's, which
+    /// AUTH-STEP-004 AC1 and AC2: the session loosens a setting with no further step-up, and the change is written down as the reserved account's, which
     /// no session but a break-glass one acts as.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -332,8 +311,8 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         Answer changed = await owner.SendAsync(
             "PUT",
-            "/admin/config/alerting.email.destinations",
-            ("value", Rota),
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT6H"),
             ("reason", "The operator is unreachable."));
 
         Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
@@ -504,8 +483,8 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         Answer changed = await owner.SendAsync(
             "PUT",
-            "/admin/config/alerting.email.destinations",
-            ("value", Rota),
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT6H"),
             ("reason", "The operator is unreachable."));
 
         Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
@@ -615,12 +594,12 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-004 AC2: generation is audited against who generated it and alerted,
-    /// to the owner with the owner's routine alerts turned off.
+    /// OPS-BOOT-004 AC2: generation is audited against who generated it and handed to
+    /// the host's alert handler as <c>breakglass-generated</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_004_AC2_GenerationIsAuditedAndReachesTheOwnerAsync()
+    public async Task OPS_BOOT_004_AC2_GenerationIsAuditedAndAlertedAsync()
     {
         _ = await GeneratedAsync();
         _ = await _deployment.CarryAlertsAsync();
@@ -633,8 +612,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         Assert.Equal(administrator, acting);
         Assert.Null(replaced);
         Assert.Null(inSession);
-        Assert.Contains(_deployment.Mail.Taken, mail => string.Equals(mail.Destination.Value, Owner, StringComparison.Ordinal));
-        Assert.Contains(_deployment.Sms.Taken, message => string.Equals(message.Destination.Value, OwnerNumber, StringComparison.Ordinal));
+        _ = Assert.Single(_deployment.AlertHandler.Of(AlertCondition.BreakGlassGenerated));
         Assert.Equal(AlertSeverity.High, generated.Severity);
         Assert.Equal(
             Alerts.Key(AlertCondition.BreakGlassGenerated, scope: null, issue.ToString()),

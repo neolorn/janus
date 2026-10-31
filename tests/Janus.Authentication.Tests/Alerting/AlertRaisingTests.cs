@@ -7,12 +7,12 @@ using Xunit;
 namespace Janus.Authentication.Tests.Alerting;
 
 /// <summary>
-/// The one path a raised condition takes: written for the alert channels in the
+/// The one path a raised condition takes: written for <c>alert-dispatch</c> in the
 /// transaction that raised it, and announced to the host (OPS-ALERT-001,
 /// CONV-DESIGN-002).
 /// </summary>
 [Trait("kind", "unit")]
-public sealed class AlertChannelsTests : IAsyncDisposable
+public sealed class AlertRaisingTests : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
@@ -20,7 +20,7 @@ public sealed class AlertChannelsTests : IAsyncDisposable
     private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
 
-    private AlertChannels Channels => new(_raised, _events, _work);
+    private AlertRaising Channels => new(_raised, _events, _work);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _work.DisposeAsync();

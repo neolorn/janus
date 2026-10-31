@@ -4,11 +4,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Alerting;
-using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Background;
 using Janus.Hosting.Tests.Authorization;
+using Janus.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -17,32 +17,29 @@ namespace Janus.Hosting.Tests.Alerting;
 
 /// <summary>
 /// A raised condition over the library's own database: it is a row of the transaction
-/// that raised it, so it reaches the destinations only where that transaction commits
-/// (OPS-ALERT-001, D-022).
+/// that raised it, so it reaches the host's alert handler only where that transaction
+/// commits (OPS-ALERT-001, OPS-ALERT-003, D-022).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class AlertCarryingTests(HostFixture host) : IClassFixture<HostFixture>
 {
-    private const string Operator = "operator@example.test";
-
     /// <summary>
     /// OPS-ALERT-001 AC3: a condition raised in a transaction that rolls back leaves no
-    /// row and no event, and the next pass of the alert channels carries nothing; one
-    /// raised in a transaction that commits is carried by the next pass, once, and has
-    /// written one <c>AlertRaised</c>.
+    /// row and no event, and the next pass of <c>alert-dispatch</c> hands nothing over; one
+    /// raised in a transaction that commits is handed to the handler by the next pass,
+    /// once, and has written one <c>AlertRaised</c> (OPS-ALERT-003 AC2).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_001_AC3_OnlyAConditionWhoseTransactionCommitsReachesTheDestinationsAsync()
+    public async Task OPS_ALERT_001_AC3_OnlyAConditionWhoseTransactionCommitsReachesTheHandlerAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        var mail = (MailTransportInMemory)host.Services.GetRequiredService<IMailTransport>();
+        var handler = (InMemoryAlerts)host.Services.GetRequiredService<IAlertHandler>();
 
         // Whatever the start of the deployment raised is carried first, so the passes
         // below answer for the two conditions of this case alone.
         _ = await CarriedAsync(cancellationToken);
 
-        int before = mail.Taken.Count(taken => taken.Destination.Value == Operator);
         string abandoned = Guid.NewGuid().ToString("N");
         string kept = Guid.NewGuid().ToString("N");
 
@@ -50,15 +47,15 @@ public sealed class AlertCarryingTests(HostFixture host) : IClassFixture<HostFix
 
         Assert.Equal((0, 0), await WrittenAsync(abandoned));
         Assert.Equal(0, await CarriedAsync(cancellationToken));
-        Assert.Equal(before, mail.Taken.Count(taken => taken.Destination.Value == Operator));
+        Assert.DoesNotContain(handler.Taken, taken => taken.Scope == abandoned);
 
         await RaisedAsync(kept, commits: true, cancellationToken);
 
         Assert.Equal((1, 1), await WrittenAsync(kept));
-        Assert.Equal(before, mail.Taken.Count(taken => taken.Destination.Value == Operator));
+        Assert.DoesNotContain(handler.Taken, taken => taken.Scope == kept);
         Assert.Equal(1, await CarriedAsync(cancellationToken));
         Assert.Equal(0, await CarriedAsync(cancellationToken));
-        Assert.Equal(before + 1, mail.Taken.Count(taken => taken.Destination.Value == Operator));
+        _ = Assert.Single(handler.Taken, taken => taken.Scope == kept);
         Assert.Equal((0, 1), await WrittenAsync(kept));
     }
 
@@ -72,7 +69,7 @@ public sealed class AlertCarryingTests(HostFixture host) : IClassFixture<HostFix
 
         _ = await work.BeginAsync(cancellationToken);
 
-        Result raised = await services.ServiceProvider.GetRequiredService<IAlertChannels>()
+        Result raised = await services.ServiceProvider.GetRequiredService<IAlertRaising>()
             .RaiseAsync(Alerts.Scoped(AlertCondition.RestrictionGranted, scope, now), cancellationToken);
 
         Assert.Null(raised.Match(() => (Error?)null, refusal => refusal));
@@ -100,7 +97,7 @@ public sealed class AlertCarryingTests(HostFixture host) : IClassFixture<HostFix
                 refusal => throw new Xunit.Sdk.XunitException($"The pass failed: {refusal.Code}."));
     }
 
-    // How many rows wait for the alert channels, and how many events were written, for
+    // How many rows wait for alert-dispatch, and how many events were written, for
     // the condition raised under one scope.
     private async Task<(int Waiting, int Announced)> WrittenAsync(string scope)
     {

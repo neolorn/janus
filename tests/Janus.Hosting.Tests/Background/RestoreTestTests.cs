@@ -411,6 +411,7 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
             .AddSingleton(time ?? new FixedTime(at))
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
+            .AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))

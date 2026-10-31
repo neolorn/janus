@@ -32,7 +32,7 @@ namespace Janus.Authentication.Maintenance;
 internal sealed class EnvelopeRotationWatch(
     IMaintenanceStore store,
     IConfigurationStore configuration,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     // Chapter 06 section 9: the operation is annual.

@@ -286,7 +286,8 @@ public sealed class DefaultMessageTemplatesTests
                 RestrictionKeySuppliers.None,
                 Measured,
                 new MailTransportInMemory(),
-                new SmsTransportInMemory())
+                new SmsTransportInMemory(),
+                new Janus.Testing.InMemoryAlerts())
             .ValidateAsync(TestContext.Current.CancellationToken);
     }
 

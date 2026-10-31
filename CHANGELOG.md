@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Raised alerts are handed to the host's `IAlertHandler`, which a deployment must
+  register: one that registers none does not start (`model.startup.declarationmissing`,
+  `details.key` `alertHandler`). `alert-dispatch` hands each alert over once its
+  transaction commits, one per condition per window, and again at the next pass where
+  the handler did not take it; the lapse of `alert-dispatch` itself is handed over
+  straight from the worker. The library sends no alert itself: the `alerting.*.destinations`
+  and `alerting.owner.*` keys, `alerting.sms.severitythreshold`, the alert message and the
+  `alert-destination-changed` condition are gone. `Janus.Testing` ships `InMemoryAlerts`.
 - The configuration catalogue holds `oidc.continuation.lifetime` (default 30 minutes,
   ceiling 1 hour), read and written through `/admin/config` as every runtime key is.
 - The provider answers only at the provider address the host declares: its issuer is

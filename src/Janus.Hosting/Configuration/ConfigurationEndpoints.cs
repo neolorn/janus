@@ -49,10 +49,10 @@ internal static class ConfigurationEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired, ErrorCodes.ConfigurationChangeSuperseded,
+                    ErrorCodes.StepUpRequired,
                     ErrorCodes.ConfigurationValueBelowFloor, ErrorCodes.ConfigurationValueAboveCeiling,
                     ErrorCodes.ConfigurationValueNotAllowed, ErrorCodes.ConfigurationKeyProtected,
-                    ErrorCodes.ConfigurationLastDestination, ErrorCodes.EndpointInsecure,
+                    ErrorCodes.EndpointInsecure,
                     ErrorCodes.ConfigurationChangeReasonRequired)
                 .Binding<ConfigurationKey>("key"))
             .Accepts<ConfigurationBody>(MediaTypeNames.Application.Json)

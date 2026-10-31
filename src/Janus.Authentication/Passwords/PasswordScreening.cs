@@ -34,7 +34,7 @@ internal sealed class PasswordScreening(
     IWordList words,
     IConfigurationStore configuration,
     IScreeningLog log,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     private const int PrefixLength = 5;

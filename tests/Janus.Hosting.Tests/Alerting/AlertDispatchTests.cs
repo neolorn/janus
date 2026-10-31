@@ -6,110 +6,146 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Alerting;
 
 /// <summary>
-/// The alert channels carrying what committed transactions raised: by the router, to
-/// the destinations, oldest first, each once (OPS-ALERT-001, CONV-DESIGN-002).
+/// <c>alert-dispatch</c> handing what committed transactions raised to the host's alert
+/// handler, oldest first, each once, and again until it is taken (OPS-ALERT-001,
+/// OPS-ALERT-002, OPS-ALERT-003, CONV-DESIGN-002).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AlertDispatchTests : IAsyncDisposable
 {
-    private const string Operator = "ops@example.test";
-
     private readonly Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment that names its operator's destinations and not yet its owner's.
+    /// A deployment whose host registered an alert handler.
     /// </summary>
-    public AlertDispatchTests()
-    {
-        Flow.Prepare(_deployment);
-
-        _deployment.Configuration.Set(Settings.AlertingEmailDestinations, [Operator]);
-        _deployment.Configuration.Set(Settings.AlertingSmsDestinations, ["+441632960098"]);
-    }
+    public AlertDispatchTests() => Flow.Prepare(_deployment);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
 
     /// <summary>
-    /// OPS-ALERT-001 AC1: a raised condition reaches the operator with nobody watching,
-    /// once, and leaves nothing waiting.
+    /// OPS-ALERT-003 AC2 and OPS-ALERT-001 AC1: a raised condition reaches the host's
+    /// handler with nobody watching, once, oldest first, and leaves nothing waiting.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_001_AC1_ARaisedConditionIsCarriedOnceAsync()
+    public async Task OPS_ALERT_003_AC2_ARaisedAlertIsHandedToTheHandlerOnceAsync()
     {
-        Owned();
-
         await RaisedAsync(AlertCondition.RestrictionGranted, "first");
+
+        _deployment.Clock.Advance(TimeSpan.FromSeconds(1));
+
         await RaisedAsync(AlertCondition.RestrictionLoosened, "second");
 
         Assert.Equal(2, await _deployment.CarryAlertsAsync());
         Assert.Equal(0, await _deployment.CarryAlertsAsync());
         Assert.Empty(_deployment.Raised.Waiting);
         Assert.Equal(
-            [Operator, Operator],
-            _deployment.Mail.Taken.Select(mail => mail.Destination.Value));
+            [AlertCondition.RestrictionGranted, AlertCondition.RestrictionLoosened],
+            [.. _deployment.AlertHandler.Taken.Select(alert => alert.Condition)]);
     }
 
     /// <summary>
-    /// OPS-ALERT-001: a condition the router cannot carry, because the deployment does
-    /// not yet name every destination, waits for a later pass rather than being lost.
+    /// OPS-ALERT-003 AC2: an alert the handler did not take waits for a later pass
+    /// rather than being lost, and its deduplication key is given back, so the later
+    /// pass hands it over rather than folding it into the hand-over that failed.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_001_AConditionTheRouterRefusedWaitsAsync()
+    public async Task OPS_ALERT_003_AC2_AnAlertTheHandlerDidNotTakeIsHandedAgainAsync()
     {
         await RaisedAsync(AlertCondition.BreakGlassUsed, "issue");
 
+        _deployment.AlertHandler.FailHandOvers();
+
         _ = await Assert.ThrowsAsync<InvalidOperationException>(_deployment.CarryAlertsAsync);
 
-        Assert.Single(_deployment.Raised.Waiting);
-        Assert.Empty(_deployment.Mail.Taken);
+        _ = Assert.Single(_deployment.Raised.Waiting);
+        Assert.Empty(_deployment.AlertHandler.Taken);
 
-        Owned();
+        _deployment.AlertHandler.AcceptHandOvers();
 
         Assert.Equal(1, await _deployment.CarryAlertsAsync());
         Assert.Empty(_deployment.Raised.Waiting);
+        Assert.Equal(
+            AlertCondition.BreakGlassUsed,
+            Assert.Single(_deployment.AlertHandler.Taken).Condition);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-002 AC1: two raises of one condition under one key inside the window
+    /// are handed over once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_002_AC1_OneConditionInsideTheWindowIsHandedOverOnceAsync()
+    {
+        await RaisedAsync(AlertCondition.RestrictionGranted, "one");
+
+        _deployment.Clock.Advance(TimeSpan.FromSeconds(1));
+
+        await RaisedAsync(AlertCondition.RestrictionGranted, "one");
+
+        Assert.Equal(2, await _deployment.CarryAlertsAsync());
+        Assert.Empty(_deployment.Raised.Waiting);
+        _ = Assert.Single(_deployment.AlertHandler.Taken);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-002 AC3: two alerts of one condition under different scopes inside one
+    /// window are both handed over.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_002_AC3_TwoScopesOfOneConditionAreBothHandedOverAsync()
+    {
+        await ScopedAsync(AlertCondition.Degradation, "mailbox.reconciliation");
+        await ScopedAsync(AlertCondition.Degradation, "password.blocklist.fallback");
+
+        Assert.Equal(2, await _deployment.CarryAlertsAsync());
+        Assert.Equal(2, _deployment.AlertHandler.Taken.Count);
     }
 
     /// <summary>
     /// OPS-ALERT-002, D-022: a pass commits each condition's deduplication claim before
-    /// the router carries it, so no transport is called while a transaction is open.
+    /// it calls the handler, so no handler is called while a transaction is open.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_002_NoAlertIsSentWhileATransactionIsOpenAsync()
+    public async Task OPS_ALERT_002_NoHandlerIsCalledWhileATransactionIsOpenAsync()
     {
-        Owned();
+        Deployment? watched = null;
+        var watching = new Watching(() => watched!.Work.Open);
 
-        var open = new List<int>();
+        await using (watched = new Deployment(services: services => services.AddSingleton<IAlertHandler>(watching)))
+        {
+            Flow.Prepare(watched);
 
-        _deployment.Mail.Handed = () => open.Add(_deployment.Work.Opened - _deployment.Work.Committed);
+            AlertRaised raised = Alerts.Of(AlertCondition.RestrictionGranted, "first", watched.Clock.GetUtcNow());
 
-        await RaisedAsync(AlertCondition.RestrictionGranted, "first");
+            await watched.Raised.AddAsync(new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised), CancellationToken.None);
 
-        Assert.Equal(1, await _deployment.CarryAlertsAsync());
-        Assert.Equal([0], open);
-        Assert.Empty(_deployment.Raised.Waiting);
+            Assert.Equal(1, await watched.CarryAlertsAsync());
+            Assert.Equal([false], watching.Open);
+            Assert.Empty(watched.Raised.Waiting);
+        }
     }
 
     /// <summary>
     /// CONV-DESIGN-003 AC9, INF-BG-001 AC4: a raised condition another pass holds is
-    /// that pass's: this one carries nothing of it and leaves the row as it stands, and
-    /// once that claim has timed out the next pass carries it. A condition the router
-    /// refused gives its claim up, so the next pass takes it without waiting.
+    /// that pass's: this one hands nothing of it over and leaves the row as it stands,
+    /// and once that claim has timed out the next pass hands it over.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task CONV_DESIGN_003_AC9_AConditionAnotherPassHoldsIsNotCarriedAsync()
     {
-        Owned();
-
         await RaisedAsync(AlertCondition.RestrictionGranted, "first");
 
         RaisedAlert held = Assert.Single(_deployment.Raised.Waiting);
@@ -118,26 +154,35 @@ public sealed class AlertDispatchTests : IAsyncDisposable
         _deployment.Raised.TakeOver(held.Id, _deployment.Clock.GetUtcNow() + timeout);
 
         Assert.Equal(0, await _deployment.CarryAlertsAsync());
-        Assert.Empty(_deployment.Mail.Taken);
-        Assert.Single(_deployment.Raised.Waiting);
+        Assert.Empty(_deployment.AlertHandler.Taken);
+        _ = Assert.Single(_deployment.Raised.Waiting);
 
         _deployment.Clock.Advance(timeout);
 
         Assert.Equal(1, await _deployment.CarryAlertsAsync());
-        Assert.Single(_deployment.Mail.Taken);
+        _ = Assert.Single(_deployment.AlertHandler.Taken);
         Assert.Empty(_deployment.Raised.Waiting);
     }
 
-    private void Owned()
-    {
-        _deployment.Configuration.Set(Settings.AlertingOwnerEmail, "owner@example.test");
-        _deployment.Configuration.Set(Settings.AlertingOwnerSms, "+441632960099");
-    }
+    private async Task RaisedAsync(AlertCondition condition, string named) =>
+        await WaitingAsync(Alerts.Of(condition, named, _deployment.Clock.GetUtcNow()));
 
-    private async Task RaisedAsync(AlertCondition condition, string scope)
-    {
-        AlertRaised raised = Alerts.Of(condition, scope, _deployment.Clock.GetUtcNow());
+    private async Task ScopedAsync(AlertCondition condition, string scope) =>
+        await WaitingAsync(Alerts.Scoped(condition, scope, _deployment.Clock.GetUtcNow()));
 
+    private async Task WaitingAsync(AlertRaised raised) =>
         await _deployment.Raised.AddAsync(new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised), CancellationToken.None);
+
+    // A handler that notes, at each hand-over, whether a transaction was open.
+    private sealed class Watching(Func<bool> open) : IAlertHandler
+    {
+        public List<bool> Open { get; } = [];
+
+        public ValueTask<Result> TakeAsync(AlertRaised alert, CancellationToken cancellationToken)
+        {
+            Open.Add(open());
+
+            return ValueTask.FromResult(Result.Success());
+        }
     }
 }

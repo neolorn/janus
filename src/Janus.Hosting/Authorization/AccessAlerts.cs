@@ -17,9 +17,9 @@ namespace Janus.Hosting.Authorization;
 /// <remarks>
 /// Implements OPS-ALERT-001, AUTHZ-GATE-004 and CONV-DESIGN-003. The severity of a
 /// condition and what it deduplicates under are the alert table's, so the gate names
-/// the condition and this carries it to the one router every condition goes through.
+/// the condition and this raises it the one way every condition is raised.
 /// </remarks>
-internal sealed class AccessAlerts(IAlertChannels alerts, TimeProvider time) : IAccessAlerts
+internal sealed class AccessAlerts(IAlertRaising alerts, TimeProvider time) : IAccessAlerts
 {
     /// <inheritdoc/>
     public async ValueTask<Result> RaiseAsync(

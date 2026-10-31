@@ -21,7 +21,7 @@ namespace Janus.Authentication.BreakGlass;
 /// </remarks>
 internal sealed class EmergencyCredentialWatch(
     IBreakGlassStore store,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     /// <summary>

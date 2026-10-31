@@ -50,7 +50,7 @@ internal sealed class BreakGlassService(
     IEmergencyAccount emergency,
     IBreakGlassAudit audit,
     ISessionAudit refusals,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     SessionService sessions,
     ThrottleService throttle,
     AdministrativeScope scope,
@@ -294,7 +294,7 @@ internal sealed class BreakGlassService(
             .ConfigureAwait(false);
 
         // OPS-BOOT-004 AC2: generation is raised under its own condition, scoped to the
-        // issue, and reaches the owner as use does, whatever alerting.owner.enabled says.
+        // issue, as use is.
         Result alerted = await alerts
             .RaiseAsync(
                 Alerts.Of(AlertCondition.BreakGlassGenerated, issued.Id.ToString(), now),

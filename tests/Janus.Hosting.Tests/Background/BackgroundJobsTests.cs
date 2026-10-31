@@ -569,6 +569,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
         if (sms)
         {
             services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+            services.AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts());
         }
 
         ServiceProvider deployed = services

@@ -33,7 +33,6 @@ internal static class MessageChannels
         MessageKind.SecondStepCode,
         MessageKind.SecurityNotice,
         MessageKind.EnrolmentLink,
-        MessageKind.Alert,
         MessageKind.NoAccount,
         MessageKind.AccountExists,
         MessageKind.IdentifierAdded,

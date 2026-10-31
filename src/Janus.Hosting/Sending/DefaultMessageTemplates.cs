@@ -123,16 +123,6 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "استخدم هذا لإتمام إعداد وسيلة الدخول الجديدة: {link}. ينتهي بعد قليل.",
                 "لإتمام الإعداد: {link}")),
         (
-            MessageKind.Alert,
-            new Words(
-                "Alert: {condition}",
-                "The condition {condition} was raised at {raisedAt}.",
-                "Alert: {condition}"),
-            new Words(
-                "تنبيه: {condition}",
-                "رُفع التنبيه {condition} في {raisedAt}.",
-                "تنبيه: {condition}")),
-        (
             MessageKind.NoAccount,
             new Words(
                 "We could not find an account",

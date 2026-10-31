@@ -33,7 +33,7 @@ namespace Janus.Authentication.Mailboxes;
 internal sealed class MailboxReconciliation(
     IMailboxStore mailboxes,
     IMailServerInUse inUse,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     private const string Scope = "mailbox.reconciliation";

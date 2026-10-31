@@ -65,18 +65,13 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
     /// <summary>
     /// OPS-OBS-002 AC2: a blocklist fall back met while a password is changed is still
-    /// waiting for the alert channels once the corpus answers again, and is carried
+    /// waiting for <c>alert-dispatch</c> once the corpus answers again, and is carried
     /// once rather than forgotten with the outage.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task OPS_OBS_002_AC2_AFallbackOutlivesTheOutageUntilItIsCarriedAsync()
     {
-        _deployment.Configuration.Set(Settings.AlertingEmailDestinations, ["ops@example.test"]);
-        _deployment.Configuration.Set(Settings.AlertingSmsDestinations, ["+441632960098"]);
-        _deployment.Configuration.Set(Settings.AlertingOwnerEmail, "owner@example.test");
-        _deployment.Configuration.Set(Settings.AlertingOwnerSms, "+441632960099");
-
         Browser browser = await SignedInAsync();
 
         _deployment.Corpus.Unreachable.Add(BlocklistSource.RangeApi);

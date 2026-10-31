@@ -36,7 +36,7 @@ internal sealed class NonExistenceNotice(
     ISendingRestrictions restrictions,
     INoticeLedger ledger,
     IUnitOfWork work,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     TimeProvider time)
 {
     private static readonly TimeSpan Hour = TimeSpan.FromHours(1);

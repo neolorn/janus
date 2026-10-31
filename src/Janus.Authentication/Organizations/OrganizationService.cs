@@ -53,7 +53,7 @@ internal sealed class OrganizationService(
     IConfigurationStore configuration,
     ConfigurationAdministration administration,
     PolicyResolution policies,
-    IAlertChannels alerts,
+    IAlertRaising alerts,
     IEvents events,
     ImageCodec? codec,
     OrganizationReads reads,

@@ -26,7 +26,7 @@ public sealed class RegistrationSignalsTests : IClassFixture<DatabaseFixture>, I
 
     private readonly DatabaseFixture _database;
 
-    private readonly AlertChannelsInMemory _alerts = new();
+    private readonly AlertRaisingInMemory _alerts = new();
 
     private readonly ServiceProvider _services;
 
@@ -38,7 +38,7 @@ public sealed class RegistrationSignalsTests : IClassFixture<DatabaseFixture>, I
     {
         _database = database;
         _services = new ServiceCollection()
-            .AddSingleton<IAlertChannels>(_alerts)
+            .AddSingleton<IAlertRaising>(_alerts)
             .BuildServiceProvider();
     }
 

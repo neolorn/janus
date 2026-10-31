@@ -83,6 +83,7 @@ public sealed class StandInBalanceTests(HostFixture host) : IClassFixture<HostFi
     {
         ServiceProvider deployed = new ServiceCollection()
             .AddSingleton<ISmsTransport>(new InMemorySmsTransport())
+            .AddSingleton<IAlertHandler>(new Janus.Testing.InMemoryAlerts())
             .AddSingleton<TimeProvider>(new FixedTime(now))
             .AddSingleton<IMailTransport>(new InMemoryMailTransport())
             .AddSingleton(new AuthenticationAddresses(

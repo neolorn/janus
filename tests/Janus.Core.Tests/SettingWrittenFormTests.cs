@@ -65,7 +65,7 @@ public sealed class SettingWrittenFormTests
     /// </summary>
     [Fact]
     public void Written_AValueOfAStatedSet_IsTheNameTheContractGivesIt() =>
-        Assert.Equal("normal", Settings.AlertingSmsSeverityThreshold.Write(AlertSeverity.Normal));
+        Assert.Equal("selfHosted", Settings.PasswordBlocklistSource.Write(BlocklistSource.SelfHosted));
 
     /// <summary>
     /// A set of a stated vocabulary is written as the names, and read back as the
