@@ -19044,6 +19044,8 @@ section 4).
 
 ## D-226 — Round H3 questions 1, 2, 3, 8 and 9: the mail server's tokens, a loss report's link, a challenge's browser, and what a sign-in and a restore keep
 
+> **Amended.** Answer 1: the scopes a client is registered with are those beyond `openid`, `email`, `profile` and `offline_access`, which keep their own rules (D-227).
+
 **Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-224, D-225
 
 **TL;DR.** Round H3 asked nine questions. Questions 4 to 7 were about an SMS gateway's
@@ -19184,6 +19186,44 @@ INT-MAIL-001, INT-MAIL-004, INT-MAIL-010; `07` LIB-HOST-001; `09` `POST /auth/be
 `model.startup.declarationmissing`; `13` R-A02; `17` BFF-CSRF-005a, BFF-STEP-001,
 BFF-ORDER-001 (stage 5); `18` FE-API-004; `20` REG-MAIL-002; `implementation-plan.md`
 (round H3's row).
+
+---
+
+## D-227 — Round H3 questions 10 and 11: a repeated failure report, and the four scopes
+
+**Date:** 2026-10-31 · **Status:** accepted · **Follows from:** D-225, D-226
+
+**TL;DR.** A repeated report of a message the library handed over answers true, as
+INT-SMS-005 already says, so the ledger keeps a released message's row, marked
+released, for as long as it would have kept it unreleased (10). The scope clause of
+AUTH-OIDC-001 covers the scopes beyond `openid`, `email`, `profile` and
+`offline_access`, which keep their own rules (11).
+
+1. **A repeated failure report (question 10).** INT-SMS-005 answers true "where the
+   reference names a message the library handed over", a repeated report changing
+   nothing; a message the host reported failed is still one the library handed over.
+   Removing its row at the first failure made the second answer false, which a host
+   reads as a reference the library never issued. The row stays, marked released, until
+   the time it would have left the ledger had no report come; a report on a released
+   row answers true and changes nothing. The criterion's test asserts the answer.
+
+   *Rejected:* false, as built (it says the reference is unknown when it is known, and
+   a host that alerts on unknown references would alert on every gateway's retry).
+
+2. **The four scopes (question 11).** D-226 set the four apart with "besides": the
+   clause gives a client the scopes beyond them that it is registered with, and refuses
+   the others with `invalid_scope`. The four keep the rules they had: `openid` is every
+   client's; `offline_access` is a `protocol` client's alone, a browser application's
+   request for it refused at `POST /oidc/par` with `invalid_request` (AUTH-OIDC-002);
+   `email` and `profile` are a client's registered with them, a request for one its
+   client is not registered with refused with `invalid_request` by the provider's own
+   check of a client's permissions, as before.
+
+   *Rejected:* judging the four by the clause (it would make `offline_access` a matter
+   of registration rather than of the client's kind, against AUTH-OIDC-002, and change
+   the refusal every registered client meets today for no gain in what it may receive).
+
+**Propagated to:** `02` AUTH-OIDC-001.
 
 ---
 
@@ -19423,6 +19463,7 @@ BFF-ORDER-001 (stage 5); `18` FE-API-004; `20` REG-MAIL-002; `implementation-pla
 | Round H3: what a host's own frontends meet | D-224 |
 | The library sends nothing, and keeps to its own work | D-225 |
 | Round H3 questions 1, 2, 3, 8 and 9: the mail server's tokens, a loss report's link, a challenge's browser, and what a sign-in and a restore keep | D-226 |
+| Round H3 questions 10 and 11: a repeated failure report, and the four scopes | D-227 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

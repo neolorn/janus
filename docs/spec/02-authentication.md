@@ -3041,9 +3041,14 @@ the deployment's data key (AUTH-KEY-002) and rotates it with the signing keys
 alone. A running host takes a changed destination at its next start (API-REDIR-001 AC3).
 Besides `openid`, `email`, `profile` and `offline_access`, a client receives each scope
 it is registered with where its request asks for it, and a request for a scope its
-client is not registered with is refused with `invalid_scope` (D-226).
+client is not registered with is refused with `invalid_scope` (D-226). That clause
+covers the scopes beyond those four, which keep their own rules: `openid` is every
+client's; `offline_access` a `protocol` client's alone (AUTH-OIDC-002); `email` and
+`profile` a client's registered with them, a request for one that its client is not
+registered with being refused with `invalid_request`, as the provider's own check of a
+client's permissions refuses it (D-227).
 
-*Source: D-005, D-041, D-146, D-166, D-226*
+*Source: D-005, D-041, D-146, D-166, D-226, D-227*
 
 Introspection is excluded because Stalwart validates offline via JWKS and does not
 use it; an endpoint nothing calls is attack surface for no benefit.
