@@ -371,15 +371,16 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     /// <summary>
     /// OPS-SEC-003 AC4 (D-225): the run that rotates prints its report and no key, the
     /// rotation stays unretired until <c>--retire</c> asks, and that retires the previous
-    /// version, printing no key either: neither key is on either stream of either run, in
-    /// any encoding the library writes a key in.
+    /// version, printing no key either: neither key-encryption key, nor any data key the
+    /// rotation unwrapped, is on either stream of either run, in any encoding the library
+    /// writes a key in.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task OPS_SEC_003_AC4_NoRunPrintsAKeyAndTheRotationRetiresOnlyWhenAskedAsync()
     {
         await using NpgsqlConnection connection = await ResetAsync();
-        await SeedAsync(connection, 3);
+        IReadOnlyDictionary<Guid, byte[]> seeded = await SeedAsync(connection, 3);
 
         Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
 
@@ -395,7 +396,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         string printed = rotated.Output + rotated.Error + retired.Output + retired.Error;
 
         Assert.All(
-            [Previous, Next],
+            [Previous, Next, .. seeded.Values],
             key => Assert.All(
                 [
                     Convert.ToBase64String(key),
