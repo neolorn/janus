@@ -403,6 +403,63 @@ D-230, by item, with the review of `c1b0c835..8b8a6095`:
   reads both streams of both runs for both keys in standard and URL-safe base64 and in
   upper- and lower-case hexadecimal.
 
+D-231, by item, with the review of `514024d1..d10b1449`:
+
+- Item 1, Q17 (reading A): the sample runs no key rotation; the clause is the library's,
+  proven by `KeyRotationTests`. Nothing built.
+- Item 2, Q18: the machine profile has no stage that refuses a request before the
+  provider at `/oidc/par` and `/oidc/token`, and the tests for those routes stand.
+  Nothing built.
+- Review 1, a hand-over abandoned past its claim (OPS-ALERT-002, OPS-ALERT-003 AC2):
+  - The ledger records a hand-over the handler took by one insert or update: it is
+    written whatever an earlier, abandoned hand-over of the same raise gave back
+    meanwhile, and over a claim another raise made since that nobody answered; another
+    raise's taken claim stands. A claim given back after it changes nothing, as before.
+  - The handler's token is cancelled at the lapse of the pass's claim on the alert, the
+    instant the claim names, rather than a timeout counted from after the ledger's
+    transaction; no handler is asked once the claim has lapsed. The worker's own lapse,
+    handed over with no claim on a row, keeps `outbox.claim.timeout` from its start.
+  - A handler that ignores its token outlasts the claim, and the hand-over is then at
+    least once: said in the comment above `TakenAsync` and in the changelog line.
+  - `AlertDispatchTests.OPS_ALERT_003_AC2_AHandOverAbandonedPastItsClaimLeavesTheOneThatTookItTakenAsync`
+    (failed before the change, the first hand-over's token still uncancelled at the
+    lapse);
+  - `AlertLedgerTests.OPS_ALERT_003_AC2_AHandOverTakenIsRecordedWhateverAnAbandonedOneGaveBackAsync`
+    on PostgreSQL.
+- Review 2, a handler's fault kept (BFF-ERR-002 AC2): `FaultLog.Failure` is the one
+  failure a caught fault becomes, its entry in the `fault` detail; the worker, the
+  error translation and `alert-dispatch` build it alike, and the worker writes the
+  entry of the failure a pass or a lapse returns. `MailboxPublisher`, in
+  `Janus.Authentication`, keeps the server's fault through `IMailServerFaults`,
+  which `Janus.Hosting` implements with `FaultLog`, as `IFaultEntry` does for the
+  export; the push stays a failed attempt. The send publisher's handler fault is kept
+  the same way (section 3).
+  - `AlertDispatchTests.OPS_ALERT_003_AC2_WhatTheHandlerThrewIsKeptByItsTypeAndFramesAsync`;
+  - `MailboxPublisherTests.BFF_ERR_002_AC2_WhatTheMailServerThrewAtAPushIsKeptAsync`;
+  - `SendingGovernanceTests.BFF_ERR_002_AC2_WhatTheHandlerThrewAtAMessageIsLoggedAsync`.
+- Review 3, the profile's mark (BFF-ORDER-001 AC8, D-230): the marking layer takes the
+  mark off in a `finally` around what follows it, at both places, and the layer after
+  the authentication still takes it off before anything downstream runs:
+  `FrameworkAuthenticationTests.BFF_ORDER_001_AC8_TheProfilesMarkIsTakenOffWhateverTheProviderDidAsync`
+  (an authorization request the provider answers, a request it hands on, and a pushed
+  request it throws at, each read as it leaves the host's outermost layer; failed before
+  the change).
+- Review 4, a link asked for an identifier read as neither an address nor a number
+  (AUTH-FACT-003 AC6): added to
+  `AuthenticationServiceTests.AUTH_FACT_003_AC6_WhetherTheAnswerNamesASignInNeverTurnsOnTheAccountAsync`.
+- Review 5, the key rotations print no key (OPS-SEC-003 AC4):
+  `KeyRotationTests.OPS_SEC_003_AC4_NoRunPrintsAKeyAndTheRotationRetiresOnlyWhenAskedAsync`
+  reads both streams of both runs for the three seeded data keys the rotation unwraps
+  too, in the same four encodings.
+- Review 6, the post room keeps nothing past its outcome (LIB-TEST-004): the courier,
+  once the library has its report, takes the letter and its places out in one
+  transaction; a report the library refused leaves them to be reported again:
+  `HandlersTests.LIB_TEST_004_ALetterTheCourierReportedLeavesNothingAtRestAsync`.
+- The throwing handler's test,
+  `AlertDispatchTests.OPS_ALERT_003_AC2_AnAlertWhoseHandlerThrewIsHandedAgainUntilTakenAsync`,
+  runs the pass and asserts its refusal, `system.fault`, rather than an exception that
+  the handler's own fault would also have passed.
+
 The plan's row, clause by clause, on the sample host:
 
 - From its application's sign-on to the sign-in and back to that application's route:
@@ -424,7 +481,8 @@ The plan's row, clause by clause, on the sample host:
   `HandlersTests.INT_SMS_005_AC2_ALetterTheCourierCouldNotDeliverGivesBackItsCountAsync`.
 - A deployment with either handler missing does not start:
   `HandlersTests.INT_SMS_006_AC2_AWorkshopMissingEitherHandlerDoesNotStartAsync`.
-- The key rotations print no key: no sample test; Q17.
+- The key rotations print no key: the library's, proven by `KeyRotationTests` (D-231
+  item 1).
 - No code of a retired item remains, and the mail server's criteria against Stalwart: the
   library's, not the sample's (D-225 items 1 to 7, D-224 item 23 above).
 
@@ -471,9 +529,7 @@ pipeline.
 
 ## 2. Items not implemented
 
-Each waits on a question; nothing of them is in the code:
-
-- A key rotation run by the sample host: Q17.
+None: Q17 and Q18 are answered (D-231), and nothing waits on a question.
 
 ## 3. Resolved by rule
 
@@ -530,6 +586,13 @@ Each waits on a question; nothing of them is in the code:
     real port.
   - Rule: the browser takes the host it sends to, defaulting to the authentication
     application's, as the machine client does.
+- `src/Janus.Hosting/Sending/SendPublisher.cs`:
+  - What was out of step: the publisher turned what the host's notification handler
+    threw into a bare `system.fault`, as the two places D-231's review named did.
+  - Governing item: BFF-ERR-002 AC2, a fault the library catches is kept by its type and
+    frames; section 4 of the instructions, one way of doing a thing.
+  - Rule: the fault is kept by its fault log entry in the publisher's log
+    (`SendLog.HandlerFaulted`), and the attempt stays one not taken.
 
 ## 4. Open questions
 
@@ -823,7 +886,7 @@ failed: the values in `PublicAPI.Unshipped.txt` are the public surface).
 - Answer: the renumbering stands; nothing released carried the earlier values.
 - Parks: nothing.
 
-**Q17 (Tier 2).** Whether the sample host runs a key rotation (the plan's row H3,
+**Q17 (Tier 2), answered by D-231 item 1 (reading A).** Whether the sample host runs a key rotation (the plan's row H3,
 LIB-TEST-004, OPS-SEC-003 AC4).
 
 - What the code needs: the row says the sample host does each of its clauses in the
@@ -839,9 +902,10 @@ LIB-TEST-004, OPS-SEC-003 AC4).
 - Reading B: the sample rotates its deployment's key encryption key with `rotate-kek`
   and `--retire`, the next key in a document of its own, and its test reads both
   streams for both keys. Smallest fix: one sample test.
-- Parks: the sample's rotation only.
+- Answer: reading A; the key rotations are the library's, proven by `KeyRotationTests`.
+- Parks: nothing.
 
-**Q18 (Tier 3).** BFF-ORDER-001 AC8 at `/oidc/par` and `/oidc/token`.
+**Q18 (Tier 3), answered by D-231 item 2.** BFF-ORDER-001 AC8 at `/oidc/par` and `/oidc/token`.
 
 - AC8 asks that "a request a stage refuses reaches no provider endpoint", and the round's
   message names source rate limiting for one. Those two routes are mounted in the machine
@@ -851,10 +915,23 @@ LIB-TEST-004, OPS-SEC-003 AC4).
 - What the tests prove for them instead: the provider acts on each only inside the
   machine profile (it sees the profile's mark), and a fault inside the provider is
   answered by the profile's error translation (500 `system.fault`).
+- Answer: at those two routes the machine profile has no stage that refuses a request
+  before the provider, and the tests meet AC8 as they stand; D-230 item 1 is amended.
 - Parks: nothing.
 
 ## 5. Gate result
 
+- This turn (D-231), before the push: every unit and contract test passes (5172 in eleven
+  projects); the commit-message, changelog, acceptance-test-names and forbidden-marker
+  gates pass over the commits since `d10b1449`; the full-history secret scan finds
+  nothing. The sample host's solution was packed, restored, built, checked by
+  `dotnet format --verify-no-changes` and its tests run (29 passed); its first run found
+  that the letter a no-account notice leaves carries no places, so the courier's test
+  now reports the verification code of an address the first administrator adds. The
+  `AlertLedgerTests` (5) and `KeyRotationTests`' printing case ran on PostgreSQL on
+  this machine.
+- Pipeline on d10b1449: the push run (41204446531) and the pull-request run
+  (41204452857) green.
 - This turn (D-230), before the push: every unit and contract test passes (5167 in eleven
   projects); the commit-message, changelog, acceptance-test-names and forbidden-marker
   gates pass over the commits since `514024d1`; the full-history secret scan finds
