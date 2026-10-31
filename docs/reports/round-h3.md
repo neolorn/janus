@@ -460,6 +460,9 @@ D-226 item 1).
   `JmapMailServerAgainstStalwartTests` against the pinned server, INT-MAIL-010's two
   among them (16 passed). Every other test of the round's integration suites runs first
   in the pipeline.
+- Pipeline on 6ba5e91a: the pull-request run (41173773422) green; the push run
+  (41173769847) red in the changelog job alone, its range 968502cf..6ba5e91a holding
+  cf892f8d's change to `ErrorCodes.cs` and no changelog line. The line is added on top.
 - Pipeline on 968502cf (runs 41171816838 and 41171813171): red in the contract and
   truth-table jobs; every other job green.
   - Contract: the contract lists still held what D-225 retired (thirteen configuration
