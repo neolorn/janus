@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The documentation of `integration.callback.rejected` states what to do on it: call
+  again once `details.retryAt` has passed where it is carried, and otherwise correct the
+  callback before sending it again.
 - `POST /recovery/report-loss/{id}/cancel` with the link's `token` finds the report by
   the token's fingerprint and does not read `{id}`, so a landing page sends the nil
   identifier; a token that finds no report is answered 404 `auth.credential.notfound`.
