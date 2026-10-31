@@ -10,7 +10,6 @@ using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
-using Janus.Storage.Authentication.Maintenance;
 using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
@@ -539,16 +538,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<KeyRotationRecord> KeyRotations => Set<KeyRotationRecord>();
 
     /// <summary>
-    /// The licences and permits whose expiry the system warns of.
-    /// </summary>
-    public DbSet<LicenceRecord> Licences => Set<LicenceRecord>();
-
-    /// <summary>
-    /// The maintenance log: each recurring task performed and each review made.
-    /// </summary>
-    public DbSet<MaintenanceEntryRecord> MaintenanceLog => Set<MaintenanceEntryRecord>();
-
-    /// <summary>
     /// The records each person was given, counted by day.
     /// </summary>
     public DbSet<ReadVolumeRecord> ReadVolume => Set<ReadVolumeRecord>();
@@ -670,8 +659,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new LawfulBasisConfiguration());
         modelBuilder.ApplyConfiguration(new BackgroundJobConfiguration());
         modelBuilder.ApplyConfiguration(new KeyRotationConfiguration());
-        modelBuilder.ApplyConfiguration(new LicenceConfiguration());
-        modelBuilder.ApplyConfiguration(new MaintenanceEntryConfiguration());
         modelBuilder.ApplyConfiguration(new ReadVolumeConfiguration());
         modelBuilder.ApplyConfiguration(new ReadBaselineConfiguration());
         modelBuilder.ApplyConfiguration(new BulkExportConfiguration());

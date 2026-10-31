@@ -28,7 +28,6 @@ using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Events;
 using Janus.Hosting.Mailboxes;
-using Janus.Hosting.Maintenance;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Passwords;

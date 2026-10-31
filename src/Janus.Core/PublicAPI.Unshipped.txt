@@ -1528,11 +1528,6 @@ Janus.Core.IMailServerInUse
 Janus.Core.IMailServerInUse.Chosen() -> Janus.Core.Result<Janus.Core.IMailServer!>
 Janus.Core.IMailTransport
 Janus.Core.IMailTransport.SendAsync(Janus.Core.MailMessage! mail, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IMaintenanceRecords
-Janus.Core.IMaintenanceRecords.LicencesAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Licence!>!>>
-Janus.Core.IMaintenanceRecords.LogAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.MaintenanceEntry!>!>>
-Janus.Core.IMaintenanceRecords.RecordAsync(Janus.Core.AccessContext! context, Janus.Core.MaintenanceTask task, System.DateTimeOffset performedAt, string? note, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.MaintenanceEntry!>>
-Janus.Core.IMaintenanceRecords.ReplaceLicencesAsync(Janus.Core.AccessContext! context, System.Collections.Generic.IReadOnlyList<Janus.Core.Licence!>! licences, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMessageTemplates
 Janus.Core.IMessageTemplates.Find(Janus.Core.MessageKind message, Janus.Core.SendKind kind, string! language) -> Janus.Core.Result<Janus.Core.MessageTemplate!>
 Janus.Core.INotificationHandler
@@ -1831,31 +1826,6 @@ Janus.Core.LegalName
 Janus.Core.LegalName.Equals(Janus.Core.LegalName other) -> bool
 Janus.Core.LegalName.LegalName() -> void
 Janus.Core.LegalName.Value.get -> string!
-Janus.Core.Licence
-Janus.Core.Licence.<Clone>$() -> Janus.Core.Licence!
-Janus.Core.Licence.Deconstruct(out Janus.Core.LicenceId Id, out Janus.Core.LicenceKind Kind, out string! Name, out System.DateTimeOffset ExpiresAt, out System.DateTimeOffset? RenewedAt) -> void
-Janus.Core.Licence.Equals(Janus.Core.Licence? other) -> bool
-Janus.Core.Licence.ExpiresAt.get -> System.DateTimeOffset
-Janus.Core.Licence.ExpiresAt.init -> void
-Janus.Core.Licence.Id.get -> Janus.Core.LicenceId
-Janus.Core.Licence.Id.init -> void
-Janus.Core.Licence.Kind.get -> Janus.Core.LicenceKind
-Janus.Core.Licence.Kind.init -> void
-Janus.Core.Licence.Licence(Janus.Core.LicenceId Id, Janus.Core.LicenceKind Kind, string! Name, System.DateTimeOffset ExpiresAt, System.DateTimeOffset? RenewedAt) -> void
-Janus.Core.Licence.Name.get -> string!
-Janus.Core.Licence.Name.init -> void
-Janus.Core.Licence.RenewedAt.get -> System.DateTimeOffset?
-Janus.Core.Licence.RenewedAt.init -> void
-Janus.Core.LicenceId
-Janus.Core.LicenceId.Deconstruct(out System.Guid Value) -> void
-Janus.Core.LicenceId.Equals(Janus.Core.LicenceId other) -> bool
-Janus.Core.LicenceId.LicenceId() -> void
-Janus.Core.LicenceId.LicenceId(System.Guid Value) -> void
-Janus.Core.LicenceId.Value.get -> System.Guid
-Janus.Core.LicenceId.Value.init -> void
-Janus.Core.LicenceKind
-Janus.Core.LicenceKind.Licence = 0 -> Janus.Core.LicenceKind
-Janus.Core.LicenceKind.Permit = 1 -> Janus.Core.LicenceKind
 Janus.Core.LinkLanding
 Janus.Core.LinkLanding.<Clone>$() -> Janus.Core.LinkLanding!
 Janus.Core.LinkLanding.Code.get -> string?
@@ -1980,34 +1950,6 @@ Janus.Core.MailboxState
 Janus.Core.MailboxState.Disabled = 0 -> Janus.Core.MailboxState
 Janus.Core.MailboxState.Enabled = 1 -> Janus.Core.MailboxState
 Janus.Core.MailboxState.Removed = 2 -> Janus.Core.MailboxState
-Janus.Core.MaintenanceEntry
-Janus.Core.MaintenanceEntry.<Clone>$() -> Janus.Core.MaintenanceEntry!
-Janus.Core.MaintenanceEntry.Actor.get -> Janus.Core.SubjectId
-Janus.Core.MaintenanceEntry.Actor.init -> void
-Janus.Core.MaintenanceEntry.Deconstruct(out Janus.Core.MaintenanceEntryId Id, out Janus.Core.MaintenanceTask Task, out System.DateTimeOffset PerformedAt, out Janus.Core.SubjectId Actor, out string? Note) -> void
-Janus.Core.MaintenanceEntry.Equals(Janus.Core.MaintenanceEntry? other) -> bool
-Janus.Core.MaintenanceEntry.Id.get -> Janus.Core.MaintenanceEntryId
-Janus.Core.MaintenanceEntry.Id.init -> void
-Janus.Core.MaintenanceEntry.MaintenanceEntry(Janus.Core.MaintenanceEntryId Id, Janus.Core.MaintenanceTask Task, System.DateTimeOffset PerformedAt, Janus.Core.SubjectId Actor, string? Note) -> void
-Janus.Core.MaintenanceEntry.Note.get -> string?
-Janus.Core.MaintenanceEntry.Note.init -> void
-Janus.Core.MaintenanceEntry.PerformedAt.get -> System.DateTimeOffset
-Janus.Core.MaintenanceEntry.PerformedAt.init -> void
-Janus.Core.MaintenanceEntry.Task.get -> Janus.Core.MaintenanceTask
-Janus.Core.MaintenanceEntry.Task.init -> void
-Janus.Core.MaintenanceEntryId
-Janus.Core.MaintenanceEntryId.Deconstruct(out System.Guid Value) -> void
-Janus.Core.MaintenanceEntryId.Equals(Janus.Core.MaintenanceEntryId other) -> bool
-Janus.Core.MaintenanceEntryId.MaintenanceEntryId() -> void
-Janus.Core.MaintenanceEntryId.MaintenanceEntryId(System.Guid Value) -> void
-Janus.Core.MaintenanceEntryId.Value.get -> System.Guid
-Janus.Core.MaintenanceEntryId.Value.init -> void
-Janus.Core.MaintenanceTask
-Janus.Core.MaintenanceTask.ApproverReview = 2 -> Janus.Core.MaintenanceTask
-Janus.Core.MaintenanceTask.EnvelopeRotation = 0 -> Janus.Core.MaintenanceTask
-Janus.Core.MaintenanceTask.LicenceRenewal = 1 -> Janus.Core.MaintenanceTask
-Janus.Core.MaintenanceTask.PipelineConsumptionReview = 3 -> Janus.Core.MaintenanceTask
-Janus.Core.MaintenanceTask.RiskTriggerReview = 4 -> Janus.Core.MaintenanceTask
 Janus.Core.MemberPage
 Janus.Core.MemberPage.<Clone>$() -> Janus.Core.MemberPage!
 Janus.Core.MemberPage.Deconstruct(out System.Collections.Generic.IReadOnlyList<Janus.Core.MemberSummary!>! Members, out Janus.Core.SubjectId? Next) -> void
@@ -3944,11 +3886,6 @@ override Janus.Core.LawfulBasisDeclaration.GetHashCode() -> int
 override Janus.Core.LawfulBasisDeclaration.ToString() -> string!
 override Janus.Core.LegalName.GetHashCode() -> int
 override Janus.Core.LegalName.ToString() -> string!
-override Janus.Core.Licence.Equals(object? obj) -> bool
-override Janus.Core.Licence.GetHashCode() -> int
-override Janus.Core.Licence.ToString() -> string!
-override Janus.Core.LicenceId.GetHashCode() -> int
-override Janus.Core.LicenceId.ToString() -> string!
 override Janus.Core.LinkLanding.Equals(object? obj) -> bool
 override Janus.Core.LinkLanding.GetHashCode() -> int
 override Janus.Core.LinkLanding.ToString() -> string!
@@ -3966,11 +3903,6 @@ override Janus.Core.MailboxId.ToString() -> string!
 override Janus.Core.MailboxPush.Equals(object? obj) -> bool
 override Janus.Core.MailboxPush.GetHashCode() -> int
 override Janus.Core.MailboxPush.ToString() -> string!
-override Janus.Core.MaintenanceEntry.Equals(object? obj) -> bool
-override Janus.Core.MaintenanceEntry.GetHashCode() -> int
-override Janus.Core.MaintenanceEntry.ToString() -> string!
-override Janus.Core.MaintenanceEntryId.GetHashCode() -> int
-override Janus.Core.MaintenanceEntryId.ToString() -> string!
 override Janus.Core.MemberPage.Equals(object? obj) -> bool
 override Janus.Core.MemberPage.GetHashCode() -> int
 override Janus.Core.MemberPage.ToString() -> string!
@@ -5026,10 +4958,6 @@ static Janus.Core.LawfulBasisDeclaration.operator ==(Janus.Core.LawfulBasisDecla
 static Janus.Core.LegalName.TryParse(string! entered, out Janus.Core.LegalName name) -> bool
 static Janus.Core.LegalName.operator !=(Janus.Core.LegalName left, Janus.Core.LegalName right) -> bool
 static Janus.Core.LegalName.operator ==(Janus.Core.LegalName left, Janus.Core.LegalName right) -> bool
-static Janus.Core.Licence.operator !=(Janus.Core.Licence? left, Janus.Core.Licence? right) -> bool
-static Janus.Core.Licence.operator ==(Janus.Core.Licence? left, Janus.Core.Licence? right) -> bool
-static Janus.Core.LicenceId.operator !=(Janus.Core.LicenceId left, Janus.Core.LicenceId right) -> bool
-static Janus.Core.LicenceId.operator ==(Janus.Core.LicenceId left, Janus.Core.LicenceId right) -> bool
 static Janus.Core.LinkLanding.operator !=(Janus.Core.LinkLanding? left, Janus.Core.LinkLanding? right) -> bool
 static Janus.Core.LinkLanding.operator ==(Janus.Core.LinkLanding? left, Janus.Core.LinkLanding? right) -> bool
 static Janus.Core.LossReported.operator !=(Janus.Core.LossReported? left, Janus.Core.LossReported? right) -> bool
@@ -5043,11 +4971,6 @@ static Janus.Core.MailboxId.operator !=(Janus.Core.MailboxId left, Janus.Core.Ma
 static Janus.Core.MailboxId.operator ==(Janus.Core.MailboxId left, Janus.Core.MailboxId right) -> bool
 static Janus.Core.MailboxPush.operator !=(Janus.Core.MailboxPush? left, Janus.Core.MailboxPush? right) -> bool
 static Janus.Core.MailboxPush.operator ==(Janus.Core.MailboxPush? left, Janus.Core.MailboxPush? right) -> bool
-static Janus.Core.MaintenanceEntry.operator !=(Janus.Core.MaintenanceEntry? left, Janus.Core.MaintenanceEntry? right) -> bool
-static Janus.Core.MaintenanceEntry.operator ==(Janus.Core.MaintenanceEntry? left, Janus.Core.MaintenanceEntry? right) -> bool
-static Janus.Core.MaintenanceEntryId.Of(System.DateTimeOffset recordedAt) -> Janus.Core.MaintenanceEntryId
-static Janus.Core.MaintenanceEntryId.operator !=(Janus.Core.MaintenanceEntryId left, Janus.Core.MaintenanceEntryId right) -> bool
-static Janus.Core.MaintenanceEntryId.operator ==(Janus.Core.MaintenanceEntryId left, Janus.Core.MaintenanceEntryId right) -> bool
 static Janus.Core.MemberPage.operator !=(Janus.Core.MemberPage? left, Janus.Core.MemberPage? right) -> bool
 static Janus.Core.MemberPage.operator ==(Janus.Core.MemberPage? left, Janus.Core.MemberPage? right) -> bool
 static Janus.Core.MemberSummary.operator !=(Janus.Core.MemberSummary? left, Janus.Core.MemberSummary? right) -> bool
@@ -5379,9 +5302,7 @@ virtual Janus.Core.SubjectEvent.Equals(Janus.Core.SubjectEvent? other) -> bool
 ~override Janus.Core.IdentifierId.Equals(object obj) -> bool
 ~override Janus.Core.InvitationId.Equals(object obj) -> bool
 ~override Janus.Core.LegalName.Equals(object obj) -> bool
-~override Janus.Core.LicenceId.Equals(object obj) -> bool
 ~override Janus.Core.MailboxId.Equals(object obj) -> bool
-~override Janus.Core.MaintenanceEntryId.Equals(object obj) -> bool
 ~override Janus.Core.MembershipId.Equals(object obj) -> bool
 ~override Janus.Core.OrganizationId.Equals(object obj) -> bool
 ~override Janus.Core.Permission.Equals(object obj) -> bool

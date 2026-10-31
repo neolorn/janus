@@ -88,7 +88,7 @@ public enum AlertCondition
     [JsonStringEnumMemberName("privacy-deadline-reached")]
     PrivacyDeadlineReached = 17,
 
-    /// <summary>A licence or permit expiry is approaching.</summary>
+    /// <summary>The key-encryption key's cryptoperiod is approaching its end.</summary>
     [JsonStringEnumMemberName("expiry-approaching")]
     ExpiryApproaching = 18,
 

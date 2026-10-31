@@ -1128,68 +1128,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
-        modelBuilder.Entity("Janus.Storage.Authentication.Maintenance.LicenceRecord", b =>
-            {
-                b.Property<Guid>("Id")
-                    .HasColumnType("uuid")
-                    .HasColumnName("id");
-
-                b.Property<DateTimeOffset>("ExpiresAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("expires_at");
-
-                b.Property<string>("Kind")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("kind");
-
-                b.Property<string>("Name")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("name");
-
-                b.Property<DateTimeOffset?>("RenewedAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("renewed_at");
-
-                b.HasKey("Id")
-                    .HasName("pk_licences");
-
-                b.ToTable("licences", "identity");
-            });
-
-        modelBuilder.Entity("Janus.Storage.Authentication.Maintenance.MaintenanceEntryRecord", b =>
-            {
-                b.Property<Guid>("Id")
-                    .HasColumnType("uuid")
-                    .HasColumnName("id");
-
-                b.Property<Guid>("Actor")
-                    .HasColumnType("uuid")
-                    .HasColumnName("actor");
-
-                b.Property<string>("Note")
-                    .HasColumnType("text")
-                    .HasColumnName("note");
-
-                b.Property<DateTimeOffset>("PerformedAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("performed_at");
-
-                b.Property<string>("Task")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("task");
-
-                b.HasKey("Id")
-                    .HasName("pk_maintenance_log");
-
-                b.ToTable("maintenance_log", "identity", t =>
-                    {
-                        t.HasCheckConstraint("ck_maintenance_log_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
-                    });
-            });
-
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.OidcAuthorizationRecord", b =>
             {
                 b.Property<Guid>("Id")

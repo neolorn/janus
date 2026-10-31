@@ -380,7 +380,7 @@ internal static class StorageRegistration
         services.AddScoped<IAlertLedger, AlertLedger>();
         services.AddScoped<IRaisedAlerts, RaisedAlerts>();
         services.AddScoped<IPendingEvents, PendingEvents>();
-        services.AddScoped<IMaintenanceStore, MaintenanceStore>();
+        services.AddScoped<ICryptoperiodStore, CryptoperiodStore>();
         services.AddScoped<IJobRuns, JobRunStore>();
         services.AddScoped<IDeploymentSeed, DeploymentSeed>();
         services.AddScoped<IConfigurationAudit, ConfigurationAudit>();

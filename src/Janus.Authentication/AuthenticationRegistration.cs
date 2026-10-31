@@ -112,12 +112,9 @@ internal static class AuthenticationRegistration
         services.AddScoped<IBreakGlass>(provider => provider.GetRequiredService<BreakGlassService>());
         services.AddScoped<EmergencyCredentialWatch>();
 
-        // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
-        // DR-009a: the annual operation the key-encryption key is rotated in, warned of
-        // from the log.
-        services.AddScoped<IMaintenanceRecords, MaintenanceRecords>();
-        services.AddScoped<LicenceExpiry>();
-        services.AddScoped<EnvelopeRotationWatch>();
+        // DR-009a: the end of the key-encryption key's cryptoperiod, warned of from the
+        // key's own rotation record.
+        services.AddScoped<CryptoperiodWatch>();
 
         // AUTH-SESS-001, AUTH-PASS-004, AUTH-FACT-005: the authentication services,
         // each of which reads the settings table for what it enforces.

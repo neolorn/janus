@@ -545,7 +545,10 @@ public static class Settings
     public static DurationSetting AlertingDedupeWindow { get; } =
         new("alerting.dedupe.window", SettingScope.Runtime, "PT1H");
 
-    /// <summary>How far ahead an expiry on the maintenance log is warned about.</summary>
+    /// <summary>
+    /// How far ahead the end of the key-encryption key's cryptoperiod and of the holiday
+    /// list is warned about.
+    /// </summary>
     public static DurationSetting MaintenanceExpiryWarningLead { get; } =
         new("maintenance.expiry.warninglead", SettingScope.Runtime, "P30D");
 

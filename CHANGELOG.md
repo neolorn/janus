@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library no longer keeps licences or a maintenance log: `/admin/compliance/licences`,
+  `/admin/compliance/maintenance`, the `licence-expiry` job and the `licences` and
+  `maintenance_log` tables are gone. The daily `kek-cryptoperiod` job, which replaces
+  `envelope-rotation`, warns only of the end of the key-encryption key's cryptoperiod.
 - The library no longer watches the server: the `clock-drift` and `certificate-renewal`
   jobs, `ICertificateRenewal`, `IClockReference`, the conditions `certificate-renewal-failed`
   and `clock-drift`, and the testing stand-ins `FixedClockReference` and

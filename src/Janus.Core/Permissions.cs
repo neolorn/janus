@@ -175,8 +175,8 @@ public static class Permissions
     public static Permission NoticePublish { get; } = Permission.Parse("notice:publish");
 
     /// <summary>
-    /// Licence and permit dates, assessment references, and the declared human-input
-    /// fields of the records of processing.
+    /// Assessment references and the declared human-input fields of the records of
+    /// processing.
     /// </summary>
     public static Permission ComplianceManage { get; } = Permission.Parse("compliance:manage");
 

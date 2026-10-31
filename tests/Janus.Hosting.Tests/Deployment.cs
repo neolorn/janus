@@ -823,11 +823,6 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authentication.Tests.Mailboxes.MailServerInMemory MailServer { get; } = new();
 
     /// <summary>
-    /// The licences and permits warned of and the maintenance log.
-    /// </summary>
-    public Janus.Authentication.Tests.Maintenance.MaintenanceStoreInMemory Maintenance { get; } = new();
-
-    /// <summary>
     /// The domains organizations lock their members to.
     /// </summary>
     public Janus.Authentication.Tests.Organizations.DomainStoreInMemory Domains { get; } = new();
@@ -1415,9 +1410,6 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<Janus.Authentication.Invitations.IRoleHandOut, Janus.Storage.Authentication.Invitations.RoleHandOut>();
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
         _ = services.AddSingleton<IMailServer>(MailServer);
-        _ = services.AddSingleton<Janus.Authentication.Maintenance.IMaintenanceStore>(Maintenance);
-        _ = services.AddScoped<IMaintenanceRecords, Janus.Authentication.Maintenance.MaintenanceRecords>();
-        _ = services.AddScoped<Janus.Authentication.Maintenance.LicenceExpiry>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationAcknowledgement>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipEnding>(Endings);

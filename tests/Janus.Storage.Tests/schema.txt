@@ -568,13 +568,6 @@ table legal_document_versions
   constraint ck_legal_document_versions_governing_text CHECK ((length(TRIM(BOTH FROM governing_text)) > 0))
   constraint pk_legal_document_versions PRIMARY KEY (document, version)
   index ix_legal_document_versions_current using btree (document, published_at)
-table licences
-  column id uuid not null
-  column kind text not null
-  column name text not null
-  column expires_at timestamp with time zone not null
-  column renewed_at timestamp with time zone
-  constraint pk_licences PRIMARY KEY (id)
 table lifecycle_links
   column token bytea not null
   column subject uuid not null
@@ -632,14 +625,6 @@ table mailboxes
   constraint pk_mailboxes PRIMARY KEY (id)
   index ix_mailboxes_holder using btree (holder)
   index ux_mailboxes_fingerprint unique using btree (fingerprint) WHERE ((fingerprint <> decode(repeat('00'::text, 32), 'hex'::text)) AND (removal_owed_at IS NULL))
-table maintenance_log
-  column id uuid not null
-  column task text not null
-  column performed_at timestamp with time zone not null
-  column actor uuid not null
-  column note text
-  constraint ck_maintenance_log_actor_not_max_uuid CHECK ((actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint pk_maintenance_log PRIMARY KEY (id)
 table memberships
   column id uuid not null
   column subject uuid not null

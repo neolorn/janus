@@ -899,52 +899,6 @@ PUT /admin/compliance/assessments
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied authz.restricted
-GET /admin/compliance/licences
-  200
-    application/json
-      licences[].id: Guid
-      licences[].kind: string
-      licences[].name: string
-      licences[].expiresAt: DateTimeOffset
-      licences[].renewedAt: DateTimeOffset?
-  401 auth.session.expired
-  403 auth.session.csrfinvalid authz.denied
-PUT /admin/compliance/licences
-  request application/json
-    [].id: Guid?
-    [].kind: string
-    [].name: string
-    [].expiresAt: DateTimeOffset?
-    [].renewedAt: DateTimeOffset?
-  204
-  400 api.request.malformed
-  401 auth.session.expired
-  403 auth.session.csrfinvalid authz.denied authz.restricted
-  422 api.request.invalid
-GET /admin/compliance/maintenance
-  200
-    application/json
-      entries[].task: string
-      entries[].performedAt: DateTimeOffset
-      entries[].actor: Guid
-      entries[].note: string
-  401 auth.session.expired
-  403 auth.session.csrfinvalid authz.denied
-POST /admin/compliance/maintenance
-  request application/json
-    task: string
-    performedAt: DateTimeOffset?
-    note: string
-  201
-    application/json
-      task: string
-      performedAt: DateTimeOffset
-      actor: Guid
-      note: string
-  400 api.request.malformed
-  401 auth.session.expired
-  403 auth.session.csrfinvalid authz.denied authz.restricted
-  422 api.request.invalid
 GET /admin/config/{key}
   200
     application/json
