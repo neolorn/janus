@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -48,6 +49,8 @@ public sealed class WorkshopHost : IAsyncLifetime
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     private string _connectionString = string.Empty;
+
+    private FixedSecretSource? _secrets;
 
     private WebApplication? _application;
 
@@ -182,15 +185,83 @@ public sealed class WorkshopHost : IAsyncLifetime
     /// <param name="email">The customer's address.</param>
     /// <param name="cancellationToken">Abandons the registration.</param>
     /// <returns>The customer's session.</returns>
-    public async Task<TestSession> CustomerAsync(EmailAddress email, CancellationToken cancellationToken)
+    public Task<TestSession> CustomerAsync(EmailAddress email, CancellationToken cancellationToken) =>
+        CustomerAsync(email, Convert.ToHexString(RandomNumberGenerator.GetBytes(16)), cancellationToken);
+
+    /// <summary>
+    /// Registers a customer of the workshop under an address and a password the test
+    /// names, as <see cref="CustomerAsync(CancellationToken)"/> registers one, for a test
+    /// that signs the customer in itself.
+    /// </summary>
+    /// <param name="email">The customer's address.</param>
+    /// <param name="password">The customer's password.</param>
+    /// <param name="cancellationToken">Abandons the registration.</param>
+    /// <returns>The customer's session.</returns>
+    public async Task<TestSession> CustomerAsync(EmailAddress email, string password, CancellationToken cancellationToken)
     {
         int customer = Interlocked.Increment(ref _customers);
 
         return await People.CustomerAsync(
             email,
             Phone("+2010020" + customer.ToString("D5", CultureInfo.InvariantCulture)),
-            Convert.ToHexString(RandomNumberGenerator.GetBytes(16)),
+            password,
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Starts the workshop a second time on this deployment, from the same packages, at an
+    /// origin of its own, as a second application: a sign-on client of its own is
+    /// registered for it by the library's command-line tool with its exact return address,
+    /// and it declares this application's addresses as its authentication application's
+    /// and the deployment's landing origins as this one declares them (LIB-TEST-004,
+    /// BFF-SESS-006, D-229). Its back channel reaches this application.
+    /// </summary>
+    /// <param name="origin">The origin the second application answers at.</param>
+    /// <param name="client">The second application's client of the provider.</param>
+    /// <param name="cancellationToken">Abandons the registration and the start.</param>
+    /// <returns>The second application, started.</returns>
+    internal async Task<SecondApplication> SecondApplicationAsync(
+        Uri origin,
+        string client,
+        CancellationToken cancellationToken)
+    {
+        FixedSecretSource secrets = _secrets ?? throw new InvalidOperationException("The host has not started.");
+        Uri address = WorkshopApplication.Address(origin);
+
+        await RegisteredAsync(
+            secrets,
+            client,
+            new Uri(address.AbsoluteUri + "/auth/signon/return").AbsoluteUri,
+            cancellationToken);
+
+        ServerInMemory? server = new();
+        WebApplication? application = null;
+
+        try
+        {
+            application = Built(server, client, secrets);
+
+            await application.StartAsync(cancellationToken);
+
+            var second = new SecondApplication(
+                application,
+                server,
+                new TestPeople(address, new SignOnClient(client), Terms, server.Channel, Notifications, _randomness));
+
+            application = null;
+            server = null;
+
+            return second;
+        }
+        finally
+        {
+            if (application is not null)
+            {
+                await application.DisposeAsync();
+            }
+
+            server?.Dispose();
+        }
     }
 
     /// <summary>
@@ -280,6 +351,8 @@ public sealed class WorkshopHost : IAsyncLifetime
                 new NpgsqlConnectionStringBuilder(_connectionString) { Options = "-c role=identity_maintenance" }.ConnectionString),
         };
 
+        _secrets = secrets;
+
         TestDeployment deployment = await TestDeployment.PrepareAsync(
             WorkshopApplication.Address(Origin),
             new SignOnClient(WorkshopApplication.Client),
@@ -298,7 +371,7 @@ public sealed class WorkshopHost : IAsyncLifetime
             _ = await created.ExecuteNonQueryAsync(CancellationToken.None);
         }
 
-        _application = Built(secrets);
+        _application = Built(_server, WorkshopApplication.Client, secrets);
 
         await _application.StartAsync(CancellationToken.None);
 
@@ -387,16 +460,18 @@ public sealed class WorkshopHost : IAsyncLifetime
         _randomness.Dispose();
     }
 
-    // The application as the workshop composes it, with what this deployment supplies
-    // of its own: the web server, the clock, the secret source, the transports and the
-    // stand-ins for the optional environment seams (LIB-TEST-003).
-    private WebApplication Built(FixedSecretSource secrets)
+    // The application as the workshop composes it, as the client of the provider it is,
+    // with what this deployment supplies of its own: the web server, the clock, the
+    // secret source, the transports and the stand-ins for the optional environment seams
+    // (LIB-TEST-003). Its back channel reaches the authentication application, this
+    // deployment's first.
+    private WebApplication Built(ServerInMemory serving, string client, FixedSecretSource secrets)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
 
-        _ = builder.Services.AddSingleton<IServer>(_server);
+        _ = builder.Services.AddSingleton<IServer>(serving);
         _ = builder.Services.AddSingleton<TimeProvider>(Clock);
         _ = builder.Services.AddSingleton<ISecretSource>(secrets);
         _ = builder.Services.AddSingleton<INotificationHandler>(Notifications);
@@ -404,7 +479,7 @@ public sealed class WorkshopHost : IAsyncLifetime
         _ = builder.Services.AddSingleton<ILocationSource>(new EmptyLocationSource(Clock));
         _ = builder.Services.AddSingleton<IDatacenterRangeSource>(new EmptyDatacenterRangeSource(Clock));
 
-        WorkshopApplication.Register(builder.Services, Origin, _connectionString);
+        WorkshopApplication.Register(builder.Services, Origin, client, _connectionString);
 
         _ = builder.Services.AddHttpClient(SignOnChannel).ConfigurePrimaryHttpMessageHandler(_server.Channel);
 
@@ -447,6 +522,63 @@ public sealed class WorkshopHost : IAsyncLifetime
         }
 
         return arguments;
+    }
+
+    // OPS-BOOT-001: a browser application registered by the library's command-line tool,
+    // as a host's pipeline registers each one it declares, the deployment's keys read
+    // from its standard input.
+    private async Task RegisteredAsync(
+        FixedSecretSource secrets,
+        string client,
+        string redirect,
+        CancellationToken cancellationToken)
+    {
+        var start = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+
+        foreach (string argument in (string[])
+            [
+                "tool", "run", "identity", "register-client",
+                "--client", client,
+                "--name", client,
+                "--kind", "browser-application",
+                "--redirect", redirect,
+                "--scopes", "openid",
+            ])
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using Process run = Process.Start(start) ?? throw new InvalidOperationException("The tool did not start.");
+
+        Task<string> output = run.StandardOutput.ReadToEndAsync(cancellationToken);
+        Task<string> error = run.StandardError.ReadToEndAsync(cancellationToken);
+        byte[] keys = secrets.KeyDocument(_connectionString);
+
+        try
+        {
+            await run.StandardInput.BaseStream.WriteAsync(keys, cancellationToken);
+            run.StandardInput.Close();
+        }
+        finally
+        {
+            Array.Clear(keys);
+        }
+
+        await run.WaitForExitAsync(cancellationToken);
+        _ = await output;
+
+        string refused = await error;
+
+        if (run.ExitCode is not 0)
+        {
+            throw new InvalidOperationException("register-client was refused: " + refused.Trim());
+        }
     }
 
     // A version of a legal document, published by the first administrator.

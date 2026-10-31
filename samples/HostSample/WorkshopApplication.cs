@@ -53,16 +53,37 @@ public static class WorkshopApplication
     /// <param name="connectionString">How the application reaches the deployment's database.</param>
     /// <exception cref="ArgumentNullException">The collection or the origin is absent.</exception>
     /// <exception cref="ArgumentException">The connection string is empty.</exception>
-    public static void Register(IServiceCollection services, Uri origin, string connectionString)
+    public static void Register(IServiceCollection services, Uri origin, string connectionString) =>
+        Register(services, origin, Client, connectionString);
+
+    /// <summary>
+    /// Registers the application as <see cref="Register(IServiceCollection, Uri, string)"/>
+    /// does, as a given client of the provider: the authentication application itself
+    /// where the client is <see cref="Client"/>, or a second application of the same
+    /// deployment, served at an origin of its own, whose sign-on that client is
+    /// (BFF-SESS-006, D-229).
+    /// </summary>
+    /// <param name="services">The host's collection.</param>
+    /// <param name="origin">
+    /// The origin the deployment's authentication application answers at, where its
+    /// frontend's pages are.
+    /// </param>
+    /// <param name="client">Which client of the provider the application is.</param>
+    /// <param name="connectionString">How the application reaches the deployment's database.</param>
+    /// <exception cref="ArgumentNullException">The collection or the origin is absent.</exception>
+    /// <exception cref="ArgumentException">The client or the connection string is empty.</exception>
+    public static void Register(IServiceCollection services, Uri origin, string client, string connectionString)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(origin);
+        ArgumentException.ThrowIfNullOrWhiteSpace(client);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
         string site = origin.GetLeftPart(UriPartial.Authority);
 
         // LIB-HOST-001: the frontend's pages, its sign-in screen and the provider, which
-        // is this application, and which client of the provider it is.
+        // is the authentication application, and which client of the provider this one
+        // is.
         _ = services.AddSingleton(new PasskeyAddresses(
             new Uri(origin, "/account/password").AbsoluteUri,
             new Uri(origin, "/account/passkeys/new").AbsoluteUri,
@@ -70,7 +91,7 @@ public static class WorkshopApplication
         _ = services.AddSingleton(new AuthenticationAddresses(
             new Uri(origin, "/signin").AbsoluteUri,
             Address(origin).AbsoluteUri));
-        _ = services.AddSingleton(new SignOnClient(Client));
+        _ = services.AddSingleton(new SignOnClient(client));
 
         // API-LAND-001: both of the frontend's applications are served at the one origin.
         _ = services.AddSingleton(new LandingOrigins(site, site));
