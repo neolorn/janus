@@ -322,6 +322,7 @@ public static class HostingRegistration
         // type, never as IMailServer; the start chooses it where the host registered no
         // mail server and the endpoint is set.
         services.AddScoped<IAppPasswordLog, AppPasswordLog>();
+        services.AddSingleton<IMailServerFaults, MailServerFaults>();
         services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel);
 

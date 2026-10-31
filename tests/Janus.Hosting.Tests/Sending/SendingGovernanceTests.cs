@@ -1682,6 +1682,33 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-ERR-002 AC2, D-022: what the host's handler threw at a message is logged as
+    /// every other fault the library catches is, by its type and frames and never its
+    /// message, and the message waits with the attempt counted.
+    /// </summary>
+    [Fact]
+    public async Task BFF_ERR_002_AC2_WhatTheHandlerThrewAtAMessageIsLoggedAsync()
+    {
+        using var logs = new LogsInMemory();
+        using ILoggerFactory logging = LoggerFactory.Create(builder => builder.AddProvider(logs));
+
+        _log = logging.CreateLogger<SendPublisher>();
+        _replaced = new NotificationHandlerInMemory
+        {
+            Asking = _ => throw new InvalidOperationException("The host's delivery faulted."),
+        };
+
+        _ = await SentAsync(Mailed());
+
+        Assert.Equal(1, Assert.Single(_outbox.Waiting).Attempts);
+
+        string line = Assert.Single(logs.Lines, written => written.Contains(typeof(SendPublisher).FullName!, StringComparison.Ordinal));
+
+        Assert.Contains(typeof(InvalidOperationException).FullName!, line, StringComparison.Ordinal);
+        Assert.DoesNotContain("The host's delivery faulted.", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// OPS-CFG-008 AC5: a setting that does not read under its key, met by the attempt
     /// that runs after the send committed, is logged there and goes no further: the send
     /// answers as it committed and its row is left to the publisher. The publisher's own

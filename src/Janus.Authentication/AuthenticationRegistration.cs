@@ -246,7 +246,8 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
-            provider.GetRequiredService<RandomNumberGenerator>()));
+            provider.GetRequiredService<RandomNumberGenerator>(),
+            provider.GetRequiredService<IMailServerFaults>()));
         services.AddScoped(provider => new MailboxReconciliation(
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IMailServerInUse>(),

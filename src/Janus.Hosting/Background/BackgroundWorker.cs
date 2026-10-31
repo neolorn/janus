@@ -38,8 +38,6 @@ internal sealed class BackgroundWorker(
     TimeProvider time,
     ILogger<BackgroundWorker> log) : BackgroundService
 {
-    private const string Fault = "fault";
-
     // INF-BG-001 (D-209): the longest single delay the runtime's timer accepts, which is
     // the timer's own limit and no deployment's choice.
     private static readonly TimeSpan Longest = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
@@ -179,10 +177,7 @@ internal sealed class BackgroundWorker(
         catch (Exception fault)
             when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.SystemFault,
-                Fault,
-                JsonSerializer.SerializeToElement(FaultLog.Of(fault))));
+            return Result.Failure(FaultLog.Failure(fault));
         }
     }
 
@@ -196,7 +191,7 @@ internal sealed class BackgroundWorker(
     // What a failure is written down as: the fault log entry of what was thrown where
     // it was a fault, and its code otherwise.
     private static string Described(Error error) =>
-        error.Details.TryGetValue(Fault, out JsonElement fault)
+        error.Details.TryGetValue(FaultLog.Detail, out JsonElement fault)
             ? fault.GetString() ?? string.Empty
             : error.Code.ToString();
 

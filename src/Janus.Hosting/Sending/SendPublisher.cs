@@ -335,7 +335,8 @@ internal sealed class SendPublisher(
 
     // The handler is asked outside any transaction, for no longer than the claim
     // stands: an attempt still running then is abandoned as a failed attempt. A handler
-    // that throws did not take the message. Letting the fault out would leave the
+    // that throws did not take the message, and its fault is kept as every other fault
+    // the library catches is (BFF-ERR-002 AC2). Letting the fault out would leave the
     // attempt uncounted, so the message would be carried at every pass, never back off
     // and never spend its budget.
     private async ValueTask<Result> TakenAsync(
@@ -352,6 +353,8 @@ internal sealed class SendPublisher(
         }
         catch (Exception fault) when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            SendLog.HandlerFaulted(log, FaultLog.Of(fault));
+
             return Result.Failure(Error.From(ErrorCodes.SystemFault));
         }
     }

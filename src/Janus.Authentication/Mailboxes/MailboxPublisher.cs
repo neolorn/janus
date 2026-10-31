@@ -23,6 +23,7 @@ namespace Janus.Authentication.Mailboxes;
 /// <param name="work">The transactions a claim, an attempt and an outcome are each written in.</param>
 /// <param name="time">The clock the schedule is computed against.</param>
 /// <param name="randomness">Where the full jitter of each delay comes from.</param>
+/// <param name="faults">Where what the mail server threw at a push is kept.</param>
 /// <remarks>
 /// Implements INT-MAIL-001 AC4, INT-MAIL-006, INT-MAIL-006a AC1, INT-MAIL-007 AC1, AC3,
 /// AC5 to AC8, OPS-OBS-002, CONV-DESIGN-002, CONV-DESIGN-003, INF-BG-001, D-177 and
@@ -50,7 +51,8 @@ internal sealed class MailboxPublisher(
     IAlertRaising alerts,
     IUnitOfWork work,
     TimeProvider time,
-    RandomNumberGenerator randomness)
+    RandomNumberGenerator randomness,
+    IMailServerFaults faults)
 {
     /// <summary>
     /// Runs one pass.
@@ -290,7 +292,8 @@ internal sealed class MailboxPublisher(
 
     // The server is asked outside any transaction, for no longer than the claim
     // stands: an attempt still running then is abandoned as a failed attempt. A server
-    // that throws is a server that did not confirm. Letting the fault out would leave
+    // that throws is a server that did not confirm, and its fault is kept as every other
+    // fault the library catches is (BFF-ERR-002 AC2). Letting the fault out would leave
     // the push without its next attempt, so it would be made at every pass and never
     // back off.
     private async ValueTask<Result> ProvisionedAsync(
@@ -308,6 +311,8 @@ internal sealed class MailboxPublisher(
         }
         catch (Exception fault) when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            faults.Keep(fault);
+
             return Result.Failure(Error.From(ErrorCodes.SystemFault));
         }
     }

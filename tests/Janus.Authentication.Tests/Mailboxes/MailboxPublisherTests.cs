@@ -33,6 +33,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private readonly MailServerFaultsInMemory _faults = new();
     private readonly SubjectId _holder;
 
     /// <summary>
@@ -621,6 +622,27 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-ERR-002 AC2, INT-MAIL-007: what the mail server threw at a push is kept as
+    /// every other fault the library catches is, and the push is a failed attempt.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_002_AC2_WhatTheMailServerThrewAtAPushIsKeptAsync()
+    {
+        Mailbox reserved = await ReservedAsync();
+        var thrown = new InvalidOperationException("The server's client faulted.");
+
+        _server.Receiving = _ => throw thrown;
+
+        Assert.Equal(0, await PassAsync());
+
+        Assert.Same(thrown, Assert.Single(_faults.Kept));
+        Assert.Equal(1, reserved.Attempts);
+        Assert.NotNull(reserved.NextAttemptAt);
+        Assert.Empty(_mailboxes.Claims);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003: a pass reads the mailboxes without a lock and claims only one it
     /// has something to do for, so a push marked failed, which is not due within the
     /// day, costs no claim and no write.
@@ -644,7 +666,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     }
 
     private MailboxPublisher Built(IMailServer? server) =>
-        new(_mailboxes, new MailServerInUseInMemory(server), _configuration, _events, _work, _clock, _randomness);
+        new(_mailboxes, new MailServerInUseInMemory(server), _configuration, _events, _work, _clock, _randomness, _faults);
 
     /// <summary>
     /// INT-MAIL-006 AC5, D-178: a mailbox replaced is owed <c>removed</c> though its
