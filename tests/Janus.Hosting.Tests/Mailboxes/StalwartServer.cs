@@ -196,6 +196,28 @@ public sealed class StalwartServer : IAsyncLifetime
         return Created(answered[0], "account");
     }
 
+    /// <summary>
+    /// What the server answers a mail client that signs in with a credential, as one
+    /// opening its session does.
+    /// </summary>
+    /// <param name="login">The name the client signs in as.</param>
+    /// <param name="secret">The credential it presents.</param>
+    /// <returns>The status of the answer.</returns>
+    public async Task<HttpStatusCode> SignedInAsync(string login, string secret)
+    {
+        using HttpMessageHandler trusting = Trusting();
+        using var requests = new HttpClient(trusting, disposeHandler: false);
+        using var message = new HttpRequestMessage(HttpMethod.Get, new Uri(Endpoint, "jmap/session"));
+
+        message.Headers.Authorization = new AuthenticationHeaderValue(
+            "Basic",
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(login + ":" + secret)));
+
+        using HttpResponseMessage response = await requests.SendAsync(message, TestContext.Current.CancellationToken);
+
+        return response.StatusCode;
+    }
+
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {

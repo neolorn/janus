@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
@@ -30,8 +31,16 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
     private static readonly IReadOnlyDictionary<string, ProviderCredential> NoCredentials =
         new Dictionary<string, ProviderCredential>(StringComparer.Ordinal);
 
-    // The criteria of INT-MAIL-001 the server decides with the management key (AC7).
-    private static readonly string[] Decided = ["AC3", "AC4", "AC5", "AC6"];
+    // The criteria the server decides with the management key: INT-MAIL-001 criteria 3
+    // to 6, and INT-MAIL-010's calls (INT-MAIL-001 AC7).
+    private static readonly string[] Decided =
+    [
+        "INT_MAIL_001_AC3_",
+        "INT_MAIL_001_AC4_",
+        "INT_MAIL_001_AC5_",
+        "INT_MAIL_001_AC6_",
+        "INT_MAIL_010_AC1_",
+    ];
 
     private readonly ConcurrentQueue<Sent> _sent = new();
 
@@ -276,10 +285,117 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
     }
 
     /// <summary>
-    /// CONV-TEST-002 AC5, INT-MAIL-001 AC7 for criteria 3 to 6: every criterion of the
-    /// adapter the server decides with the management key has its test here, against a
-    /// server whose image this class names by digest and which started as the release
-    /// the adapter is written for.
+    /// INT-MAIL-010 AC1 to AC3, INT-MAIL-001 AC7 (D-226): an app password is created,
+    /// listed and revoked by one call each with the management key on the account that
+    /// carries the mailbox's identifier, named by the call's <c>accountId</c>; the server
+    /// generates the secret, which signs a mail client in until it is revoked and not
+    /// after.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_010_AC1_AnAppPasswordIsManagedOnTheAccountOfTheMailboxHeldAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = Mailbox.Drawn();
+        DateTimeOffset expiresAt = DateTimeOffset.UtcNow.AddDays(30);
+
+        await using Started started = await StartedAsync();
+
+        Assert.True(Succeeded(await started.Server.ProvisionAsync(mailbox.Push(MailboxState.Enabled), cancellationToken)));
+
+        string account = (await server.AccountAsync(mailbox.Name))!.Value.GetProperty("id").GetString()!;
+
+        _sent.Clear();
+
+        IssuedAppPassword issued = Value(await started.Server.CreateAppPasswordAsync(
+            mailbox.Id,
+            mailbox.Address,
+            "Phone",
+            expiresAt,
+            cancellationToken));
+
+        Assert.NotEmpty(issued.Secret);
+        Assert.Single(
+            _sent.SelectMany(sent => (JsonArray)sent.Body["methodCalls"]!),
+            call => (string)call![0]! == "x:AppPassword/set");
+        Assert.All(
+            _sent.SelectMany(sent => (JsonArray)sent.Body["methodCalls"]!)
+                .Where(call => ((string)call![0]!).StartsWith("x:AppPassword/", StringComparison.Ordinal)),
+            call => Assert.Equal(account, (string)call![1]!["accountId"]!));
+
+        AppPassword listed = Assert.Single(Value(await started.Server.AppPasswordsAsync(
+            mailbox.Id,
+            mailbox.Address,
+            cancellationToken)));
+
+        Assert.Equal((issued.Id, "Phone"), (listed.Id, listed.Label));
+        Assert.Equal(expiresAt.ToUnixTimeSeconds(), listed.ExpiresAt!.Value.ToUnixTimeSeconds());
+        Assert.Equal(HttpStatusCode.OK, await server.SignedInAsync(mailbox.Address.Value, issued.Secret));
+
+        Assert.True(Succeeded(await started.Server.RevokeAppPasswordAsync(
+            mailbox.Id,
+            mailbox.Address,
+            issued.Id,
+            cancellationToken)));
+        Assert.Empty(Value(await started.Server.AppPasswordsAsync(mailbox.Id, mailbox.Address, cancellationToken)));
+        Assert.Equal(HttpStatusCode.Unauthorized, await server.SignedInAsync(mailbox.Address.Value, issued.Secret));
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Refusal(await started.Server.RevokeAppPasswordAsync(
+                mailbox.Id,
+                mailbox.Address,
+                issued.Id,
+                cancellationToken)));
+    }
+
+    /// <summary>
+    /// INT-MAIL-010, INT-MAIL-001 AC7 (D-226): where the server holds no account under
+    /// the mailbox's name, or one that does not carry its identifier, each app-password
+    /// call fails as a failed call does and no app password is read, made or destroyed
+    /// on any account.
+    /// </summary>
+    /// <param name="exists">Whether an account the library did not make holds the name.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task INT_MAIL_010_ACallActsOnNoAccountButTheOneCarryingTheMailboxAsync(bool exists)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = Mailbox.Drawn();
+
+        if (exists)
+        {
+            _ = await server.CreateAsync(mailbox.Name, description: null, new JsonObject { ["@type"] = "Inherit" });
+        }
+
+        await using Started started = await StartedAsync();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await started.Server.AppPasswordsAsync(mailbox.Id, mailbox.Address, cancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await started.Server.CreateAppPasswordAsync(mailbox.Id, mailbox.Address, "Phone", null, cancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await started.Server.RevokeAppPasswordAsync(
+                mailbox.Id,
+                mailbox.Address,
+                AppPasswordId.Parse("p0001"),
+                cancellationToken)));
+        Assert.DoesNotContain(
+            _sent.SelectMany(sent => (JsonArray)sent.Body["methodCalls"]!),
+            call => ((string)call![0]!).StartsWith("x:AppPassword/", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// CONV-TEST-002 AC5, INT-MAIL-001 AC7 for criteria 3 to 6 and INT-MAIL-010's calls:
+    /// every criterion of the adapter the server decides with the management key has its
+    /// test here, against a server whose image this class names by digest and which
+    /// started as the release the adapter is written for.
     /// </summary>
     [Fact]
     public void CONV_TEST_002_AC5_TheServerDecidingTheCriteriaIsItsReleaseNamedByDigest()
@@ -296,7 +412,7 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
         Assert.StartsWith("1.0.", server.Release, StringComparison.Ordinal);
         Assert.All(Decided, criterion => Assert.Contains(
             tested,
-            name => name.StartsWith("INT_MAIL_001_" + criterion + "_", StringComparison.Ordinal)));
+            name => name.StartsWith(criterion, StringComparison.Ordinal)));
     }
 
     /// <summary>
