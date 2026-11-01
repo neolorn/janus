@@ -71,6 +71,13 @@ internal static class AccountEndpoints
         _ = SessionRequired.On(group.MapDelete("/photo", RemovePhotoAsync))
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted))
             .Produces(StatusCodes.Status204NoContent);
+        // IDN-ATTR-003 (D-250): a colleague's photo, served as the account's own is.
+        _ = SessionRequired.On(endpoints.MapGet("/organizations/{id}/members/{account}/photo", ReadColleaguePhotoAsync))
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.PhotoNotFound)
+                .Binding<OrganizationId>("id")
+                .Binding<SubjectId>("account"))
+            .Produces<byte[]>(StatusCodes.Status200OK, StoredPhoto);
         _ = SessionRequired.On(group.MapGet("/preferences", ReadPreferencesAsync))
             .Declares(EndpointDeclaration.Answering())
             .Produces<PreferencesView>();
@@ -278,6 +285,26 @@ internal static class AccountEndpoints
 
         return Answers.Of(
             await accounts.ReadPhotoAsync(holder, cancellationToken).ConfigureAwait(false),
+            image => TypedResults.Bytes(image, StoredPhoto));
+    }
+
+    private static async Task<IResult> ReadColleaguePhotoAsync(
+        IAccounts accounts,
+        RequestSession browser,
+        HttpContext context,
+        OrganizationId id,
+        SubjectId account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        // IDN-ATTR-003 AC3: the image is served through the gate the session is, and
+        // carries nothing a shared cache could hand to anyone else.
+        context.Response.Headers.CacheControl = "no-store";
+
+        return Answers.Of(
+            await accounts.MemberPhotoAsync(Asking(browser), id, account, cancellationToken).ConfigureAwait(false),
             image => TypedResults.Bytes(image, StoredPhoto));
     }
 

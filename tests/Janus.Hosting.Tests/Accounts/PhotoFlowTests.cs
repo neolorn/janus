@@ -1,5 +1,7 @@
 using System;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Core;
@@ -25,13 +27,19 @@ public sealed class PhotoFlowTests : IAsyncDisposable
 
     private readonly Deployment _deployment = new();
 
+    private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+
     /// <summary>
     /// A deployment able to send, which is what registering a browser needs.
     /// </summary>
     public PhotoFlowTests() => Flow.Prepare(_deployment);
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await _deployment.DisposeAsync();
+        _randomness.Dispose();
+    }
 
     /// <summary>
     /// 09 section 6: an account that shows no photo is answered as one whose
@@ -206,6 +214,106 @@ public sealed class PhotoFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", Path)).Status);
     }
+
+    /// <summary>
+    /// IDN-ATTR-002 AC6 (D-249): an organization whose policy turns photos on over a system
+    /// policy that has them off shows its members' photos, while an account of no
+    /// organization follows the system policy and sets none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_AC6_AnOrganizationShowsPhotosWhereTheSystemPolicyDoesNotAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        var organization = OrganizationId.New(_deployment.Clock);
+
+        _deployment.Configuration.Set(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            PolicyOverride.None with { Photos = true });
+
+        Answer withheld = await browser.SendAsync("PUT", Path, Upload, contentType: Png);
+
+        _deployment.Memberships.Place(subject, organization);
+
+        Answer uploaded = await browser.SendAsync("PUT", Path, Upload, contentType: Png);
+        Answer read = await browser.SendAsync("GET", Path);
+
+        Assert.Equal(ErrorCodes.PhotoNotEnabled.ToString(), withheld.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, uploaded.Status);
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-003 AC4, IDN-ATTR-002 AC7, `09` `GET /organizations/{id}/members/{account}/photo`
+    /// (D-250): a member reads a colleague's photo as `GET /account/photo` serves the
+    /// account's own, through the gate with `Cache-Control: no-store` and no entity tag;
+    /// every read not admitted (of an organization the reader does not belong to, of a
+    /// colleague of a second organization that keeps photos off, of a colleague showing
+    /// none) answers 404 `identity.photo.notfound` with the same body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_003_AC4_AMemberReadsAColleaguesPhotoOverTheWireAsync()
+    {
+        Browser member = await Flow.SignedInAsync(_deployment);
+        SubjectId reader = _deployment.Directory.Created[^1].Subject;
+        var colleague = SubjectId.New(_randomness);
+        var bare = SubjectId.New(_randomness);
+        var divided = SubjectId.New(_randomness);
+        var organization = OrganizationId.New(_deployment.Clock);
+        var hiding = OrganizationId.New(_deployment.Clock);
+        var foreign = OrganizationId.New(_deployment.Clock);
+
+        foreach (SubjectId standing in new[] { colleague, bare, divided })
+        {
+            _deployment.Accounts.Stands(standing, AccountState.Active);
+            _deployment.Memberships.Place(standing, organization);
+        }
+
+        _deployment.Memberships.Place(reader, organization);
+        _deployment.Memberships.Place(divided, hiding);
+        _deployment.Memberships.Place(colleague, foreign);
+
+        foreach (OrganizationId showing in new[] { organization, foreign })
+        {
+            _deployment.Configuration.Set(
+                Settings.OrganizationPolicy,
+                showing.ToString(),
+                PolicyOverride.None with { Photos = true });
+        }
+        _deployment.Accounts.Shows(colleague, Encoding.ASCII.GetBytes("a-photo"));
+        _deployment.Accounts.Shows(divided, Encoding.ASCII.GetBytes("a-photo"));
+
+        Answer read = await member.SendAsync("GET", ColleagueOf(organization, colleague));
+        Answer[] concealed =
+        [
+            await member.SendAsync("GET", ColleagueOf(foreign, colleague)),
+            await member.SendAsync("GET", ColleagueOf(organization, divided)),
+            await member.SendAsync("GET", ColleagueOf(organization, bare)),
+        ];
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal("image/jpeg", read.Header("Content-Type"));
+        Assert.Equal("no-store", read.Header("Cache-Control"));
+        Assert.Null(read.Header("ETag"));
+        Assert.Equal("a-photo", read.Body);
+        Assert.All(concealed, answer =>
+        {
+            Assert.Equal(StatusCodes.Status404NotFound, answer.Status);
+            Assert.Equal(ErrorCodes.PhotoNotFound.ToString(), answer.Text("code"));
+            Assert.Empty(answer.Json().GetProperty("details").EnumerateObject());
+            Assert.Equal(Uncorrelated(concealed[0]), Uncorrelated(answer));
+        });
+    }
+
+    // The bytes of a refusal save the correlation identifier every answer carries.
+    private static string Uncorrelated(Answer answer) =>
+        Regex.Replace(answer.Body, "\"correlationId\":\"[^\"]*\"", string.Empty, RegexOptions.None, TimeSpan.FromSeconds(1));
+
+    private static string ColleagueOf(OrganizationId organization, SubjectId member) =>
+        "/organizations/" + organization + "/members/" + member + "/photo";
 
     // IDN-ATTR-002: photos are the policy's to show, and the browser's account belongs
     // to no organization, so the system policy is the one that shows them.

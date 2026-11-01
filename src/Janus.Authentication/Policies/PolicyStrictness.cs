@@ -20,7 +20,9 @@ internal static class PolicyStrictness
     /// a value written before the system default rose cannot take effect. The gates are
     /// overridden action by action: an action the organization does not name keeps the
     /// system's gate. The grammatical gender is no loosening either way, so the
-    /// organization's own value stands over the system's (D-236).
+    /// organization's own value stands over the system's (D-236). Photos are the
+    /// organization's to show, so its own value stands over the system's too, though
+    /// turning them on is a loosening (IDN-ATTR-002, D-249).
     /// </summary>
     /// <param name="system">The system policy.</param>
     /// <param name="overrides">What the organization overrides.</param>
@@ -42,7 +44,11 @@ internal static class PolicyStrictness
                 overrides.EmailDomains ?? system.EmailDomains,
                 overrides.Photos ?? system.Photos));
 
-        return tightened with { GrammaticalGender = overrides.GrammaticalGender ?? system.GrammaticalGender };
+        return tightened with
+        {
+            Photos = overrides.Photos ?? system.Photos,
+            GrammaticalGender = overrides.GrammaticalGender ?? system.GrammaticalGender,
+        };
     }
 
     /// <summary>
@@ -77,7 +83,8 @@ internal static class PolicyStrictness
 
     /// <summary>
     /// The first field an organization's overrides state looser than the system
-    /// policy, which an organization may not do.
+    /// policy, which an organization may not do. Photos are no such field: their
+    /// availability is the organization's (IDN-ATTR-002, D-249).
     /// </summary>
     /// <param name="system">The system policy.</param>
     /// <param name="overrides">What the organization would override.</param>
@@ -110,12 +117,9 @@ internal static class PolicyStrictness
             return "credentialRedundancy";
         }
 
-        if (overrides.SelfServiceRecovery is true && !system.SelfServiceRecovery)
-        {
-            return "selfServiceRecovery";
-        }
-
-        return overrides.Photos is true && !system.Photos ? "photos" : null;
+        return overrides.SelfServiceRecovery is true && !system.SelfServiceRecovery
+            ? "selfServiceRecovery"
+            : null;
     }
 
     /// <summary>
@@ -210,10 +214,7 @@ internal static class PolicyStrictness
                     || !Admitting(system.EmailDomains).SetEquals(resolved.EmailDomains))
                 ? resolved.EmailDomains
                 : null,
-            stated.Photos is { } photos
-                && (photos == resolved.Photos || resolved.Photos != system.Photos)
-                ? resolved.Photos
-                : null,
+            stated.Photos is not null ? resolved.Photos : null,
             stated.GrammaticalGender is not null ? resolved.GrammaticalGender : null);
     }
 

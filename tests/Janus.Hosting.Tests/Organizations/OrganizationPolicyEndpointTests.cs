@@ -258,6 +258,40 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ATTR-002 AC6, OPS-CFG-002 (D-249): an organization's policy turns photos on
+    /// over a system policy that has them off, not refused as below the system policy;
+    /// it is still a loosening, so it needs `system:administer` and is written down as
+    /// one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_AC6_AnOrganizationTurnsPhotosOnAsALooseningAsync()
+    {
+        (Browser administrator, SubjectId subject) = await SignedInAsync();
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.OrganizationManage);
+
+        const string photos = """{"photos":true,"reason":"Staff show their faces."}""";
+
+        Answer withheld = await administrator.SendAsync("PUT", PathOf(Branch), photos);
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+
+        Answer turned = await administrator.SendAsync("PUT", PathOf(Branch), photos);
+
+        Assert.Equal(ErrorCodes.Denied.ToString(), withheld.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, turned.Status);
+        Assert.True((await OverrideAsync(Branch)).Photos);
+        Assert.True(Assert.Single(_deployment.Changes.Written).Loosening);
+        Assert.True(
+            (await administrator.SendAsync("GET", PathOf(Branch)))
+                .Json()
+                .GetProperty("photos")
+                .GetProperty("value")
+                .GetBoolean());
+    }
+
+    /// <summary>
     /// OPS-ALERT-001 AC1, D-083: giving up a gate the organization asked more of raises
     /// the High alert under the organization, naming its policy key and the gate.
     /// </summary>

@@ -2092,6 +2092,14 @@ POST /enrol/begin
   400 api.request.malformed
   403 auth.session.csrfinvalid
   422 auth.enrolment.tokeninvalid auth.recovery.tokenexpired
+GET /organizations/{id}/members/{account}/photo
+  200
+    image/jpeg
+      : number[]
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.photo.notfound
 GET /privacy/consents
   200
     application/json

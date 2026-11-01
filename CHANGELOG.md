@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A current member of an organization reads another current member's photo:
+  `GET /organizations/{id}/members/{account}/photo` and `IAccounts.MemberPhotoAsync`,
+  where every organization the colleague belongs to shows photos. It is served as the
+  account's own photo is, `Cache-Control: no-store` and no entity tag; every other case
+  answers 404 `identity.photo.notfound` alike, and a system principal is refused
+  `authz.denied`. An admitted read counts one record toward the reader's read volume.
+- An organization's policy may set `photos` to `true` while the system policy has it
+  `false`: it is no longer refused `config.policy.belowsystem`, and it is still a
+  loosening that asks `system:administer` and the step-up. Members of that
+  organization show photos; an account of no organization follows the system policy.
 - The `identity organization` command sets a business organization up from the server,
   before any person can work: `--name`, `--policy` (a file holding the policy object
   `PUT /admin/organizations/{id}/policy` takes, without `reason`) and `--reason`, with

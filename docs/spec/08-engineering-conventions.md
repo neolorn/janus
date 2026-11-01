@@ -38,7 +38,7 @@ area**, published as one package, beside the further packages LIB-PKG-001 lists.
 | `Janus.Analyzers` | The Roslyn analysers the gates rely on (CONV-CODE-008); targets `netstandard2.0` as analysers must, the one exemption to CONV-SETUP-001 AC1 | nothing (D-149) |
 | `tools/Janus.UnicodeTables` | The generator of the Unicode tables `Janus.Core` carries (IDN-ACCT-004, D-154), the IDNA mapping of UTS #46 that gives a domain its ASCII form among them (REG-DOM-001): a console project outside the package, with the Unicode Character Database files and the UTS #46 IDNA mapping table and conformance test file (`IdnaTestV2.txt`, REG-DOM-001) of the pinned version vendored beside it under their licence. Its output is checked in; a gate regenerates and diffs | nothing |
 | `tools/leaked-passwords` | The draw of the offline leaked-password list (AUTH-PASS-004, CONV-VCS-005): a script outside the package and the solution that streams the ranges and keeps a running top 100,000, run at each release by a manually dispatched workflow on a hosted runner (D-197) | nothing |
-| `Janus.Cli` | Bootstrap, migration and key rotation; ships as a .NET tool package at the library's version, its command `identity`, the neutral word of CONV-NAME-001 (LIB-PKG-001, D-204) | Core, Storage, Identity, Authentication, Privacy — it applies the library's migrations (`migrate`, OPS-MIG-001); it creates the first organization, administrator, enrolment link and the credential-less `emergency` account; **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003 (`rotate-kek`) and the fingerprint key's (`rotate-fingerprint-key`), run under the maintenance credential (D-147), the change of a protected key from the server (`configure`, OPS-CFG-004), the erasure replay (`replay-erasures`, DR-016) and client registration (`register-client`, AUTH-OIDC-001) |
+| `Janus.Cli` | Bootstrap, migration and key rotation; ships as a .NET tool package at the library's version, its command `identity`, the neutral word of CONV-NAME-001 (LIB-PKG-001, D-204) | Core, Storage, Identity, Authentication, Privacy — it applies the library's migrations (`migrate`, OPS-MIG-001); it creates the first organization, administrator, enrolment link and the credential-less `emergency` account; **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003 (`rotate-kek`) and the fingerprint key's (`rotate-fingerprint-key`), run under the maintenance credential (D-147), the change of a protected key from the server (`configure`, OPS-CFG-004), the creation of a business organization with its policy (`organization`, OPS-BOOT-001, D-248), the erasure replay (`replay-erasures`, DR-016) and client registration (`register-client`, AUTH-OIDC-001) |
 | `Janus.Testing` | The testing package a host's tests and its development setup use (LIB-TEST-003): the in-memory notification and alert handlers, the fixed secret source, stand-ins for the optional environment seams, the software passkey, the test deployment and the test people; a project with public types, shipped as its own package, built only on the public surface | Core, Hosting (D-204) |
 
 **The sample host (D-204, D-207).** `samples/HostSample` and its test project
@@ -101,7 +101,7 @@ for a build that references it. `Janus.Cli` packs as a tool
 (`PackAsTool`, `ToolCommandName` `identity`), carrying what it runs.
 
 *Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172, D-176, D-181,
-D-183, D-187, D-189, D-197, D-204, D-205, D-207*
+D-183, D-187, D-189, D-197, D-204, D-205, D-207, D-248*
 
 Separate projects make the boundaries a compiler concern rather than a review
 concern. Under a single project with folders, LIB-PKG-001's acceptance criteria
@@ -1920,7 +1920,7 @@ author trusted with full application privilege.
 **CONV-DEP-004** — Security updates SHALL be applied promptly; other updates SHALL be
 taken **as they arrive**, merged when checks pass. Neither is a calendar task.
 
-*Source: D-046, D-110, D-184, D-205, D-215, D-246*
+*Source: D-046, D-110, D-184, D-205, D-215, D-246, D-249*
 
 Vulnerability alerting opens a change when an advisory lands; routine updates arrive
 as they are published. Acting on them is a habit at the point of a pull request, not a
@@ -1952,7 +1952,8 @@ since no alert does, was a known issue carried into Milestone 2
 reads the 10.0 channel's release metadata from Microsoft's published location and
 compares the newest SDK in the feature band of `global.json`'s pin with the pin. Where a
 newer one is out, it opens one issue, or updates the open one, naming the version and
-whether it carries security fixes. It holds `issues: write` and nothing else. It opens no
+whether it carries security fixes. It holds `issues: write` and `contents: read`, so it
+reads `global.json` if the repository turns private (D-249), and nothing else. It opens no
 pull request and writes no commit: a bot's commit would break the rule that every commit
 is the owner's, and a pull request opened with the workflow's token runs no gates.
 `global.json`'s version moves in an ordinary commit in the project's form, merged when
@@ -1965,7 +1966,7 @@ its base image's (`19` INF-DEP-003).
 3. With an SDK newer than `global.json`'s pin out in its feature band, the servicing
    workflow opens one issue naming the version and whether it carries security fixes,
    or updates the open one, and opens no pull request and writes no commit; it holds
-   `issues: write` and no other permission (D-246).
+   `issues: write` and `contents: read` and no other permission (D-246, D-249).
 
 ---
 

@@ -20099,8 +20099,85 @@ release.
 - `01` IDN-ORG-002;
 - `09` (the routes the command matches, by reference);
 - `10` (the system principal `organization`, and section 5.28's `configuration`, the
-  operation it runs; section 5.24's `identity.organization.created`);
+  operation it runs; section 5.24's `identity.organization.created`; section 1.5's
+  `config.change.reasonrequired`; section 5b's `OrganizationCreated`);
+- `08` CONV-LAYOUT-001 (the `Janus.Cli` row);
 - `implementation-plan.md` (round H9).
+
+---
+
+## D-249 — An organization turns photos on where the system policy has them off
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** IDN-ATTR-002, OPS-CFG-002, D-246
+
+**TL;DR.** An organization's policy may set `photos` to `true` over a system policy whose
+`photos` is `false`. IDN-ATTR-002 already makes photo availability the organization's
+("disabled for every organization until enabled"), but the policy route refused the
+override as below the system policy (`config.policy.belowsystem`), so no organization
+could enable photos while customers kept them off. Found by Cura's first production
+release. With it, `servicing.yml` also reads the repository's contents.
+
+- **The override.** `photos: true` in an organization's policy is admitted whatever the
+  system policy says. It stays a loosening for what OPS-CFG-002 asks of a loosening
+  (its step-up and its record). No other field changes: every other override is still
+  judged against the system policy as before.
+- **Who it reaches.** Members of that organization, as AUTH-PRIN-002 resolves every
+  field. An account with no membership follows the system policy, so customers keep
+  photos off while it says so.
+- **Servicing (D-246).** `servicing.yml` holds `contents: read` besides `issues: write`,
+  so it reads `global.json` if the repository turns private.
+
+*Rejected:*
+- **Turning photos on in the system policy:** customers would get photos too.
+- **Leaving it:** IDN-ATTR-002's per-organization availability could never be used
+  while the system policy kept photos off.
+
+**Propagated to:**
+- `01` IDN-ATTR-002;
+- `06` OPS-CFG-002;
+- `09` (the policy route's below-system rule);
+- `10` section 1 (`config.policy.belowsystem`) and section 4.1a (the below-system
+  sentence);
+- `08` CONV-DEP-004 (the workflow's permissions);
+- `implementation-plan.md` (round H10).
+
+---
+
+## D-250 — A member sees a colleague's photo
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** IDN-ATTR-002, IDN-ATTR-003
+
+**TL;DR.** A current member of an organization reads the photo of another current member
+of the same organization, where that organization's policy has photos on:
+`GET /organizations/{id}/members/{account}/photo` and its library call. Until now the
+only read of another account's photo was the administrators' (`account:manage` in the
+administrative organization), so a host could not show staff each other's pictures.
+Found by Cura, whose owner wants staff pictures beside colleagues, never to customers.
+
+- **The read.** `IAccounts.MemberPhotoAsync(AccessContext context, OrganizationId
+  organization, AccountId member, ...)` answers the image, and the route answers it as
+  `GET /account/photo` does: through the access gate, `Cache-Control: no-store`, no
+  entity tag, no public address.
+- **Who may read it.** The caller and the member must both hold a current membership of
+  that organization, and its policy must have `photos` on. No permission beyond the two
+  memberships is asked. A system principal is refused.
+- **Concealment.** Anything else (either not a current member, photos off, no photo set)
+  answers **404** `identity.photo.notfound`, alike, so the read discloses nothing about
+  membership to an outsider.
+- **What it counts.** Each admitted read counts one record toward the reader's read
+  volume (OPS-ALERT-005). No audit row is written.
+
+*Rejected:*
+- **Opening the administrators' read to members:** it names no organization, so it
+  could reach accounts the reader shares nothing with.
+- **A public address per photo:** IDN-ATTR-003 keeps photos behind the access gate.
+
+**Propagated to:**
+- `01` IDN-ATTR-002, IDN-ATTR-003;
+- `07` LIB-API-005 (`IAccounts.MemberPhotoAsync`);
+- `09` (the route, beside `GET /account/photo`);
+- `06` OPS-ALERT-005;
+- `implementation-plan.md` (round H10).
 
 ---
 
@@ -20362,6 +20439,8 @@ release.
 | Servicing the SDK | D-246 |
 | The roles a giver may hand out | D-247 |
 | A deployment creates a business organization from the command line | D-248 |
+| An organization turns photos on where the system policy has them off | D-249 |
+| A member sees a colleague's photo | D-250 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

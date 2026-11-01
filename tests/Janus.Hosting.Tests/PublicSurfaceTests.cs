@@ -181,7 +181,8 @@ public sealed class PublicSurfaceTests
 
     // CONV-DESIGN-002 AC3: the operations on the caller's own account, credentials,
     // sessions, consent, requests, invitations, the end set on its memberships (D-240)
-    // and the records attached to it (REC-ATT-002). No permission governs them
+    // and the records attached to it (REC-ATT-002), and a colleague's photo, which the
+    // caller's membership and the colleague's govern (D-250). No permission governs them
     // (AUTHZ-GATE-006, IDN-ACCT-007), so their gate step is asking whose account is
     // asking, and it is asked before any call is made.
     private static readonly string[] OwnOperations =
@@ -192,6 +193,7 @@ public sealed class PublicSurfaceTests
         nameof(IAccount) + "." + nameof(IAccount.ReadAsync),
         nameof(IAccount) + "." + nameof(IAccount.ReadPhotoAsync),
         nameof(IAccount) + "." + nameof(IAccount.ReadPreferencesAsync),
+        nameof(IAccounts) + "." + nameof(IAccounts.MemberPhotoAsync),
         nameof(IAppPasswords) + "." + nameof(IAppPasswords.CreateAsync),
         nameof(IAppPasswords) + "." + nameof(IAppPasswords.ListAsync),
         nameof(IAppPasswords) + "." + nameof(IAppPasswords.RevokeAsync),
