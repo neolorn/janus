@@ -15,9 +15,11 @@ against the public contract of LIB-API-001.
   invitation, under `membership:manage` and the `invitation:issue` step-up: reserved as
   an invitation's is and owed `enabled` at once, the address a verified email and the
   primary where the account holds none of its domain, the other emails left as they
-  are. It answers 201 `{ id, address, state }`, is recorded as `identity.mailbox.given`
-  and notified once; it is refused `identity.mailbox.held`, `identity.mailbox.taken`
-  (also where another account holds the address as an email),
+  are; an address the account already holds as an email stays its one email for it,
+  marked verified and counted once. It answers 201 `{ id, address, state }`, is
+  recorded as `identity.mailbox.given` and notified once; it is refused
+  `identity.mailbox.held`, `identity.mailbox.taken` (also where another account holds
+  the address as an email),
   `identity.identifier.maximum`, `identity.membership.notfound` (any organization but
   the administrative one alike) and `integration.mailserver.unavailable`.
 - `formerMailbox` `adopt`, on an invitation or a mailbox given, lets the push take over

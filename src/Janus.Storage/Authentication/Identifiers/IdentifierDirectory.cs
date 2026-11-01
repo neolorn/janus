@@ -306,6 +306,21 @@ internal sealed class IdentifierDirectory(
     }
 
     /// <inheritdoc/>
+    public async ValueTask VerifyAsync(
+        SubjectId subject,
+        IdentifierId id,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        set.Verify(id, at);
+
+        await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask PromoteAsync(
         SubjectId subject,
         IdentifierId id,

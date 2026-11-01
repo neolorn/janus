@@ -90,6 +90,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly EmergencyAccountInMemory _emergency = new();
     private readonly OrganizationAuditInMemory _audit = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
+    private readonly PendingVerificationStoreInMemory _pending = new();
     private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
@@ -108,6 +109,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     public InvitationServiceTests()
     {
         _notifications.Work = _work;
+        _identifiers.Pending = _pending;
         _organizations = new OrganizationsInMemory(_memberships);
         _attachments = new MembershipAttachmentInMemory(_memberships);
         _ending = new MembershipEndingInMemory(_memberships);
@@ -2202,6 +2204,66 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-MAIL-001 AC11 (D-253): giving a mailbox at an address the account itself holds
+    /// as an email writes no second email: that email is the mailbox's address, verified,
+    /// primary where the account held no other from the address's domain, and counted
+    /// once against <c>identifiers.email.max</c>, whether the account held it verified (an
+    /// administrator bootstrapped with the company address as the personal one), held it
+    /// unverified, or had begun to add it.
+    /// </summary>
+    /// <param name="held">How the account holds the address.</param>
+    [Theory]
+    [InlineData("verified")]
+    [InlineData("unverified")]
+    [InlineData("pending")]
+    public async Task REG_MAIL_001_AC11_AnAddressTheAccountHoldsIsTheMailboxsOneEmailAsync(string held)
+    {
+        var member = SubjectId.New(_randomness);
+
+        _memberships.Place(member, Staff);
+        _accounts.Stands(member, AccountState.Active);
+        _ = _mailboxes.Standing.Add(member);
+
+        IdentifierId own;
+
+        if (held is "pending")
+        {
+            _ = _identifiers.Verified(member, IdentifierKind.Email, Personal);
+            own = IdentifierId.New(_clock);
+            await _pending.AddAsync(
+                PendingVerification.ToAdd(
+                    member,
+                    browser: null,
+                    Janus.Authentication.Registration.StagedIdentity.Of(own, IdentifierKind.Email, Corporate, Corporate),
+                    Noon),
+                TestContext.Current.CancellationToken);
+        }
+        else
+        {
+            own = _identifiers.Verified(member, IdentifierKind.Email, Corporate);
+        }
+
+        if (held is "unverified")
+        {
+            _ = await _identifiers.UnverifyAsync(member, Corporate, TestContext.Current.CancellationToken);
+        }
+
+        // Every email the account may hold is held, the address among them.
+        _configuration.Set(Settings.IdentifiersEmailMax, held is "pending" ? 2 : 1);
+
+        GivenMailbox given = Accepted(await GiveAsync(Staff, member, new MailboxGift(Corporate, Why)));
+
+        HeldIdentifiers after = await _identifiers.HeldAsync(member, TestContext.Current.CancellationToken);
+        HeldIdentifier email = Assert.Single(after.OfKind(IdentifierKind.Email), one => one.Canonical == Corporate);
+
+        Assert.Equal(own, email.Id);
+        Assert.True(email is { IsVerified: true, IsPrimary: true, IsPending: false });
+        Assert.Equal(held is "pending" ? 2 : 1, after.OfKind(IdentifierKind.Email).Count);
+        Assert.Equal((member, MailboxState.Enabled), (Assert.Single(_mailboxes.Held).Holder, given.State));
+        Assert.Equal(held is "pending" ? 1 : 0, _events.Of<IdentifierAdded>().Count);
+    }
+
+    /// <summary>
     /// REG-MAIL-003 AC9 and INT-MAIL-006 (D-255): under <c>formerMailbox</c> <c>adopt</c>,
     /// an invitation reserves a mailbox whose push takes over the unmarked account the
     /// mail server holds at the address, recorded with its reason, and without
@@ -3092,6 +3154,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _emergency,
                 _accounts,
                 _identifiers,
+                _pending,
                 new DomainLock(_memberships, _configuration, _domains),
                 reservations,
                 _mailboxes,

@@ -29,6 +29,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="emergency">Which account is the reserved emergency account.</param>
 /// <param name="accounts">Where the member's state is read.</param>
 /// <param name="identifiers">Where the member's emails are read and the address taken on.</param>
+/// <param name="pending">Where an add of the address the member began is ended once it is taken on.</param>
 /// <param name="locks">Where the organization's domain lock is judged.</param>
 /// <param name="reservations">The rules the mailbox is reserved under.</param>
 /// <param name="mailboxes">Where the mailbox the member holds is read and the new one held.</param>
@@ -44,7 +45,9 @@ namespace Janus.Authentication.Invitations;
 /// chapter 09 section 8a (D-253, D-255). The mailbox is reserved as an invitation's
 /// corporate address is, under the same rules and codes, and held by the member at once,
 /// so it is owed <c>enabled</c>. The address is taken on as a verified email; the
-/// member's other emails stay, with no lock. It hands out no role, so AUTHZ-GRANT-005 does
+/// member's other emails stay, with no lock. An address the member's own account already
+/// holds as an email stays its one identifier for it, marked verified, and is counted
+/// once (D-253). It hands out no role, so AUTHZ-GRANT-005 does
 /// not bear on it. Everything is written in one transaction; a refused request writes
 /// nothing.
 /// </remarks>
@@ -56,6 +59,7 @@ internal sealed class MailboxGiving(
     IEmergencyAccount emergency,
     IAccountDirectory accounts,
     IIdentifierDirectory identifiers,
+    IPendingVerificationStore pending,
     DomainLock locks,
     MailboxReservations reservations,
     IMailboxStore mailboxes,
@@ -180,7 +184,7 @@ internal sealed class MailboxGiving(
             return Result.Failure<GivenMailbox>(failure);
         }
 
-        if (Filled(await identifiers.HeldAsync(member, cancellationToken).ConfigureAwait(false), maximum))
+        if (Filled(await identifiers.HeldAsync(member, cancellationToken).ConfigureAwait(false), given, maximum))
         {
             return Result.Failure<GivenMailbox>(Error.From(ErrorCodes.IdentifierMaximum));
         }
@@ -255,14 +259,24 @@ internal sealed class MailboxGiving(
     }
 
     // D-253: the address counts against identifiers.email.max, every email the account
-    // holds counted, verified or not, as an invitation's acknowledgement counts them.
-    private static bool Filled(HeldIdentifiers held, int maximum) =>
-        held.OfKind(IdentifierKind.Email).Count >= maximum;
+    // holds counted, verified or not, as an invitation's acknowledgement counts them, and
+    // once: an address the account already holds is counted already.
+    private static bool Filled(HeldIdentifiers held, EmailAddress given, int maximum) =>
+        Own(held, given) is null && held.OfKind(IdentifierKind.Email).Count >= maximum;
+
+    // D-253: the email the account itself already holds at the address, verified, held
+    // unverified or an add it began, where it holds one.
+    private static HeldIdentifier? Own(HeldIdentifiers held, EmailAddress given) =>
+        held.OfKind(IdentifierKind.Email)
+            .FirstOrDefault(email => string.Equals(email.Canonical, given.Value, StringComparison.Ordinal));
 
     // REG-MAIL-001 (D-253): the address becomes the primary email where the account holds
-    // none from the address's domain, and leaves the primary where it holds one.
+    // no other verified email from the address's domain, and leaves the primary where it
+    // holds one.
     private static bool Promoted(HeldIdentifiers held, EmailAddress given) =>
-        !held.OfKind(IdentifierKind.Email).Any(email => email.IsVerified && SameDomain(email.Canonical, given.Value));
+        !held.OfKind(IdentifierKind.Email).Any(email => email.IsVerified
+            && !string.Equals(email.Canonical, given.Value, StringComparison.Ordinal)
+            && SameDomain(email.Canonical, given.Value));
 
     private static bool SameDomain(string held, string given) =>
         string.Equals(held[(held.LastIndexOf('@') + 1)..], given[(given.LastIndexOf('@') + 1)..], StringComparison.Ordinal);
@@ -334,7 +348,7 @@ internal sealed class MailboxGiving(
         SubjectId? reserved = await identifiers.ReservedToAsync(IdentifierKind.Email, given.Value, now, cancellationToken)
             .ConfigureAwait(false);
 
-        if (owner is not null || (reserved is SubjectId other && other != member))
+        if ((owner is SubjectId holder && holder != member) || (reserved is SubjectId other && other != member))
         {
             return Result.Failure<MailboxReservation>(Named(ErrorCodes.MailboxTaken, AddressMember));
         }
@@ -396,7 +410,7 @@ internal sealed class MailboxGiving(
 
         HeldIdentifiers held = await identifiers.HeldAsync(member, cancellationToken).ConfigureAwait(false);
 
-        if (Filled(held, maximum))
+        if (Filled(held, given, maximum))
         {
             return Result.Failure<GivenMailbox>(Error.From(ErrorCodes.IdentifierMaximum));
         }
@@ -411,14 +425,35 @@ internal sealed class MailboxGiving(
 
         await mailboxes.RecordAsync(mailbox, cancellationToken).ConfigureAwait(false);
 
-        var identifier = IdentifierId.New(time);
-        bool promoted = Promoted(held, given);
+        HeldIdentifier? own = Own(held, given);
+        IdentifierId identifier = own?.Id ?? IdentifierId.New(time);
 
-        await identifiers
-            .TakeOnAsync(member, identifier, IdentifierKind.Email, given.Value, given.Value, now, cancellationToken)
-            .ConfigureAwait(false);
+        // D-253: the address the account already holds stays its one identifier for it,
+        // marked verified; an add the member began is taken on as its verification would
+        // take it on, and ended.
+        if (own is null)
+        {
+            await identifiers
+                .TakeOnAsync(member, identifier, IdentifierKind.Email, given.Value, given.Value, now, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else if (own.IsPending)
+        {
+            await identifiers
+                .TakeOnAsync(member, identifier, IdentifierKind.Email, own.Entered, own.Canonical, now, cancellationToken)
+                .ConfigureAwait(false);
+            await pending.RemoveAsync(identifier, cancellationToken).ConfigureAwait(false);
+        }
+        else if (!own.IsVerified)
+        {
+            await identifiers.VerifyAsync(member, identifier, now, cancellationToken).ConfigureAwait(false);
+        }
 
-        if (promoted)
+        bool promoted = own is not { IsPrimary: true } && Promoted(held, given);
+
+        if (promoted
+            && (await identifiers.HeldAsync(member, cancellationToken).ConfigureAwait(false)).Find(identifier)
+                is not { IsPrimary: true })
         {
             await identifiers.PromoteAsync(member, identifier, cancellationToken).ConfigureAwait(false);
         }
@@ -456,13 +491,17 @@ internal sealed class MailboxGiving(
         // REG-IDENT-004, D-253: the set as it stood before hears of the address once.
         _ = await TellAsync(held.NoticeSet, member, source, cancellationToken).ConfigureAwait(false);
 
-        List<DomainEvent> announced =
-        [
-            new IdentifierAdded(now, Key(identifier, now), identifier, IdentifierKind.Email)
-            {
-                Subject = member,
-            },
-        ];
+        // REG-IDENT-004: an identifier that now counts on the account is announced as
+        // added; one the account held already, verified or not, was announced when it was.
+        List<DomainEvent> announced = own is null or { IsPending: true }
+            ?
+            [
+                new IdentifierAdded(now, Key(identifier, now), identifier, IdentifierKind.Email)
+                {
+                    Subject = member,
+                },
+            ]
+            : [];
 
         if (promoted)
         {

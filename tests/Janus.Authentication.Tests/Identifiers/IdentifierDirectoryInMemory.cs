@@ -428,6 +428,17 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     }
 
     /// <inheritdoc/>
+    public ValueTask VerifyAsync(SubjectId subject, IdentifierId id, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        Replace(subject, id, identifier => identifier.IsVerified
+            ? throw new InvalidOperationException("The identifier is verified already.")
+            : identifier with { IsVerified = true, VerifiedAt = at });
+        Settle(subject, id);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask PromoteAsync(SubjectId subject, IdentifierId id, CancellationToken cancellationToken)
     {
         IdentifierKind kind = Required(subject, id).Kind;
