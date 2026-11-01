@@ -19839,7 +19839,8 @@ release.
 - `06` OPS-BOOT-001 (the command beside `bootstrap`);
 - `01` IDN-ORG-002;
 - `09` (the routes the command matches, by reference);
-- `10` (the system principal `organization`);
+- `10` (the system principal `organization`, and section 5.28's `configuration`, the
+  operation it runs);
 - `implementation-plan.md` (round H9).
 
 ---

@@ -1205,10 +1205,11 @@ The operations a deployment-scoped system principal may run, and nothing else
 what has committed to where it goes (the outboxes, mailbox provisioning, raised alerts);
 `monitoring` reads the state of something the deployment depends on and raises what the
 reading calls for; `configuration` changes the deployment's configuration from the server,
-a protected key or the provider's client registry; `role-seeding` defines a host's
-declared roles at a start, inside the start step alone (AUTHZ-GRANT-004, D-204).
+a protected key, the provider's client registry, or a business organization with its
+policy (D-248); `role-seeding` defines a host's declared roles at a start, inside the
+start step alone (AUTHZ-GRANT-004, D-204).
 
-*Source: IDN-PRIN-001, INF-BG-001, INF-BG-002, OPS-BOOT-001, OPS-SEC-003, OPS-CFG-004, AUTH-OIDC-001, DR-016, AUTHZ-GRANT-004, D-166, D-204, D-206*
+*Source: IDN-PRIN-001, INF-BG-001, INF-BG-002, OPS-BOOT-001, OPS-SEC-003, OPS-CFG-004, AUTH-OIDC-001, DR-016, AUTHZ-GRANT-004, D-166, D-204, D-206, D-248*
 
 ### 5.29 System principals
 
@@ -1248,6 +1249,7 @@ of this table, nor `migrate`, the command that runs as none (D-206).
 | `kek-cryptoperiod` | job | `monitoring` | DR-009a |
 | `bootstrap` | command | `bootstrap` | OPS-BOOT-001 |
 | `configure` | command | `configuration` | OPS-CFG-004 |
+| `organization` | command | `configuration` | OPS-BOOT-001 |
 | `register-client` | command | `configuration` | AUTH-OIDC-001 |
 | `rotate-kek` | command | `key-rotation` | OPS-SEC-003 |
 | `rotate-fingerprint-key` | command | `key-rotation` | OPS-SEC-003 |
@@ -1255,7 +1257,7 @@ of this table, nor `migrate`, the command that runs as none (D-206).
 | `role-declaration` | start | `role-seeding` | AUTHZ-GRANT-004 |
 
 *Source: IDN-PRIN-001, INF-BG-001, INF-BG-002, AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-166,
-D-189, D-202, D-204, D-206*
+D-189, D-202, D-204, D-206, D-248*
 
 ### 5.30 Conformance checks and truth-table scenarios
 
