@@ -39,14 +39,15 @@ an application identity, or the resource acted on:
 
 Today the only organization is the administrative organization (D-001).
 
-**"Policy" is one object with seven fields** (`requiredAssurance`, `loginFactors`,
-`gates`, `credentialRedundancy`, `selfServiceRecovery`, `emailDomains`, `photos`)
-defined in `10` §4.1a and carried by `PUT /admin/organizations/{id}/policy`. The system policy is
-`policy.default`; an organization's policy stores only the fields it overrides.
+**"Policy" is one object with eight fields** (`requiredAssurance`, `loginFactors`,
+`gates`, `credentialRedundancy`, `selfServiceRecovery`, `emailDomains`, `photos`,
+`grammaticalGender`, D-236) defined in `10` §4.1a and carried by
+`PUT /admin/organizations/{id}/policy`. The system policy is `policy.default`; an
+organization's policy stores only the fields it overrides.
 Every rule in this document that says "where the policy requires AAL2" reads
 `requiredAssurance`; nothing is inferred from which factors happen to be enabled.
 
-*Source: D-148; D-002, D-020.1, D-086, D-116, D-143, D-166*
+*Source: D-148; D-002, D-020.1, D-086, D-116, D-143, D-166, D-236*
 
 **Acceptance criteria**
 1. No enum, flag or claim distinguishes staff from customers as a property of a
@@ -483,7 +484,18 @@ the authentication application; the cancel link of a loss notification, `loss-re
 token travels in the fragment, so it never reaches a server in an address. Every link
 acts only on a press, never on load, so a mail scanner's prefetch changes nothing.
 
-*Source: D-009, D-146, D-166, D-230*
+**A press that leaves the sign-in open (D-233, D-238).** A sign-in challenge is held by
+its handle's fingerprint alone. Where a press leaves a second step or the new-browser
+code, it SHALL draw a second handle for the same challenge, of the same form and length,
+store only its fingerprint, and answer it once in `challengeId`, so the landing page
+completes the sign-in itself; a second press of the same link answers no handle, the
+link being spent. Either handle SHALL carry the challenge on with the same attempts,
+lifetime and binding, completing it through one SHALL end it for both, and abandoning or
+sweeping it SHALL remove both fingerprints. The second handle opens only what the link's
+token already opens and is never logged or stored in clear (`08` CONV-LOG-005; `09`
+`POST /auth/factor`).
+
+*Source: D-009, D-146, D-166, D-230, D-233, D-238*
 
 Password plus email OTP, where email is also the recovery channel, is single-factor
 wearing an MFA badge: one mailbox compromise yields both the reset link and the
@@ -505,6 +517,9 @@ second step (AUTH-FACT-002, `phoneCode`).
    `challengeId` of the one its request opened, and the code shown where the link is
    opened, typed on it, completes it; whether an answer carries a `challengeId` turns
    on the browser's sign-ins alone, never on the account (AUTH-ABUSE-002, D-230).
+7. A press that leaves a second step answers a second handle once and a second press
+   of the link answers none; either handle completes the challenge, the other then
+   answering as for an ended challenge; no handle is stored or logged in clear (D-238).
 
 ---
 

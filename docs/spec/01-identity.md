@@ -1404,19 +1404,32 @@ is discarded.
 ### 5.4 Profile fields
 
 **IDN-ATTR-007** — The profile SHALL consist of the display name, the legal name, the
-date of birth and the photo, each with the enablement, rules and editing path stated
-in REG-PROF-001. Legal name and date of birth SHALL be off by default and switched by
-`profile.legalname` and `profile.dateofbirth`.
+date of birth, the photo and the grammatical gender, each with the enablement, rules and
+editing path stated in REG-PROF-001. Legal name and date of birth SHALL be off by
+default and switched by `profile.legalname` and `profile.dateofbirth`.
 
-*Source: D-146*
+*Source: D-146, D-236*
 
 The photo keeps IDN-ATTR-002 to IDN-ATTR-004. Postal addresses stay host data
 (IDN-ATTR-005).
 
+**Grammatical gender (D-236).** `grammaticalGender` is optional, `masculine` or
+`feminine` (the spellings of CLDR's `grammaticalFeatures`), so that a host can address
+the person, or name their job, in the right grammatical form. It records how the person
+is addressed, not a legal sex, and nothing derives it from another field. A message
+selects on it as MessageFormat 2 selects on any string, with `*` for an absent value,
+which takes the message's default form. Its availability is the policy field
+`grammaticalGender` (`10` section 4.1a), resolved as `photos` is (IDN-ATTR-002): the
+system policy's is `false` and every organization's starts `true`, so an account with no
+membership has none, and an account of several organizations has it only where every
+one of them enables it. The person sets, changes and clears it (REG-PROF-001); it is
+read by the person, by an administrator and by a host's account read (IDN-READ-003).
+
 **Acceptance criteria**
-1. No profile field exists outside the four named here and in REG-PROF-001.
-2. While `profile.legalname` and `profile.dateofbirth` are off, no request accepts the
-   field and no response carries it.
+1. No profile field exists outside the five named here and in REG-PROF-001.
+2. While `profile.legalname` and `profile.dateofbirth` are off, and while the policy
+   does not enable `grammaticalGender` for the account, no request accepts the field
+   and no response carries it.
 
 ---
 
@@ -1613,11 +1626,13 @@ sessions, and set their preferences as an administrator.
 **Values (D-218).** Each read but the sessions' is asked in the organization named, with
 the reach of IDN-READ-004:
 - `IAccounts.ReadAsync`, under `account:read`: `AccountView`, carrying `subject`,
-  `state`, `createdAt`, `profile` (`displayName`, `legalName`), `identifiers` (`emails`,
-  `phones`, `username`), `preferences` (`language`, `timeZone`, `declared`) and
-  `memberships`, each email and phone with its value and whether it is verified and
-  primary, `legalName` present only where `profile.legalname` is on (REG-PROF-001),
-  `memberships` the organizations the account is a current member of; never a
+  `state`, `createdAt`, `profile` (`displayName`, `legalName`, `grammaticalGender`),
+  `identifiers` (`emails`, `phones`, `username`), `preferences` (`language`,
+  `timeZone`, `declared`) and `memberships`, each email and phone with its value and
+  whether it is verified and primary, `legalName` present only where
+  `profile.legalname` is on (REG-PROF-001), `grammaticalGender` only where the policy
+  enables it for the account (IDN-ATTR-007, D-236), `memberships` the organizations the
+  account is a current member of; never a
   credential, the date of birth or the photo, which has its own read (IDN-ATTR-003).
 - `IAccounts.FindAsync`, under `account:read`: the subject bearing an email, phone or
   username, read in the canonical form sign-in reads it in (IDN-ACCT-004), or
@@ -1652,11 +1667,12 @@ they answer an account's, each answer naming its `kind` (`account` · `record`):
 record's contact read carries its name, its contacts as held, verified or not, its
 language, no time zone and its state (`21` REC-ADM-001).
 
-*Source: D-218, D-221*
+*Source: D-218, D-221, D-236*
 
 **Acceptance criteria**
-1. An account read answers no credential, date of birth or photo, and the legal name
-   only where `profile.legalname` is on.
+1. An account read answers no credential, date of birth or photo, the legal name only
+   where `profile.legalname` is on, and the grammatical gender only where the policy
+   enables it for the account.
 2. Finding an account by its email, written in another case or another Unicode form,
    answers its subject; an identifier no account bears answers
    `identity.account.notfound`.

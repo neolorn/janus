@@ -538,7 +538,7 @@ identifier SHALL be refused with `identity.identifier.locked`.
 **REG-PROF-001** — The profile SHALL carry the following fields with the following
 rules.
 
-*Source: D-146, D-162, D-166; IDN-ATTR-002 to 004 for the photo*
+*Source: D-146, D-162, D-166, D-236; IDN-ATTR-002 to 004 for the photo*
 
 | Field | Enabled | Rules | Edited |
 |---|---|---|---|
@@ -546,6 +546,7 @@ rules.
 | Legal name | `profile.legalname` = off (default) · optional · required | 1 to 200 Unicode scalar values after NFC (D-153); mixed-script rule per word | same |
 | Date of birth | `profile.dateofbirth` = off (default) · optional · required | the date entered at the age step (REG-PROF-002); **immutable to the person**, corrected through support; never used to infer anything but age | support only |
 | Photo | as IDN-ATTR-002 | as IDN-ATTR-002 to 004; `photo.maxbytes`, `photo.maxdimension`; validated client-side for convenience and server-side by content | photo endpoints |
+| Grammatical gender | the policy field `grammaticalGender` (`10` section 4.1a), resolved as the photo's: off for an account with no membership, on for every organization's members until an organization turns it off · optional | `masculine` · `feminine` (IDN-ATTR-007, D-236); how the person is addressed, not a legal sex, and derived from nothing; never asked at registration; changeable and clearable at any time | `PUT /account/profile`, no gate, audited without its value |
 
 Legal name is off because identity needs no name: no proofing is done, and a name is a
 proofing attribute (NIST SP 800-63A). A host that invoices or ships turns it on with a
@@ -560,6 +561,12 @@ key off the age step records only the derived outcome.
    field (`identity.profile.notaccepted`) and no response carries it.
 3. `PUT /account/profile` with a date of birth is refused for the person with
    `identity.profile.notaccepted` even when the key is on.
+4. Where the policy enables it, the person sets `grammaticalGender` to `masculine` or
+   `feminine`, changes it and clears it, and the change is audited without its value;
+   where it does not, a request carrying the field is refused with
+   `identity.profile.notaccepted` and no response carries it; any other value is refused
+   400 `api.request.malformed` naming the member; the registration session never asks
+   for it (D-236).
 
 ---
 

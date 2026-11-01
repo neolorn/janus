@@ -112,6 +112,13 @@ granted, when, why, and who revoked.
 held to the free-text rule of API-CONV-002: absent, or blank after trimming, the request
 is refused with `authz.grant.reasonrequired` (422).
 
+**Grants that must end (D-237).** A role MAY require that every grant of it carries an
+end date (`grantsMustEnd`, AUTHZ-GRANT-004). A grant of such a role without `expiresAt`
+SHALL be refused with `authz.grant.endrequired` (422), naming the role in
+`details.role`, and nothing is written; `POST /admin/grants` and the library call answer
+the same code. Derived and materialised grants come from the host's data and end with it
+(AUTHZ-DERIVE-001 to AUTHZ-DERIVE-007), so the rule does not apply to them.
+
 A grant no person made SHALL record the nil subject as its granter, never its holder:
 the grants bootstrap makes carry the reason `OPS-BOOT-001`, and a materialised grant the
 drift check writes carries the reason `AUTHZ-DERIVE-005`, its audit record,
@@ -132,7 +139,7 @@ the reason `AUTHZ-INHERIT-002`, as `authz.grant.revoked` (D-203). Each of these 
 records names the grant's holder as its subject where the holder is an account, and none
 where it is a group, whoever acted (`10` section 5.24, D-206).
 
-*Source: D-015, D-166, D-187, D-197, D-203, D-206, D-207, D-208*
+*Source: D-015, D-166, D-187, D-197, D-203, D-206, D-207, D-208, D-237*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
 migration across every query later.
@@ -154,6 +161,10 @@ migration across every query later.
    each with its reason, in the transaction that writes it. These two records, and the
    two a refresh or the drift check writes, name the grant's holder as their subject
    where the holder is an account, and none where it is a group (D-206, D-207).
+7. A grant of a role with `grantsMustEnd` and no `expiresAt` is refused with
+   `authz.grant.endrequired`, `details.role` naming the role, and nothing is written;
+   with `expiresAt` it is written; a derived or materialised grant of that role is not
+   refused (D-237).
 
 ---
 
@@ -161,9 +172,10 @@ migration across every query later.
 
 A change to a role SHALL carry a `reason` (API-CONV-002), SHALL be the `grant:manage`
 step-up action (`10` section 5a), SHALL stay within the actor's reach (AUTHZ-GRANT-005),
-and SHALL be recorded with the role, its permissions and its `handsOut` before and
-after, the reason and the actor. A change to a role that carries `system:administer`
-before or after it SHALL require `system:administer` (OPS-CFG-007). A change SHALL NOT
+and SHALL be recorded with the role, its permissions, its `handsOut` and its
+`grantsMustEnd` before and after, the reason and the actor. A change to a role that
+carries `system:administer` before or after it SHALL require `system:administer`
+(OPS-CFG-007). A change SHALL NOT
 take a library-owned permission out of a role the reserved `emergency` account holds,
 and the `emergency` account's grant of `system-administrator` SHALL NOT be revoked
 (OPS-BOOT-002). A role that a grant (live, expired or revoked), a declared derivation or
@@ -189,7 +201,14 @@ principal it builds: the role is defined where no role of that name exists, reco
 as seeded, a row of a library table. A role once seeded is never seeded again, so a
 change or a removal an administrator makes later stands.
 
-*Source: D-010, D-015, D-166, D-204, D-212*
+**Grants that must end (D-237).** A role MAY require that every grant of it carries an
+end date: declared with `.GrantsMustEnd()` on `Role(name, permissions, handsOut)`, and
+over HTTP the role's boolean `grantsMustEnd`, default `false`, read and set as its other
+members are (`09` `/admin/roles`), under `role:manage` and within the actor's reach.
+Turning it on leaves the role's existing open-ended grants as they are and binds the
+grants made after it (AUTHZ-GRANT-003); the change is recorded as any role change is.
+
+*Source: D-010, D-015, D-166, D-204, D-212, D-237*
 
 **Acceptance criteria**
 1. Creating a role and assigning permissions to it requires no restart.
@@ -208,6 +227,10 @@ change or a removal an administrator makes later stands.
    `10` section 3 fails startup; an `IRoles` call made with a system principal's context,
    one named `role-declaration` included, is refused with `authz.denied` and changes
    nothing.
+8. Turning a role's `grantsMustEnd` on leaves its open-ended grants standing and is
+   recorded with the value before and after; the next grant of the role without
+   `expiresAt` is refused (AUTHZ-GRANT-003). A role declared with `.GrantsMustEnd()` is
+   seeded with `grantsMustEnd` true (D-237).
 
 ---
 
