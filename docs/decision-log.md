@@ -20336,7 +20336,10 @@ production release.
 
 **Propagated to:** `20` REG-MAIL-001 (the route beside the invitation); `05`
 INT-MAIL-006; `07` LIB-API (`IMemberships.GiveMailboxAsync`); `09` (the route); `10`
-section 1 (`identity.mailbox.held`); `implementation-plan.md` (round H12).
+section 1 (`identity.mailbox.held`, `integration.mailserver.unavailable`,
+`identity.mailbox.taken`), section 5a (`invitation:issue`), section 5.25
+(`identifier-added`) and section 5b (`IdentifierAdded`, `IdentifierPrimaryChanged`);
+`implementation-plan.md` (round H12).
 
 ---
 
@@ -20362,8 +20365,9 @@ the library's management account, the operator's), each raising the alert daily.
   `unknown` as before.
 
 **Propagated to:** `05` INT-MAIL-007 (and the listing of INT-MAIL-001 where it names
-the accounts read); `10` section 4 (`integration.mailserver.ownaccounts`);
-`implementation-plan.md` (round H12).
+the accounts read); `10` section 4 (`integration.mailserver.ownaccounts`, and section
+4.8 as a protected key) and section 1 (`integration.mailserver.conflict`); `06`
+OPS-CFG-004 (the protected list); `implementation-plan.md` (round H12).
 
 ---
 

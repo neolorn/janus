@@ -218,7 +218,7 @@ others.
 | App passwords | **Stored by Stalwart**, never by this system; managed for the person by the library with the mail server's management key (INT-MAIL-010, D-226) |
 | Storage | Stalwart's own database, not co-located with business data |
 
-*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187, D-188, D-224, D-226*
+*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187, D-188, D-224, D-226, D-254*
 
 **Restated** (D-146): every management operation happens through JMAP objects, so
 "management API" means JMAP and nothing else. The four concerns are unchanged. Should the edition change,
@@ -257,9 +257,15 @@ destroys it); otherwise the adapter changes nothing and answers
 raises `degradation` scoped `mailbox.conflict:<mailbox id>`, naming the mailbox by its
 identifier and never by its address, without waiting for `outbox.retry.maxattempts`,
 since retrying within the run of `outbox.retry.*` cannot resolve a conflict that someone
-must resolve at the mail server (INT-MAIL-007). The listing is `x:Account/query` with
-`x:Account/get` of `emailAddress`, `description` and `permissions`, and answers for each
-account the mailbox identifier its `description` carries (none where it carries none),
+must resolve at the mail server (INT-MAIL-007). A push that meets an account the server
+holds under a name `integration.mailserver.ownaccounts` lists changes nothing there and
+is answered `integration.mailserver.conflict` the same way, whatever its `description`
+carries (D-254). The listing is `x:Account/query` with `x:Account/get` of `@type`,
+`name`, `emailAddress`, `description` and `permissions`; it leaves out every account
+whose `@type` is not `User` and every account whose `name` the list of own accounts
+names, neither of which reconciliation counts or acts on (INT-MAIL-007, D-254), and
+answers for each other account the mailbox identifier its `description` carries (none
+where it carries none),
 its address (none where `emailAddress` is absent, is not text, or does not read as an
 email address, D-187) and whether it is enabled; an account is listed enabled exactly
 where `authenticate` is not disabled and, under `Replace`, is enabled. App passwords are
@@ -288,6 +294,10 @@ called with the management key on the person's account, which the request-level
 7. Criteria 3 to 6, and INT-MAIL-010's calls, are decided by tests in the pipeline
    against a real Stalwart server of the release the adapter is written for, 1.0, its
    container image pinned by digest, and never by a fake alone (CONV-TEST-002, D-224).
+8. Against that server, the listing leaves out a group account and an account
+   `integration.mailserver.ownaccounts` names, and a push that meets an account that
+   list names changes nothing there and is answered `integration.mailserver.conflict`
+   (D-254).
 
 ---
 
@@ -389,7 +399,9 @@ re-invites it or revokes the invitation, which releases a mailbox nobody has hel
 owes it `removed` (REG-MAIL-001). The invitation SHALL name a personal email as well,
 and the account that owns the mailbox SHALL NOT exist until that address is verified by
 the press on the invitation link (REG-MAIL-001, D-148); the mailbox is reserved for the
-invitation, not for an account, until then.
+invitation, not for an account, until then. Where a current member with no mailbox is
+given one (`20` REG-MAIL-001, D-253), the mailbox is reserved at the address given and,
+the membership being current, owed `enabled` at once.
 
 A deployment integrates a mail server where one is registered, the shipped adapter or
 the host's own (INT-MAIL-001), and only for the administrative organization. A mailbox
@@ -416,7 +428,7 @@ mailbox passes to a holder without that choice, and the issue checks nothing abo
 the invitee is. An invitation that names `formerMailbox` where no such mailbox stands
 SHALL be refused with `api.request.invalid`, `details.member` `formerMailbox`.
 
-*Source: D-148, D-166; D-006, D-074, D-144, D-146, D-177, D-178*
+*Source: D-148, D-166; D-006, D-074, D-144, D-146, D-177, D-178, D-253*
 
 **A mailbox is for a person.** The reserved `emergency` account (OPS-BOOT-002) is a
 member of the administrative organization but is not a person (it is a role a human
@@ -438,7 +450,8 @@ a state that differs from the one the server last confirmed is pushed under
 next attempt of the run in progress or, where the push was marked failed, in the run
 begun for it a day later (INT-MAIL-007). Until then the administrator is reached at the
 personal address given at bootstrap; the enrolment link itself is printed by the command
-and sent nowhere (OPS-BOOT-001).
+and sent nowhere (OPS-BOOT-001). An administrator bootstrapped without `--mailbox` is
+given one later as any current member is (`20` REG-MAIL-001, D-253).
 
 **Scope is deliberate and was previously missing.** The mail server hosts the
 company's own mail: staff mailboxes. **Customers are not provisioned a mailbox**;
@@ -460,6 +473,8 @@ pre-creation for those who receive mail *at* the company.
 1c. Sending a staff invitation creates a disabled mail account; acknowledgement enables
    it; expiry leaves it disabled and reserved, and reconciliation treats a reserved
    mailbox for an open or expired invitation as expected, not as drift.
+1d. A mailbox given to a current member of the administrative organization is owed
+   `enabled` at once and created on the first successful push (D-253).
 2. Registering a customer account provisions **no** mailbox.
 3. Mail to a newly provisioned staff address is accepted without prior sign-in.
 4. Mail-server unavailability does not block customer registration.
@@ -545,7 +560,14 @@ outstanding included, with the account the server lists under that mailbox's ide
 included), listed disabled; owed `removed`, no account listed under it. An account
 listed under a mailbox's identifier at another address than the mailbox's is a
 difference too. It SHALL count every account the server lists that carries no identifier
-of a mailbox the library holds. A mailbox whose holder was erased (PRIV-RIGHT-005) is
+of a mailbox the library holds, save the mail server's own accounts (D-254): an account
+that is not an individual one (a group; in Stalwart 1.0, `@type` other than `User`),
+which the library never creates, and an account `integration.mailserver.ownaccounts`
+names, an individual account the deployment keeps for itself. Neither is counted or
+acted on, and a push that meets an account that list names is refused as a push meeting
+another account is (`integration.mailserver.conflict`), so a mailbox can never be given
+an address the deployment keeps for itself. Every other account without a mailbox
+identifier is counted as before. A mailbox whose holder was erased (PRIV-RIGHT-005) is
 not compared and is owed nothing further: a push outstanding for it, `removed` after a
 `replace` included, is ended without being sent, since its address can no longer be
 read, and a push that waited for it waits no longer. The account it left at the server
@@ -562,7 +584,7 @@ raise `degradation`, scope `mailbox.reconciliation`, details `{ mailboxes, unkno
 (mailbox identifiers and a count, never an address); a listing that cannot be had SHALL
 raise it with `{ listed: false }`. Nothing SHALL be changed on either side.
 
-*Source: D-006, D-041, D-166, D-177, D-178, D-183, D-187*
+*Source: D-006, D-041, D-166, D-177, D-178, D-183, D-187, D-254*
 
 A failed suspension leaves a person reading mail after offboarding. Silent
 auto-correction conceals a broken pipeline.
@@ -595,6 +617,11 @@ auto-correction conceals a broken pipeline.
    is read whole: every other account is compared as before, and that account is counted
    where it carries no identifier of a mailbox the library holds and is a difference
    where it carries one.
+10. A group account, and an account `integration.mailserver.ownaccounts` names, raise no
+    `degradation` and are neither counted in `unknown` nor acted on; a push that meets
+    an account that list names changes nothing and is answered
+    `integration.mailserver.conflict`; any other account without a mailbox identifier
+    is counted in `unknown` (D-254).
 
 ---
 

@@ -1272,7 +1272,27 @@ whose invitation expired SHALL revoke that invitation in the same transaction an
 the mailbox. In every other case no corporate address is asserted, and every email of
 the member SHALL be verified by the person like any other.
 
-*Source: D-148; D-146, D-166, D-178, amends D-144 (provisioning moves from acceptance to invitation)*
+**A mailbox for a current member (D-253).** Beside the invitation, a person already a
+current member of the administrative organization, the bootstrap administrator first
+among them, MAY be given a mailbox: `POST /admin/organizations/{id}/members/{account}/mailbox`
+(`09`), `{id}` the administrative organization, admitted under `membership:manage`
+there with the step-up the invitation's issue asks (`invitation:issue`), and its library
+call `IMemberships.GiveMailboxAsync`. The mailbox SHALL be reserved at the address given
+as an invitation's is, under the same address rules (the organization's domain lock,
+uniqueness, and `formerMailbox` for a mailbox held before, `identity.invitation.mailboxheld`
+without it), and, the membership being current, owed `enabled` at once (`05` INT-MAIL-006,
+INT-MAIL-007). The address SHALL become a verified email of the account, and its primary
+email where the account holds none from the organization's domain; the account's other
+emails stay. Taking it on SHALL be notified once to the security-notice set as it stood
+before, and recorded with its reason. It SHALL be refused for an account that already
+holds a mailbox (`identity.mailbox.held`, 409), an account that holds no current
+membership of the administrative organization, an account neither `active` nor
+`restricted`, the `emergency` account (OPS-BOOT-002), and a deployment with no mail
+server registered (`integration.mailserver.unavailable`). It hands out no role, so
+AUTHZ-GRANT-005 does not bear on it, and a system administrator may give themselves a
+mailbox.
+
+*Source: D-148; D-146, D-166, D-178, D-253, amends D-144 (provisioning moves from acceptance to invitation)*
 
 A temporary mailbox password for reading a code is rejected: staff reach mail through
 the library's OIDC provider and app passwords created after sign-in (INT-MAIL-005), the
@@ -1300,6 +1320,16 @@ security notices reach the personal address as well.
 8. An invitation for a corporate address a member holds, or that a standing invitation
    not yet expired reserves, is refused with `identity.mailbox.taken`; re-inviting an
    address whose invitation expired revokes that invitation and keeps the mailbox.
+9. A current member of the administrative organization with no mailbox, the bootstrap
+   administrator bootstrapped without `--mailbox` included, is given one: the mailbox is
+   reserved and owed `enabled` at once, the address becomes a verified email and the
+   primary where the account held none from the organization's domain, its other emails
+   stay, and the security-notice set as it stood before is notified once (D-253).
+10. Giving a mailbox is refused, and nothing written, for an account that already holds
+    one (`identity.mailbox.held`), one with no current membership of the administrative
+    organization, one neither `active` nor `restricted`, the `emergency` account, and a
+    deployment with no mail server registered (`integration.mailserver.unavailable`);
+    a system administrator gives themselves one (D-253).
 
 ---
 

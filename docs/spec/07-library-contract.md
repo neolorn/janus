@@ -211,7 +211,7 @@ host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. 
 operations named below as called in process only have no endpoint.
 
 *Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208, D-218, D-221,
-D-247, D-250*
+D-247, D-250, D-253*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -220,7 +220,8 @@ gate already uses — one rule rendered two ways (AUTHZ-GATE-002) — applied to
 operations. An endpoint is a mapping, never a second implementation.
 
 **The operations covered** — each required by a SHALL elsewhere: organization lifecycle
-and policy; memberships and invitations; groups; account suspension, reactivation,
+and policy; memberships and invitations, a current member's mailbox among them (`20`
+REG-MAIL-001, D-253); groups; account suspension, reactivation,
 restriction lift and deletion cancel; the takedown; the data-subject request queue;
 consent and objection records; erasure progress and manual completion; audit query by
 subject; explanation resolution; compliance-text publishing; the assessment
@@ -251,6 +252,12 @@ context, the organization and the member, answers the member's photo where `01`
 IDN-ATTR-002 admits the read, and refuses a system principal with `authz.denied`. Its
 endpoint is
 `GET /organizations/{id}/members/{account}/photo` (`09`).
+
+**A current member's mailbox (D-253).** `IMemberships.GiveMailboxAsync`, taking the
+caller's access context, the administrative organization, the member and the request's
+address, `formerMailbox` and reason, gives that member a mailbox as `20` REG-MAIL-001
+states. Its endpoint is `POST /admin/organizations/{id}/members/{account}/mailbox`
+(`09`).
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
