@@ -19886,8 +19886,10 @@ Milestone 2's first known issue (D-197).
 - **The text alone:** the person is still told to report a loss.
 
 **Propagated to:**
-- `02` AUTH-STEP-002, AUTH-STEP-008 (invariant 3 and the known issue closed);
+- `02` AUTH-STEP-002, AUTH-STEP-008 (invariant 3 and the known issue closed),
+  AUTH-FACT-002 (criterion 7's list of step 3's answers);
 - `09` (step-up's step 3 answer);
+- `10` section 1 (`auth.stepup.required`, its `outcome`);
 - `18` (the frontend's handling of `signIn`);
 - `implementation-plan.md` (round H8; Milestone 2's known issues).
 
@@ -19998,7 +20000,7 @@ now. This closes Milestone 2's third known issue (D-205).
 - `08` CONV-DEP-004;
 - `13` R-M20;
 - `15` (the compromised dependency row);
-- `19` (the deployment's runtime);
+- `19` (the deployment's runtime, INF-DEP-003);
 - `implementation-plan.md` (round H8; Milestone 2's known issues).
 
 ---

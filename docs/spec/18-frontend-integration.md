@@ -122,11 +122,13 @@ data intact.
 can reach AAL2, password + TOTP, password + recovery code, password + security key, or a
 passkey, the subject choosing among them; for a password-only customer, the password. A
 combination that does not reach the gate is never shown, so a bare password is never
-offered on an account that reaches AAL2 (AUTH-STEP-002). The prompt has **two
+offered on an account that reaches AAL2 (AUTH-STEP-002). The prompt has **three
 non-dead-end outcomes** beside presenting a factor: `enrol` (the frontend initiates
 enrolment in place, and the original request completes afterwards); `report-loss` (the
 frontend offers to report the missing factor lost, `POST /recovery/report-loss`,
-explaining that the action becomes available when the window completes). A `pending`
+explaining that the action becomes available when the window completes); `signIn` (the
+frontend sends the person through a new sign-in with the provider, and the gate is
+judged on the `delegated` instant the new session holds, D-243). A `pending`
 outcome shows the completion time (`pendingUntil`) and, for a credential
 `GET /account/credentials` lists as `cancellable`, the cancel option (D-197); it is a
 status, not an error, though it arrives as a 403 because the operation did not proceed
@@ -148,7 +150,7 @@ for is answered `auth.stepup.required` and handled as this item states, its opti
 judged under the organization's policy.
 
 *Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188, D-190,
-D-191, D-197*
+D-191, D-197, D-243*
 
 **Acceptance criteria**
 1. A form submission interrupted by step-up **or by session expiry** completes after
@@ -163,10 +165,13 @@ D-191, D-197*
    subject holding password and TOTP is shown password + TOTP, never the password
    alone.
 4. A subject with no usable combination is offered enrolment or a loss report, and
-   the original request completes afterwards where the gate can still be met.
+   the original request completes afterwards where the gate can still be met; one
+   answered `signIn` is handled as criterion 7 states.
 5. Social sign-in never appears as a step-up option.
 6. A pending loss report is shown with its completion time, and a cancel option where
    its credential is `cancellable`, not as an error.
+7. A step-up answered `signIn` sends the person through a new sign-in with the
+   provider, and offers no loss report (D-243).
 
 ---
 
@@ -750,7 +755,12 @@ the server enforces (AUTH-PASS-001, AUTH-PASS-004).
 request with **conditional mediation** and **no `allowCredentials`**, so a manager
 can offer a passkey inside the field.
 
-*Source: D-146; AUTH-FACT-002 (conditional UI), D-201*
+*Source: D-146; AUTH-FACT-002 (conditional UI), D-201, D-244*
+
+**The challenge on load (D-244).** The conditional request's challenge is the one
+`POST /auth/begin` opens without an `identifier` (`20` REG-IDENT-003), and the selected
+passkey's assertion is presented at `POST /auth/factor` against it; its user handle names
+the account.
 
 **Acceptance criteria**
 1. The identifier field carries both tokens.
@@ -758,9 +768,9 @@ can offer a passkey inside the field.
    carries an empty or absent `allowCredentials`.
 3. Selecting the offered passkey signs in without the identifier being typed.
 
-A known issue is carried into Milestone 2 by `implementation-plan.md` section 4: no
-route opens a passkey sign-in without an identifier (`09` `POST /auth/begin` always
-takes one), so criteria 2 and 3 do not hold until Milestone 2 answers it (D-201).
+The known issue `implementation-plan.md` section 4 carried into Milestone 2 (D-201), that
+no route opened a passkey sign-in without an identifier, is closed by D-244:
+`POST /auth/begin` takes `identifier` as optional, and criteria 2 and 3 hold.
 
 ---
 
