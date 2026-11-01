@@ -308,10 +308,9 @@ Both versions run briefly during rollout.
 **Acceptance criteria**
 1. A new column is added nullable; the constraint is tightened in a later release.
 2. A migration is tested against the previous release's application build.
-3. Before the first final release nothing binds (D-232): a migration need not upgrade an
-   earlier release candidate's database, though the migrations still run in order, and
-   a column added by a migration before the first final release carries its final
-   constraint from that migration.
+3. Before the first final release (D-232), a migration may reshape what an earlier
+   release candidate created, a constraint or a column, but it still upgrades that
+   release candidate's database, as criterion 2 tests.
 
 ---
 

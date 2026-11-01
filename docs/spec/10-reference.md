@@ -1545,11 +1545,11 @@ another person's account or loosens a control has one (`09` section 8a).
 
 | Name | Action | Endpoint(s) |
 |---|---|---|
-| `password:set` | Set or change a password | `POST /account/password` |
+| `password:set` | Set or change a password | `POST /account/password`; the password an enrolment session sets is not gated, the enrolment session being itself the proof (AUTH-RECOV-002, D-234) |
 | `identifier:add` | Add an identifier; replace in single-address mode | `POST /account/identifiers`, `PUT /account/identifiers/{id}/replace` (REG-IDENT-004, REG-IDENT-007); setting the primary or the backup setting needs no gate (REG-IDENT-005); the replace an enrolment session opened with `mailboxLost` takes, in any mode, is not gated, the enrolment session being itself the proof (AUTH-RECOV-002, D-234) |
 | `identifier:remove` | Remove an identifier | `DELETE /account/identifiers/{id}` (REG-IDENT-006); the undo is link-borne and not gated |
 | `username:change` | Change the username | `PUT /account/profile` with a `username` other than the one the account holds when the edit's step-up is judged (REG-IDENT-009, D-208); display name and legal name are not gated |
-| `factor:enrol` | Enrol a factor (AUTH-STEP-007); upgrade a security key to a passkey | `/account/factors/*`, `/auth/webauthn/register/*`, `POST /account/credentials/{id}/upgrade`; the label (`PATCH /account/credentials/{id}`) and the preferred second step (`PUT /account/secondstep/preferred`) are not gated |
+| `factor:enrol` | Enrol a factor (AUTH-STEP-007); upgrade a security key to a passkey | `/account/factors/*`, `/auth/webauthn/register/*`, `POST /account/credentials/{id}/upgrade`; the label (`PATCH /account/credentials/{id}`) and the preferred second step (`PUT /account/secondstep/preferred`) are not gated; the factor an enrolment session enrols (`/auth/webauthn/register/*`, `/account/factors/totp/*`) is not gated, the enrolment session being itself the proof (AUTH-RECOV-002, D-234) |
 | `factor:remove` | Remove an `active` factor | `DELETE /account/factors/{id}`, `DELETE /account/credentials/{id}` |
 | `recoverycodes:generate` | Generate or regenerate recovery codes | `POST /account/recoverycodes` |
 | `mailcredential:create` | Create a mail app password | `POST /account/mail/apppasswords` (REG-MAIL-002, INT-MAIL-010) |

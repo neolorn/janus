@@ -404,11 +404,12 @@ recovery whose approver recorded the mailbox as lost,
 lists, taken whatever `identifiers.email.max` is and completing on the **new address
 alone**, the new address taking the replaced one's place, primary included
 (AUTH-RECOV-002: the approver's recorded confirmation stands in for the old address; the
-exception is stated in REG-IDENT-007; the session adds and removes no identifier,
-D-234), `POST /account/identifiers/{id}/verify` for that replace's pending verification
-alone (a code naming any other is answered as one naming no pending verification of the
-account, **422** `auth.code.invalid`, and a press as one that opens nothing, **422**
-`auth.code.expired`; that replace's link lands on the
+exception is stated in REG-IDENT-007; the session adds and removes no identifier and
+takes one replace: a second, naming another identifier or made once the first's swap has
+applied, is **403** `authz.denied`, D-234), `POST /account/identifiers/{id}/verify` for
+that replace's pending verification alone (a code naming any other is answered as one
+naming no pending verification of the account, **422** `auth.code.invalid`, and a press
+as one that opens nothing, **422** `auth.code.expired`; that replace's link lands on the
 authentication application, where the enrolment session is held, and a press of it there
 verifies, as a press in the browser that staged any replace does, REG-SESS-003, D-190),
 and `POST /account/recoverycodes/exported` for the codes a second step enrolled beside a
@@ -1604,12 +1605,14 @@ operation (REG-IDENT-007). Within an admin-assisted enrolment session opened wit
 `mailboxLost` it is taken in any mode: a replace naming an email `GET /enrol`'s
 `identifiers` lists is taken whatever `identifiers.email.max` is, verified by the new
 address alone, and the new address takes the replaced one's place, primary included;
-outside that session the replace stays a single-address-mode operation (D-234).
-Step-up, save under that session, which is itself the proof (`10` section 5a); the new
-value is verified by `POST /account/identifiers/{id}/verify`; on
-verification the swap applies at once and the undo goes to the remaining channels of the
-account. **Only where the account has no other channel at all** does the old address
-confirm before the swap, except within an admin-assisted enrolment session
+outside that session the replace stays a single-address-mode operation. That session
+takes one replace: a second, naming another identifier or made once the first's swap has
+applied, is refused **403** `authz.denied` (D-234). Step-up, save under that session,
+which is itself the proof (`10` section 5a); the new value is verified by
+`POST /account/identifiers/{id}/verify`; on verification the swap applies at once and
+the undo goes to the remaining channels of the account. **Only where the account has no
+other channel at all** does the old address confirm before the swap, except within an
+admin-assisted enrolment session
 (AUTH-RECOV-002, REG-IDENT-007); the old address's message (`identifier-change-confirm`)
 carries a link of kind `identifier-confirm` (API-LAND-001), which the old address
 confirms by a press presented to `POST /account/identifiers/{id}/verify` with its token;
@@ -1627,7 +1630,8 @@ session, the records staged before it no longer answering (REG-IDENT-007, D-190)
 ```
 
 **202**: always, whether or not the new value belongs to another account (API-CONV-005)
-**403**: `auth.stepup.required` **429**: `auth.restriction.exceeded` with `retryAt`
+**403**: `auth.stepup.required`; `authz.denied` for a second replace in an enrolment
+session (D-234) **429**: `auth.restriction.exceeded` with `retryAt`
 where a restriction refuses the code's send, identical for a value another account holds
 or an undo reserves, and nothing is staged (AUTH-ABUSE-004) **409**:
 `identity.change.pending` (a replace of another value is already staged for this
