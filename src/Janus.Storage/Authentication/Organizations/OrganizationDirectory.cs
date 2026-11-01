@@ -39,6 +39,43 @@ internal sealed class OrganizationDirectory(StoreContext context, IOrganizationS
         Standing(await organizations.FindForUpdateAsync(organization, cancellationToken).ConfigureAwait(false));
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<IReadOnlyList<OrganizationStanding>> HoldNamedAsync(
+        string name,
+        CancellationToken cancellationToken)
+    {
+        // CONV-DESIGN-003, D-248: no row stands for a name no organization holds yet, so
+        // the lock is the name's own, taken on its comparison key and held to the
+        // transaction's end.
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A name is held only inside a transaction.");
+        }
+
+        string key = CanonicalForm.Of(name);
+        string held = "identity.organizations/" + key;
+
+        _ = await context.Database
+            .ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtextextended({held}, 0))", cancellationToken)
+            .ConfigureAwait(false);
+
+        // IDN-ACCT-004: a name is compared on the comparison key the row keeps beside it.
+        List<OrganizationRecord> found = await context.Organizations
+            .Where(record => record.CanonicalName == key && record.ErasedAt == null)
+            .OrderBy(record => record.Id)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. found.Select(record => new OrganizationStanding(
+            record.Id,
+            record.Name,
+            record.IsAdministrative,
+            record.DeletionRequestedAt,
+            record.ErasedAt))];
+    }
+
+    /// <inheritdoc/>
     public async ValueTask CreateAsync(
         OrganizationId organization,
         string name,

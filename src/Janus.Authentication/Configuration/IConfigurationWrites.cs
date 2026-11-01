@@ -13,7 +13,9 @@ namespace Janus.Authentication.Configuration;
 /// Implements OPS-CFG-008, OPS-CFG-005 and OPS-CFG-004. The store the host reads is
 /// read-only; a write that went round the one writer would be a change with no step-up,
 /// no reason and no record, so the write is a port of this assembly and no host holds
-/// it.
+/// it. A command on the server that sets a runtime key holds its row here before it
+/// reads the value in force, and writes it through the writer of the values a command
+/// sets (D-248).
 /// </remarks>
 internal interface IConfigurationWrites
 {

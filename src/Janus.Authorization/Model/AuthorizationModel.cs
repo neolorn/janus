@@ -62,7 +62,7 @@ internal sealed class AuthorizationModel
         "location-database", "datacenter-ranges", "read-volume-baseline", "holiday-list",
         "emergency-credential",
         "audit-partitions", "kek-cryptoperiod", "bootstrap",
-        "configure", "register-client", "rotate-kek", "rotate-fingerprint-key",
+        "configure", "register-client", "organization", "rotate-kek", "rotate-fingerprint-key",
         "replay-erasures", "role-declaration", "migrate",
     ];
 

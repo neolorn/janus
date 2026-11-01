@@ -1012,16 +1012,16 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// OPS-CFG-004 AC1 and AC2, D-071: a protected key is written by bootstrap and by the
-    /// change from the server alone, and the change from the server is run by the command
-    /// line alone, so no endpoint of the management application and no job of the worker
-    /// reaches either.
+    /// OPS-CFG-004 AC1 and AC2, D-071, D-248: the writer of protected keys is reached by
+    /// bootstrap, by the change from the server and by the organization set up from the
+    /// server alone, and the change from the server is run by the command line alone, so
+    /// no endpoint of the management application and no job of the worker reaches either.
     /// </summary>
     [Fact]
     public void OPS_CFG_004_AC2_OnlyTheCommandLineWritesAProtectedKey()
     {
         Assert.Equal(
-            ["DeploymentSeed.cs", "IProtectedSettings.cs", "ProtectedConfiguration.cs", "ProtectedSettings.cs", "StorageRegistration.cs"],
+            ["DeploymentSeed.cs", "IProtectedSettings.cs", "OrganizationFromServer.cs", "ProtectedConfiguration.cs", "ProtectedSettings.cs", "StorageRegistration.cs"],
             Named(text => Regex.IsMatch(text, @"\bIProtectedSettings\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
         Assert.Equal(
             ["ConfigureCommand.cs", "ProtectedConfiguration.cs"],

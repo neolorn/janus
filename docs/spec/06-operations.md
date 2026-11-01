@@ -980,6 +980,43 @@ name the deployment (`10` section 4), and it is protected from then on (OPS-CFG-
 
 *Source: D-146, D-166*
 
+**A business organization from the command line (D-248).** Beside `bootstrap`,
+`Janus.Cli` SHALL carry the command `organization`, run on the server against the
+database as `bootstrap` is:
+`identity organization --name <name> --policy <file> --reason <text>`, with
+`--multiplememberships true|false` optional. Every argument is
+`--<name> <value>` and is judged as `bootstrap` judges its own: an unknown name, one
+given twice or one without a value is refused with `api.request.malformed` naming it.
+`--policy` names a JSON file holding the policy object the body of
+`PUT /admin/organizations/{id}/policy` takes, without `reason`; a file that does not
+read, or does not hold that object, is refused with `api.request.malformed` naming
+`policy`. In one transaction it:
+- creates the organization where none of that name exists, recorded as
+  `identity.organization.created`, and writes its policy key as
+  `POST /admin/organizations` does (`09` section 8a);
+- writes the policy from the file as `PUT /admin/organizations/{id}/policy` writes it,
+  with the same value checks and codes, as a configuration change (OPS-CFG-005);
+- with `--multiplememberships`, writes `organization.multiplememberships` as a
+  configuration change.
+
+The loosening rule's step-up and `system:administer` (OPS-CFG-002) do not apply: the
+command is the deployment's own act on the server, as `configure` asks no step-up
+(OPS-CFG-004). Each change is recorded under the system principal `organization` (`10`
+section 5.29), with the reason given. A name is matched by its comparison key, as the
+mixed-script rule reads names (IDN-ACCT-005). Where one organization of that name
+exists, the command writes only what differs and changes nothing else; where two or
+more share the name, it is refused with `api.request.malformed` naming `name` and writes
+nothing. It is refused with `authz.denied` on a deployment not yet bootstrapped, as
+`bootstrap` is on one already stood up; for a policy the policy route would refuse, with
+that route's code; and for a missing or empty `--reason`, with
+`config.change.reasonrequired`. Nothing of a refused run is written. It writes no grant and no membership: the
+organization's first grants are given as before, by a person holding `system:administer`
+(AUTHZ-SCOPE-001, D-207). On success it exits 0 with the organization's identifier as
+the one line on standard output; a refusal is reported as `bootstrap` reports one
+(OPS-SEC-001).
+
+*Source: D-207, D-248*
+
 **Acceptance criteria**
 1. Running it on a deployment already stood up (the administrative organization
    exists, or an allow grant of a role holding `system:administer` stands unrevoked,
@@ -1003,6 +1040,19 @@ name the deployment (`10` section 4), and it is protected from then on (OPS-CFG-
    administrative organization's identifier.
 9. After bootstrap the administrative organization's `grammaticalGender` is `true`
    (D-236).
+10. On a bootstrapped deployment, `organization` creates the organization, writes its
+    policy from the file and, where given, `organization.multiplememberships`, each
+    recorded under the system principal `organization` with the reason given; it writes
+    no grant and no membership, and standard output holds the organization's identifier
+    alone (D-248).
+11. Run again with the same arguments, `organization` writes nothing and prints the
+    same identifier; where two organizations share the name, with a policy file that
+    does not read or the policy route refuses, or without `--reason`, it is refused and
+    writes nothing, and on a deployment not yet bootstrapped it is refused with
+    `authz.denied` (D-248).
+12. A policy whose write is a loosening (OPS-CFG-002) is written by `organization` with
+    no step-up and no `system:administer`, where the policy route's value checks admit
+    it (D-248).
 
 ---
 

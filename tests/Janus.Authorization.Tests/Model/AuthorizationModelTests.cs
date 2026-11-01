@@ -543,6 +543,7 @@ public sealed class AuthorizationModelTests
     [InlineData("bootstrap")]
     [InlineData("configure")]
     [InlineData("register-client")]
+    [InlineData("organization")]
     [InlineData("rotate-kek")]
     [InlineData("rotate-fingerprint-key")]
     [InlineData("replay-erasures")]

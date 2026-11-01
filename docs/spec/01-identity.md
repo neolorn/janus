@@ -285,16 +285,24 @@ index guaranteeing exactly one such row; the domain reads `Organization.IsAdmini
 **IDN-ORG-002** — Authentication policy SHALL attach to the organization, not to a
 user type or an application.
 
-*Source: D-002, D-020.1*
+*Source: D-002, D-020.1, D-248*
 
 There is no staff flag. "Passkeys for interactive access" is an organization policy
 value. A second organization needing different rules is a configuration row.
+
+**From the command line (D-248).** A deployment MAY create a business organization and
+write its policy from the server, with the `Janus.Cli` command `organization` (`06`
+OPS-BOOT-001), which writes them as `POST /admin/organizations` and
+`PUT /admin/organizations/{id}/policy` do, under the system principal `organization`,
+and gives no grant and no membership.
 
 **Acceptance criteria**
 1. No column, enum, or claim distinguishes staff from customers.
 2. Changing an organization's factor policy changes behaviour for its members
    without a deploy.
 3. Two organizations with different policies coexist and are enforced independently.
+4. An organization the command `organization` creates holds the policy its file
+   states, as one the policy route wrote would, and no grant (D-248).
 
 ---
 
