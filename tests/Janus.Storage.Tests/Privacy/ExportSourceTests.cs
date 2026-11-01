@@ -410,6 +410,46 @@ public sealed class ExportSourceTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// IDN-ATTR-007 and PRIV-RIGHT-003 (D-236): the grammatical gender is profile data,
+    /// in the export with the rest of the profile, and under the subject key, so erasure
+    /// leaves it unreadable.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_007_TheGrammaticalGenderIsExportedAndErasedWithTheProfileAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext writing = database.Context())
+        {
+            var profiles = new ProfileStore(writing, _deployment.Ring, _deployment.Randomness);
+            Janus.Identity.Profiles.Profile profile = await profiles.FindBySubjectAsync(
+                subject,
+                TestContext.Current.CancellationToken);
+
+            profile.SetGrammaticalGender(GrammaticalGender.Feminine);
+            await profiles.RecordAsync(profile, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        IReadOnlyDictionary<string, string> exported = Assert.Single(
+            Assert.Single(
+                await AssembledAsync(subject),
+                section => section.Name == "profile").Records).Values;
+
+        Assert.Equal("feminine", exported["grammaticalGender"]);
+
+        await _deployment.EraseAsync(subject);
+
+        await using StoreContext reading = database.Context();
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness).FindBySubjectAsync(
+                subject,
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// IDN-ATTR-001 AC1: the language the person set is in the subject access export
     /// beside the rest of what is held about them.
     /// </summary>

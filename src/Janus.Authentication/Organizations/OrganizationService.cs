@@ -135,12 +135,13 @@ internal sealed class OrganizationService(
         await directory.CreateAsync(organization, named, now, cancellationToken).ConfigureAwait(false);
 
         // IDN-ORG-002 and chapter 10 section 4: the organization's policy key is created
-        // with it, holding no override, so it starts under the system policy.
+        // with it, holding the grammatical gender on and no other override, so it starts
+        // under the system policy otherwise (D-236).
         if ((await administration
                 .ChangeMemberAsync(
                     Settings.OrganizationPolicy,
                     organization.ToString(),
-                    PolicyOverride.None,
+                    Settings.OrganizationPolicy.Default,
                     before: PolicyOverride.None,
                     loosening: false,
                     stated,

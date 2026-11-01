@@ -223,6 +223,12 @@ internal sealed class ExportSource(
             values["dateOfBirth"] = born.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
 
+        // D-236: the grammatical gender is profile data, exported with the account.
+        if (profile.GrammaticalGender is GrammaticalGender gender)
+        {
+            values["grammaticalGender"] = VocabularyConverter<GrammaticalGender>.Write(gender);
+        }
+
         if (profile.PhotoUpdatedAt is DateTimeOffset photo)
         {
             values["photoUpdatedAt"] = Moment(photo);

@@ -103,6 +103,28 @@ public sealed class PolicyStrictnessTests
     }
 
     /// <summary>
+    /// IDN-ATTR-007 and chapter 10 section 4.1a (D-236): the grammatical gender is a
+    /// loosening in neither direction, an organization may state it on over a system
+    /// policy that has it off, and its stated value is in force and its own.
+    /// </summary>
+    [Fact]
+    public void IDN_ATTR_007_TheGrammaticalGenderLoosensNothingEitherWay()
+    {
+        Policy off = Janus.Core.Policies.SystemDefault;
+        Policy on = off with { GrammaticalGender = true };
+        PolicyOverride stated = PolicyOverride.None with { GrammaticalGender = true };
+        Policy tightened = PolicyStrictness.Tighten(off, stated);
+
+        Assert.False(PolicyStrictness.Loosens(off, on));
+        Assert.False(PolicyStrictness.Loosens(on, off));
+        Assert.Null(PolicyStrictness.BelowSystem(off, stated));
+        Assert.True(tightened.GrammaticalGender);
+        Assert.False(PolicyStrictness.Tighten(on, PolicyOverride.None with { GrammaticalGender = false }).GrammaticalGender);
+        Assert.True(PolicyStrictness.InForce(off, tightened, stated).GrammaticalGender);
+        Assert.Null(PolicyStrictness.InForce(off, off, PolicyOverride.None).GrammaticalGender);
+    }
+
+    /// <summary>
     /// D-143: a field the organization states is its own while its value is in force,
     /// and inherited once the system policy has overtaken it; a field it does not
     /// state is inherited.

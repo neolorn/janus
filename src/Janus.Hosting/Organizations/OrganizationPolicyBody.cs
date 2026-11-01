@@ -29,6 +29,7 @@ internal static class OrganizationPolicyBody
         "credentialRedundancy",
         "selfServiceRecovery",
         "photos",
+        "grammaticalGender",
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>

@@ -3731,6 +3731,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("enc_display_name");
 
+                b.Property<byte[]>("GrammaticalGender")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_grammatical_gender");
+
                 b.Property<byte[]>("LegalName")
                     .HasColumnType("bytea")
                     .HasColumnName("enc_legal_name");

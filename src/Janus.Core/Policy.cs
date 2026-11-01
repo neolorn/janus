@@ -34,6 +34,9 @@ namespace Janus.Core;
 /// Whether the account shows a profile photo, which needs the image codec the host
 /// declares (IDN-ATTR-002).
 /// </param>
+/// <param name="GrammaticalGender">
+/// Whether the account carries the profile's grammatical gender (IDN-ATTR-007, D-236).
+/// </param>
 /// <remarks>
 /// Implements chapter 10 section 4.1a, AUTH-PRIN-002, AUTH-STEP-002a, IDN-ATTR-002. An organization
 /// stores only what it overrides and may tighten any field, never loosen below the
@@ -50,7 +53,8 @@ public sealed record Policy(
     CredentialRedundancy CredentialRedundancy,
     bool SelfServiceRecovery,
     IReadOnlyList<string> EmailDomains,
-    bool Photos)
+    bool Photos,
+    bool GrammaticalGender = false)
 {
     /// <summary>
     /// The stated floor.

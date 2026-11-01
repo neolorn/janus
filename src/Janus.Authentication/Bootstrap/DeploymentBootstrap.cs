@@ -391,7 +391,8 @@ internal sealed class DeploymentBootstrap(
     // Chapter 10 section 4.1a, the column "Administrative organization, at bootstrap".
     // The domain lock stays off, which is the system default, so it is not overridden.
     // IDN-ATTR-002, OPS-BOOT-001: photos are written off, because bootstrap cannot see
-    // whether the host declares an image codec.
+    // whether the host declares an image codec; the grammatical gender is written on, as
+    // every organization's starts (D-236).
     private static PolicyOverride Administrative(TimeSpan recency) =>
         new(
             AssuranceLevel.Aal2,
@@ -402,7 +403,8 @@ internal sealed class DeploymentBootstrap(
             CredentialRedundancy.Enforced,
             SelfServiceRecovery: false,
             EmailDomains: null,
-            Photos: false);
+            Photos: false,
+            GrammaticalGender: true);
 
     // API-LAND-001 and R2 of D-166: the link lands on the authentication application's
     // own route at the first configured origin, which the command settled as the start

@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
+using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -26,6 +28,7 @@ namespace Janus.Authentication.Accounts;
 /// <param name="reserved">The usernames no account takes.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
 /// <param name="photos">The image the account shows for itself.</param>
+/// <param name="policies">The policy in force for the account, which enables the grammatical gender.</param>
 /// <param name="configuration">Where the settings that switch fields on are read.</param>
 /// <param name="work">The transaction the whole of one operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -47,11 +50,15 @@ internal sealed class AccountService(
     ReservedUsernames reserved,
     PreferenceDeclarations declarations,
     ProfilePhotos photos,
+    PolicyResolution policies,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time) : IAccount
 {
     private static readonly AuditAction ProfileChanged = AuditActions.ProfileChanged;
+
+    // The wire's spellings of a vocabulary, which its members' names declare.
+    private static readonly JsonSerializerOptions Spelled = new() { Converters = { new JsonStringEnumConverter() } };
 
     private static readonly AuditAction UsernameChanged = AuditActions.UsernameChanged;
 
@@ -84,7 +91,7 @@ internal sealed class AccountService(
 
         Error? failure = null;
 
-        Fields fields = (await FieldsAsync(cancellationToken).ConfigureAwait(false))
+        Fields fields = (await FieldsAsync(subject, cancellationToken).ConfigureAwait(false))
             .Match(read => read, error => Withheld<Fields>(error, ref failure));
 
         if (failure is not null)
@@ -165,9 +172,26 @@ internal sealed class AccountService(
             return Result.Failure(Error.From(ErrorCodes.ProfileNotAccepted));
         }
 
+        // REG-PROF-001 (D-236): a grammatical gender is one of the two CLDR names, or
+        // empty to clear it; anything else is not a value of the member at all.
+        GrammaticalGender? gender = null;
+
+        if (edit.GrammaticalGender is { Length: > 0 } addressed)
+        {
+            if (!Addressed(addressed, out GrammaticalGender read))
+            {
+                return Result.Failure(Error.From(
+                    ErrorCodes.RequestMalformed,
+                    "member",
+                    JsonSerializer.SerializeToElement("grammaticalGender")));
+            }
+
+            gender = read;
+        }
+
         Error? failure = null;
 
-        Fields fields = (await FieldsAsync(cancellationToken).ConfigureAwait(false))
+        Fields fields = (await FieldsAsync(subject, cancellationToken).ConfigureAwait(false))
             .Match(read => read, error => Withheld<Fields>(error, ref failure));
 
         if (failure is not null)
@@ -176,7 +200,8 @@ internal sealed class AccountService(
         }
 
         if ((edit.LegalName is not null && !fields.LegalName)
-            || (edit.Username is not null && !fields.Username))
+            || (edit.Username is not null && !fields.Username)
+            || (edit.GrammaticalGender is not null && !fields.GrammaticalGender))
         {
             return Result.Failure(Error.From(ErrorCodes.ProfileNotAccepted));
         }
@@ -265,7 +290,14 @@ internal sealed class AccountService(
             return Result.Failure(refused);
         }
 
-        await directory.RecordProfileAsync(subject, displayName, legalName, cancellationToken)
+        // D-236: an edit that does not name the grammatical gender leaves it as it stands.
+        await directory
+            .RecordProfileAsync(
+                subject,
+                displayName,
+                legalName,
+                edit.GrammaticalGender is null ? held.GrammaticalGender : gender,
+                cancellationToken)
             .ConfigureAwait(false);
 
         await audit
@@ -748,11 +780,39 @@ internal sealed class AccountService(
             profile.DisplayName?.Value,
             fields.LegalName ? profile.LegalName?.Value : null,
             fields.DateOfBirth ? profile.DateOfBirth : null,
-            profile.PhotoUpdatedAt);
+            profile.PhotoUpdatedAt,
+            fields.GrammaticalGender ? profile.GrammaticalGender : null);
 
-    private async ValueTask<Result<Fields>> FieldsAsync(CancellationToken cancellationToken)
+    // D-236: a gender is entered as the wire spells it, matched exactly, so no other
+    // casing or spelling stands for one.
+    private static bool Addressed(string entered, out GrammaticalGender gender)
+    {
+        foreach (GrammaticalGender candidate in Enum.GetValues<GrammaticalGender>())
+        {
+            if (string.Equals(
+                JsonSerializer.SerializeToElement(candidate, Spelled).GetString(),
+                entered,
+                StringComparison.Ordinal))
+            {
+                gender = candidate;
+
+                return true;
+            }
+        }
+
+        gender = default;
+
+        return false;
+    }
+
+    private async ValueTask<Result<Fields>> FieldsAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         Error? failure = null;
+
+        // IDN-ATTR-007 (D-236): the grammatical gender is the policy's, resolved for the
+        // account as AUTH-PRIN-002 resolves every field.
+        bool gender = (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(policy => policy.GrammaticalGender, error => Withheld<bool>(error, ref failure));
 
         AttributeRequirement legalName = (await configuration
                 .ReadAsync(Settings.ProfileLegalName, cancellationToken).ConfigureAwait(false))
@@ -771,7 +831,8 @@ internal sealed class AccountService(
             : Result.Success(new Fields(
                 legalName is not AttributeRequirement.Off,
                 dateOfBirth is not AttributeRequirement.Off,
-                username));
+                username,
+                gender));
     }
 
     // What a username is refused for on its own text, which needs no transaction and is
@@ -932,5 +993,5 @@ internal sealed class AccountService(
 
     // Which of the fields a policy switches this deployment collects, read once so
     // that one answer shapes the whole of one operation.
-    private sealed record Fields(bool LegalName, bool DateOfBirth, bool Username);
+    private sealed record Fields(bool LegalName, bool DateOfBirth, bool Username, bool GrammaticalGender);
 }

@@ -32,4 +32,10 @@ internal sealed class ProfileRecord
     /// The <c>enc_date_of_birth</c> column.
     /// </summary>
     public byte[]? DateOfBirth { get; set; }
+
+    /// <summary>
+    /// The <c>enc_grammatical_gender</c> column: how the person is addressed, encrypted
+    /// under the subject key as the other declared values are (D-236).
+    /// </summary>
+    public byte[]? GrammaticalGender { get; set; }
 }

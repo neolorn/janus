@@ -19,9 +19,14 @@ namespace Janus.Core;
 /// When the photo was last set, absent where the account shows none. The image itself
 /// is read from the photo endpoint and never from here.
 /// </param>
-/// <remarks>Implements REG-ACCT-001, REG-PROF-001 and IDN-ATTR-002.</remarks>
+/// <param name="GrammaticalGender">
+/// How the person is addressed, absent where the policy in force for the account does
+/// not enable it or the person has given none (D-236).
+/// </param>
+/// <remarks>Implements REG-ACCT-001, REG-PROF-001, IDN-ATTR-002 and IDN-ATTR-007.</remarks>
 public sealed record ProfileDetail(
     string? DisplayName,
     string? LegalName,
     DateOnly? DateOfBirth,
-    DateTimeOffset? PhotoUpdatedAt);
+    DateTimeOffset? PhotoUpdatedAt,
+    GrammaticalGender? GrammaticalGender);

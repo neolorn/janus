@@ -425,6 +425,30 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// OPS-BOOT-001 AC9 (D-236): bootstrap writes the administrative organization's
+    /// grammatical gender on, as every organization's starts.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC9_BootstrapWritesTheAdministrativeOrganizationsGrammaticalGenderOnAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Guid organization = await connection.QuerySingleAsync<Guid>(
+            "SELECT id FROM identity.organizations WHERE administrative");
+        string parameter = organization.ToString("D", System.Globalization.CultureInfo.InvariantCulture);
+        string stored = await connection.QuerySingleAsync<string>(
+            "SELECT value FROM identity.settings WHERE key = @Key",
+            new { Key = Settings.OrganizationPolicy.For(parameter).ToString() });
+
+        PolicyOverride policy = Settings.OrganizationPolicy
+            .Read(parameter, stored)
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.True(policy.GrammaticalGender);
+    }
+
+    /// <summary>
     /// Chapter 10 section 3: the three administrative roles are seeded so the system is
     /// usable at once.
     /// </summary>

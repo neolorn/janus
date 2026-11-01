@@ -139,8 +139,8 @@ Janus.Core.AccountViewIdentifiers.Username.get -> string?
 Janus.Core.AccountViewIdentifiers.Username.init -> void
 Janus.Core.AccountViewProfile
 Janus.Core.AccountViewProfile.<Clone>$() -> Janus.Core.AccountViewProfile!
-Janus.Core.AccountViewProfile.AccountViewProfile(string? DisplayName, string? LegalName) -> void
-Janus.Core.AccountViewProfile.Deconstruct(out string? DisplayName, out string? LegalName) -> void
+Janus.Core.AccountViewProfile.AccountViewProfile(string? DisplayName, string? LegalName, Janus.Core.GrammaticalGender? GrammaticalGender) -> void
+Janus.Core.AccountViewProfile.Deconstruct(out string? DisplayName, out string? LegalName, out Janus.Core.GrammaticalGender? GrammaticalGender) -> void
 Janus.Core.AccountViewProfile.DisplayName.get -> string?
 Janus.Core.AccountViewProfile.DisplayName.init -> void
 Janus.Core.AccountViewProfile.Equals(Janus.Core.AccountViewProfile? other) -> bool
@@ -2244,7 +2244,7 @@ Janus.Core.Policy
 Janus.Core.Policy.<Clone>$() -> Janus.Core.Policy!
 Janus.Core.Policy.CredentialRedundancy.get -> Janus.Core.CredentialRedundancy
 Janus.Core.Policy.CredentialRedundancy.init -> void
-Janus.Core.Policy.Deconstruct(out Janus.Core.AssuranceLevel RequiredAssurance, out System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>! LoginFactors, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>! Gates, out Janus.Core.CredentialRedundancy CredentialRedundancy, out bool SelfServiceRecovery, out System.Collections.Generic.IReadOnlyList<string!>! EmailDomains, out bool Photos) -> void
+Janus.Core.Policy.Deconstruct(out Janus.Core.AssuranceLevel RequiredAssurance, out System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>! LoginFactors, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>! Gates, out Janus.Core.CredentialRedundancy CredentialRedundancy, out bool SelfServiceRecovery, out System.Collections.Generic.IReadOnlyList<string!>! EmailDomains, out bool Photos, out bool GrammaticalGender) -> void
 Janus.Core.Policy.EmailDomains.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.Policy.EmailDomains.init -> void
 Janus.Core.Policy.Equals(Janus.Core.Policy? other) -> bool
@@ -2254,7 +2254,7 @@ Janus.Core.Policy.LoginFactors.get -> System.Collections.Generic.IReadOnlySet<Ja
 Janus.Core.Policy.LoginFactors.init -> void
 Janus.Core.Policy.Photos.get -> bool
 Janus.Core.Policy.Photos.init -> void
-Janus.Core.Policy.Policy(Janus.Core.AssuranceLevel RequiredAssurance, System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>! LoginFactors, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>! Gates, Janus.Core.CredentialRedundancy CredentialRedundancy, bool SelfServiceRecovery, System.Collections.Generic.IReadOnlyList<string!>! EmailDomains, bool Photos) -> void
+Janus.Core.Policy.Policy(Janus.Core.AssuranceLevel RequiredAssurance, System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>! LoginFactors, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>! Gates, Janus.Core.CredentialRedundancy CredentialRedundancy, bool SelfServiceRecovery, System.Collections.Generic.IReadOnlyList<string!>! EmailDomains, bool Photos, bool GrammaticalGender = false) -> void
 Janus.Core.Policy.RequiredAssurance.get -> Janus.Core.AssuranceLevel
 Janus.Core.Policy.RequiredAssurance.init -> void
 Janus.Core.Policy.SelfServiceRecovery.get -> bool
@@ -2266,7 +2266,7 @@ Janus.Core.PolicyOverride
 Janus.Core.PolicyOverride.<Clone>$() -> Janus.Core.PolicyOverride!
 Janus.Core.PolicyOverride.CredentialRedundancy.get -> Janus.Core.CredentialRedundancy?
 Janus.Core.PolicyOverride.CredentialRedundancy.init -> void
-Janus.Core.PolicyOverride.Deconstruct(out Janus.Core.AssuranceLevel? RequiredAssurance, out System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>? LoginFactors, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>? Gates, out Janus.Core.CredentialRedundancy? CredentialRedundancy, out bool? SelfServiceRecovery, out System.Collections.Generic.IReadOnlyList<string!>? EmailDomains, out bool? Photos) -> void
+Janus.Core.PolicyOverride.Deconstruct(out Janus.Core.AssuranceLevel? RequiredAssurance, out System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>? LoginFactors, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>? Gates, out Janus.Core.CredentialRedundancy? CredentialRedundancy, out bool? SelfServiceRecovery, out System.Collections.Generic.IReadOnlyList<string!>? EmailDomains, out bool? Photos, out bool? GrammaticalGender) -> void
 Janus.Core.PolicyOverride.EmailDomains.get -> System.Collections.Generic.IReadOnlyList<string!>?
 Janus.Core.PolicyOverride.EmailDomains.init -> void
 Janus.Core.PolicyOverride.Equals(Janus.Core.PolicyOverride? other) -> bool
@@ -2276,7 +2276,7 @@ Janus.Core.PolicyOverride.LoginFactors.get -> System.Collections.Generic.IReadOn
 Janus.Core.PolicyOverride.LoginFactors.init -> void
 Janus.Core.PolicyOverride.Photos.get -> bool?
 Janus.Core.PolicyOverride.Photos.init -> void
-Janus.Core.PolicyOverride.PolicyOverride(Janus.Core.AssuranceLevel? RequiredAssurance, System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>? LoginFactors, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>? Gates, Janus.Core.CredentialRedundancy? CredentialRedundancy, bool? SelfServiceRecovery, System.Collections.Generic.IReadOnlyList<string!>? EmailDomains, bool? Photos) -> void
+Janus.Core.PolicyOverride.PolicyOverride(Janus.Core.AssuranceLevel? RequiredAssurance, System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>? LoginFactors, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>? Gates, Janus.Core.CredentialRedundancy? CredentialRedundancy, bool? SelfServiceRecovery, System.Collections.Generic.IReadOnlyList<string!>? EmailDomains, bool? Photos, bool? GrammaticalGender = null) -> void
 Janus.Core.PolicyOverride.RequiredAssurance.get -> Janus.Core.AssuranceLevel?
 Janus.Core.PolicyOverride.RequiredAssurance.init -> void
 Janus.Core.PolicyOverride.SelfServiceRecovery.get -> bool?
@@ -2467,7 +2467,7 @@ Janus.Core.ProfileDetail
 Janus.Core.ProfileDetail.<Clone>$() -> Janus.Core.ProfileDetail!
 Janus.Core.ProfileDetail.DateOfBirth.get -> System.DateOnly?
 Janus.Core.ProfileDetail.DateOfBirth.init -> void
-Janus.Core.ProfileDetail.Deconstruct(out string? DisplayName, out string? LegalName, out System.DateOnly? DateOfBirth, out System.DateTimeOffset? PhotoUpdatedAt) -> void
+Janus.Core.ProfileDetail.Deconstruct(out string? DisplayName, out string? LegalName, out System.DateOnly? DateOfBirth, out System.DateTimeOffset? PhotoUpdatedAt, out Janus.Core.GrammaticalGender? GrammaticalGender) -> void
 Janus.Core.ProfileDetail.DisplayName.get -> string?
 Janus.Core.ProfileDetail.DisplayName.init -> void
 Janus.Core.ProfileDetail.Equals(Janus.Core.ProfileDetail? other) -> bool
@@ -2475,18 +2475,18 @@ Janus.Core.ProfileDetail.LegalName.get -> string?
 Janus.Core.ProfileDetail.LegalName.init -> void
 Janus.Core.ProfileDetail.PhotoUpdatedAt.get -> System.DateTimeOffset?
 Janus.Core.ProfileDetail.PhotoUpdatedAt.init -> void
-Janus.Core.ProfileDetail.ProfileDetail(string? DisplayName, string? LegalName, System.DateOnly? DateOfBirth, System.DateTimeOffset? PhotoUpdatedAt) -> void
+Janus.Core.ProfileDetail.ProfileDetail(string? DisplayName, string? LegalName, System.DateOnly? DateOfBirth, System.DateTimeOffset? PhotoUpdatedAt, Janus.Core.GrammaticalGender? GrammaticalGender) -> void
 Janus.Core.ProfileEdit
 Janus.Core.ProfileEdit.<Clone>$() -> Janus.Core.ProfileEdit!
 Janus.Core.ProfileEdit.DateOfBirth.get -> string?
 Janus.Core.ProfileEdit.DateOfBirth.init -> void
-Janus.Core.ProfileEdit.Deconstruct(out string? DisplayName, out string? LegalName, out string? Username, out string? DateOfBirth) -> void
+Janus.Core.ProfileEdit.Deconstruct(out string? DisplayName, out string? LegalName, out string? Username, out string? DateOfBirth, out string? GrammaticalGender) -> void
 Janus.Core.ProfileEdit.DisplayName.get -> string?
 Janus.Core.ProfileEdit.DisplayName.init -> void
 Janus.Core.ProfileEdit.Equals(Janus.Core.ProfileEdit? other) -> bool
 Janus.Core.ProfileEdit.LegalName.get -> string?
 Janus.Core.ProfileEdit.LegalName.init -> void
-Janus.Core.ProfileEdit.ProfileEdit(string? DisplayName = null, string? LegalName = null, string? Username = null, string? DateOfBirth = null) -> void
+Janus.Core.ProfileEdit.ProfileEdit(string? DisplayName = null, string? LegalName = null, string? Username = null, string? DateOfBirth = null, string? GrammaticalGender = null) -> void
 Janus.Core.ProfileEdit.Username.get -> string?
 Janus.Core.ProfileEdit.Username.init -> void
 Janus.Core.ProviderCredential
@@ -5262,3 +5262,16 @@ Janus.Core.DefinedRole.GrantsMustEnd.init -> void
 Janus.Core.RoleDeclaration.GrantsMustEnd.get -> bool
 Janus.Core.RoleDeclaration.GrantsMustEnd.init -> void
 static Janus.Core.ErrorCodes.GrantEndRequired.get -> Janus.Core.ErrorCode
+Janus.Core.Policy.GrammaticalGender.get -> bool
+Janus.Core.Policy.GrammaticalGender.init -> void
+Janus.Core.PolicyOverride.GrammaticalGender.get -> bool?
+Janus.Core.PolicyOverride.GrammaticalGender.init -> void
+Janus.Core.AccountViewProfile.GrammaticalGender.get -> Janus.Core.GrammaticalGender?
+Janus.Core.AccountViewProfile.GrammaticalGender.init -> void
+Janus.Core.GrammaticalGender.Masculine = 0 -> Janus.Core.GrammaticalGender
+Janus.Core.GrammaticalGender.Feminine = 1 -> Janus.Core.GrammaticalGender
+Janus.Core.ProfileDetail.GrammaticalGender.get -> Janus.Core.GrammaticalGender?
+Janus.Core.ProfileDetail.GrammaticalGender.init -> void
+Janus.Core.ProfileEdit.GrammaticalGender.get -> string?
+Janus.Core.ProfileEdit.GrammaticalGender.init -> void
+Janus.Core.GrammaticalGender

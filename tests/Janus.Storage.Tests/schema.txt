@@ -996,6 +996,7 @@ table profiles
   column enc_display_name bytea
   column enc_legal_name bytea
   column enc_date_of_birth bytea
+  column enc_grammatical_gender bytea
   constraint ck_profiles_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_profiles_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_profiles PRIMARY KEY (subject)

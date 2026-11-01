@@ -39,7 +39,8 @@ public static class Policies
         CredentialRedundancy.Advisory,
         SelfServiceRecovery: true,
         [],
-        Photos: false);
+        Photos: false,
+        GrammaticalGender: false);
 
     /// <summary>
     /// The administrative organization's policy at bootstrap: two factors, passkeys
@@ -54,7 +55,8 @@ public static class Policies
         CredentialRedundancy.Enforced,
         SelfServiceRecovery: false,
         [],
-        Photos: false);
+        Photos: false,
+        GrammaticalGender: true);
 
     // Section 4.1a states one gate for every action of section 5a rather than a gate
     // per action.

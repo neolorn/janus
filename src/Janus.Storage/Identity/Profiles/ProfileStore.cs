@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -49,7 +50,8 @@ internal sealed class ProfileStore(
                 subject,
                 Name(dataKey, subject, ProfileConfiguration.DisplayNameColumn, record.DisplayName),
                 Legal(dataKey, subject, record.LegalName),
-                Born(dataKey, subject, record.DateOfBirth));
+                Born(dataKey, subject, record.DateOfBirth),
+                Addressed(dataKey, subject, record.GrammaticalGender));
         }
         finally
         {
@@ -92,6 +94,13 @@ internal sealed class ProfileStore(
                 profile.DateOfBirth?.ToString(DateFormat, CultureInfo.InvariantCulture),
                 profile.Subject,
                 ProfileConfiguration.DateOfBirthColumn,
+                dataKey);
+
+            record.GrammaticalGender = Carry(
+                record.GrammaticalGender,
+                profile.GrammaticalGender is { } gender ? VocabularyConverter<GrammaticalGender>.Write(gender) : null,
+                profile.Subject,
+                ProfileConfiguration.GrammaticalGenderColumn,
                 dataKey);
         }
         finally
@@ -161,6 +170,20 @@ internal sealed class ProfileStore(
             out DateOnly born)
             ? born
             : throw new InvalidOperationException("The stored date of birth is not a date.");
+    }
+
+    private static GrammaticalGender? Addressed(ReadOnlySpan<byte> dataKey, SubjectId subject, byte[]? stored)
+    {
+        string? held = Read(dataKey, subject, ProfileConfiguration.GrammaticalGenderColumn, stored);
+
+        if (held is null)
+        {
+            return null;
+        }
+
+        return VocabularyConverter<GrammaticalGender>.Admitted.Contains(held)
+            ? VocabularyConverter<GrammaticalGender>.Read(held)
+            : throw new InvalidOperationException("The stored grammatical gender is not one.");
     }
 
     // Re-encrypting an unchanged value would draw a new initialisation vector and write

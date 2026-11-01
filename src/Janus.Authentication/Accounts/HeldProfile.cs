@@ -10,12 +10,14 @@ namespace Janus.Authentication.Accounts;
 /// <param name="LegalName">The legal name, a proofing attribute collected only with a declared purpose.</param>
 /// <param name="DateOfBirth">The date entered at the age step, where it is retained.</param>
 /// <param name="PhotoUpdatedAt">When the photo was last set, where one is shown.</param>
+/// <param name="GrammaticalGender">How the person is addressed, where they have said (D-236).</param>
 /// <remarks>
 /// Implements REG-PROF-001 and CONV-LAYOUT-001. The image itself never crosses this
-/// port: a read of the profile is a read of four small fields.
+/// port: a read of the profile is a read of a few small fields.
 /// </remarks>
 internal sealed record HeldProfile(
     DisplayName? DisplayName,
     LegalName? LegalName,
     DateOnly? DateOfBirth,
-    DateTimeOffset? PhotoUpdatedAt);
+    DateTimeOffset? PhotoUpdatedAt,
+    GrammaticalGender? GrammaticalGender = null);

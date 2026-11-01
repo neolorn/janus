@@ -32,6 +32,7 @@ namespace Janus.Authentication.Accounts;
 /// <param name="events">Where the transition is announced.</param>
 /// <param name="audit">Where what the administrator did is recorded.</param>
 /// <param name="photos">Where the photo an account shows is read.</param>
+/// <param name="policies">The policy in force for an account, which enables the grammatical gender.</param>
 /// <param name="reach">Where a read is asked, and which accounts it reaches.</param>
 /// <param name="identifiers">Where an account's identifiers are read and found.</param>
 /// <param name="records">Where a person record's contact is read.</param>
@@ -57,6 +58,7 @@ internal sealed class AccountAdministration(
     IEvents events,
     IAccountAudit audit,
     ProfilePhotos photos,
+    PolicyResolution policies,
     AccountReach reach,
     IIdentifierDirectory identifiers,
     IRecordDirectory records,
@@ -528,6 +530,11 @@ internal sealed class AccountAdministration(
                 .ReadAsync(Settings.IdentifiersUsernameEnabled, cancellationToken).ConfigureAwait(false))
             .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
+        // IDN-ATTR-007, IDN-READ-003 (D-236): the grammatical gender is read only where
+        // the policy in force for the account enables it.
+        bool gender = (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(policy => policy.GrammaticalGender, error => throw new InvalidOperationException(error.Code.ToString()));
+
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
         HeldProfile profile = await directory.ProfileAsync(subject, cancellationToken).ConfigureAwait(false);
         HeldPreferences preferences = await directory.PreferencesAsync(subject, cancellationToken)
@@ -551,7 +558,10 @@ internal sealed class AccountAdministration(
             subject,
             state,
             createdAt,
-            new AccountViewProfile(profile.DisplayName?.Value, legalName ? profile.LegalName?.Value : null),
+            new AccountViewProfile(
+                profile.DisplayName?.Value,
+                legalName ? profile.LegalName?.Value : null,
+                gender ? profile.GrammaticalGender : null),
             new AccountViewIdentifiers(
                 Shown(held, IdentifierKind.Email),
                 Shown(held, IdentifierKind.Phone),

@@ -763,9 +763,11 @@ public sealed class ModelTests
             "profile_photos.subject",
             "profile_photos.updated_at",
 
-            // Profile: the three declared fields of REG-PROF-001, all under the key.
+            // Profile: the four declared fields of REG-PROF-001, all under the key, the
+            // grammatical gender among them (D-236).
             "profiles.enc_date_of_birth",
             "profiles.enc_display_name",
+            "profiles.enc_grammatical_gender",
             "profiles.enc_legal_name",
             "profiles.subject",
 
@@ -1094,16 +1096,18 @@ public sealed class ModelTests
 
     /// <summary>
     /// IDN-ATTR-007 AC1: the profile is the display name, the legal name, the date of
-    /// birth and the photo. A fifth field would be one nothing states a rule for.
+    /// birth, the photo and the grammatical gender (D-236). A sixth field would be one
+    /// nothing states a rule for.
     /// </summary>
     [Fact]
-    public void IDN_ATTR_007_AC1_TheProfileIsTheFourFieldsAndNothingElse()
+    public void IDN_ATTR_007_AC1_TheProfileIsTheFiveFieldsAndNothingElse()
     {
         string[] expected =
         [
             "profile_photos.enc_image",
             "profiles.enc_date_of_birth",
             "profiles.enc_display_name",
+            "profiles.enc_grammatical_gender",
             "profiles.enc_legal_name",
         ];
 

@@ -110,6 +110,7 @@ public sealed class AccountReadTests : IAsyncDisposable
                 _work,
                 codec: null,
                 _clock),
+            new PolicyResolution(_memberships, _configuration, new PolicyRaiseStoreInMemory()),
             new AccountReach(_gate, _administrative, _organizations, _ties),
             _identifiers,
             _records,
@@ -169,6 +170,32 @@ public sealed class AccountReadTests : IAsyncDisposable
                 || name.Contains("birth", StringComparison.OrdinalIgnoreCase)
                 || name.Contains("photo", StringComparison.OrdinalIgnoreCase)
                 || name.Contains("password", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// IDN-READ-003 AC1 and IDN-ATTR-007 AC2 (D-236): the account a host or an
+    /// administrator reads carries the grammatical gender where the policy in force for
+    /// the account enables it, as its organization's does from the start, and nothing
+    /// once the organization turns it off.
+    /// </summary>
+    [Fact]
+    public async Task IDN_READ_003_AC1_TheGrammaticalGenderIsReadOnlyWhereThePolicyEnablesItAsync()
+    {
+        _directory.Holds(_customer, new HeldProfile(null, null, null, null, GrammaticalGender.Feminine));
+
+        AccountView enabled = Read(await Administration.ReadAsync(
+            Clerk, _customer, _shop, TestContext.Current.CancellationToken));
+
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            _shop.ToString(),
+            PolicyOverride.None with { GrammaticalGender = false });
+
+        AccountView disabled = Read(await Administration.ReadAsync(
+            Clerk, _customer, _shop, TestContext.Current.CancellationToken));
+
+        Assert.Equal(GrammaticalGender.Feminine, enabled.Profile.GrammaticalGender);
+        Assert.Null(disabled.Profile.GrammaticalGender);
     }
 
     /// <summary>

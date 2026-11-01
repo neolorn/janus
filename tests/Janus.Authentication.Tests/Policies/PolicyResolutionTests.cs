@@ -374,6 +374,30 @@ public sealed class PolicyResolutionTests : IDisposable
                 Enum.GetValues<StepUpAction>().ToFrozenDictionary(action => action, _ => gate)),
         };
 
+    /// <summary>
+    /// IDN-ATTR-007 and chapter 10 section 4.1a (D-236): the grammatical gender is off
+    /// for a principal with no membership, on for a member of an organization as it
+    /// starts, and on for a member of several only where every one enables it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_007_TheGrammaticalGenderIsOnWhereEveryOrganizationEnablesItAsync()
+    {
+        var customer = SubjectId.New(_randomness);
+        var member = SubjectId.New(_randomness);
+        var both = SubjectId.New(_randomness);
+        OrganizationId starting = Organization();
+        OrganizationId off = Organization();
+
+        _memberships.Place(member, starting);
+        _memberships.Place(both, starting);
+        _memberships.Place(both, off);
+        Override(off, PolicyOverride.None with { GrammaticalGender = false });
+
+        Assert.False((await ResolvedAsync(customer)).GrammaticalGender);
+        Assert.True((await ResolvedAsync(member)).GrammaticalGender);
+        Assert.False((await ResolvedAsync(both)).GrammaticalGender);
+    }
+
     private static OrganizationId Organization() => OrganizationId.New(TimeProvider.System);
 
     private void Override(OrganizationId organization, PolicyOverride overrides) =>

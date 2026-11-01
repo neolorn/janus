@@ -36,6 +36,11 @@ internal sealed class ProfileConfiguration : IEntityTypeConfiguration<ProfileRec
     /// </summary>
     public const string DateOfBirthColumn = "enc_date_of_birth";
 
+    /// <summary>
+    /// The column holding the grammatical gender (D-236).
+    /// </summary>
+    public const string GrammaticalGenderColumn = "enc_grammatical_gender";
+
     /// <inheritdoc/>
     public void Configure(EntityTypeBuilder<ProfileRecord> builder)
     {
@@ -54,6 +59,7 @@ internal sealed class ProfileConfiguration : IEntityTypeConfiguration<ProfileRec
         builder.Property(profile => profile.DisplayName).HasColumnName(DisplayNameColumn);
         builder.Property(profile => profile.LegalName).HasColumnName(LegalNameColumn);
         builder.Property(profile => profile.DateOfBirth).HasColumnName(DateOfBirthColumn);
+        builder.Property(profile => profile.GrammaticalGender).HasColumnName(GrammaticalGenderColumn);
 
         builder.HasOne<AccountRecord>()
             .WithOne()

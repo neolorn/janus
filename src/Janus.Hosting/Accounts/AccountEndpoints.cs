@@ -241,7 +241,8 @@ internal static class AccountEndpoints
             request.DisplayName,
             request.LegalName,
             request.Username,
-            request.DateOfBirth);
+            request.DateOfBirth,
+            request.GrammaticalGender);
 
         return Answers.Of(
             await accounts

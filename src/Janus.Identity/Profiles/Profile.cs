@@ -4,23 +4,30 @@ using Janus.Core;
 namespace Janus.Identity.Profiles;
 
 /// <summary>
-/// The four fields of an account's profile, less the photo, which is held apart so that
-/// an ordinary read of the profile never carries image bytes.
+/// The fields of an account's profile, less the photo, which is held apart so that an
+/// ordinary read of the profile never carries image bytes.
 /// </summary>
 /// <remarks>
 /// Implements IDN-ATTR-007 and REG-PROF-001. Every field here is optional: identity
 /// does no proofing, so it needs no name. The legal name and the date of birth are off
 /// unless the deployment turns them on, and the date is the one entered at the age step
-/// rather than one the person edits afterwards.
+/// rather than one the person edits afterwards. The grammatical gender is the policy's
+/// to enable (D-236).
 /// </remarks>
 internal sealed class Profile
 {
-    private Profile(SubjectId subject, DisplayName? displayName, LegalName? legalName, DateOnly? dateOfBirth)
+    private Profile(
+        SubjectId subject,
+        DisplayName? displayName,
+        LegalName? legalName,
+        DateOnly? dateOfBirth,
+        GrammaticalGender? grammaticalGender)
     {
         Subject = subject;
         DisplayName = displayName;
         LegalName = legalName;
         DateOfBirth = dateOfBirth;
+        GrammaticalGender = grammaticalGender;
     }
 
     /// <summary>
@@ -45,16 +52,22 @@ internal sealed class Profile
     public DateOnly? DateOfBirth { get; private set; }
 
     /// <summary>
+    /// How the person is addressed, where they have said (D-236).
+    /// </summary>
+    public GrammaticalGender? GrammaticalGender { get; private set; }
+
+    /// <summary>
     /// Whether the profile carries anything at all.
     /// </summary>
-    public bool IsEmpty => DisplayName is null && LegalName is null && DateOfBirth is null;
+    public bool IsEmpty =>
+        DisplayName is null && LegalName is null && DateOfBirth is null && GrammaticalGender is null;
 
     /// <summary>
     /// The profile of an account that has filled nothing in.
     /// </summary>
     /// <param name="subject">Whose profile it is.</param>
     /// <returns>The profile.</returns>
-    public static Profile Empty(SubjectId subject) => new(subject, null, null, null);
+    public static Profile Empty(SubjectId subject) => new(subject, null, null, null, null);
 
     /// <summary>
     /// The profile as it already stands. This is the store's translation of a stored
@@ -64,13 +77,15 @@ internal sealed class Profile
     /// <param name="displayName">The display name, where one is held.</param>
     /// <param name="legalName">The legal name, where one is held.</param>
     /// <param name="dateOfBirth">The date of birth, where one is retained.</param>
+    /// <param name="grammaticalGender">The grammatical gender, where one is held.</param>
     /// <returns>The profile.</returns>
     public static Profile Existing(
         SubjectId subject,
         DisplayName? displayName,
         LegalName? legalName,
-        DateOnly? dateOfBirth) =>
-        new(subject, displayName, legalName, dateOfBirth);
+        DateOnly? dateOfBirth,
+        GrammaticalGender? grammaticalGender) =>
+        new(subject, displayName, legalName, dateOfBirth, grammaticalGender);
 
     /// <summary>
     /// Sets or clears the display name.
@@ -84,6 +99,13 @@ internal sealed class Profile
     /// </summary>
     /// <param name="name">The name, or nothing to clear it.</param>
     public void SetLegalName(LegalName? name) => LegalName = name;
+
+    /// <summary>
+    /// Sets or clears the grammatical gender. Whether the account carries one at all is
+    /// the policy's, which the caller reads (D-236).
+    /// </summary>
+    /// <param name="gender">The gender, or nothing to clear it.</param>
+    public void SetGrammaticalGender(GrammaticalGender? gender) => GrammaticalGender = gender;
 
     /// <summary>
     /// Records the date entered at the age step, or a correction to it. The date is

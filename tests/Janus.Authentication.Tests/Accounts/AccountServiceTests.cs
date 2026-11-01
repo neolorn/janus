@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -106,6 +107,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
             ReservedUsernames.Default,
             Declared,
             Photos,
+            new PolicyResolution(_memberships, _configuration, new PolicyRaiseStoreInMemory()),
             _configuration,
             _work,
             _clock);
@@ -239,6 +241,63 @@ public sealed class AccountServiceTests : IAsyncDisposable
 
         Assert.Null(shown.LegalName);
         Assert.Null(shown.DateOfBirth);
+    }
+
+    /// <summary>
+    /// REG-PROF-001 AC4 and IDN-ATTR-007 (D-236): where the policy enables it, as every
+    /// organization's starts, the person sets the grammatical gender, changes it and
+    /// clears it, each change audited as a profile change carrying no value, and an edit
+    /// not naming it leaves it as it stands.
+    /// </summary>
+    [Fact]
+    public async Task REG_PROF_001_AC4_AMemberSetsChangesAndClearsTheGrammaticalGenderAsync()
+    {
+        _memberships.Place(_person, OrganizationId.New(TimeProvider.System));
+
+        var shown = new List<GrammaticalGender?>();
+
+        foreach (ProfileEdit edit in new ProfileEdit[]
+        {
+            new(GrammaticalGender: "masculine"),
+            new(GrammaticalGender: "feminine"),
+            new(DisplayName: "Kestrel"),
+            new(GrammaticalGender: string.Empty),
+        })
+        {
+            Accepted(await Service.EditProfileAsync(Acting, Stepped(), edit, TestContext.Current.CancellationToken));
+            shown.Add(Read(await Service.ReadAsync(Acting, TestContext.Current.CancellationToken)).Profile.GrammaticalGender);
+        }
+
+        Assert.Equal([GrammaticalGender.Masculine, GrammaticalGender.Feminine, GrammaticalGender.Feminine, null], shown);
+        Assert.Equal(4, _audit.Recorded.Count(change => change.Action == AuditActions.ProfileChanged));
+    }
+
+    /// <summary>
+    /// REG-PROF-001 AC4 and IDN-ATTR-007 AC2 (D-236): where the policy does not enable
+    /// the grammatical gender, as for an account of no organization, an edit naming it is
+    /// refused <c>identity.profile.notaccepted</c> and no read carries it, whatever is held;
+    /// a value other than the two is malformed, naming the member, wherever it is sent.
+    /// </summary>
+    [Fact]
+    public async Task REG_PROF_001_AC4_TheGrammaticalGenderIsRefusedWhereThePolicyDoesNotEnableItAsync()
+    {
+        _directory.Holds(_person, Profile("Kestrel", null, null) with { GrammaticalGender = GrammaticalGender.Feminine });
+
+        Error refused = Failure(await Service.EditProfileAsync(
+            Acting,
+            Stepped(),
+            new ProfileEdit(GrammaticalGender: "masculine"),
+            TestContext.Current.CancellationToken));
+        Error malformed = Failure(await Service.EditProfileAsync(
+            Acting,
+            Stepped(),
+            new ProfileEdit(GrammaticalGender: "Masculine"),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.ProfileNotAccepted, refused.Code);
+        Assert.Equal(ErrorCodes.RequestMalformed, malformed.Code);
+        Assert.Equal("grammaticalGender", malformed.Details["member"].GetString());
+        Assert.Null(Read(await Service.ReadAsync(Acting, TestContext.Current.CancellationToken)).Profile.GrammaticalGender);
     }
 
     /// <summary>

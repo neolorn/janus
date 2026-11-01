@@ -16,6 +16,7 @@ namespace Janus.Hosting.Organizations;
 /// <param name="CredentialRedundancy">Whether a second credential is required.</param>
 /// <param name="SelfServiceRecovery">Whether recovery is self-service.</param>
 /// <param name="Photos">Whether a member's account shows a profile photo.</param>
+/// <param name="GrammaticalGender">Whether a member's account carries the grammatical gender.</param>
 /// <param name="EmailDomains">The domain lock; empty is off.</param>
 /// <remarks>Implements chapter 09 section 8a, D-143 and chapter 10 section 4.1a.</remarks>
 internal sealed record OrganizationPolicyView(
@@ -25,6 +26,7 @@ internal sealed record OrganizationPolicyView(
     PolicyFieldView CredentialRedundancy,
     PolicyFieldView SelfServiceRecovery,
     PolicyFieldView Photos,
+    PolicyFieldView GrammaticalGender,
     PolicyFieldView EmailDomains)
 {
     /// <summary>
@@ -60,6 +62,7 @@ internal sealed record OrganizationPolicyView(
             Field(root, "credentialRedundancy", own.CredentialRedundancy is not null),
             Field(root, "selfServiceRecovery", own.SelfServiceRecovery is not null),
             Field(root, "photos", own.Photos is not null),
+            Field(root, "grammaticalGender", own.GrammaticalGender is not null),
             Field(root, "emailDomains", own.EmailDomains is not null));
     }
 

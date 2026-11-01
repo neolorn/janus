@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Configuration;
@@ -352,6 +353,29 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
         Assert.Null(announced.Subject);
         Assert.Equal((_administrator, _administrator), (announced.Actor, announced.Effective));
         Assert.Contains(announced, _events.PublishedInTransaction);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-007 and chapter 10 section 4.1 (D-236): a created organization's policy
+    /// override is written holding the grammatical gender on and nothing else, so its
+    /// members carry the field from the start.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_007_ACreatedOrganizationStartsWithTheGrammaticalGenderOnAsync()
+    {
+        OrganizationId organization = (await Service.CreateAsync(
+                Acting,
+                "Northwind Freight",
+                Reason,
+                TestContext.Current.CancellationToken))
+            .Match(id => id, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        IReadOnlyDictionary<string, PolicyOverride> written = (await _configuration.ReadWrittenAsync(
+                Settings.OrganizationPolicy,
+                TestContext.Current.CancellationToken))
+            .Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        Assert.Equal(PolicyOverride.None with { GrammaticalGender = true }, written[organization.ToString()]);
     }
 
     /// <summary>
