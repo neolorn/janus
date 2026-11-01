@@ -198,6 +198,27 @@ public interface IInvitations
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Ends the caller's own membership of the organization now, where an end is set for
+    /// it and still ahead (IDN-MEM-001, D-240). The end was judged when it was set, so
+    /// bringing it forward asks no permission and no step-up, and the grants it revokes
+    /// are judged against no hand-out list.
+    /// </summary>
+    /// <param name="context">Whose membership, as the caller's live session carries it.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>authz.denied</c> where no person asks,
+    /// <c>identity.organization.notfound</c> where the deployment holds no such
+    /// organization, <c>identity.membership.notfound</c> where the caller holds no current
+    /// membership of it or its end has passed, <c>identity.membership.noend</c> where no
+    /// end is set.
+    /// </returns>
+    ValueTask<Result> BringMembershipEndForwardAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Lists an organization's current members, one page at a time.
     /// </summary>
     /// <param name="context">Who is asking.</param>

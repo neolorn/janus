@@ -283,6 +283,141 @@ internal sealed class MembershipEnd(
     }
 
     /// <summary>
+    /// The reason a membership whose member brought its end forward is recorded with,
+    /// and its grants revoked with (D-240).
+    /// </summary>
+    public const string BroughtForward = "broughtforward";
+
+    /// <summary>
+    /// Ends the caller's own membership now, where an end is set and still ahead. The end
+    /// was judged when an administrator set it, so no permission, step-up or hand-out
+    /// list is asked, and it is the job's end brought to now (D-240).
+    /// </summary>
+    /// <param name="context">Whose membership.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal <see cref="IInvitations.BringMembershipEndForwardAsync"/> states.</returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    public async ValueTask<Result> BringForwardAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // IDN-MEM-001 (D-240): the member's own membership, under the member's session.
+        if (context.Effective is not SubjectId member)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
+            is not OrganizationStanding standing)
+        {
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
+        // OPS-BOOT-002 (D-202): the reserved account's membership of the administrative
+        // organization is never ended, as the job keeps it.
+        if (standing.IsAdministrative
+            && await emergency.FindAsync(cancellationToken).ConfigureAwait(false) == member)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (await StandingEndAsync(member, organization, now, cancellationToken).ConfigureAwait(false)
+            is Error unscheduled)
+        {
+            return Result.Failure(unscheduled);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the account's row first, as for an end the member makes, then the end
+        // read again under the membership's lock.
+        await identifiers.HoldAsync(member, cancellationToken).ConfigureAwait(false);
+
+        if (await memberships.BringForwardAsync(member, organization, now, cancellationToken).ConfigureAwait(false)
+            is not (MembershipEndDue ended, DateTimeOffset replaced))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(
+                await StandingEndAsync(member, organization, now, cancellationToken).ConfigureAwait(false)
+                ?? Error.From(ErrorCodes.MembershipNotFound));
+        }
+
+        // AUTHZ-GRANT-005 (D-240): the scheduler's hand-out lists were judged when the end
+        // was set, so the revocations are the job's, unjudged, in the member's name.
+        IReadOnlyList<DomainEvent> revoked = await revocations
+            .RevokeAsync(
+                member,
+                organization,
+                standing.IsAdministrative,
+                member,
+                BroughtForward,
+                context.BreakGlassReason,
+                now,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        List<DomainEvent> announced =
+        [
+            new MembershipChanged(
+                now,
+                Key(ended.Membership, now),
+                ended.Membership,
+                organization,
+                MembershipChange.Ended,
+                ended.Invitation)
+            {
+                Subject = member,
+            },
+        ];
+
+        announced.AddRange(revoked);
+
+        // REG-MAIL-003: as for the job's end.
+        if (standing.IsAdministrative
+            && await mailboxes.HeldByAsync(member, cancellationToken).ConfigureAwait(false) is Mailbox mailbox)
+        {
+            announced.AddRange(await RetiredAsync(member, mailbox, now, source: null, cancellationToken)
+                .ConfigureAwait(false));
+        }
+
+        await audit
+            .MembershipEndBroughtForwardAsync(
+                organization,
+                ended.Membership,
+                member,
+                replaced,
+                context.BreakGlassReason,
+                now,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (DomainEvent happened in announced)
+        {
+            if ((await events.PublishAsync(happened, cancellationToken).ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error) is Error unpublished)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure(unpublished);
+            }
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(Result.Success, Result.Failure);
+    }
+
+    /// <summary>
     /// Runs one pass of the job <c>membership-ends</c>: each membership whose end, set in
     /// advance, the clock has reached is ended as the administrator who set it would have
     /// ended it, in one transaction per membership.
@@ -629,6 +764,27 @@ internal sealed class MembershipEnd(
         }
 
         return Result.Success(1);
+    }
+
+    // D-240: a membership with no end set has nothing to bring forward, and one whose end
+    // has passed is answered as an ended membership is.
+    private async ValueTask<Error?> StandingEndAsync(
+        SubjectId member,
+        OrganizationId organization,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (await memberships.FindAsync(member, organization, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Error.From(ErrorCodes.MembershipNotFound);
+        }
+
+        return await memberships.EndSetAsync(member, organization, cancellationToken).ConfigureAwait(false) switch
+        {
+            null => Error.From(ErrorCodes.MembershipNoEnd),
+            DateTimeOffset set when set <= now => Error.From(ErrorCodes.MembershipNotFound),
+            _ => null,
+        };
     }
 
     // CONV-DESIGN-002 AC3: the organization the path names is where the gate is asked,

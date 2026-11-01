@@ -128,6 +128,31 @@ internal sealed class MembershipEnding(IMembershipStore memberships) : IMembersh
         return Due(current);
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<(MembershipEndDue Ended, DateTimeOffset Replaced)?> BringForwardAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        // D-240: the end is read again under the row's lock, so one cancelled, moved to
+        // now or carried out since the request read it is followed as it now stands.
+        if (await HeldAsync(subject, organization, cancellationToken).ConfigureAwait(false) is not Membership current
+            || current.EndSet is not { } set
+            || set.At <= at)
+        {
+            return null;
+        }
+
+        DateTimeOffset replaced = set.At;
+
+        current.End(at);
+
+        await memberships.RecordAsync(current, cancellationToken).ConfigureAwait(false);
+
+        return (Due(current)!, replaced);
+    }
+
     private static MembershipEndDue? Due(Membership membership) =>
         membership.EndSet is { } set
             ? new MembershipEndDue(

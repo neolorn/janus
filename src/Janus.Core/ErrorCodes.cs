@@ -988,6 +988,13 @@ public static class ErrorCodes
     public static ErrorCode GrantDuplicate { get; } = ErrorCode.Parse("authz.grant.duplicate");
 
     /// <summary>
+    /// The membership has no end set, so there is none to bring forward. Ask an
+    /// administrator of the organization to set one.
+    /// </summary>
+    /// <remarks>Implements IDN-MEM-001, chapter 10 section 1.1 (D-240).</remarks>
+    public static ErrorCode MembershipNoEnd { get; } = ErrorCode.Parse("identity.membership.noend");
+
+    /// <summary>
     /// The role is one whose grants must end, and the grant carries no expiry. Grant it
     /// again with an expiry.
     /// </summary>

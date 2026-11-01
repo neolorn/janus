@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A member brings forward the end an administrator set on their membership with
+  `POST /account/memberships/{organization}/end` or
+  `IInvitations.BringMembershipEndForwardAsync`, under their live session alone: no
+  permission and no step-up. The membership ends now, and its grants are revoked as the
+  `membership-ends` job revokes them, judged against no hand-out list. A membership
+  with no end set answers 409 `identity.membership.noend`, and one whose end has passed
+  404 `identity.membership.notfound`. Its `identity.membership.ended` record names
+  the member as actor, with the reason `broughtforward` and the end it replaced in
+  `endsAt`.
 - A pressed sign-in link that leaves a second step or the new-browser code answers
   `challengeId`, a second handle of the challenge drawn at the press and kept only as
   its fingerprint, so the page the link landed on completes the sign-in itself; the

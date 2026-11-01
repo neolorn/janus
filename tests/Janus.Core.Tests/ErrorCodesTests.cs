@@ -122,6 +122,7 @@ public sealed class ErrorCodesTests
         "identity.mailbox.notfound",
         "identity.mailbox.taken",
         "identity.membership.limitreached",
+        "identity.membership.noend",
         "identity.membership.notfound",
         "identity.organization.notfound",
         "identity.organization.protected",

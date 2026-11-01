@@ -357,6 +357,13 @@ DELETE /account/mail/apppasswords/{id}
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required
   404 auth.credential.notfound identity.mailbox.notfound
+POST /account/memberships/{organization}/end
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.membership.notfound identity.organization.notfound
+  409 identity.membership.noend
 POST /account/password
   request application/json
     password: string

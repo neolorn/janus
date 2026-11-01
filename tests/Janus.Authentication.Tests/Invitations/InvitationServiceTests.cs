@@ -2528,6 +2528,88 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-MEM-001, AUTHZ-GRANT-005 (D-240): a member brings the end an administrator set
+    /// forward to now under their own session, asking no permission, no step-up and no
+    /// hand-out list: the membership ends, its grants are revoked in the member's name
+    /// with the reason <c>broughtforward</c>, and the record names the member and the end
+    /// it replaced; the job then finds nothing left to end.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AMemberBringsTheirScheduledEndForwardAsync()
+    {
+        var clerk = new DefinedRole(_roles.Define("clerk", Permissions.MembershipManage), [Permissions.MembershipManage], []);
+        SubjectId holder = Holder();
+        DateTimeOffset endsAt = _clock.GetUtcNow().AddDays(30);
+
+        _memberships.Place(holder, Customer);
+        Accepted(await SetEndAsync(Customer, holder, endsAt));
+        _revocations.Give(holder, Customer, clerk);
+        _clock.Advance(TimeSpan.FromDays(1));
+        _work.Reset();
+
+        Accepted(await BringForwardAsync(AccessContext.Of(holder), Customer));
+
+        DateTimeOffset now = _clock.GetUtcNow();
+        EndedInMemory ended = Assert.Single(_ending.Ended);
+        MembershipRevocationsInMemory.Revocation revoked = Assert.Single(_revocations.Revoked);
+        OrganizationAuditInMemory.OrganizationChange recorded = _audit.Changes[^1];
+        MembershipChanged announced = _events.Of<MembershipChanged>()[^1];
+
+        Assert.Equal((holder, Customer, now), (ended.Subject, ended.Organization, ended.At));
+        Assert.Empty(await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+        Assert.Null(_ending.EndSetOn(holder, Customer));
+        Assert.Equal((holder, Customer, clerk.Name, holder, "broughtforward", now), (revoked.Member, revoked.Organization, revoked.Role, revoked.Actor, revoked.Reason, revoked.At));
+        Assert.Null(revoked.Principal);
+        Assert.Equal((AuditActions.MembershipEnded, Customer, holder, "broughtforward", now), (recorded.Action, recorded.Organization, recorded.Actor, recorded.Reason, recorded.At));
+        Assert.Equal((ended.Id, holder, endsAt), (recorded.Membership!.Value, recorded.Member!.Value, recorded.EndsAt!.Value));
+        Assert.Null(recorded.Principal);
+        Assert.Equal((ended.Id, Customer, MembershipChange.Ended, holder), (announced.Membership, announced.Organization, announced.Change, announced.Subject));
+        Assert.Equal(1, _work.Committed);
+
+        _clock.Advance(TimeSpan.FromDays(30));
+
+        Assert.Equal(0, Accepted(await PassAsync()));
+        Assert.Single(_ending.Ended);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 (D-240): a membership with no end set answers
+    /// <c>identity.membership.noend</c>; one whose end has passed, or no membership,
+    /// answers <c>identity.membership.notfound</c>; an organization the deployment does
+    /// not hold, <c>identity.organization.notfound</c>; no person asking, and the reserved
+    /// account's membership of the administrative organization, <c>authz.denied</c>. No
+    /// transaction is begun and nothing is ended.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_OnlyAnEndSetAndAheadIsBroughtForwardAsync()
+    {
+        SubjectId unscheduled = Holder();
+        SubjectId passed = Holder();
+        SubjectId reserved = Holder();
+
+        _memberships.Place(unscheduled, Customer);
+        _memberships.Place(passed, Customer);
+        _memberships.Place(reserved, Staff);
+        _emergency.Account = reserved;
+        Accepted(await SetEndAsync(Customer, passed, _clock.GetUtcNow().AddDays(1)));
+        _ = await _ending.SetEndAsync(reserved, Staff, _clock.GetUtcNow().AddDays(1), _inviter, Why, TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromDays(2));
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.MembershipNoEnd, Failure(await BringForwardAsync(AccessContext.Of(unscheduled), Customer)).Code);
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await BringForwardAsync(AccessContext.Of(passed), Customer)).Code);
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await BringForwardAsync(AccessContext.Of(Holder()), Customer)).Code);
+        Assert.Equal(
+            ErrorCodes.OrganizationNotFound,
+            Failure(await BringForwardAsync(AccessContext.Of(passed), new OrganizationId(Guid.NewGuid()))).Code);
+        Assert.Equal(ErrorCodes.Denied, Failure(await BringForwardAsync(Carrier, Customer)).Code);
+        Assert.Equal(ErrorCodes.Denied, Failure(await BringForwardAsync(AccessContext.Of(reserved), Staff)).Code);
+        Assert.Empty(_ending.Ended);
+        Assert.Empty(_revocations.Revoked);
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
     /// INF-BG-002 AC1: the pass runs only as a system principal that may sweep what has
     /// expired, never for a person.
     /// </summary>
@@ -2890,6 +2972,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             endsAt,
             Why,
             TestContext.Current.CancellationToken);
+
+    private ValueTask<Result> BringForwardAsync(AccessContext context, OrganizationId organization) =>
+        Service.BringMembershipEndForwardAsync(context, organization, TestContext.Current.CancellationToken);
 
     private ValueTask<Result> CancelEndAsync(OrganizationId organization, SubjectId member) =>
         Service.CancelMembershipEndAsync(

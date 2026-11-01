@@ -629,6 +629,50 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(AuditActions.InvitationIssued, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
     }
 
+    /// <summary>
+    /// IDN-MEM-001 (D-240): <c>POST /account/memberships/{organization}/end</c> under the
+    /// member's live session, a day after it was proved and holding no permission, ends
+    /// their own membership whose end is set and ahead and answers <c>204</c>; with no end
+    /// set it is <c>409</c> <c>identity.membership.noend</c>, and once ended <c>404</c>
+    /// <c>identity.membership.notfound</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AMemberBringsTheirEndForwardAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId member = _deployment.Directory.Created[^1].Subject;
+        string path = "/account/memberships/" + Branch + "/end";
+
+        _deployment.Memberships.Place(member, Branch);
+        _deployment.Clock.Advance(TimeSpan.FromDays(1));
+
+        Answer unscheduled = await browser.SendAsync("POST", path);
+
+        _ = await _deployment.Endings.SetEndAsync(
+            member,
+            Branch,
+            _deployment.Clock.GetUtcNow().AddDays(30),
+            new SubjectId(Guid.NewGuid()),
+            "The contract ends.",
+            TestContext.Current.CancellationToken);
+
+        Answer ended = await browser.SendAsync("POST", path);
+        Answer again = await browser.SendAsync("POST", path);
+
+        Assert.Equal(StatusCodes.Status409Conflict, unscheduled.Status);
+        Assert.Equal(ErrorCodes.MembershipNoEnd.ToString(), unscheduled.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(ErrorCodes.MembershipNotFound.ToString(), again.Text("code"));
+        Assert.Equal(member, Assert.Single(_deployment.Endings.Ended).Subject);
+
+        Janus.Authentication.Tests.Organizations.OrganizationAuditInMemory.OrganizationChange recorded =
+            Assert.Single(_deployment.OrganizationChanges.Changes);
+
+        Assert.Equal((AuditActions.MembershipEnded, member, "broughtforward"), (recorded.Action, recorded.Actor, recorded.Reason));
+    }
+
     private static string MembershipOf(OrganizationId organization, SubjectId member) =>
         "/admin/organizations/" + organization + "/memberships/" + member;
 

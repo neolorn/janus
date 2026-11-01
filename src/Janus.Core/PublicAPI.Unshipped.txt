@@ -1906,6 +1906,7 @@ Janus.Core.IConsents.StandingAsync(Janus.Core.AccessContext! context, Janus.Core
 Janus.Core.IInvitations.MemberAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.MemberSummary!>>
 Janus.Core.IInvitations.MembersAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.SubjectId? after, int? limit, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.MemberPage!>>
 Janus.Core.IInvitations.StandingAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.StandingInvitation!>!>>
+Janus.Core.IInvitations.BringMembershipEndForwardAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IOrganizations.AdministrativeAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationId>>
 Janus.Core.IOrganizations.ListAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId? after, int? limit, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationPage!>>
 Janus.Core.IOrganizations.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationSummary!>>
@@ -5277,3 +5278,4 @@ Janus.Core.ProfileEdit.GrammaticalGender.init -> void
 Janus.Core.GrammaticalGender
 Janus.Core.SignInLanding.ChallengeId.get -> string?
 Janus.Core.SignInLanding.ChallengeId.init -> void
+static Janus.Core.ErrorCodes.MembershipNoEnd.get -> Janus.Core.ErrorCode

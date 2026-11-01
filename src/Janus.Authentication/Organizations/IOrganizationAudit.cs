@@ -137,6 +137,28 @@ internal interface IOrganizationAudit
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Records a membership its member ended by bringing forward the end an administrator
+    /// had set, the member acting, with the reason <c>broughtforward</c> and the end it
+    /// replaced, filed under the organization (IDN-MEM-001, D-240).
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="membership">Which membership.</param>
+    /// <param name="member">Whose membership it was, who ended it.</param>
+    /// <param name="replaced">The instant the end had been set to.</param>
+    /// <param name="breakGlassReason">The break-glass reason the session carries, or nothing.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask MembershipEndBroughtForwardAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        DateTimeOffset replaced,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a membership the job <c>membership-ends</c> ended at the instant an
     /// administrator set, under its principal, naming that administrator, filed under the
     /// organization with the member as whom it was done to (IDN-MEM-001, D-217).

@@ -842,6 +842,13 @@ internal sealed class InvitationService(
         end.CancelEndAsync(context, session, organization, member, reason, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<Result> BringMembershipEndForwardAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        end.BringForwardAsync(context, organization, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Result> AcknowledgeAsync(
         AccessContext context,
         InvitationId invitation,
