@@ -52,6 +52,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
     private readonly RecoveryLinkStoreInMemory _links = new();
     private readonly RecoveryApprovalStoreInMemory _approvals = new();
+    private readonly ApproverReachInMemory _reach = new();
     private readonly LossReportStoreInMemory _reports = new();
     private readonly RecoveryAuditInMemory _recorded = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
@@ -800,6 +801,40 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-002 AC9 (D-251): an approver holding `recovery:approve` who may not
+    /// hand out a role the account holds is refused `authz.role.notassignable` before
+    /// the step-up is asked, so a session that has proved nothing is refused for the
+    /// reach and not the step-up, and nothing is written or sent. An approver who reaches
+    /// the account approves it, the reach asked again inside the unit of work.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_AC9_AnApproverWhoMayNotHandOutTheAccountsRolesIsRefusedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+        (SubjectId reaching, SessionId reachingSession) = await ApproverAsync();
+
+        _reach.Beyond(approver, subject);
+
+        int sent = _notifications.Mail.Count;
+        int committed = _work.Committed;
+
+        Assert.Equal(
+            ErrorCodes.RoleNotAssignable,
+            Refused(await Approving(approver, SessionId.New(_clock), subject, Reason)));
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Refused(await Approving(approver, session, subject, Reason)));
+        Assert.Empty(_approvals.All);
+        Assert.Equal(sent, _notifications.Mail.Count);
+        Assert.Equal(committed, _work.Committed);
+
+        Assert.NotNull(Value(await Approving(reaching, reachingSession, subject, Reason)));
+        Assert.Equal(
+            [(reaching, subject), (reaching, subject)],
+            _reach.Asked.Where(asked => asked.Approver == reaching).Select(asked => ((SubjectId)asked.Approver!, asked.Subject)));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002a AC3: a break-glass session approves the sole administrator's
     /// recovery, which is what it exists for.
     /// </summary>
@@ -1133,6 +1168,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Sessions,
             new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),
             new AdministrativeScope(_gate, _administrative),
+            _reach,
             _notifications,
             _restrictions,
             Landing.Links,

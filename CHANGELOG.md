@@ -10,6 +10,27 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /oidc/token`, the discovery document and `GET /oidc/jwks` answer CORS for the
+  origin of each registered `public-application` return address: that origin
+  exactly, no credentials, and the token endpoint's preflight answered with `POST`
+  and `Content-Type`. Any other origin, and every other route, gets no CORS headers.
+- A third client kind, `public-application`, for a browser application that holds
+  no secret: `register-client --kind public-application` takes `--redirect` once for
+  each exact return address and an optional `--audience`, and draws no secret. It may
+  send a direct `GET /oidc/authorize` or push without authenticating; PKCE `S256` is
+  required, `offline_access` is refused `invalid_request`, and a token request that
+  presents a secret is refused `invalid_client`. It receives an ID token naming itself
+  and an access token naming its audience (or itself), never a refresh token. Its
+  access token lives `oidc.publicapplication.accesstoken.lifetime` (default `PT15M`,
+  at most `PT1H`), and a signing key's overlap follows the longer of the two
+  lifetimes. Discovery now advertises `require_pushed_authorization_requests: false`;
+  every other kind is still refused a direct request, and the conformance suite no
+  longer reports that member.
+- A recovery's approval is refused 403 `authz.role.notassignable` unless the approver
+  may hand out every role the account holds through a live allow grant, its own or a
+  group's, in the organization of that grant. It is judged before the step-up, writes
+  nothing and is recorded as a refusal; only a system administrator approves a system
+  administrator's recovery, and an account holding no role is approved as before.
 - A current member of an organization reads another current member's photo:
   `GET /organizations/{id}/members/{account}/photo` and `IAccounts.MemberPhotoAsync`,
   where every organization the colleague belongs to shows photos. It is served as the

@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Security;
@@ -40,6 +41,18 @@ public sealed class ProviderAndMailServer : IAsyncLifetime
     /// A client the mail server does not accept tokens of.
     /// </summary>
     public const string Another = "another-client";
+
+    /// <summary>
+    /// A public application registered with the client the mail server accepts as its
+    /// audience (D-252).
+    /// </summary>
+    public const string Webmail = "webmail";
+
+    /// <summary>
+    /// A public application registered with no audience, which the mail server lists
+    /// among its accepted audiences itself (D-252).
+    /// </summary>
+    public const string Pages = "account-pages";
 
     /// <summary>
     /// The interoperable scope the mail server grants access by.
@@ -103,9 +116,13 @@ public sealed class ProviderAndMailServer : IAsyncLifetime
             browser.Hold(name, value);
         }
 
+        // D-252: a public application presents no secret, at the push or the exchange.
+        bool holdsNone = Deployment.Clients.Registered
+            .Single(held => held.Client.ClientId == clientId).Client.Kind is OidcClientKind.PublicApplication;
+
         Answer pushed = await machine.PostAsync(
             "/oidc/par",
-            RelyingParty.Request(clientId, silent: true, RelyingParty.Destination, "openid email " + MailScope));
+            Sent(RelyingParty.Request(clientId, silent: true, RelyingParty.Destination, "openid email " + MailScope), holdsNone));
 
         Assert.Equal(StatusCodes.Status201Created, pushed.Status);
 
@@ -118,7 +135,7 @@ public sealed class ProviderAndMailServer : IAsyncLifetime
 
         Answer exchanged = await machine.PostAsync(
             "/oidc/token",
-            RelyingParty.Code(RelyingParty.Returned(authorized, "code"), clientId));
+            Sent(RelyingParty.Code(RelyingParty.Returned(authorized, "code"), clientId), holdsNone));
 
         Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
 
@@ -206,10 +223,27 @@ public sealed class ProviderAndMailServer : IAsyncLifetime
                 TestContext.Current.CancellationToken);
         }
 
+        foreach ((string clientId, string? audience) in new[] { (Webmail, (string?)Accepted), (Pages, null) })
+        {
+            await _deployment.Clients.AddAsync(
+                new OidcClient(
+                    clientId,
+                    clientId,
+                    OidcClientKind.PublicApplication,
+                    RelyingParty.Destination,
+                    ["openid", "email", MailScope])
+                {
+                    Audience = audience,
+                },
+                secret: null,
+                _deployment.Clock.GetUtcNow(),
+                TestContext.Current.CancellationToken);
+        }
+
         Flow.Prepare(_deployment);
         _signedIn = await Flow.SignedInAsync(_deployment);
 
-        _server = new StalwartServer(Issuer, _authority, [Accepted]);
+        _server = new StalwartServer(Issuer, _authority, [Accepted, Pages]);
         await _server.InitializeAsync();
     }
 
@@ -254,6 +288,10 @@ public sealed class ProviderAndMailServer : IAsyncLifetime
 
     // The provider's certificate for its host, issued by the authority, with its key, in
     // a form the web server can present on every platform.
+    // The fields as the client sends them: a public application's without the secret.
+    private static (string Name, string? Value)[] Sent((string Name, string? Value)[] fields, bool holdsNone) =>
+        holdsNone ? RelyingParty.With(fields, "client_secret", null) : fields;
+
     private static X509Certificate2 Presented(X509Certificate2 authority, ECDsa authorityKey)
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);

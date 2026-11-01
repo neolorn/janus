@@ -34,6 +34,17 @@ internal sealed class OidcClientConfiguration : IEntityTypeConfiguration<OidcCli
             table.HasCheckConstraint(
                 "ck_oidc_clients_previous",
                 "(previous_secret IS NULL) = (previous_secret_until IS NULL)");
+
+            // D-252: a public application holds no secret, every other kind holds one, and
+            // a secret is held only with the instant it was drawn.
+            table.HasCheckConstraint(
+                "ck_oidc_clients_secret",
+                "((kind = 'public-application') = (secret IS NULL)) AND ((secret IS NULL) = (secret_issued_at IS NULL))");
+
+            // D-252: further destinations and an audience are a public application's alone.
+            table.HasCheckConstraint(
+                "ck_oidc_clients_public",
+                "kind = 'public-application' OR (cardinality(other_redirects) = 0 AND audience IS NULL)");
         });
 
         builder.HasKey(client => client.ClientId).HasName("pk_oidc_clients");
@@ -46,6 +57,8 @@ internal sealed class OidcClientConfiguration : IEntityTypeConfiguration<OidcCli
             .HasConversion(new VocabularyConverter<OidcClientKind>());
 
         builder.Property(client => client.Redirect).HasColumnName("redirect");
+        builder.Property(client => client.OtherRedirects).HasColumnName("other_redirects").HasDefaultValueSql("'{}'");
+        builder.Property(client => client.Audience).HasColumnName("audience");
         builder.Property(client => client.Secret).HasColumnName("secret");
         builder.Property(client => client.SecretIssuedAt).HasColumnName("secret_issued_at");
         builder.Property(client => client.PreviousSecret).HasColumnName("previous_secret");

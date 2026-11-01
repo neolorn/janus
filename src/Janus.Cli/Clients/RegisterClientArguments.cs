@@ -10,14 +10,16 @@ namespace Janus.Cli.Clients;
 /// <summary>
 /// Reads what the <c>register-client</c> command is given: the client's identifier as
 /// <c>--client</c>, what the deployment calls it as <c>--name</c>, its kind as
-/// <c>--kind</c>, the one destination a code is returned to as <c>--redirect</c> and
-/// what it may ask for as <c>--scopes</c>, the scopes separated by spaces as a request
-/// carries them.
+/// <c>--kind</c>, each destination a code is returned to as <c>--redirect</c>, what it
+/// may ask for as <c>--scopes</c>, the scopes separated by spaces as a request carries
+/// them, and the client its tokens are for as <c>--audience</c>.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-OIDC-001 and API-REDIR-001, as entry 340 of the decisions pending
-/// review settles them. The secret is never an argument: it comes with the keys, so no
-/// process list shows it.
+/// Implements AUTH-OIDC-001, API-REDIR-001 and OPS-BOOT-001, as entry 340 of the
+/// decisions pending review and D-252 settle them. The secret is never an argument: it
+/// comes with the keys, so no process list shows it. <c>--redirect</c> is repeated for
+/// each return address and <c>--audience</c> may be left out; that more than one
+/// address and an audience are a public application's alone is the registry's to judge.
 /// </remarks>
 internal static class RegisterClientArguments
 {
@@ -33,10 +35,14 @@ internal static class RegisterClientArguments
 
     private const string Scopes = "scopes";
 
-    private static readonly string[] Members = [Client, Name, Kind, Redirect, Scopes];
+    private const string Audience = "audience";
+
+    private static readonly string[] Members = [Client, Name, Kind, Redirect, Scopes, Audience];
+
+    private static readonly string[] Required = [Client, Name, Kind, Redirect, Scopes];
 
     /// <summary>
-    /// The arguments the command takes (LIB-API-001), each required.
+    /// The arguments the command takes (LIB-API-001), each required but the audience.
     /// </summary>
     public static IReadOnlyList<CommandArgument> Declared { get; } =
     [
@@ -46,8 +52,9 @@ internal static class RegisterClientArguments
             Prefix + Kind,
             Required: true,
             "choice allowed=" + string.Join(',', Enum.GetValues<OidcClientKind>().Select(kind => WrittenName.Of(kind)).Order(StringComparer.Ordinal))),
-        new(Prefix + Redirect, Required: true, "url"),
+        new(Prefix + Redirect, Required: true, "url repeatable"),
         new(Prefix + Scopes, Required: true, "text-list separator=space"),
+        new(Prefix + Audience, Required: false, "text"),
     ];
 
     /// <summary>
@@ -56,7 +63,8 @@ internal static class RegisterClientArguments
     /// <param name="arguments">The arguments.</param>
     /// <returns>
     /// The client they describe, or the failure naming the argument that is missing,
-    /// unknown or repeated, or the kind that is not one of the two.
+    /// unknown or repeated where it is not <c>--redirect</c>, or the kind that is not
+    /// one of the three.
     /// </returns>
     /// <exception cref="ArgumentNullException">The arguments are absent.</exception>
     public static Result<OidcClient> Read(IReadOnlyList<string> arguments)
@@ -64,6 +72,7 @@ internal static class RegisterClientArguments
         ArgumentNullException.ThrowIfNull(arguments);
 
         var given = new Dictionary<string, string>(StringComparer.Ordinal);
+        var redirects = new List<string>();
 
         for (int at = 0; at < arguments.Count; at += 2)
         {
@@ -72,13 +81,19 @@ internal static class RegisterClientArguments
             if (!option.StartsWith(Prefix, StringComparison.Ordinal)
                 || at + 1 == arguments.Count
                 || !Members.Contains(option[Prefix.Length..], StringComparer.Ordinal)
-                || !given.TryAdd(option[Prefix.Length..], arguments[at + 1]))
+                || (option[Prefix.Length..] is not Redirect && !given.TryAdd(option[Prefix.Length..], arguments[at + 1])))
             {
                 return Result.Failure<OidcClient>(Malformed(option));
             }
+
+            if (option[Prefix.Length..] is Redirect)
+            {
+                redirects.Add(arguments[at + 1]);
+                given[Redirect] = redirects[0];
+            }
         }
 
-        foreach (string member in Members)
+        foreach (string member in Required)
         {
             if (!given.ContainsKey(member))
             {
@@ -99,8 +114,12 @@ internal static class RegisterClientArguments
             given[Client],
             given[Name],
             named,
-            given[Redirect],
-            given[Scopes].Split(' ')));
+            redirects[0],
+            given[Scopes].Split(' '))
+        {
+            OtherRedirects = [.. redirects.Skip(1)],
+            Audience = given.GetValueOrDefault(Audience),
+        });
     }
 
     private static Error Malformed(string member) =>

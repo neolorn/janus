@@ -20,7 +20,7 @@ namespace Janus.Hosting.Tests.Oidc;
 public sealed class MailServerTokensAgainstStalwartTests(ProviderAndMailServer pair) : IClassFixture<ProviderAndMailServer>
 {
     // The criteria the server decides against the provider (INT-MAIL-004 AC4).
-    private static readonly string[] Decided = ["INT_MAIL_004_AC1_", "INT_MAIL_004_AC2_", "INT_MAIL_004_AC3_"];
+    private static readonly string[] Decided = ["INT_MAIL_004_AC1_", "INT_MAIL_004_AC2_", "INT_MAIL_004_AC3_", "INT_MAIL_004_AC5_"];
 
     /// <summary>
     /// INT-MAIL-004 AC1: the server accepts a person's access token issued to the client
@@ -81,7 +81,31 @@ public sealed class MailServerTokensAgainstStalwartTests(ProviderAndMailServer p
     }
 
     /// <summary>
-    /// INT-MAIL-004 AC4: criteria 1 to 3 each have their test here, against a server whose
+    /// INT-MAIL-004 AC5 (D-252): the server accepts a public application's access token
+    /// carrying the mail scope, whether its audience is the client the server accepts or,
+    /// with none registered, the application itself, which the server lists.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_004_AC5_TheServerAcceptsAPublicApplicationsTokenForAnAudienceItNamesAsync()
+    {
+        string named = await pair.TokenAsync(ProviderAndMailServer.Webmail);
+        string own = await pair.TokenAsync(ProviderAndMailServer.Pages);
+
+        HttpStatusCode namedAnswered = await pair.Server.PresentedAsync(named);
+        HttpStatusCode ownAnswered = await pair.Server.PresentedAsync(own);
+
+        Assert.Equal(
+            (ProviderAndMailServer.Accepted, ProviderAndMailServer.Pages),
+            (MailServerAdapter.Claims(named).GetProperty("aud").GetString(), MailServerAdapter.Claims(own).GetProperty("aud").GetString()));
+        Assert.All(
+            new[] { named, own },
+            token => Assert.Contains(ProviderAndMailServer.MailScope, MailServerAdapter.Claims(token).GetProperty("scope").GetString()!.Split(' ')));
+        Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (namedAnswered, ownAnswered));
+    }
+
+    /// <summary>
+    /// INT-MAIL-004 AC4: criteria 1 to 3 each have their test here, as criterion 5 does, against a server whose
     /// image is named by digest and which started as release 1.0, holding the directory
     /// INT-MAIL-004 states as it reads it back and authenticating by it, the directory
     /// naming the issuer of a provider on a real port.
@@ -107,10 +131,11 @@ public sealed class MailServerTokensAgainstStalwartTests(ProviderAndMailServer p
         Assert.Equal(new Uri(pair.Issuer).Port, pair.Port);
         Assert.Equal(pair.Issuer, directory.GetProperty("issuerUrl").GetString());
         Assert.Equal(
-            [ProviderAndMailServer.Accepted],
+            [ProviderAndMailServer.Pages, ProviderAndMailServer.Accepted],
             directory.GetProperty("acceptedAudiences").EnumerateObject()
                 .Where(audience => audience.Value.GetBoolean())
-                .Select(audience => audience.Name));
+                .Select(audience => audience.Name)
+                .Order(StringComparer.Ordinal));
         Assert.False(directory.GetProperty("skipAudienceValidation").GetBoolean());
         Assert.Equal("none", directory.GetProperty("opaqueTokenValidation").GetString());
         Assert.Equal("reject", directory.GetProperty("unscopedTokens").GetString());

@@ -702,13 +702,17 @@ table oidc_clients
   column name text not null
   column kind text not null
   column redirect text not null
-  column secret bytea not null
+  column secret bytea
   column scopes text[] not null
   column previous_secret bytea
   column previous_secret_until timestamp with time zone
-  column secret_issued_at timestamp with time zone not null
-  constraint ck_oidc_clients_kind CHECK ((kind = ANY (ARRAY['browser-application'::text, 'protocol'::text])))
+  column secret_issued_at timestamp with time zone
+  column audience text
+  column other_redirects text[] not null default '{}'::text[]
+  constraint ck_oidc_clients_kind CHECK ((kind = ANY (ARRAY['browser-application'::text, 'protocol'::text, 'public-application'::text])))
   constraint ck_oidc_clients_previous CHECK (((previous_secret IS NULL) = (previous_secret_until IS NULL)))
+  constraint ck_oidc_clients_public CHECK (((kind = 'public-application'::text) OR ((cardinality(other_redirects) = 0) AND (audience IS NULL))))
+  constraint ck_oidc_clients_secret CHECK ((((kind = 'public-application'::text) = (secret IS NULL)) AND ((secret IS NULL) = (secret_issued_at IS NULL))))
   constraint pk_oidc_clients PRIMARY KEY (client_id)
 table oidc_scopes
   column id uuid not null

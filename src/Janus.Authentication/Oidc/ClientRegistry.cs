@@ -22,7 +22,9 @@ namespace Janus.Authentication.Oidc;
 /// settles them. No person chooses a secret: a first registration draws one and holds
 /// it wrapped, and registering a client the registry holds changes its name, kind,
 /// destination and scopes and leaves its secret as it stands. The secret rotates
-/// without a person (<see cref="RegisteredSecrets"/>).
+/// without a person (<see cref="RegisteredSecrets"/>). A public application holds no
+/// secret, so none is drawn for it, and a registered client is not moved between it and
+/// a kind that holds one (D-252).
 /// </remarks>
 internal sealed class ClientRegistry(
     IOidcClientStore clients,
@@ -31,8 +33,6 @@ internal sealed class ClientRegistry(
     RandomNumberGenerator randomness,
     TimeProvider time)
 {
-    private const string Redirect = "redirect";
-
     /// <summary>
     /// The principal a registration from the server is recorded under: the command
     /// cannot know which person at the server runs it.
@@ -57,17 +57,28 @@ internal sealed class ClientRegistry(
 
         if (Unregistrable(client) is string member)
         {
-            // API-REDIR-001 AC3: a return address is refused as startup refuses it, so
-            // nothing registered here stops the next start.
-            return Result.Failure(string.Equals(member, Redirect, StringComparison.Ordinal)
-                ? Error.From(
-                    ErrorCodes.StartupRedirectClient,
-                    "client",
-                    JsonSerializer.SerializeToElement(client.ClientId))
-                : Error.From(
-                    ErrorCodes.RequestMalformed,
-                    "member",
-                    JsonSerializer.SerializeToElement(member)));
+            return Result.Failure(Error.From(
+                ErrorCodes.RequestMalformed,
+                "member",
+                JsonSerializer.SerializeToElement(member)));
+        }
+
+        // API-REDIR-001 AC3: a return address is refused as startup refuses it, so
+        // nothing registered here stops the next start.
+        if (!RedirectValidation.Registered(client).All(RedirectValidation.Origin))
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.StartupRedirectClient,
+                "client",
+                JsonSerializer.SerializeToElement(client.ClientId)));
+        }
+
+        if (client.Scopes.Count is 0 || client.Scopes.Any(Blank))
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.RequestMalformed,
+                "member",
+                JsonSerializer.SerializeToElement("scopes")));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -78,11 +89,26 @@ internal sealed class ClientRegistry(
             return Result.Failure(notBegun);
         }
 
-        bool changed = await clients.FindAsync(client.ClientId, cancellationToken).ConfigureAwait(false) is not null;
+        OidcClient? held = await clients.FindAsync(client.ClientId, cancellationToken).ConfigureAwait(false);
+        bool changed = held is not null;
+
+        // D-252: a public application holds no secret and every other kind holds one, so
+        // a change across that line would leave a secret where none belongs or none where
+        // one does.
+        if (held is not null && Public(held) != Public(client))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("kind")));
+        }
 
         if (changed)
         {
             await clients.RecordAsync(client, cancellationToken).ConfigureAwait(false);
+        }
+        else if (Public(client))
+        {
+            await clients.AddAsync(client, secret: null, now, cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -111,13 +137,17 @@ internal sealed class ClientRegistry(
         return Result.Success();
     }
 
-    // The member a client cannot be registered with, or nothing where each can be.
+    // The member a client cannot be registered with, of those judged before its return
+    // addresses, or nothing where each can be. A further return address and an
+    // audience are a public application's alone (D-252).
     private static string? Unregistrable(OidcClient client) =>
         Blank(client.ClientId) ? "client"
         : string.IsNullOrWhiteSpace(client.Name) ? "name"
-        : !RedirectValidation.Origin(client.Redirect) ? Redirect
-        : client.Scopes.Count is 0 || client.Scopes.Any(Blank) ? "scopes"
+        : !Public(client) && client.OtherRedirects.Count > 0 ? "redirect"
+        : client.Audience is not null && (!Public(client) || Blank(client.Audience)) ? "audience"
         : null;
+
+    private static bool Public(OidcClient client) => client.Kind is OidcClientKind.PublicApplication;
 
     private static bool Blank(string value) =>
         value.Length is 0 || value.Any(char.IsWhiteSpace);

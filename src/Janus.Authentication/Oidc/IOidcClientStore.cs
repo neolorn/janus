@@ -30,16 +30,17 @@ internal interface IOidcClientStore
 
     /// <summary>
     /// Registers a client with the first secret the library drew for it, which the
-    /// deployment does and a request never does.
+    /// deployment does and a request never does, or with none for a public application,
+    /// which holds no secret (D-252).
     /// </summary>
     /// <param name="client">The client.</param>
-    /// <param name="secret">Its secret as it presents it, which the store wraps.</param>
+    /// <param name="secret">Its secret as it presents it, which the store wraps, or nothing.</param>
     /// <param name="issuedAt">When the secret was drawn.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of registering it.</returns>
     ValueTask AddAsync(
         OidcClient client,
-        [NeverLogged] ReadOnlyMemory<byte> secret,
+        [NeverLogged] ReadOnlyMemory<byte>? secret,
         DateTimeOffset issuedAt,
         CancellationToken cancellationToken);
 

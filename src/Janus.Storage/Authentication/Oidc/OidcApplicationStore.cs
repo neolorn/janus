@@ -73,7 +73,9 @@ internal sealed class OidcApplicationStore(StoreContext context)
     public IAsyncEnumerable<OidcClientRecord> FindByRedirectUriAsync(
         string uri,
         CancellationToken cancellationToken) =>
-        context.OidcClients.Where(client => client.Redirect == uri).AsAsyncEnumerable();
+        context.OidcClients
+            .Where(client => client.Redirect == uri || client.OtherRedirects.Contains(uri))
+            .AsAsyncEnumerable();
 
     /// <inheritdoc/>
     public ValueTask<string?> GetApplicationTypeAsync(
@@ -122,10 +124,17 @@ internal sealed class OidcApplicationStore(StoreContext context)
     /// <inheritdoc/>
     public ValueTask<string?> GetClientTypeAsync(
         OidcClientRecord application,
-        CancellationToken cancellationToken) =>
-        // 09 section 9: both kinds hold a secret. A browser application's own layer is
-        // a confidential client of the provider exactly as a protocol client is.
-        ValueTask.FromResult<string?>(OpenIddictConstants.ClientTypes.Confidential);
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(application);
+
+        // 09 section 9: a browser application's own layer is a confidential client of
+        // the provider exactly as a protocol client is; a public application holds no
+        // secret, so one it presents is refused `invalid_client` (D-252).
+        return ValueTask.FromResult<string?>(application.Kind is OidcClientKind.PublicApplication
+            ? OpenIddictConstants.ClientTypes.Public
+            : OpenIddictConstants.ClientTypes.Confidential);
+    }
 
     /// <inheritdoc/>
     public ValueTask<string?> GetConsentTypeAsync(
@@ -174,7 +183,8 @@ internal sealed class OidcApplicationStore(StoreContext context)
 
         ImmutableArray<string>.Builder permitted = ImmutableArray.CreateBuilder<string>();
 
-        // AUTH-OIDC-006 AC2: every client pushes its authorization request first.
+        // AUTH-OIDC-006 AC2: every client may push its authorization request, and which
+        // must is each registration's requirement (D-252).
         permitted.Add(OpenIddictConstants.Permissions.Endpoints.PushedAuthorization);
         permitted.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
         permitted.Add(OpenIddictConstants.Permissions.Endpoints.Token);
@@ -218,20 +228,28 @@ internal sealed class OidcApplicationStore(StoreContext context)
     {
         ArgumentNullException.ThrowIfNull(application);
 
-        // API-REDIR-001: one exact destination, matched as one string and never as a
-        // prefix or a pattern.
-        return ValueTask.FromResult(ImmutableArray.Create(application.Redirect));
+        // API-REDIR-001: exact destinations, each matched as one string and never as a
+        // prefix or a pattern; one for every kind save a public application (D-252).
+        return ValueTask.FromResult(ImmutableArray.Create([application.Redirect, .. application.OtherRedirects]));
     }
 
     /// <inheritdoc/>
     public ValueTask<ImmutableArray<string>> GetRequirementsAsync(
         OidcClientRecord application,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(application);
+
         // AUTH-SESS-012 AC4: every client proves the verifier, so the requirement is
-        // the client's own and not only the server's.
-        ValueTask.FromResult(
-            ImmutableArray.Create(
-                OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange));
+        // the client's own and not only the server's. AUTH-OIDC-006 (D-252): every
+        // client save a public application pushes its authorization request first,
+        // which is its registration's requirement now that the server's is lifted.
+        return ValueTask.FromResult(application.Kind is OidcClientKind.PublicApplication
+            ? ImmutableArray.Create(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange)
+            : ImmutableArray.Create(
+                OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange,
+                OpenIddictConstants.Requirements.Features.PushedAuthorizationRequests));
+    }
 
     /// <inheritdoc/>
     public ValueTask<ImmutableDictionary<string, string>> GetSettingsAsync(

@@ -28,6 +28,10 @@ public sealed class SigningKeysTests : IAsyncDisposable
 
     private static readonly TimeSpan Second = TimeSpan.FromSeconds(1);
 
+    // AUTH-KEY-001 (D-252): the greater of the two access-token lifetimes by default,
+    // a public application's, plus 5 minutes.
+    private static readonly TimeSpan DefaultOverlap = TimeSpan.FromMinutes(20);
+
     private readonly SigningKeyStoreInMemory _keys = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly FixedClock _clock = new(Noon);
@@ -215,12 +219,39 @@ public sealed class SigningKeysTests : IAsyncDisposable
         string first = KeyId(await _process.SigningAsync(accessToken: true));
 
         await RotatedAsync(_process, _clock);
-        _clock.Advance(TimeSpan.FromMinutes(15));
+        _clock.Advance(DefaultOverlap);
 
         SigningKeySet set = await _process.ReadAsync();
 
         Assert.DoesNotContain(first, Published(set));
         Assert.Contains(set.Keys, held => held.Key.KeyId == first);
+    }
+
+    /// <summary>
+    /// AUTH-KEY-001 AC9 (D-252): with a public application's access-token lifetime longer
+    /// than every other client's, a key that signed under it stays published for that
+    /// lifetime plus 5 minutes after it is replaced, so a token it signed just before
+    /// still validates at its expiry.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_KEY_001_AC9_APublicApplicationsLongerLifetimeLengthensTheOverlapAsync()
+    {
+        _configuration.Set(Settings.OidcAccessTokenLifetime, TimeSpan.FromMinutes(10));
+        _configuration.Set(Settings.OidcPublicApplicationAccessTokenLifetime, TimeSpan.FromMinutes(40));
+
+        string first = KeyId(await _process.SigningAsync(accessToken: true));
+
+        await RotatedAsync(_process, _clock);
+        _clock.Advance(TimeSpan.FromMinutes(45) - Second);
+
+        IReadOnlyList<string> within = Published(await _process.ReadAsync());
+
+        _clock.Advance(Second);
+
+        Assert.Equal(TimeSpan.FromMinutes(40), _keys.Held(first)!.LongestLifetime);
+        Assert.Contains(first, within);
+        Assert.DoesNotContain(first, Published(await _process.ReadAsync()));
     }
 
     /// <summary>
@@ -298,7 +329,7 @@ public sealed class SigningKeysTests : IAsyncDisposable
 
         _ = await _process.SigningAsync(accessToken: true);
         await RotatedAsync(_process, _clock);
-        _clock.Advance(TimeSpan.FromMinutes(15) - Second);
+        _clock.Advance(DefaultOverlap - Second);
 
         SigningKeySet before = await _process.ReadAsync();
 
@@ -329,7 +360,7 @@ public sealed class SigningKeysTests : IAsyncDisposable
         byte[] signature = ((ECDsaSecurityKey)previous.Key).ECDsa.SignData(payload, HashAlgorithmName.SHA256);
 
         await RotatedAsync(_process, _clock);
-        _clock.Advance(TimeSpan.FromMinutes(15));
+        _clock.Advance(DefaultOverlap);
 
         HeldSigningKey kept = (await _process.ReadAsync()).Keys.Single(held => held.Key.KeyId == KeyId(previous));
 

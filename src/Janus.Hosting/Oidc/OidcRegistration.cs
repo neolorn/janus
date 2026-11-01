@@ -99,7 +99,9 @@ internal static class OidcRegistration
                 // AUTH-OIDC-006 AC2: every authorization request is pushed over the
                 // back channel first, so the browser carries a reference and none of
                 // the parameters, and the reference lapses a minute after it is issued.
-                _ = options.RequirePushedAuthorizationRequests();
+                // The requirement is each client's registration's (RFC 9126 section 6):
+                // a public application alone may send its request directly, so the
+                // server's own requirement is lifted and discovery says so (D-252).
                 _ = options.Configure(server => server.RequestTokenLifetime = PushedRequestLifetime);
                 _ = options.RegisterScopes(
                     OpenIddictConstants.Scopes.OpenId,

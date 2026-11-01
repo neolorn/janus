@@ -56,8 +56,38 @@ internal sealed class OidcService(
     /// revoked or has reached either of its expiries: no token is minted from a record
     /// that no longer answers.
     /// </returns>
-    public async ValueTask<Result<MintedSession>> MintAsync(
+    public ValueTask<Result<MintedSession>> MintAsync(
         SessionId session,
+        CancellationToken cancellationToken) =>
+        MintAsync(session, Settings.OidcAccessTokenLifetime, cancellationToken);
+
+    /// <summary>
+    /// What a token minted from a session record for a client of a kind may carry and
+    /// how long it may last: a public application's access token lives
+    /// <c>oidc.publicapplication.accesstoken.lifetime</c>, every other client's
+    /// <c>oidc.accesstoken.lifetime</c> (AUTH-OIDC-004, D-252).
+    /// </summary>
+    /// <param name="session">The record the token stands on.</param>
+    /// <param name="kind">The kind of client it is minted for.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// What to mint from, or <c>auth.session.expired</c> where the record no longer
+    /// answers.
+    /// </returns>
+    public ValueTask<Result<MintedSession>> MintAsync(
+        SessionId session,
+        OidcClientKind kind,
+        CancellationToken cancellationToken) =>
+        MintAsync(
+            session,
+            kind is OidcClientKind.PublicApplication
+                ? Settings.OidcPublicApplicationAccessTokenLifetime
+                : Settings.OidcAccessTokenLifetime,
+            cancellationToken);
+
+    private async ValueTask<Result<MintedSession>> MintAsync(
+        SessionId session,
+        DurationSetting lifetimeOf,
         CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
@@ -76,7 +106,7 @@ internal sealed class OidcService(
         Error? failure = null;
 
         TimeSpan lifetime = (await configuration
-                .ReadAsync(Settings.OidcAccessTokenLifetime, cancellationToken).ConfigureAwait(false))
+                .ReadAsync(lifetimeOf, cancellationToken).ConfigureAwait(false))
             .Match(read => read, error => Withheld<TimeSpan>(error, ref failure));
 
         return failure is Error refusal

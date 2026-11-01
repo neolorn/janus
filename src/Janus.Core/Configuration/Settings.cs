@@ -853,6 +853,18 @@ public static class Settings
             ceiling: "PT1H",
             loosening: SettingDirection.Increase);
 
+    /// <summary>
+    /// How long the access token a public application receives lives; on expiry it
+    /// starts a new authorization, no refresh token being issued (D-252).
+    /// </summary>
+    public static DurationSetting OidcPublicApplicationAccessTokenLifetime { get; } =
+        new(
+            "oidc.publicapplication.accesstoken.lifetime",
+            SettingScope.Runtime,
+            "PT15M",
+            ceiling: "PT1H",
+            loosening: SettingDirection.Increase);
+
     /// <summary>How long an authorization code lives.</summary>
     public static DurationSetting OidcCodeLifetime { get; } =
         new("oidc.code.lifetime", SettingScope.Runtime, "PT60S", ceiling: "PT10M");
@@ -1053,6 +1065,7 @@ public static class Settings
         HostingCrossBorderBasis,
         LegalGoverningLanguage,
         OidcAccessTokenLifetime,
+        OidcPublicApplicationAccessTokenLifetime,
         OidcCodeLifetime,
         OidcContinuationLifetime,
         RedirectDefaultClient,

@@ -34,8 +34,9 @@ public sealed class SigningKeyRotationTests
 
     private static readonly TimeSpan Lead = TimeSpan.FromMinutes(5);
 
-    // The access-token lifetime, 10 minutes by default, and the margin of 5.
-    private static readonly TimeSpan Overlap = TimeSpan.FromMinutes(15);
+    // The longer of the two access-token lifetimes, a public application's 15 minutes
+    // by default, and the margin of 5 (D-252).
+    private static readonly TimeSpan Overlap = TimeSpan.FromMinutes(20);
 
     private static readonly TimeSpan Second = TimeSpan.FromSeconds(1);
 

@@ -118,7 +118,7 @@ public sealed class ClientSecretLifecycleTests
         Assert.Equal(StatusCodes.Status401Unauthorized, after.Status);
         Assert.Null(removed.Previous);
         Assert.Null(removed.PreviousUntil);
-        Assert.Equal(replacing, Encoding.UTF8.GetString(removed.Secret));
+        Assert.Equal(replacing, Encoding.UTF8.GetString(removed.Secret!));
         Assert.Equal(StatusCodes.Status201Created, (await PushedAsync(deployment, replacing)).Status);
     }
 

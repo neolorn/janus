@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -118,7 +119,7 @@ public sealed class RegisterClientTests(BootstrappedDeployment deployment) : ICl
     }
 
     /// <summary>
-    /// AUTH-OIDC-001: a kind that is not one of the two, an argument the command does not
+    /// AUTH-OIDC-001: a kind that is not one of the three, an argument the command does not
     /// take and one it needs but was not given are each refused by name before the
     /// database is reached.
     /// </summary>
@@ -190,6 +191,61 @@ public sealed class RegisterClientTests(BootstrappedDeployment deployment) : ICl
             0,
             await connection.ExecuteScalarAsync<int>(
                 "SELECT count(*)::int FROM identity.oidc_clients WHERE client_id = 'unheld'"));
+    }
+
+    /// <summary>
+    /// OPS-BOOT-001 AC13, AUTH-OIDC-001 (D-252): <c>register-client --kind
+    /// public-application</c> registers a client with every <c>--redirect</c> given and
+    /// the <c>--audience</c> named, or none where none is, and generates no secret for it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC13_APublicApplicationIsRegisteredWithEveryAddressAndNoSecretAsync()
+    {
+        Invocation named = await RegisteredAsync(
+        [
+            .. Arguments("webmail", "public-application", "https://webmail.example.test/callback"),
+            "--redirect", "http://127.0.0.1:8080/callback",
+            "--audience", "mail",
+        ]);
+        Invocation own = await RegisteredAsync(Arguments("account-pages", "public-application", "https://pages.example.test/callback"));
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        IEnumerable<(string Client, string Kind, string Redirect, string[] Others, string? Audience, bool Secret, bool IssuedAt)> held =
+            await connection.QueryAsync<(string, string, string, string[], string?, bool, bool)>(
+                """
+                SELECT client_id, kind, redirect, other_redirects, audience, secret IS NOT NULL, secret_issued_at IS NOT NULL
+                FROM identity.oidc_clients WHERE client_id IN ('webmail', 'account-pages') ORDER BY client_id
+                """);
+
+        Assert.Equal((0, 0), (named.ExitCode, own.ExitCode));
+        Assert.Equal(
+            [
+                ("account-pages", "public-application", "https://pages.example.test/callback", string.Empty, (string?)null, false, false),
+                ("webmail", "public-application", "https://webmail.example.test/callback", "http://127.0.0.1:8080/callback", "mail", false, false),
+            ],
+            held.Select(row => (row.Client, row.Kind, row.Redirect, string.Join(' ', row.Others), row.Audience, row.Secret, row.IssuedAt)));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 (D-252): a further return address is a public application's alone,
+    /// so a protocol client given two is refused naming the address, and nothing is
+    /// registered.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_AFurtherAddressForAnotherKindIsRefusedAsync()
+    {
+        Invocation run = await RegisteredAsync(
+            [.. Arguments("doubled", "protocol", Redirect), "--redirect", "https://mail.example.test/other"]);
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(("api.request.malformed", "redirect"), Refusal(run));
+        Assert.Equal(
+            0,
+            await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.oidc_clients WHERE client_id = 'doubled'"));
     }
 
     private static IReadOnlyList<string> Arguments(string client, string kind, string redirect) =>

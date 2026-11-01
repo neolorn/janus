@@ -333,6 +333,50 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-005 AC11, AUTH-RECOV-002 AC9 (D-251): a recovery's approval is judged
+    /// over the grants the deployment holds as handing out every role the account holds:
+    /// an approver who may hand out the account's role reaches it, as every approver
+    /// reaches an account holding no role; one who may not hand out a role the account
+    /// holds through a group is refused `authz.role.notassignable`, recorded as a
+    /// refusal; and an account holding `system:administer` is reached by a system
+    /// administrator alone.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC11_ARecoverysApprovalReachesOnlyTheRolesTheApproverHandsOutAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case held = await CaseAsync();
+        Deployment deployment = held.Deployment;
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        RoleName unlisted = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        RoleName administering = await deployment.RoleAsync([Permissions.SystemAdminister], cancellationToken);
+        SubjectId listed = await deployment.AccountAsync(cancellationToken);
+        SubjectId bare = await deployment.AccountAsync(cancellationToken);
+        SubjectId grouped = await deployment.AccountAsync(cancellationToken);
+        SubjectId administrator = await deployment.AccountAsync(cancellationToken);
+        SubjectId approver = await deployment.AccountAsync(cancellationToken);
+        GroupId group = await deployment.GroupAsync(cancellationToken);
+
+        await deployment.GrantAsync(GrantSubject.Of(listed), held.Listed, null, false, null, null, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(group), unlisted, null, false, null, null, cancellationToken);
+        await deployment.JoinAsync(group, GrantSubject.Of(grouped), cancellationToken);
+        await deployment.MemberAsync(administrator, administrative, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(administrator), administering, null, false, null, administrative, cancellationToken);
+        await deployment.MemberAsync(approver, administrative, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(approver), administering, null, false, null, administrative, cancellationToken);
+
+        int refusals = await RefusalsAsync(held.Actor);
+
+        Assert.Null(await ReachedAsync(held.Actor, listed));
+        Assert.Null(await ReachedAsync(held.Actor, bare));
+        Assert.Equal(ErrorCodes.RoleNotAssignable, await ReachedAsync(held.Actor, grouped));
+        Assert.Equal(ErrorCodes.RoleNotAssignable, await ReachedAsync(held.Actor, administrator));
+        Assert.Equal(refusals + 2, await RefusalsAsync(held.Actor));
+        Assert.Null(await ReachedAsync(approver, administrator));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-005 AC6: an actor holding <c>system:administer</c> in the
     /// administrative organization hands out a role no role of its lists, to itself
     /// included, and defines a role carrying a permission its grants do not admit and
@@ -540,6 +584,16 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
             session,
             new GrantRequest(holder, role, on ?? Whole(held.Deployment), deny, ExpiresAt: null, "Handed out."),
             TestContext.Current.CancellationToken);
+    }
+
+    private async Task<ErrorCode?> ReachedAsync(SubjectId approver, SubjectId subject)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider
+                .GetRequiredService<Janus.Authentication.Recovery.IApproverReach>()
+                .RefusedAsync(AccessContext.Of(approver), subject, TestContext.Current.CancellationToken))
+            ?.Code;
     }
 
     private async Task<Result> RevokedAsync(Case held, GrantId grant)
