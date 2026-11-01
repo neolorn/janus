@@ -688,7 +688,7 @@ internal static class AuthenticationEndpoints
                 StatusCodes.Status200OK);
         }
 
-        return await CarriedAsync(signedIn, cookies, contacts, configuration, time, context, cancellationToken)
+        return await CarriedAsync(signedIn, cookies, contacts, configuration, time, context, cancellationToken, landed.Handle)
             .ConfigureAwait(false);
     }
 
@@ -730,6 +730,7 @@ internal static class AuthenticationEndpoints
     // boundary, and each lasting cookie is written only where the step produced one.
     // BFF-CSRF-005a AC3 (D-206): the first contact the browser carried is ended where
     // a session is issued, rather than left beside it until its expiry.
+    // D-233, D-238: a pressed link's open answer carries the challenge's second handle.
     private static async Task<IResult> CarriedAsync(
         SignInOutcome outcome,
         BrowserSessionCookies cookies,
@@ -737,7 +738,8 @@ internal static class AuthenticationEndpoints
         IConfigurationStore configuration,
         TimeProvider time,
         HttpContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [NeverLogged] string? handle = null)
     {
         ArgumentNullException.ThrowIfNull(cookies);
         ArgumentNullException.ThrowIfNull(contacts);
@@ -785,7 +787,7 @@ internal static class AuthenticationEndpoints
         }
 
         return TypedResults.Json(
-            SignInProgressView.Of(outcome.Progress) with { ContinueTo = continueTo },
+            SignInProgressView.Of(outcome.Progress) with { ContinueTo = continueTo, ChallengeId = handle },
             AuthenticationJson.Default.SignInProgressView,
             contentType: null,
             StatusCodes.Status200OK);

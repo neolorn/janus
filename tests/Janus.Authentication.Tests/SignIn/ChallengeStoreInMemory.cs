@@ -9,7 +9,8 @@ namespace Janus.Authentication.Tests.SignIn;
 
 /// <summary>
 /// The sign-ins in progress, held in memory and keyed by what the caller's handle
-/// hashes to, as the table keys them.
+/// hashes to, as the table keys them, and found by the second handle a pressed link
+/// answered as by the first (D-238).
 /// </summary>
 internal sealed class ChallengeStoreInMemory : IChallengeStore
 {
@@ -17,7 +18,15 @@ internal sealed class ChallengeStoreInMemory : IChallengeStore
 
     /// <inheritdoc/>
     public ValueTask<Challenge?> FindAsync(byte[] fingerprint, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_challenges.GetValueOrDefault(Key(fingerprint)));
+        ValueTask.FromResult(
+            _challenges.GetValueOrDefault(Key(fingerprint))
+            ?? _challenges.Values.FirstOrDefault(challenge =>
+                challenge.LandingFingerprint is { } landing && landing.AsSpan().SequenceEqual(fingerprint)));
+
+    /// <summary>
+    /// What each sign-in in progress holds, as the table would show it.
+    /// </summary>
+    public IReadOnlyCollection<Challenge> Held => _challenges.Values;
 
     /// <summary>
     /// Whether another transaction removed the challenge while this one waited for its
@@ -28,7 +37,16 @@ internal sealed class ChallengeStoreInMemory : IChallengeStore
     /// <inheritdoc/>
     public ValueTask<Challenge?> FindForUpdateAsync(byte[] fingerprint, CancellationToken cancellationToken)
     {
-        if (RemovedMeanwhile)
+        if (RemovedMeanwhile && _challenges.GetValueOrDefault(Key(fingerprint)) is null)
+        {
+            foreach (Challenge landed in _challenges.Values
+                .Where(challenge => challenge.LandingFingerprint is { } landing && landing.AsSpan().SequenceEqual(fingerprint))
+                .ToList())
+            {
+                _challenges.Remove(Key(landed.Fingerprint));
+            }
+        }
+        else if (RemovedMeanwhile)
         {
             _challenges.Remove(Key(fingerprint));
         }

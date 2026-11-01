@@ -429,7 +429,7 @@ internal sealed class AuthenticationService(
             .ConfigureAwait(false))
         .Match(
             landed => Result.Success(
-                new SignInLanding(landed.Outcome?.Progress, landed.SameBrowser, landed.Code)),
+                new SignInLanding(landed.Outcome?.Progress, landed.SameBrowser, landed.Code, landed.Handle)),
             Result.Failure<SignInLanding>);
 
     /// <inheritdoc/>
@@ -1438,7 +1438,9 @@ internal sealed class AuthenticationService(
             return Result.Failure<LandedSignIn>(notCommitted);
         }
 
-        return (await SettleAsync(
+        Error? failure = null;
+
+        SignInOutcome settled = (await SettleAsync(
                     open,
                     held.Subject,
                     origin,
@@ -1449,9 +1451,50 @@ internal sealed class AuthenticationService(
                     trusted: null,
                     cancellationToken)
                 .ConfigureAwait(false))
+            .Match(outcome => outcome, error => Withheld<SignInOutcome>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<LandedSignIn>(failure);
+        }
+
+        // D-233, D-238: a press that leaves a second step or the new-browser code answers
+        // a second handle of the challenge, so the tab it landed in completes the sign-in.
+        if (settled.Progress.Status is not (SignInStatus.FactorRequired or SignInStatus.DeviceVerificationRequired))
+        {
+            return Result.Success(new LandedSignIn(settled, SameBrowser: true, Code: null));
+        }
+
+        return (await LandedHandleAsync(open, cancellationToken).ConfigureAwait(false))
             .Match(
-                outcome => Result.Success(new LandedSignIn(outcome, SameBrowser: true, Code: null)),
+                handle => Result.Success(new LandedSignIn(settled, SameBrowser: true, Code: null, handle)),
                 Result.Failure<LandedSignIn>);
+    }
+
+    // D-238: the second handle is drawn under the challenge's lock and only its
+    // fingerprint kept; a challenge ended meanwhile, through its first handle, takes none.
+    private async ValueTask<Result<string?>> LandedHandleAsync(Challenge open, CancellationToken cancellationToken)
+    {
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<string?>(notBegun);
+        }
+
+        if (await challenges.FindForUpdateAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false)
+            is not Challenge holding)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success<string?>(null);
+        }
+
+        OpaqueToken handle = holding.Land(randomness);
+
+        await challenges.RecordAsync(holding, cancellationToken).ConfigureAwait(false);
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Success<string?>(handle.Value), Result.Failure<string?>);
     }
 
     private static FactorProperties[] Properties(IReadOnlyCollection<Factor> presented) =>

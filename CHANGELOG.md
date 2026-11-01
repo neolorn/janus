@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A pressed sign-in link that leaves a second step or the new-browser code answers
+  `challengeId`, a second handle of the challenge drawn at the press and kept only as
+  its fingerprint, so the page the link landed on completes the sign-in itself; the
+  library call answers it as `SignInLanding.ChallengeId`. A second press of the link
+  answers none. `POST /auth/factor`, `POST /auth/device/verify` and
+  `POST /auth/device/resend` take either handle, and completing through one ends the
+  challenge for both.
 - The profile carries an optional `grammaticalGender`, `masculine` or `feminine`, so a
   host can address a person or name their job in the right grammatical form. The policy
   field `grammaticalGender` enables it: `false` in the system policy, and `true` in every

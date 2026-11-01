@@ -5058,6 +5058,69 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-003 AC7 (D-233, D-238): a press that leaves the new-browser code answers
+    /// a second handle of the challenge, kept only as its fingerprint, which resends the
+    /// code and completes the sign-in; a second press of the link answers none, and the
+    /// first handle then answers as for an ended challenge.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_003_AC7_APressThatLeavesTheCheckAnswersASecondHandleOnceAsync()
+    {
+        _ = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+
+        var browser = OpaqueToken.Draw(_randomness);
+        SignInChallenge began = await BeganAsync(Number, browser.Value);
+
+        _ = await Service.SendLinkAsync(Number, Language, Source, browser.Value, TestContext.Current.CancellationToken);
+
+        string token = _notifications.Texts[^1].Token();
+        SignInLanding pressed = (await PressedLinkAsync(browser.Value, token))
+            .Match(landing => landing, error => throw new InvalidOperationException(error.Code.ToString()));
+        Result<SignInLanding> again = await PressedLinkAsync(browser.Value, token);
+        string handle = pressed.ChallengeId!;
+        Challenge held = Assert.Single(_challenges.Held, challenge => challenge.LandingFingerprint is not null);
+
+        Assert.Equal(SignInStatus.DeviceVerificationRequired, pressed.SignedIn!.Status);
+        Assert.NotEqual(began.Challenge, handle);
+        Assert.Equal(OpaqueToken.Of(handle).Fingerprint(), held.LandingFingerprint);
+        Assert.Equal(began.Challenge.Length, handle.Length);
+        Assert.False(again.Match(_ => true, _ => false));
+        Assert.Null(Code(await ResentAsync(handle, browser.Value)));
+
+        SignInProgress completed = Reached(await VerifiedAsync(handle, Code()));
+
+        Assert.Equal(SignInStatus.Complete, completed.Status);
+        Assert.NotNull(Refused(await VerifiedAsync(began.Challenge, Code())));
+        Assert.Empty(_challenges.Held);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC7 (D-238): the sign-in completed through the handle it began with
+    /// ends the second handle too, which then answers as for an ended challenge.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_003_AC7_CompletingThroughTheFirstHandleEndsTheSecondAsync()
+    {
+        _ = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+
+        var browser = OpaqueToken.Draw(_randomness);
+        SignInChallenge began = await BeganAsync(Number, browser.Value);
+
+        _ = await Service.SendLinkAsync(Number, Language, Source, browser.Value, TestContext.Current.CancellationToken);
+
+        SignInLanding pressed = (await PressedLinkAsync(browser.Value, _notifications.Texts[^1].Token()))
+            .Match(landing => landing, error => throw new InvalidOperationException(error.Code.ToString()));
+        string code = Code();
+
+        Assert.Equal(SignInStatus.Complete, Reached(await VerifiedAsync(began.Challenge, code)).Status);
+        Assert.NotNull(Refused(await VerifiedAsync(pressed.ChallengeId!, code)));
+    }
+
+    /// <summary>
     /// AUTH-FACT-016 AC9 (D-224): where the email destination restriction refuses the
     /// check's code, the factor stays accepted and the sign-in held at the check; a
     /// resend while the restriction still refuses is refused as it was, and one after
@@ -7558,6 +7621,16 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     private static ErrorCode? Code(Result outcome) =>
         outcome.Match(() => (ErrorCode?)null, error => error.Code);
+
+    private ValueTask<Result<SignInLanding>> PressedLinkAsync(string browser, string token) =>
+        Service.LandAsync(
+            browser,
+            token,
+            Factor.PhoneLink,
+            press: true,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
 
     private ValueTask<Result> ResentAsync(string challenge, string? browser) =>
         Service.ResendDeviceCodeAsync(challenge, browser, Source, TestContext.Current.CancellationToken);

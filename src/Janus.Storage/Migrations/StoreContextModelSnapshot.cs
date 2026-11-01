@@ -2562,6 +2562,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("identifier");
 
+                b.Property<byte[]>("LandingHandle")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("landing_handle");
+
                 b.PrimitiveCollection<string[]>("Presented")
                     .IsRequired()
                     .HasColumnType("text[]")
@@ -2585,6 +2590,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_signin_challenges_expires_at");
 
+                b.HasIndex("LandingHandle")
+                    .IsUnique()
+                    .HasDatabaseName("ux_signin_challenges_landing_handle");
+
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_signin_challenges_subject");
 
@@ -2595,6 +2604,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_signin_challenges_handle", "octet_length(handle) = 32");
 
                         t.HasCheckConstraint("ck_signin_challenges_identifier", "identifier IS NULL OR octet_length(identifier) = 32");
+
+                        t.HasCheckConstraint("ck_signin_challenges_landing_handle", "landing_handle IS NULL OR octet_length(landing_handle) = 32");
 
                         t.HasCheckConstraint("ck_signin_challenges_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });

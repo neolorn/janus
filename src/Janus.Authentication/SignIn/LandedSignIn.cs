@@ -14,8 +14,16 @@ namespace Janus.Authentication.SignIn;
 /// <param name="Code">
 /// The code to type where the sign-in began, present only where it did not.
 /// </param>
+/// <param name="Handle">
+/// The second handle of the challenge, answered once where the press left a second step
+/// or the new-browser code (D-238).
+/// </param>
 /// <remarks>
 /// Implements AUTH-FACT-003 and REG-SESS-003. The contract method is this one without
 /// the secrets, because a caller in process has no cookie to write them to.
 /// </remarks>
-internal sealed record LandedSignIn(SignInOutcome? Outcome, bool SameBrowser, [property: NeverLogged] string? Code);
+internal sealed record LandedSignIn(
+    SignInOutcome? Outcome,
+    bool SameBrowser,
+    [property: NeverLogged] string? Code,
+    [property: NeverLogged] string? Handle = null);

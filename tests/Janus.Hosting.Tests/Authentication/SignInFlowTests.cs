@@ -237,6 +237,55 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-003 AC7 (D-233, D-238): a press that leaves the new-browser code answers
+    /// a second handle in <c>challengeId</c>, once, and the tab the link landed in
+    /// completes the sign-in with it alone; a second press answers none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_003_AC7_TheLandingTabCompletesTheSignInWithTheSecondHandleAsync()
+    {
+        await RegisteredAsync();
+
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "second@example.test");
+
+        var asking = new Browser(_deployment);
+
+        _ = await asking.SendAsync("GET", "/auth/session");
+
+        Answer asked = await asking.SendAsync("POST", "/auth/link", ("identifier", "second@example.test"));
+        string token = Flow.Token(_deployment, IdentifierKind.Email);
+
+        Answer pressed = await asking.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("factor", "emailLink"),
+            ("linkToken", token),
+            ("press", true));
+        Answer again = await asking.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("factor", "emailLink"),
+            ("linkToken", token),
+            ("press", true));
+        string handle = pressed.Text("challengeId");
+
+        Answer completed = await asking.SendAsync(
+            "POST",
+            "/auth/device/verify",
+            ("challengeId", handle),
+            ("code", Emailed()));
+
+        Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
+        Assert.Equal("deviceVerificationRequired", pressed.Text("status"));
+        Assert.NotEqual(asked.Text("challengeId"), handle);
+        Assert.False(again.Json().TryGetProperty("challengeId", out _));
+        Assert.Equal("complete", completed.Text("status"));
+        Assert.True(asking.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
     /// AUTH-FACT-016 AC9 (D-224 item 18): a resend while the email destination
     /// restriction stands is answered <c>auth.restriction.exceeded</c> with
     /// <c>retryAt</c>; one from a browser the held sign-in is not bound to is answered

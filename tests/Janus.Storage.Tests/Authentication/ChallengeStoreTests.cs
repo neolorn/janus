@@ -233,6 +233,54 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
     public void Dispose() => _randomness.Dispose();
 
     // A sign-in opened with an identifier from a browser, or from none.
+    /// <summary>
+    /// AUTH-FACT-003 AC7 (D-238): the second handle a press drew is held as its
+    /// fingerprint alone, finds the challenge as the first does, under its lock too, and
+    /// goes with the row when the challenge ends.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_003_AC7_TheSecondHandleIsHeldAsItsFingerprintAndFindsTheChallengeAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Challenge opened = Opened(RandomNumberGenerator.GetBytes(Fingerprint.Length), browser: null, Noon);
+        OpaqueToken handle;
+
+        await using (StoreContext writing = database.Context())
+        {
+            var challenges = new ChallengeStore(writing, Deployment.Fingerprints);
+
+            await challenges.AddAsync(opened, cancellationToken);
+            _ = await writing.SaveChangesAsync(cancellationToken);
+
+            handle = opened.Land(_randomness);
+            await challenges.RecordAsync(opened, cancellationToken);
+            _ = await writing.SaveChangesAsync(cancellationToken);
+        }
+
+        await using (StoreContext reading = database.Context())
+        {
+            Challenge found = Assert.IsType<Challenge>(
+                await new ChallengeStore(reading, Deployment.Fingerprints).FindAsync(handle.Fingerprint(), cancellationToken));
+
+            Assert.Equal(opened.Fingerprint, found.Fingerprint);
+        }
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            [handle.Fingerprint()],
+            await connection.QueryAsync<byte[]>(
+                "SELECT landing_handle FROM identity.signin_challenges WHERE handle = @Handle;",
+                new { Handle = opened.Fingerprint }));
+        Assert.True(await CompletedAsync(opened, handle.Fingerprint()));
+        Assert.Equal(
+            0,
+            await connection.QuerySingleAsync<int>(
+                "SELECT count(*)::int FROM identity.signin_challenges WHERE handle = @Handle OR landing_handle = @Landing;",
+                new { Handle = opened.Fingerprint, Landing = handle.Fingerprint() }));
+    }
+
     private Challenge Opened(byte[] identifier, byte[]? browser, DateTimeOffset at) =>
         Challenge.Open(
             OpaqueToken.Draw(_randomness),
@@ -246,7 +294,10 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
 
     // Each completion is its own request, holding the challenge and removing it as the
     // sign-in does around the session it issues.
-    private async Task<bool> CompletedAsync(Challenge opened)
+    private Task<bool> CompletedAsync(Challenge opened) => CompletedAsync(opened, opened.Fingerprint);
+
+    // A completion through the handle given, the first or the second.
+    private async Task<bool> CompletedAsync(Challenge opened, byte[] through)
     {
         await using StoreContext context = database.Context();
         await using var work = new UnitOfWork(context);
@@ -254,7 +305,7 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
 
         Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
-        bool held = await challenges.FindForUpdateAsync(opened.Fingerprint, TestContext.Current.CancellationToken)
+        bool held = await challenges.FindForUpdateAsync(through, TestContext.Current.CancellationToken)
             is not null;
 
         if (held)

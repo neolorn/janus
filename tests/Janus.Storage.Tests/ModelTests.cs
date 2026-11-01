@@ -995,7 +995,8 @@ public sealed class ModelTests
             // and the keyed hash of the identifier it was opened with, with its version,
             // which a refused factor is counted against (AUTH-ABUSE-001); what the
             // pre-authentication session it is bound to hashes to, and when the
-            // new-device check held it (D-226).
+            // new-device check held it (D-226), and what the second handle a pressed link
+            // answered hashes to (D-238).
             "signin_challenges.browser",
             "signin_challenges.created_at",
             "signin_challenges.email",
@@ -1004,6 +1005,7 @@ public sealed class ModelTests
             "signin_challenges.handle",
             "signin_challenges.held_at",
             "signin_challenges.identifier",
+            "signin_challenges.landing_handle",
             "signin_challenges.presented",
             "signin_challenges.subject",
             "signin_challenges.webauthn",

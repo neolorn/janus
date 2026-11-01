@@ -3057,11 +3057,11 @@ Janus.Core.SignInLanding
 Janus.Core.SignInLanding.<Clone>$() -> Janus.Core.SignInLanding!
 Janus.Core.SignInLanding.Code.get -> string?
 Janus.Core.SignInLanding.Code.init -> void
-Janus.Core.SignInLanding.Deconstruct(out Janus.Core.SignInProgress? SignedIn, out bool SameBrowser, out string? Code) -> void
+Janus.Core.SignInLanding.Deconstruct(out Janus.Core.SignInProgress? SignedIn, out bool SameBrowser, out string? Code, out string? ChallengeId) -> void
 Janus.Core.SignInLanding.Equals(Janus.Core.SignInLanding? other) -> bool
 Janus.Core.SignInLanding.SameBrowser.get -> bool
 Janus.Core.SignInLanding.SameBrowser.init -> void
-Janus.Core.SignInLanding.SignInLanding(Janus.Core.SignInProgress? SignedIn, bool SameBrowser, string? Code) -> void
+Janus.Core.SignInLanding.SignInLanding(Janus.Core.SignInProgress? SignedIn, bool SameBrowser, string? Code, string? ChallengeId = null) -> void
 Janus.Core.SignInLanding.SignedIn.get -> Janus.Core.SignInProgress?
 Janus.Core.SignInLanding.SignedIn.init -> void
 Janus.Core.SignInProgress
@@ -5275,3 +5275,5 @@ Janus.Core.ProfileDetail.GrammaticalGender.init -> void
 Janus.Core.ProfileEdit.GrammaticalGender.get -> string?
 Janus.Core.ProfileEdit.GrammaticalGender.init -> void
 Janus.Core.GrammaticalGender
+Janus.Core.SignInLanding.ChallengeId.get -> string?
+Janus.Core.SignInLanding.ChallengeId.init -> void

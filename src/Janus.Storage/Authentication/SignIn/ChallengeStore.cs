@@ -32,8 +32,11 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
 
+        // D-238: a challenge is found by either of its handles.
         ChallengeRecord? record = await context.SignInChallenges
-            .FindAsync([fingerprint], cancellationToken)
+            .FirstOrDefaultAsync(
+                challenge => challenge.Handle == fingerprint || challenge.LandingHandle == fingerprint,
+                cancellationToken)
             .ConfigureAwait(false);
 
         return Read(record);
@@ -52,10 +55,13 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
             throw new InvalidOperationException("A sign-in's row is held only inside the operation's transaction.");
         }
 
-        bool tracked = context.SignInChallenges.Local.Any(record => CryptographicOperations.FixedTimeEquals(record.Handle, fingerprint));
+        bool tracked = context.SignInChallenges.Local.Any(record =>
+            CryptographicOperations.FixedTimeEquals(record.Handle, fingerprint)
+            || (record.LandingHandle is { } landing && CryptographicOperations.FixedTimeEquals(landing, fingerprint)));
 
         ChallengeRecord? held = (await context.SignInChallenges
-                .FromSql($"SELECT * FROM identity.signin_challenges WHERE handle = {fingerprint} FOR UPDATE")
+                .FromSql(
+                    $"SELECT * FROM identity.signin_challenges WHERE handle = {fingerprint} OR landing_handle = {fingerprint} FOR UPDATE")
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false))
             .SingleOrDefault();
@@ -102,6 +108,7 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
                 new ChallengeRecord
                 {
                     Handle = challenge.Fingerprint,
+                    LandingHandle = challenge.LandingFingerprint,
                     Subject = challenge.Subject,
                     Email = challenge.Email,
                     Identifier = challenge.Identifier,
@@ -127,6 +134,7 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The sign-in has no row to carry the change.");
 
+        record.LandingHandle = challenge.LandingFingerprint;
         record.ExpiresAt = challenge.ExpiresAt;
         record.HeldAt = challenge.HeldAt;
         record.Presented = Spellings(challenge);
@@ -167,7 +175,8 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
                 record.CreatedAt,
                 record.ExpiresAt,
                 record.HeldAt,
-                [.. record.Presented.Select(VocabularyConverter<Factor>.Read)]);
+                [.. record.Presented.Select(VocabularyConverter<Factor>.Read)],
+                record.LandingHandle);
 
     private static string[] Spellings(Challenge challenge) =>
         [.. challenge.Presented.Select(VocabularyConverter<Factor>.Write)];
