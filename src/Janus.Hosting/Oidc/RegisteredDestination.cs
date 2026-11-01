@@ -24,7 +24,7 @@ namespace Janus.Hosting.Oidc;
 /// <c>invalid_request</c>, no description and no reference (OAuth 2.1 section 2.3.5). A
 /// request naming none takes the registered one where the client holds one, and is
 /// refused where a public application holds several, since none is then the registered
-/// one (OAuth 2.1 section 2.3.2). It is judged where the request is
+/// one (RFC 6749 section 3.1.2.3). It is judged where the request is
 /// pushed, because every authorization request is (AUTH-OIDC-006 AC2) and the one the
 /// browser then carries holds only what was kept here.
 /// </remarks>
