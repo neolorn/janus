@@ -64,6 +64,7 @@ None.
 
 - Fast checks on every commit: the build with warnings as errors, the analysers and
   `dotnet format --verify-no-changes` are green.
-- Unit and contract tests before the push: 5232, green.
+- Unit and contract tests before the push, with main merged after round H9: 5262,
+  green.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
