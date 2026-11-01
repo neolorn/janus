@@ -20,6 +20,22 @@ against the public contract of LIB-API-001.
   `false`: it is no longer refused `config.policy.belowsystem`, and it is still a
   loosening that asks `system:administer` and the step-up. Members of that
   organization show photos; an account of no organization follows the system policy.
+- The `identity organization` command sets a business organization up from the server,
+  before any person can work: `--name`, `--policy` (a file holding the policy object
+  `PUT /admin/organizations/{id}/policy` takes, without `reason`) and `--reason`, with
+  `--multiplememberships true|false` optional. On a bootstrapped deployment it creates
+  the organization where none holds the name (compared on its comparison key), writes
+  its policy with the policy route's checks and codes, and writes
+  `organization.multiplememberships` where asked, in one transaction, each change
+  recorded under the system principal `organization` with the reason given, and prints
+  the organization's identifier. Run again it writes only what differs. A name two
+  organizations hold is refused `api.request.malformed` naming `name`, a policy file
+  that does not read or does not hold the policy object `api.request.malformed` naming
+  `policy`, a deployment not bootstrapped `authz.denied`, and a missing or empty reason
+  `config.change.reasonrequired`; nothing of a refused run is written. A policy that
+  loosens is written with no step-up and no `system:administer`. It writes no
+  grant and no membership, and never turns `photos` on, since it reads no host
+  declaration. `organization` is now a reserved principal name no host job may take.
 - `POST /auth/begin` takes `identifier` as optional, and `IAuthentication.BeginAsync`
   takes it as nullable: without one it opens a passkey challenge with no allow-list,
   answers `available` `["passkey"]`, and the passkey's user handle names the account at

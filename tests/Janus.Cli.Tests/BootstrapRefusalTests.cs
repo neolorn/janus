@@ -23,8 +23,14 @@ public sealed class BootstrapRefusalTests : System.IDisposable
 
     private readonly string _ledger = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
 
+    private readonly string _policy = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+
     /// <inheritdoc/>
-    public void Dispose() => File.Delete(_ledger);
+    public void Dispose()
+    {
+        File.Delete(_ledger);
+        File.Delete(_policy);
+    }
 
     /// <summary>
     /// OPS-BOOT-001 AC4: bootstrap without the governing language is refused, with the
@@ -333,12 +339,14 @@ public sealed class BootstrapRefusalTests : System.IDisposable
     [InlineData("configure")]
     [InlineData("replay-erasures")]
     [InlineData("register-client")]
+    [InlineData("organization")]
     public async Task OPS_SEC_001_AC4_EveryCommandRefusesAConnectionAbsentBlankOrNotAStringAsMalformedAsync(string command)
     {
         await File.WriteAllTextAsync(
             _ledger,
             $"2026-08-14T09:22:05Z {System.Guid.NewGuid():D} erasure-request\n",
             TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(_policy, "{}", TestContext.Current.CancellationToken);
 
         JsonObject absent = Invocation.Keys(Nowhere);
         Assert.True(absent.Remove("connection"));
@@ -393,6 +401,7 @@ public sealed class BootstrapRefusalTests : System.IDisposable
                 "--redirect", "https://shop.example.test/auth/signon/return",
                 "--scopes", "openid",
             ],
+            "organization" => [command, "--name", "Northwind Clinics", "--policy", _policy, "--reason", "Production is set up."],
             _ => [command],
         };
 }

@@ -89,6 +89,14 @@ internal sealed class OrganizationsInMemory(MembershipLookupInMemory memberships
     }
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<OrganizationStanding>> HoldNamedAsync(string name, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<OrganizationStanding>>(
+            [.. _held.Values
+                .Where(held => string.Equals(CanonicalForm.Of(held.Name), CanonicalForm.Of(name), StringComparison.Ordinal)
+                    && held.ErasedAt is null)
+                .OrderBy(held => held.Id.Value)]);
+
+    /// <inheritdoc/>
     public ValueTask CreateAsync(
         OrganizationId organization,
         string name,

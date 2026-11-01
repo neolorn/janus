@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -88,6 +89,38 @@ public sealed class CommandContractTests
         ];
 
         await AssertDeclaredAsync(Contract("register-client"), named);
+    }
+
+    /// <summary>
+    /// LIB-API-001 AC2: the arguments <c>organization</c> declares required are those it
+    /// refuses to read without, and the one it declares optional it reads without
+    /// (D-248).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_001_AC2_OrganizationRefusesToReadWithoutWhatItDeclaresRequiredAsync()
+    {
+        string policy = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+
+        try
+        {
+            await File.WriteAllTextAsync(policy, "{}", TestContext.Current.CancellationToken);
+
+            IReadOnlyList<string> named =
+            [
+                "organization",
+                "--name", "Northwind Clinics",
+                "--policy", policy,
+                "--reason", "Production is set up.",
+                "--multiplememberships", "true",
+            ];
+
+            await AssertDeclaredAsync(Contract("organization"), named);
+        }
+        finally
+        {
+            File.Delete(policy);
+        }
     }
 
     // Every argument is read, so the run reaches the document and is refused for the
