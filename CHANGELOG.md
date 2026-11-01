@@ -42,7 +42,9 @@ against the public contract of LIB-API-001.
   bootstrapped before its removal starts and gates every current action as before; a
   migration deletes those gates. A policy or override written through the API or the
   command-line tool names current actions only, and a retired name is refused as a
-  misspelled one is.
+  misspelled one is. The start logs one line at Information for each stored policy or
+  override that still names a retired action, naming the policy and the action; no other
+  read logs it.
 - An enrolment session opened for a lost mailbox replaces an email with
   `PUT /account/identifiers/{id}/replace` whatever `identifiers.email.max` is, the new
   address taking the replaced one's place, primary included. Outside that session the

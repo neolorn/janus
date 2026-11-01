@@ -315,6 +315,21 @@ public sealed class SettingWrittenFormTests
     }
 
     /// <summary>
+    /// Chapter 10 section 5a (D-238): the start names the retired actions a stored
+    /// policy or override gates, and none for one that gates only current actions or
+    /// states no gates at all.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_001_TheRetiredActionsAStoredPolicyNamesAreFound()
+    {
+        string current = Settings.PolicyDefault.Write(Settings.PolicyDefault.Default);
+
+        Assert.Equal(["alerting:destinations"], RetiredStepUpActions.NamedIn(Retiring(current)));
+        Assert.Empty(RetiredStepUpActions.NamedIn(current));
+        Assert.Empty(RetiredStepUpActions.NamedIn(Settings.OrganizationPolicy.Write(PolicyOverride.None)));
+    }
+
+    /// <summary>
     /// Chapter 10 section 5a (D-235): a stored gate naming an action neither current nor
     /// retired was written by nothing, so it is a damaged row and the read refuses it, in
     /// the system policy and in an override alike.

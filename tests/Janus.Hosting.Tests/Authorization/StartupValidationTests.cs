@@ -1037,15 +1037,17 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// Chapter 10 section 5a (D-235): a deployment bootstrapped before
+    /// Chapter 10 section 5a (D-235, D-238): a deployment bootstrapped before
     /// <c>alerting:destinations</c> was retired holds a system policy and an override
-    /// whose gates still name it. The deployment starts, every current action is gated
-    /// as it was, and the read writes nothing back.
+    /// whose gates still name it. The deployment starts, logging one line at Information
+    /// for each, naming the policy and the retired name; every current action is gated as
+    /// it was, a read after the start logs nothing, and no read writes anything back.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
     public async Task AUTH_STEP_001_ADeploymentWhosePoliciesNameARetiredActionStartsAsync()
     {
+        using var logs = new LogsInMemory();
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Policy system = Settings.PolicyDefault.Default;
         var gate = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
@@ -1064,9 +1066,18 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         try
         {
-            using IHost deployment = Deployed();
+            using IHost deployment = new HostBuilder()
+                .ConfigureServices(services => Declared(services).AddLogging(logging => logging.AddProvider(logs)))
+                .Build();
 
             await deployment.StartAsync(cancellationToken);
+
+            string[] started = [.. logs.Lines.Where(line => line.Contains("names the retired step-up actions", StringComparison.Ordinal))];
+
+            Assert.Equal(2, started.Length);
+            Assert.Single(started, line => line.Contains("Policy=" + Settings.PolicyDefault.Key, StringComparison.Ordinal));
+            Assert.Single(started, line => line.Contains("Policy=" + Showing, StringComparison.Ordinal));
+            Assert.All(started, line => Assert.Contains("alerting:destinations", line, StringComparison.Ordinal));
 
             await using (AsyncServiceScope scope = deployment.Services.CreateAsyncScope())
             {
@@ -1087,6 +1098,10 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 Assert.Equal(StepUpAction.FactorRemove, Assert.Single(overridden.Gates!).Key);
                 Assert.Equal(gate, overridden.Gates![StepUpAction.FactorRemove]);
             }
+
+            Assert.Equal(
+                2,
+                logs.Lines.Count(line => line.Contains("names the retired step-up actions", StringComparison.Ordinal)));
 
             await deployment.StopAsync(cancellationToken);
 
