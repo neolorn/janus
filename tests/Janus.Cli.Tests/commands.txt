@@ -62,6 +62,22 @@ migrate
       statement: string
       destructive: boolean
   1 api.request.malformed model.startup.secretunavailable system.fault
+organization
+  arguments
+    --name required text
+    --policy required path
+    --reason required text
+    --multiplememberships optional setting
+  input application/json
+    connection: string
+    keyEncryptionKeys.current: number
+    keyEncryptionKeys.versions{}: string
+    fingerprintKeys.current: number
+    fingerprintKeys.versions{}: string
+  0
+    text/plain
+      organization: string
+  1 api.request.malformed authz.denied config.change.reasonrequired config.policy.belowsystem config.value.belowfloor config.value.notallowed identity.identifier.mixedscript model.startup.schemamismatch model.startup.secretunavailable system.fault
 register-client
   arguments
     --client required text

@@ -72,6 +72,25 @@ public sealed class SettingFamily<TValue> : SettingFamily
         _form.Enter(entered, Malformed(parameter));
 
     /// <summary>
+    /// Reads a member's value as a command on the server received it in one of its
+    /// arguments, before the member it is for is known.
+    /// </summary>
+    /// <param name="argument">The argument the value came in, which a refusal names.</param>
+    /// <param name="entered">The value as it was received.</param>
+    /// <returns>The value, or the failure naming the argument and what it misses.</returns>
+    /// <remarks>Implements OPS-BOOT-001 and D-248.</remarks>
+    internal Result<TValue> EnteredIn(string argument, string entered) =>
+        _form.Enter(
+            entered,
+            new Error(
+                ErrorCodes.ConfigurationValueNotAllowed,
+                new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                {
+                    ["member"] = JsonSerializer.SerializeToElement(argument),
+                    ["allowed"] = JsonSerializer.SerializeToElement(_form.Expected),
+                }));
+
+    /// <summary>
     /// Writes a member's value as the settings table holds it.
     /// </summary>
     /// <param name="value">The value.</param>

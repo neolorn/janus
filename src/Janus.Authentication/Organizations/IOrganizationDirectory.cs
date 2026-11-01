@@ -35,6 +35,18 @@ internal interface IOrganizationDirectory
     ValueTask<OrganizationStanding?> HoldAsync(OrganizationId organization, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The organizations not erased whose name has the comparison key of the one given
+    /// (IDN-ACCT-004), read under a lock on that key held until the operation's
+    /// transaction ends, so a second command naming it waits and then finds what the
+    /// first created (CONV-DESIGN-003, D-248).
+    /// </summary>
+    /// <param name="name">The name.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Where each stands, none where no organization holds the name.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask<IReadOnlyList<OrganizationStanding>> HoldNamedAsync(string name, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a new organization.
     /// </summary>
     /// <param name="organization">The identifier issued for it.</param>

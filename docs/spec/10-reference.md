@@ -1080,7 +1080,7 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `identity.invitation.revoked` | security | An unacknowledged invitation was revoked, or replaced by a later one for the same corporate address; `details.invitation` | IDN-LIFE-009a, REG-MAIL-001 |
 | `identity.membership.ended` | security | An administrator ended a membership, or the job `membership-ends` ended it at the instant one set, or the member brought that instant forward to now (`09` `POST /account/memberships/{organization}/end`); `details.membership`, `details.reason`; the administrator acting, the member the `subject`; where the job ended it, its principal `membership-ends` with reason `IDN-MEM-001`, `details.endSetBy` the administrator who set the end and `details.reason` the reason given; where the member brought it forward, the member acting, `details.reason` `broughtforward` and `details.endsAt` the end it replaced, as `identity.membership.endset` names it (D-240); filed under the organization | IDN-MEM-001, REG-MAIL-003, D-213, D-217, D-240 |
 | `identity.membership.endset` | security | An administrator set, moved or cancelled the instant a membership ends; `details.membership`, `details.endsAt` (absent where cancelled), `details.reason`; the administrator acting, the member the `subject`; filed under the organization | IDN-MEM-001, D-213 |
-| `identity.organization.created` | security | An organization was created, its policy override holding `{"grammaticalGender": true}` alone (section 4.1, D-236); `details.reason`; filed under the organization; bootstrap's is recorded under the principal `bootstrap` | IDN-ORG-002, OPS-BOOT-001, D-236 |
+| `identity.organization.created` | security | An organization was created, its policy override holding `{"grammaticalGender": true}` alone (section 4.1, D-236); `details.reason`; filed under the organization; bootstrap's is recorded under the principal `bootstrap`, and one the command `organization` creates under the principal `organization` with the reason given (`06` OPS-BOOT-001, D-248) | IDN-ORG-002, OPS-BOOT-001, D-236, D-248 |
 | `identity.organization.deletioncancelled` | security | An organization's deletion was cancelled inside its window; `details.reason`; filed under the organization | IDN-ORG-003 |
 | `identity.organization.deletionrequested` | security | An organization's deletion was requested: it is suspended and every member session ended; `details.reason`; filed under the organization | IDN-ORG-003 |
 | `identity.organization.domainadded` | security | A domain was listed in an organization's lock, unverified; `details.domain`, `details.reason`; filed under the organization | REG-DOM-001, IDN-ORG-006 |
@@ -1207,10 +1207,11 @@ The operations a deployment-scoped system principal may run, and nothing else
 what has committed to where it goes (the outboxes, mailbox provisioning, raised alerts);
 `monitoring` reads the state of something the deployment depends on and raises what the
 reading calls for; `configuration` changes the deployment's configuration from the server,
-a protected key or the provider's client registry; `role-seeding` defines a host's
-declared roles at a start, inside the start step alone (AUTHZ-GRANT-004, D-204).
+a protected key, the provider's client registry, or a business organization with its
+policy (D-248); `role-seeding` defines a host's declared roles at a start, inside the
+start step alone (AUTHZ-GRANT-004, D-204).
 
-*Source: IDN-PRIN-001, INF-BG-001, INF-BG-002, OPS-BOOT-001, OPS-SEC-003, OPS-CFG-004, AUTH-OIDC-001, DR-016, AUTHZ-GRANT-004, D-166, D-204, D-206*
+*Source: IDN-PRIN-001, INF-BG-001, INF-BG-002, OPS-BOOT-001, OPS-SEC-003, OPS-CFG-004, AUTH-OIDC-001, DR-016, AUTHZ-GRANT-004, D-166, D-204, D-206, D-248*
 
 ### 5.29 System principals
 
@@ -1250,6 +1251,7 @@ of this table, nor `migrate`, the command that runs as none (D-206).
 | `kek-cryptoperiod` | job | `monitoring` | DR-009a |
 | `bootstrap` | command | `bootstrap` | OPS-BOOT-001 |
 | `configure` | command | `configuration` | OPS-CFG-004 |
+| `organization` | command | `configuration` | OPS-BOOT-001 |
 | `register-client` | command | `configuration` | AUTH-OIDC-001 |
 | `rotate-kek` | command | `key-rotation` | OPS-SEC-003 |
 | `rotate-fingerprint-key` | command | `key-rotation` | OPS-SEC-003 |
@@ -1257,7 +1259,7 @@ of this table, nor `migrate`, the command that runs as none (D-206).
 | `role-declaration` | start | `role-seeding` | AUTHZ-GRANT-004 |
 
 *Source: IDN-PRIN-001, INF-BG-001, INF-BG-002, AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-166,
-D-189, D-202, D-204, D-206*
+D-189, D-202, D-204, D-206, D-248*
 
 ### 5.30 Conformance checks and truth-table scenarios
 

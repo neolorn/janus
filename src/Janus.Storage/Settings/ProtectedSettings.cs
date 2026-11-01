@@ -13,9 +13,10 @@ namespace Janus.Storage.Settings;
 /// </summary>
 /// <param name="context">The context the writes are tracked on.</param>
 /// <remarks>
-/// Implements OPS-CFG-004 and D-071. The configuration store refuses a protected key,
-/// so this is the one other writer of the table, reached by bootstrap and by the
-/// change of a protected key from the server and by nothing the application serves.
+/// Implements OPS-CFG-004, D-071 and D-248. The configuration store refuses a protected
+/// key, so this is the one other writer of the table, reached by bootstrap, by the
+/// change of a protected key from the server and by the organization set up from the
+/// server, and by nothing the application serves.
 /// </remarks>
 internal sealed class ProtectedSettings(StoreContext context) : IProtectedSettings
 {

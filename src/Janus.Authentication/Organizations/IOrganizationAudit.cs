@@ -58,6 +58,25 @@ internal interface IOrganizationAudit
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Records that a command on the server did something to an organization under its
+    /// principal, with the reason the person running it gave (IDN-PRIN-001, D-248).
+    /// </summary>
+    /// <param name="action">What happened.</param>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="reason">Why, as the command was told.</param>
+    /// <param name="principal">The principal the command runs as, with its stated reason.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask RecordedAsync(
+        AuditAction action,
+        OrganizationId organization,
+        string reason,
+        SystemPrincipal principal,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a change to one domain of an organization's lock.
     /// </summary>
     /// <param name="action">What changed.</param>

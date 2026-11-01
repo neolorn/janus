@@ -30,6 +30,12 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
     /// </summary>
     public List<(AuditAction Action, OrganizationId Organization, SystemPrincipal Principal)> Principals { get; } = [];
 
+    /// <summary>
+    /// The reason each change a command on the server recorded under its principal was
+    /// given, oldest first.
+    /// </summary>
+    public List<string> Reasons { get; } = [];
+
     /// <inheritdoc/>
     public ValueTask RecordedAsync(
         AuditAction action,
@@ -54,6 +60,21 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         CancellationToken cancellationToken)
     {
         Principals.Add((action, organization, principal));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask RecordedAsync(
+        AuditAction action,
+        OrganizationId organization,
+        string reason,
+        SystemPrincipal principal,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Principals.Add((action, organization, principal));
+        Reasons.Add(reason);
 
         return ValueTask.CompletedTask;
     }

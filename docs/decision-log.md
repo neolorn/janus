@@ -20050,6 +20050,60 @@ Found by Cura's step 4.
 
 ---
 
+## D-248 — A deployment creates a business organization from the command line
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** OPS-BOOT-001, IDN-ORG-002
+
+**TL;DR.** `Janus.Cli` gains the command `organization`: run on the server against the
+database, as `bootstrap` is, it creates an organization by name, writes its policy from
+a file, and sets `organization.multiplememberships` where asked, then prints the
+organization's identifier. A host standing up production needs its business
+organization before any person can work, and until now only a person signed in with a
+passed step-up could write a policy, so a fresh deployment could not be set up without
+an administrator's credential held by a script. Found by Cura's first production
+release.
+
+- **The command.** `identity organization --name <name> --policy <file> --reason <text>`,
+  with `--multiplememberships true|false` optional. Every argument is `--<name> <value>`
+  and is judged as `bootstrap` judges its own: an unknown name, one given twice or
+  without a value answers `api.request.malformed` naming it.
+- **What it does, in one transaction.**
+  - It creates the organization where none of that name exists, recorded as
+    `identity.organization.created`, and writes its policy key as
+    `POST /admin/organizations` does.
+  - It writes the policy from the file as `PUT` of that organization's policy writes it,
+    with the same checks and codes, as a configuration change (OPS-CFG-005).
+  - With `--multiplememberships`, it writes that setting as a configuration change.
+  - Each change is recorded under the system principal `organization`, with the reason
+    given.
+- **Idempotent.** Where one organization of that name exists, it writes only what
+  differs and changes nothing else. Where two or more share the name, it refuses with
+  `api.request.malformed` naming `name` and writes nothing.
+- **What it refuses.** A deployment not yet bootstrapped, a policy the policy route would
+  refuse (with that route's code), and a missing or empty `--reason`
+  (`config.change.reasonrequired`). Nothing of a refused run is written.
+- **What it gives no one.** It writes no grant and no membership. The organization's
+  first grants are given as before, by a person holding `system:administer`
+  (AUTHZ-SCOPE-001, D-207).
+- **Output.** Exit code 0 with the organization's identifier as the one line on standard
+  output; a refusal exits non-zero with its code, as `bootstrap` does.
+
+*Rejected:*
+- **A host's set-up enrolling the administrator with a software passkey to call the admin
+  routes:** the administrator's credential would exist as a file during the set-up.
+- **Opening the policy write to a system principal at runtime:** the command runs only
+  where the database is reachable, as `bootstrap` and `configure` do.
+
+**Propagated to:**
+- `06` OPS-BOOT-001 (the command beside `bootstrap`);
+- `01` IDN-ORG-002;
+- `09` (the routes the command matches, by reference);
+- `10` (the system principal `organization`, and section 5.28's `configuration`, the
+  operation it runs; section 5.24's `identity.organization.created`);
+- `implementation-plan.md` (round H9).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -20307,6 +20361,7 @@ Found by Cura's step 4.
 | The release workflow | D-245 |
 | Servicing the SDK | D-246 |
 | The roles a giver may hand out | D-247 |
+| A deployment creates a business organization from the command line | D-248 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

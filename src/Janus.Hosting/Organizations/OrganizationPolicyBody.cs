@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Frozen;
-using System.IO;
-using System.Text;
 using System.Text.Json;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -13,24 +11,15 @@ namespace Janus.Hosting.Organizations;
 /// in the form chapter 10 section 4.1a writes the policy object, and the reason.
 /// </summary>
 /// <remarks>
-/// Implements chapter 09 section 8a, D-143 and API-CONV-002. A member the policy object
-/// does not have is refused rather than passed over, so a misspelt field never leaves
-/// an organization under a looser policy than the one its administrator wrote.
+/// Implements chapter 09 section 8a, D-143 and API-CONV-002. The fields are read as
+/// the policy object reads them wherever it comes from (D-248), and the reason beside
+/// them is the request's own.
 /// </remarks>
 internal static class OrganizationPolicyBody
 {
     private const string Reason = "reason";
 
-    private static readonly FrozenSet<string> Fields = new[]
-    {
-        "requiredAssurance",
-        "loginFactors",
-        "gates",
-        "credentialRedundancy",
-        "selfServiceRecovery",
-        "photos",
-        "grammaticalGender",
-    }.ToFrozenSet(StringComparer.Ordinal);
+    private static readonly FrozenSet<string> Carried = new[] { Reason }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Reads a replacement.
@@ -53,43 +42,40 @@ internal static class OrganizationPolicyBody
             return Result.Failure<(PolicyOverride, string)>(Error.From(ErrorCodes.RequestMalformed));
         }
 
-        string reason = string.Empty;
-        using var buffer = new MemoryStream();
+        Error? failure = null;
 
-        using (var writer = new Utf8JsonWriter(buffer))
+        string fields = PolicyObject.Written(body, Carried)
+            .Match(written => written, error => Withheld(error, ref failure));
+
+        if (failure is not null)
         {
-            writer.WriteStartObject();
+            return Result.Failure<(PolicyOverride, string)>(failure);
+        }
 
-            foreach (JsonProperty member in body.EnumerateObject())
+        string reason = string.Empty;
+
+        if (body.TryGetProperty(Reason, out JsonElement stated))
+        {
+            if (stated.ValueKind is not JsonValueKind.String)
             {
-                if (string.Equals(member.Name, Reason, StringComparison.Ordinal))
-                {
-                    if (member.Value.ValueKind is not JsonValueKind.String)
-                    {
-                        return Result.Failure<(PolicyOverride, string)>(Malformed(Reason));
-                    }
-
-                    reason = member.Value.GetString()!;
-
-                    continue;
-                }
-
-                if (!Fields.Contains(member.Name))
-                {
-                    return Result.Failure<(PolicyOverride, string)>(Malformed(member.Name));
-                }
-
-                member.WriteTo(writer);
+                return Result.Failure<(PolicyOverride, string)>(Malformed(Reason));
             }
 
-            writer.WriteEndObject();
+            reason = stated.GetString()!;
         }
 
         return Settings.OrganizationPolicy
-            .Entered(organization.ToString(), Encoding.UTF8.GetString(buffer.ToArray()))
+            .Entered(organization.ToString(), fields)
             .Match(
                 replacement => Result.Success((replacement, reason)),
                 Result.Failure<(PolicyOverride, string)>);
+    }
+
+    private static string Withheld(Error error, ref Error? failure)
+    {
+        failure = error;
+
+        return string.Empty;
     }
 
     private static Error Malformed(string member) =>
