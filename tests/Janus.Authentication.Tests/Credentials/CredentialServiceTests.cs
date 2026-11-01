@@ -2703,6 +2703,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Sessions,
             Guard,
             new AdministrativeScope(_gate, _administrative),
+            new Janus.Authentication.Tests.Recovery.ApproverReachInMemory(),
             _notifications,
             _restrictions,
             Landing.Links,

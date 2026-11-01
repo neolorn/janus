@@ -14,6 +14,7 @@ namespace Janus.Hosting.Oidc;
 /// stands on is worth now.
 /// </summary>
 /// <param name="oidc">Where the session record a token stands on is read.</param>
+/// <param name="clients">The registry the client is read from.</param>
 /// <remarks>
 /// Implements AUTH-OIDC-002, AUTH-OIDC-003, AUTH-OIDC-004, AUTH-OIDC-006 and
 /// AUTH-SESS-012. The grant itself has already been judged by the time this runs: what
@@ -21,7 +22,7 @@ namespace Janus.Hosting.Oidc;
 /// issued at all, how long the access token lasts, and how long a handle on the record
 /// may be held.
 /// </remarks>
-internal sealed class TokenIssue(OidcService oidc)
+internal sealed class TokenIssue(OidcService oidc, IOidcClientStore clients)
     : IOpenIddictServerHandler<OpenIddictServerEvents.HandleTokenRequestContext>
 {
     /// <inheritdoc/>
@@ -40,10 +41,14 @@ internal sealed class TokenIssue(OidcService oidc)
             return;
         }
 
+        string clientId = context.ClientId ?? throw new InvalidOperationException("The grant named no client.");
+        OidcClient client = await clients.FindAsync(clientId, context.CancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The grant's client is not registered.");
+
         Error? failure = null;
 
         MintedSession minted = (await oidc
-                .MintAsync(new SessionId(value), context.CancellationToken)
+                .MintAsync(new SessionId(value), client.Kind, context.CancellationToken)
                 .ConfigureAwait(false))
             .Match(session => session, error => Withheld(error, ref failure));
 
@@ -65,9 +70,11 @@ internal sealed class TokenIssue(OidcService oidc)
         principal.SetRefreshTokenLifetime(minted.Remaining);
 
         // AUTH-OIDC-006 AC3: the access token names the client it was issued to as its
-        // audience, so a party configured as another client refuses it.
-        principal.SetAudiences(
-            context.ClientId ?? throw new InvalidOperationException("The grant named no client."));
+        // audience, so a party configured as another client refuses it. A public
+        // application's names the client its registration names, or itself (D-252).
+        principal.SetAudiences(client.Kind is OidcClientKind.PublicApplication && client.Audience is string audience
+            ? audience
+            : clientId);
         principal.SetDestinations(Destinations);
 
         context.SignIn(principal);

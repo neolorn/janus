@@ -148,7 +148,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `authz.grant.notfound` | A revocation names a grant already revoked, or one a derivation wrote, and the caller holds `grant:manage` where it is scoped, or, for a grant in an organization other than the administrative organization, `system:administer` in the administrative organization (AUTHZ-SCOPE-001, D-207); an identifier naming no grant is `authz.denied` (`09` section 8); 404 | AUTHZ-GRANT-001, AUTHZ-SCOPE-001, D-166, D-207 |
 | `authz.grant.unresolved` | A grant names a role the deployment does not hold, or a group that does not exist or belongs to another organization; `details.member` names `role` or `subjectId`. Also an invitation whose `roles` names a role the deployment does not hold, `details.member` `roles`, and a role whose `handsOut` names one, `details.member` `handsOut`; 422 | AUTHZ-GRANT-001, AUTHZ-GRANT-005, REG-INV-001, D-166, D-212 |
 | `authz.grant.reasonrequired` | A grant created or revoked without a non-empty `reason`; 422 | AUTHZ-GRANT-003, D-153 |
-| `authz.role.notassignable` **(new)** | The actor may not hand out a role the change touches (a grant made or revoked, allow or deny, an invitation's roles, a change of a group's members), or a role change reaches beyond what the actor may give or hand out; 403 | AUTHZ-GRANT-005, D-212 |
+| `authz.role.notassignable` **(new)** | The actor may not hand out a role the change touches (a grant made or revoked, allow or deny, an invitation's roles, a change of a group's members, a recovery's approval, which touches every role the account holds, D-251), or a role change reaches beyond what the actor may give or hand out; 403 | AUTHZ-GRANT-005, AUTH-RECOV-002, D-212, D-251 |
 | `authz.grant.self` **(new)** | The change would widen the actor's own access: an allow grant to the actor or a group it belongs to, the revocation of a deny on them, adding them to a group, removing them from a group that reaches a deny, or acknowledging an invitation they issued; 403 | AUTHZ-GRANT-005, D-212 |
 | `authz.role.inuse` | A grant (live, expired or revoked), a declared derivation or a standing invitation names the role, so it is not removed; its permissions can be changed instead; 409 | AUTHZ-GRANT-004, AUTHZ-GRANT-003 AC3, AUTHZ-DERIVE-001, REG-INV-001, D-166 |
 | `authz.resource.inuse` **(new)** | A registration is removed while a record is registered inside it (`IResources.RemoveAsync`); its contents are removed first; 409 | AUTHZ-INHERIT-002, D-203 |
@@ -622,10 +622,11 @@ any relying party that validates offline against the JWKS (AUTH-OIDC-004, D-147)
 | Key | Default | Scope | Source |
 |---|---|---|---|
 | `oidc.accesstoken.lifetime` | 10 minutes | R, ceiling 1 h; lengthening is loosening (OPS-CFG-002) | AUTH-OIDC-004, D-147: for an offline validator this is the revocation latency |
+| `oidc.publicapplication.accesstoken.lifetime` | 15 minutes | R, ceiling 1 h; lengthening is loosening (OPS-CFG-002) | AUTH-OIDC-001, D-252: the life of the access token a `public-application` client receives; on expiry the application starts a new authorization, no refresh token being issued; a signing key's overlap covers it where it is the greater lifetime (AUTH-KEY-001) |
 | `oidc.code.lifetime` | 60 seconds | R, ceiling 10 min | AUTH-SESS-012, D-147: replaces the hard-coded sixty seconds |
 | `oidc.continuation.lifetime` | 30 minutes | R, ceiling 1 h | AUTH-SESS-012, D-224: how long a browser's pending authorization waits for the sign-in that completes it; past it the continuation issues nothing |
 | `token.signing.algorithm` | `ES256` | **P** (§4.8); `ES256`, the one member in this version | AUTH-KEY-001, D-147, D-148: verified against the mail server's source, file `crates/directory/src/backend/oidc/lookup.rs` of its repository, inspected 2026-09-18, which accepts P-256 keys from a JWKS as ES256 and refuses symmetric keys. The one value admitted in this version; any other is refused with `config.value.notallowed` (D-181). The one place the value is held |
-| `token.signing.rotation` | 90 days | R, duration, floor `P1D`; lengthening is loosening | AUTH-KEY-001, OPS-SEC-002, D-147, D-166, D-181, D-197: the cadence of the signing keys and of every registered client's secret, which the library generates and holds wrapped under the deployment's data key; overlap is `oidc.accesstoken.lifetime` plus 5 minutes, for a signing key the longest lifetime it signed under, not a key of its own |
+| `token.signing.rotation` | 90 days | R, duration, floor `P1D`; lengthening is loosening | AUTH-KEY-001, OPS-SEC-002, D-147, D-166, D-181, D-197: the cadence of the signing keys and of every registered client's secret, which the library generates and holds wrapped under the deployment's data key; overlap is `oidc.accesstoken.lifetime` plus 5 minutes, for a signing key the longest lifetime it signed under, the greater of `oidc.accesstoken.lifetime` and `oidc.publicapplication.accesstoken.lifetime` (D-252), not a key of its own |
 | `redirect.defaultclient` | empty | **P**, string, the identifier of a registered client of kind `browser-application`; startup refuses one the registry does not hold, or one of kind `protocol`, with `model.startup.redirectclient` | API-REDIR-001, API-REDIR-002, D-162, D-166: the client a browser falls back to where the identifier a request carried is not one the registry holds; while empty, no fallback destination is carried and the frontend chooses its own, and `GET /oidc/authorize/continue` with no authorization pending answers `/` (D-228) |
 
 ---
@@ -834,9 +835,12 @@ other.
 ### 5.13 Client kinds
 
 `protocol` (receives access and refresh tokens) · `browser-application` (code flow
-once, no refresh token)
+once, no refresh token) · `public-application` (no secret, registered from the server
+alone; a direct authorization request with PKCE `S256` allowed; the ID token, its `aud`
+the client itself, and one access token for the mail server, its `aud` the client's
+audience, and no refresh token; AUTH-OIDC-001, D-252)
 
-*Source: AUTH-SESS-012, D-104*
+*Source: AUTH-SESS-012, D-104, D-252*
 
 ### 5.14 Restriction keys
 

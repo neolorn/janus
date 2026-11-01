@@ -87,7 +87,7 @@ internal sealed class OidcClientStoreInMemory : IOidcClientStore
     /// <inheritdoc/>
     public ValueTask AddAsync(
         OidcClient client,
-        [NeverLogged] ReadOnlyMemory<byte> secret,
+        [NeverLogged] ReadOnlyMemory<byte>? secret,
         DateTimeOffset issuedAt,
         CancellationToken cancellationToken)
     {
@@ -95,7 +95,7 @@ internal sealed class OidcClientStoreInMemory : IOidcClientStore
 
         lock (_gate)
         {
-            _clients.Add(client.ClientId, new RegisteredClient(client, secret.ToArray(), issuedAt, null, null));
+            _clients.Add(client.ClientId, new RegisteredClient(client, secret?.ToArray(), issuedAt, null, null));
         }
 
         return ValueTask.CompletedTask;
@@ -122,9 +122,9 @@ internal sealed class OidcClientStoreInMemory : IOidcClientStore
         lock (_gate)
         {
             return ValueTask.FromResult(
-                _clients.TryGetValue(clientId, out RegisteredClient? held)
+                _clients.TryGetValue(clientId, out RegisteredClient? held) && held.Secret is byte[] secret
                     ? new RegisteredSecret(
-                        [.. held.Secret],
+                        [.. secret],
                         held.IssuedAt,
                         held.Previous is byte[] previous ? [.. previous] : null,
                         held.PreviousUntil)
@@ -195,13 +195,13 @@ internal sealed class OidcClientStoreInMemory : IOidcClientStore
 /// One client as the registry holds it.
 /// </summary>
 /// <param name="Client">The client.</param>
-/// <param name="Secret">Its secret as it presents it.</param>
+/// <param name="Secret">Its secret as it presents it, or nothing for a public application.</param>
 /// <param name="IssuedAt">When the secret was drawn.</param>
 /// <param name="Previous">The secret it replaced, where one was.</param>
 /// <param name="PreviousUntil">Until when the replaced secret is taken.</param>
 internal sealed record RegisteredClient(
     OidcClient Client,
-    byte[] Secret,
+    byte[]? Secret,
     DateTimeOffset IssuedAt,
     byte[]? Previous,
     DateTimeOffset? PreviousUntil);

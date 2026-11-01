@@ -1435,6 +1435,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Invitations.IInvitationStore>(Invitations);
         _ = services.AddSingleton<Janus.Authentication.Invitations.IRoleCatalogue>(RoleCatalogue);
         _ = services.AddScoped<Janus.Authentication.Invitations.IRoleHandOut, Janus.Storage.Authentication.Invitations.RoleHandOut>();
+        _ = services.AddScoped<Janus.Authentication.Recovery.IApproverReach, Janus.Storage.Authentication.Recovery.ApproverReach>();
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
         _ = services.AddSingleton<IMailServer>(MailServer);
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);

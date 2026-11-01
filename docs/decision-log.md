@@ -20181,6 +20181,145 @@ Found by Cura, whose owner wants staff pictures beside colleagues, never to cust
 
 ---
 
+## D-251 — A recovery's approver reaches every role the account holds
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** AUTH-RECOV-002, AUTHZ-GRANT-005
+
+**TL;DR.** Approving an account's admin-assisted recovery hands that account to whoever
+completes the enrolment, so it is judged as handing out every role the account holds. An
+approval is refused unless the approver may hand out, by AUTHZ-GRANT-005's rule, every
+role the account holds. Found by Cura's first production release, where the business
+runs in the administrative organization: a human-resources role holding
+`recovery:approve` could approve the recovery of a system administrator's account, a
+path from that role to `system:administer`.
+
+- **The rule.** Beside the admission of `recovery:approve` (AUTHZ-SCOPE-001) and
+  AUTH-RECOV-002a, an approval SHALL be refused with 403 `authz.role.notassignable`
+  unless the approver may hand out every role the account holds through a live allow
+  grant, its own or a group's it belongs to, directly or through nesting, in each
+  organization that grant is in, judged as AUTHZ-GRANT-005 judges a grant there.
+- **What follows.** A role carrying `system:administer` is handed out by a system
+  administrator alone (OPS-CFG-007), so only a system administrator approves a system
+  administrator's recovery. An account holding no role (a customer) is approved as
+  before.
+- **Where and how.** Judged where the admission is, before the step-up is asked; a
+  refusal writes nothing, is recorded as a refusal (AUTHZ-CONCEAL-004) and counts toward
+  `alerting.denials.threshold`, as AUTHZ-GRANT-005's refusals do.
+- **The approvers required.** Where more than one approver is required, each is judged
+  alone by the rule.
+
+*Rejected:*
+- **Excluding administrative-organization members from recovery by non-administrators:**
+  it ties the rule to an organization, not to what the account holds, and leaves the same
+  path wherever a role reaches as far.
+- **A host's own check:** a library gate a host can forget is no gate.
+
+**Propagated to:**
+- `02` AUTH-RECOV-002 (the rule; a criterion: an approver holding `recovery:approve` who
+  may not hand out a role the account holds is refused `authz.role.notassignable`,
+  writing nothing and recording the refusal; a system administrator's account is
+  approved by a system administrator alone);
+- `03` AUTHZ-GRANT-005 (the recovery approval among what is judged as a hand-out);
+- `09` (the approval route's 403);
+- `10` section 1.3 (`authz.role.notassignable`, the recovery's approval);
+- `implementation-plan.md` (round H11).
+
+---
+
+## D-252 — A browser application without a secret, for the mail server
+
+> **Amended.** 2026-11-01. Answers to the questions its carrying raised:
+> 1. Signing-key overlap: a key's overlap follows from the longest access-token lifetime
+>    any client kind receives, so the greater of `oidc.accesstoken.lifetime` and
+>    `oidc.publicapplication.accesstoken.lifetime`; a public-application token never
+>    outlives its key's overlap (AUTH-KEY-001, OPS-SEC-002).
+> 2. Discovery: the provider's metadata advertises
+>    `require_pushed_authorization_requests: false`. Every client of another kind is
+>    still refused a direct request, and its own registration metadata carries
+>    `require_pushed_authorization_requests: true` (RFC 9126 section 6).
+> 3. ID token: a public-application client receives the ID token as any client does (its
+>    `aud` the client itself), beside the access token for the mail server. "Nothing
+>    else" means no refresh token and no token any library route accepts.
+> 4. Scopes: as AUTH-OIDC-001 for every client, a registered scope is issued only where
+>    the request asks for it, and an unregistered one is refused `invalid_scope`.
+
+> **Amended.** 2026-11-01. CORS and the audience:
+> - CORS. A `public-application` client may run its code exchange in the browser
+>   (Stalwart's WebUI has no server side). So `POST /oidc/token`, the discovery document
+>   and `GET /oidc/jwks` SHALL answer CORS for the origin of each registered
+>   `public-application` return address: that origin exactly, no credentials, the
+>   methods and headers the token request needs, and the preflight answered. No other
+>   route and no other origin gains CORS. A browser request to them from any other origin
+>   gets no CORS headers.
+> - `--audience` stays optional. Where it is absent, each token's `aud` is the client
+>   itself. A deployment may list its public clients directly among the mail server's
+>   accepted audiences (INT-MAIL-004), with no client registered for the mail server
+>   alone.
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** AUTH-OIDC-001, AUTH-OIDC-002,
+AUTH-OIDC-006, INT-MAIL-004, `10` section 5.13
+
+**TL;DR.** A third client kind, `public-application`, lets a browser application that
+can hold no secret sign a person in to the mail server: the webmail (Bulwark) and the
+mail server's own account pages (Stalwart's WebUI). Each uses the authorization code with
+PKCE `S256` as a public client, and neither speaks pushed authorization requests. Such a
+client is registered from the server alone, carries no secret, may skip the pushed
+request, and receives an access token for the mail server and nothing else, never a
+refresh token. Every other client is unchanged. The owner approved the trade-off
+(2026-11-01): one sign-in for mail, by the standard method for browser applications.
+
+- **The kind.** `register-client --kind public-application`, with `--redirect` repeated
+  for each exact return address and `--scopes`. It has no secret, the library generates
+  none, and a token request that authenticates with one is refused `invalid_client`.
+  `--audience <client>` names the mail-server client the token is for (INT-MAIL-004);
+  absent, the client's own identifier.
+- **The authorization request.** A `public-application` client MAY send a direct
+  `GET /oidc/authorize` with its parameters, the one exception to AUTH-OIDC-006's pushed
+  requests, and MAY use `POST /oidc/par` without client authentication (RFC 9126 section
+  2). Everything else of AUTH-OIDC-006 holds: the code with PKCE `S256` only, every
+  redirect an exact registered match, `https` save a loopback literal. A request for
+  `offline_access` is refused with `invalid_request`.
+- **The token.** An RFC 9068 access token whose `aud` is the client's audience alone and
+  whose scopes are `openid` and those the client is registered with (the interoperable
+  mail scopes, `email`, `profile`). Its lifetime is
+  `oidc.publicapplication.accesstoken.lifetime` (default `PT15M`, at most `PT1H`; raising
+  is loosening). No refresh token is issued: on expiry the application starts a new
+  authorization, which a live session answers without a new authentication where the
+  session's level and the policy allow it.
+- **What it reaches.** Only the mail server, whose `acceptedAudiences` names it
+  (INT-MAIL-004). No route of the library accepts a bearer token, so the token opens
+  nothing in the library or in a host.
+- **The session.** The person signs in at the provider's own pages under their
+  organization's policy, passkey included, and the sign-in is recorded as any other. The
+  browser receives this one access token: the exception AUTH-OIDC-002 now names.
+
+*Rejected:*
+- **A deployment-held secret for the webmail's server side:** a secret outside the
+  library's lifecycle (OPS-SEC-002), and Stalwart's WebUI has no server side.
+- **Changing Bulwark to push its requests:** a fork to maintain, and Stalwart's WebUI
+  would still need the exception.
+- **Separate mail passwords:** mail would leave the one identity.
+
+**Propagated to:**
+- `02` AUTH-OIDC-001 (the kind; public clients registered from the server only),
+  AUTH-OIDC-002 (the exception), AUTH-OIDC-006 (the direct request for this kind alone;
+  criteria: a direct request from any other kind is still refused; a public request
+  without PKCE `S256` or with `offline_access`, and a token request with a secret, are
+  refused; the token's `aud` and scopes; no refresh token);
+- `05` INT-MAIL-004 (the webmail and WebUI clients among the accepted audiences);
+- `06` OPS-BOOT-001 (`register-client`'s new kind and `--audience`);
+- `09` (`/oidc/authorize` direct for this kind; the `/oidc/par` and `/oidc/token` rows
+  and the kinds of client in section 9);
+- the amendment: `02` AUTH-KEY-001, AUTH-OIDC-004 (the lifetime a public-application
+  token is issued with), AUTH-OIDC-006 criterion 4; `06` OPS-SEC-002; `10` section 4.9
+  (`token.signing.rotation`);
+- the CORS and audience amendment: `02` AUTH-OIDC-006 (CORS, with its criteria); `05`
+  INT-MAIL-004; `09` section 9;
+- `10` section 5.13 (the kind) and section 4 (`oidc.publicapplication.accesstoken.lifetime`);
+- `implementation-plan.md` (round H11).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |

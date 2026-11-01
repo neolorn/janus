@@ -1017,6 +1017,15 @@ the one line on standard output; a refusal is reported as `bootstrap` reports on
 
 *Source: D-207, D-248*
 
+**A public application's registration (D-252).** `register-client` (`02` AUTH-OIDC-001)
+takes `--kind public-application` beside `protocol` and `browser-application`, for a
+browser application that holds no secret: `--redirect` repeated for each exact return
+address, `--scopes`, and `--audience <client>`, the mail-server client its tokens are
+for (`05` INT-MAIL-004), the client's own identifier where it is absent. No secret is
+generated for such a client.
+
+*Source: D-252*
+
 **Acceptance criteria**
 1. Running it on a deployment already stood up (the administrative organization
    exists, or an allow grant of a role holding `system:administer` stands unrevoked,
@@ -1053,6 +1062,9 @@ the one line on standard output; a refusal is reported as `bootstrap` reports on
 12. A policy whose write is a loosening (OPS-CFG-002) is written by `organization` with
     no step-up and no `system:administer`, where the policy route's value checks admit
     it (D-248).
+13. `register-client --kind public-application` registers a client with every
+    `--redirect` given and the `--audience` named, or its own identifier as audience
+    where none is, and generates no secret for it (D-252).
 
 ---
 
@@ -1307,7 +1319,9 @@ the secrets manager, which is why it is the maintenance exception of section 9 r
 than part of this automated lifecycle. Its rotation is the command-line operation
 OPS-SEC-003 (D-147, D-225). Signing-key cadence and algorithm are the keys of `10`
 section 4.9; a signing key's overlap follows from the longest access-token lifetime it
-signed under, and how long its public key is kept after it from the ceiling of
+signed under, the greater of `oidc.accesstoken.lifetime` and
+`oidc.publicapplication.accesstoken.lifetime`, so a `public-application` client's token
+never outlives it (D-252), and how long its public key is kept after it from the ceiling of
 `session.default.absolute` (AUTH-KEY-001).
 
 **Client secrets (D-166).** The library generates the secret of every client in the
@@ -1327,7 +1341,7 @@ under (OPS-SEC-003). A provider credential that expires is renewed by the librar
 the provider lets the client sign it (IDN-LIFE-012); no calendar renewal is a
 maintenance task.
 
-*Source: D-148; D-007, D-026.3, D-103, D-147, D-166, D-172, D-181, D-197*
+*Source: D-148; D-007, D-026.3, D-103, D-147, D-166, D-172, D-181, D-197, D-252*
 
 **Acceptance criteria**
 1. Rotation completes without restart or manual action.

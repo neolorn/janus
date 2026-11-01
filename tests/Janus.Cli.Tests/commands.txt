@@ -82,9 +82,10 @@ register-client
   arguments
     --client required text
     --name required text
-    --kind required choice allowed=browser-application,protocol
-    --redirect required url
+    --kind required choice allowed=browser-application,protocol,public-application
+    --redirect required url repeatable
     --scopes required text-list separator=space
+    --audience optional text
   input application/json
     connection: string
     keyEncryptionKeys.current: number

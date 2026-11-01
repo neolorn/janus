@@ -1636,7 +1636,7 @@ POST /admin/recovery/approve
       enrolmentLinkExpiresAt: DateTimeOffset?
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
   422 auth.recovery.channelnotonaccount auth.recovery.reasonrequired auth.recovery.selfapproval
   429 auth.restriction.exceeded auth.throttled
 GET /admin/restrictions

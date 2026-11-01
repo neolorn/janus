@@ -324,12 +324,24 @@ through Stalwart's API, never its database.
 **INT-MAIL-004** — Our OIDC provider SHALL expose discovery, JWKS and userinfo for
 Stalwart's use. Token introspection SHALL NOT be provided. The mail server SHALL accept
 an access token only where its `aud` names a client the deployment registers for the
-mail server, reading the issuer and keys from discovery: in Stalwart 1.0, an `Oidc`
+mail server, or a `public-application` client it lists among the accepted audiences
+(D-252), reading the issuer and keys from discovery: in Stalwart 1.0, an `Oidc`
 directory with the provider address as `issuerUrl`, those clients in
 `acceptedAudiences`, `skipAudienceValidation` off, `opaqueTokenValidation` `none`,
 `unscopedTokens` `reject` and `email` as `claimUsername` (D-226).
 
-*Source: D-005, D-041, D-164, D-166, D-224, D-226*
+**The mail server's browser applications (D-252).** The webmail and the mail server's
+own account pages sign a person in as `public-application` clients (`02` AUTH-OIDC-001).
+Each token's `aud` is the client's audience, the mail-server client its `--audience`
+names, or the client itself where it names none, `--audience` staying optional, which
+`acceptedAudiences` then names beside the clients registered for the mail server. A
+deployment may list its public clients directly among the accepted audiences, with no
+client registered for the mail server alone. The token reaches the mail server alone:
+no route of the library accepts a bearer token. A client whose code exchange runs in the
+browser reaches the token endpoint, discovery and the key set through the CORS that
+AUTH-OIDC-006 gives its return addresses' origins.
+
+*Source: D-005, D-041, D-164, D-166, D-224, D-226, D-252*
 
 Stalwart validates offline via JWKS and reads userinfo for a claim the token lacks; it
 does not use introspection with client credentials. The `aud` check is the mail server's
@@ -349,6 +361,11 @@ naming one of its own resource identifiers, which the provider never issues
 4. Criteria 1 to 3 are decided against a real server of the release INT-MAIL-001 names,
    configured as this item states against the provider of a test host listening on a
    real port (D-224).
+5. The mail server accepts a `public-application` client's access token whose `aud` is
+   an audience `acceptedAudiences` names, and carrying `urn:ietf:params:oauth:scope:mail`
+   (D-252); with no `--audience` registered, the token's `aud` is the client itself and
+   is accepted where `acceptedAudiences` lists that client, with no client registered
+   for the mail server alone.
 
 ---
 

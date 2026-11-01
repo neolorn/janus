@@ -8,6 +8,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests.Sending;
+using Janus.Authorization.Grants;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -591,6 +592,44 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         Assert.Equal("reason", longer.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Equal(StatusCodes.Status400BadRequest, unreached.Status);
         Assert.Equal("channelUsed", unreached.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(sent, _deployment.Mail.Taken.Count);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002 AC9, `09` `POST /admin/recovery/approve` (D-251): an approver who
+    /// may not hand out a role the account holds is answered 403
+    /// `authz.role.notassignable`, and no approval, record or send is left.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_AC9_AnApproverBeyondTheAccountsRolesIsAnsweredNotAssignableAsync()
+    {
+        Browser approver = await ApproverAsync();
+        SubjectId subject = Recovered();
+        Grant held = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                GrantSubject.Of(subject),
+                RoleName.Parse("reviewer"),
+                OrganizationId.New(_deployment.Clock),
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                subject,
+                _deployment.Clock.GetUtcNow(),
+                "Reviews the drafts.")
+            .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(held, TestContext.Current.CancellationToken);
+
+        int sent = _deployment.Mail.Taken.Count;
+        Answer refused = await ApprovedAsync(approver, subject);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.RoleNotAssignable.ToString(), refused.Text("code"));
+        Assert.Empty(_deployment.RecoveryApprovals.All);
+        Assert.Empty(_deployment.RecoveryAudit.Written);
         Assert.Equal(sent, _deployment.Mail.Taken.Count);
     }
 

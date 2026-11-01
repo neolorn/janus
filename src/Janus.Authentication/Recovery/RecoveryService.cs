@@ -36,6 +36,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="sessions">What ends the sessions a changed credential invalidates.</param>
 /// <param name="stepUp">What the approver's session has to have proved.</param>
 /// <param name="scope">Whether the approver may approve at all.</param>
+/// <param name="reach">Whether the approver may hand out every role the account holds.</param>
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="restrictions">
 /// What a send is named to by the link it carries, and what releases its one count once
@@ -73,6 +74,7 @@ internal sealed class RecoveryService(
     SessionService sessions,
     StepUpGuard stepUp,
     AdministrativeScope scope,
+    IApproverReach reach,
     IGovernedSend sending,
     ISendingRestrictions restrictions,
     LandingLinks landing,
@@ -341,6 +343,15 @@ internal sealed class RecoveryService(
             is Error denied)
         {
             return Result.Failure<ApprovedRecovery>(denied);
+        }
+
+        // AUTH-RECOV-002 (D-251): the approval hands the account to whoever completes
+        // the enrolment, so it is judged where the admission is, before the step-up, as
+        // handing out every role the account holds.
+        if (await reach.RefusedAsync(context, subject, cancellationToken).ConfigureAwait(false)
+            is Error beyond)
+        {
+            return Result.Failure<ApprovedRecovery>(beyond);
         }
 
         // API-CONV-002, X4: the reason and the channel are free text of 1 to 1024
@@ -943,6 +954,16 @@ internal sealed class RecoveryService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<ApprovedRecovery>(restricted);
+        }
+
+        // AUTHZ-GATE-006 (D-251): the reach is judged again on what holds now, so a role
+        // the account gained since the first ask is judged before anything is written.
+        if (await reach.RefusedAsync(context, subject, cancellationToken).ConfigureAwait(false)
+            is Error beyond)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ApprovedRecovery>(beyond);
         }
 
         // D-166 X3: the approvals are counted under their hold, so approvals given at

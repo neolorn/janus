@@ -47,7 +47,7 @@ internal sealed class OidcClientStore(
     /// <inheritdoc/>
     public async ValueTask AddAsync(
         OidcClient client,
-        [NeverLogged] ReadOnlyMemory<byte> secret,
+        [NeverLogged] ReadOnlyMemory<byte>? secret,
         DateTimeOffset issuedAt,
         CancellationToken cancellationToken)
     {
@@ -65,8 +65,12 @@ internal sealed class OidcClientStore(
                         Name = client.Name,
                         Kind = client.Kind,
                         Redirect = client.Redirect,
-                        Secret = PersonalFieldCipher.Wrap(secret.Span, deploymentKey),
-                        SecretIssuedAt = issuedAt,
+                        OtherRedirects = [.. client.OtherRedirects],
+                        Audience = client.Audience,
+                        Secret = secret is ReadOnlyMemory<byte> drawn
+                            ? PersonalFieldCipher.Wrap(drawn.Span, deploymentKey)
+                            : null,
+                        SecretIssuedAt = secret is null ? null : issuedAt,
                         Scopes = [.. client.Scopes],
                     },
                     cancellationToken)
@@ -89,6 +93,8 @@ internal sealed class OidcClientStore(
         held.Name = client.Name;
         held.Kind = client.Kind;
         held.Redirect = client.Redirect;
+        held.OtherRedirects = [.. client.OtherRedirects];
+        held.Audience = client.Audience;
         held.Scopes = [.. client.Scopes];
     }
 
@@ -100,7 +106,8 @@ internal sealed class OidcClientStore(
             .SingleOrDefaultAsync(client => client.ClientId == clientId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (record is null)
+        // D-252: a public application holds no secret, so it has none to present.
+        if (record is not { Secret: byte[] secret, SecretIssuedAt: DateTimeOffset issued })
         {
             return null;
         }
@@ -110,8 +117,8 @@ internal sealed class OidcClientStore(
         try
         {
             return new RegisteredSecret(
-                PersonalFieldCipher.Unwrap(record.Secret, deploymentKey),
-                record.SecretIssuedAt,
+                PersonalFieldCipher.Unwrap(secret, deploymentKey),
+                issued,
                 record.PreviousSecret is byte[] previous ? PersonalFieldCipher.Unwrap(previous, deploymentKey) : null,
                 record.PreviousSecretUntil);
         }
@@ -182,7 +189,11 @@ internal sealed class OidcClientStore(
     }
 
     private static OidcClient Client(OidcClientRecord record) =>
-        new(record.ClientId, record.Name, record.Kind, record.Redirect, record.Scopes);
+        new(record.ClientId, record.Name, record.Kind, record.Redirect, record.Scopes)
+        {
+            OtherRedirects = record.OtherRedirects,
+            Audience = record.Audience,
+        };
 
     private async ValueTask<OidcClientRecord?> HeldAsync(
         string clientId,

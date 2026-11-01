@@ -30,6 +30,8 @@ internal sealed class OidcApplicationStoreInMemory(OidcClientStoreInMemory clien
                 Name = held.Client.Name,
                 Kind = held.Client.Kind,
                 Redirect = held.Client.Redirect,
+                OtherRedirects = [.. held.Client.OtherRedirects],
+                Audience = held.Client.Audience,
                 Secret = held.Secret,
                 SecretIssuedAt = held.IssuedAt,
                 PreviousSecret = held.Previous,
@@ -83,7 +85,7 @@ internal sealed class OidcApplicationStoreInMemory(OidcClientStoreInMemory clien
     public IAsyncEnumerable<OidcClientRecord> FindByRedirectUriAsync(
         string uri,
         CancellationToken cancellationToken) =>
-        Applications.Where(client => client.Redirect == uri).ToAsyncEnumerable();
+        Applications.Where(client => client.Redirect == uri || client.OtherRedirects.Contains(uri)).ToAsyncEnumerable();
 
     /// <inheritdoc/>
     public ValueTask<string?> GetApplicationTypeAsync(
@@ -129,7 +131,9 @@ internal sealed class OidcApplicationStoreInMemory(OidcClientStoreInMemory clien
     public ValueTask<string?> GetClientTypeAsync(
         OidcClientRecord application,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult<string?>(OpenIddictConstants.ClientTypes.Confidential);
+        ValueTask.FromResult<string?>(application?.Kind is OidcClientKind.PublicApplication
+            ? OpenIddictConstants.ClientTypes.Public
+            : OpenIddictConstants.ClientTypes.Confidential);
 
     /// <inheritdoc/>
     public ValueTask<string?> GetConsentTypeAsync(
@@ -212,16 +216,18 @@ internal sealed class OidcApplicationStoreInMemory(OidcClientStoreInMemory clien
     {
         ArgumentNullException.ThrowIfNull(application);
 
-        return ValueTask.FromResult(ImmutableArray.Create(application.Redirect));
+        return ValueTask.FromResult(ImmutableArray.Create([application.Redirect, .. application.OtherRedirects]));
     }
 
     /// <inheritdoc/>
     public ValueTask<ImmutableArray<string>> GetRequirementsAsync(
         OidcClientRecord application,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult(
-            ImmutableArray.Create(
-                OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange));
+        ValueTask.FromResult(application?.Kind is OidcClientKind.PublicApplication
+            ? ImmutableArray.Create(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange)
+            : ImmutableArray.Create(
+                OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange,
+                OpenIddictConstants.Requirements.Features.PushedAuthorizationRequests));
 
     /// <inheritdoc/>
     public ValueTask<ImmutableDictionary<string, string>> GetSettingsAsync(

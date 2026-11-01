@@ -158,6 +158,24 @@ public sealed class OidcServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-OIDC-004 AC2 (D-252): what is minted for a public application carries
+    /// <c>oidc.publicapplication.accesstoken.lifetime</c>, and what is minted for every
+    /// other kind the general lifetime.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_004_AC2_APublicApplicationsTokenLivesItsOwnLifetimeAsync()
+    {
+        SessionId session = await SignedInAsync();
+
+        Assert.Equal(
+            (TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10)),
+            (Value(await Service.MintAsync(session, OidcClientKind.PublicApplication, Cancellation))!.AccessTokenLifetime,
+                Value(await Service.MintAsync(session, OidcClientKind.Protocol, Cancellation))!.AccessTokenLifetime,
+                Value(await Service.MintAsync(session, OidcClientKind.BrowserApplication, Cancellation))!.AccessTokenLifetime));
+    }
+
+    /// <summary>
     /// AUTH-OIDC-003 AC3: what is minted never outlives the record, so the window is
     /// what remains of whichever of its two expiries comes first.
     /// </summary>

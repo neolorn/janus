@@ -150,9 +150,10 @@ internal sealed class ProviderProbes(
             ? [.. listed.EnumerateArray().Select(value => value.GetString() ?? string.Empty)]
             : null;
 
-    // AUTH-OIDC-006 AC1 and AC4: the document names the code flow, its proof key by
-    // S256, the code and refresh grants, the pushed request as required, and no way
-    // for a client to go unauthenticated.
+    // AUTH-OIDC-006 AC1: the document names the code flow, its proof key by S256, the
+    // code and refresh grants, and no way for a client to go unauthenticated. Whether a
+    // request must be pushed is each client's registration's, so the document's
+    // requirement is not one a deployment is held to (AUTH-OIDC-006 AC4, D-252).
     private static IEnumerable<Error> Advertised(JsonElement document)
     {
         if (Listed(document, "response_types_supported") is not ["code"])
@@ -169,12 +170,6 @@ internal sealed class ProviderProbes(
             || !grants.Order(StringComparer.Ordinal).SequenceEqual(["authorization_code", "refresh_token"]))
         {
             yield return Listing(document, "grant_types_supported");
-        }
-
-        if (!document.TryGetProperty("require_pushed_authorization_requests", out JsonElement required)
-            || required.ValueKind != JsonValueKind.True)
-        {
-            yield return Listing(document, "require_pushed_authorization_requests");
         }
 
         if (Listed(document, "token_endpoint_auth_methods_supported") is IReadOnlyList<string> methods
@@ -273,8 +268,8 @@ internal sealed class ProviderProbes(
     // Every probe but the discovery, in the order they are asked: the implicit and
     // hybrid forms, the retired grants, the plain method, a challenge naming no method,
     // which RFC 7636 reads as plain, no proof key at all, a destination other than the
-    // registered one, which OAuth 2.1 section 2.3.5 fails, and a client that does not
-    // authenticate, which is a public client, and none exists.
+    // registered one, which OAuth 2.1 section 2.3.5 fails, and the client not
+    // authenticating, which it must, being no public application (D-252).
     private IEnumerable<Probe> Probes(OidcClient registered, Uri push, Uri token)
     {
         string verifier = Drawn(32);

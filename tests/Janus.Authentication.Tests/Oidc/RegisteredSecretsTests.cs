@@ -108,7 +108,7 @@ public sealed class RegisteredSecretsTests : IAsyncDisposable
         Assert.Equal(Noon + Overlap, within.PreviousUntil);
         Assert.Null(after.Previous);
         Assert.Null(after.PreviousUntil);
-        Assert.Equal((replacing, replacing), (current, Encoding.UTF8.GetString(after.Secret)));
+        Assert.Equal((replacing, replacing), (current, Encoding.UTF8.GetString(after.Secret!)));
         Assert.False(_work.Open);
         Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
     }

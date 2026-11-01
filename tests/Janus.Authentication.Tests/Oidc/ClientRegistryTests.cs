@@ -1,6 +1,8 @@
 using System;
 using System.Buffers.Text;
+using System.Linq;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
 using Janus.Core;
@@ -25,6 +27,17 @@ public sealed class ClientRegistryTests : IAsyncDisposable
         "https://mail.example.test/callback",
         ["openid", "email", "offline_access"]);
 
+    private static readonly OidcClient Webmail = new(
+        "webmail",
+        "Webmail",
+        OidcClientKind.PublicApplication,
+        "https://webmail.example.test/login/callback",
+        ["openid", "email", "profile", "urn:ietf:params:oauth:scope:mail"])
+    {
+        OtherRedirects = ["https://webmail.example.test/silent", "http://127.0.0.1:8080/callback"],
+        Audience = "mail",
+    };
+
     private readonly OidcClientStoreInMemory _clients = new();
     private readonly OidcAuditInMemory _audit = new();
     private readonly UnitOfWorkInMemory _work = new();
@@ -47,7 +60,7 @@ public sealed class ClientRegistryTests : IAsyncDisposable
         RegisteredClient held = Assert.Single(_clients.Registered);
 
         Assert.Equal(Mail, held.Client);
-        Assert.Equal(32, Base64Url.DecodeFromUtf8(held.Secret).Length);
+        Assert.Equal(32, Base64Url.DecodeFromUtf8(held.Secret!).Length);
         Assert.Equal(Noon, held.IssuedAt);
         Assert.Null(held.Previous);
         Assert.Equal(
@@ -81,7 +94,7 @@ public sealed class ClientRegistryTests : IAsyncDisposable
     {
         await RegisteredAsync(Mail);
 
-        byte[] drawn = Assert.Single(_clients.Registered).Secret;
+        byte[]? drawn = Assert.Single(_clients.Registered).Secret;
 
         _clock.Advance(TimeSpan.FromDays(1));
 
@@ -150,6 +163,89 @@ public sealed class ClientRegistryTests : IAsyncDisposable
         Assert.Empty(_clients.Registered);
         Assert.Empty(_audit.Registrations);
         Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 AC6, OPS-BOOT-001 AC13 (D-252): a public application is registered
+    /// from the server with every return address given and the audience named, and no
+    /// secret is drawn for it; one naming no audience is registered with none, its own
+    /// identifier being its tokens' audience.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_AC6_APublicApplicationIsRegisteredWithNoSecretAsync()
+    {
+        OidcClient own = Webmail with { ClientId = "account-pages", Audience = null, OtherRedirects = [] };
+
+        Assert.Null(Refused(await RegisteredAsync(Webmail)));
+        Assert.Null(Refused(await RegisteredAsync(own)));
+
+        RegisteredClient held = _clients.Registered.Single(client => client.Client.ClientId == Webmail.ClientId);
+
+        Assert.Equal(Webmail, held.Client);
+        Assert.Equal(Webmail.OtherRedirects, held.Client.OtherRedirects);
+        Assert.Null(held.Secret);
+        Assert.Null(_clients.Registered.Single(client => client.Client.ClientId == own.ClientId).Secret);
+        Assert.Equal(
+            (ClientRegistry.Principal, "webmail", OidcClientKind.PublicApplication, false, Noon),
+            _audit.Registrations[0]);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 (D-252): further return addresses and an audience are a public
+    /// application's alone, so another kind registered with either is refused naming
+    /// the member; a further return address startup would refuse is refused as the
+    /// first is. Nothing is registered or recorded.
+    /// </summary>
+    /// <param name="member">The member the case breaks.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("redirect")]
+    [InlineData("audience")]
+    [InlineData("further")]
+    public async Task AUTH_OIDC_001_FurtherAddressesAndAnAudienceAreAPublicApplicationsAloneAsync(string member)
+    {
+        Result refused = member switch
+        {
+            "redirect" => await RegisteredAsync(Mail with { OtherRedirects = ["https://mail.example.test/other"] }),
+            "audience" => await RegisteredAsync(Mail with { Audience = "calendar" }),
+            _ => await RegisteredAsync(Webmail with { OtherRedirects = ["/relative"] }),
+        };
+
+        Error failure = refused.Match(() => throw new InvalidOperationException("The client was registered."), error => error);
+
+        Assert.Equal(
+            member switch
+            {
+                "redirect" => (ErrorCodes.RequestMalformed, "redirect"),
+                "audience" => (ErrorCodes.RequestMalformed, "audience"),
+                _ => (ErrorCodes.StartupRedirectClient, Webmail.ClientId),
+            },
+            (failure.Code, failure.Details.TryGetValue("member", out JsonElement named) ? named.GetString() : failure.Details["client"].GetString()));
+        Assert.Empty(_clients.Registered);
+        Assert.Empty(_audit.Registrations);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 (D-252): a registered client is not moved between a public
+    /// application, which holds no secret, and a kind that holds one, so a change of
+    /// kind across that line is refused naming the kind and changes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_AClientIsNotMovedAcrossTheSecretLineAsync()
+    {
+        await RegisteredAsync(Mail);
+        await RegisteredAsync(Webmail);
+
+        Assert.Equal("kind", Refused(await RegisteredAsync(Mail with { Kind = OidcClientKind.PublicApplication })));
+        Assert.Equal(
+            "kind",
+            Refused(await RegisteredAsync(Webmail with { Kind = OidcClientKind.BrowserApplication, OtherRedirects = [], Audience = null })));
+        Assert.Equal(
+            (OidcClientKind.Protocol, OidcClientKind.PublicApplication),
+            (_clients.Registered.Single(client => client.Client.ClientId == "mail").Client.Kind,
+                _clients.Registered.Single(client => client.Client.ClientId == "webmail").Client.Kind));
     }
 
     private static string? Refused(Result result) =>

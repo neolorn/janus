@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,7 +38,7 @@ internal sealed class RedirectValidation(IOidcClientStore clients, IConfiguratio
 
         foreach (OidcClient client in registered)
         {
-            if (!Origin(client.Redirect))
+            if (!Registered(client).All(Origin))
             {
                 return Result.Failure(Refused("client", client.ClientId));
             }
@@ -77,6 +78,20 @@ internal sealed class RedirectValidation(IOidcClientStore clients, IConfiguratio
         && (string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
             || (string.Equals(parsed.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
                 && parsed.Host is "127.0.0.1" or "[::1]"));
+
+    /// <summary>
+    /// Every return address a client is registered with, each matched exactly: its one
+    /// destination, and a public application's further ones after it (D-252).
+    /// </summary>
+    /// <param name="client">The client.</param>
+    /// <returns>The addresses, the first one first.</returns>
+    /// <exception cref="ArgumentNullException">The client is absent.</exception>
+    public static IReadOnlyList<string> Registered(OidcClient client)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        return [client.Redirect, .. client.OtherRedirects];
+    }
 
     /// <summary>
     /// Where a person a client sent is returned: the origin of its registered address,

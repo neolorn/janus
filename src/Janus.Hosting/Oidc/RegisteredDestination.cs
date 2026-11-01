@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
 using Janus.Core;
@@ -10,17 +12,19 @@ using OpenIddict.Server;
 namespace Janus.Hosting.Oidc;
 
 /// <summary>
-/// Where the code is returned to, which is the one destination the registry holds.
+/// Where the code is returned to, which is a destination the registry holds.
 /// </summary>
 /// <param name="clients">The registry the client is read from.</param>
 /// <param name="log">Where a refused destination is recorded.</param>
 /// <remarks>
-/// Implements AUTH-OIDC-006 AC1 and API-REDIR-001 AC4. The destination is not matched by
-/// prefix or pattern: either the request named the client's one registered destination
-/// or it did not, and a pushed request is an authorization request validated as one
-/// (RFC 9126 section 2.1), so one that named another is refused with
+/// Implements AUTH-OIDC-006 AC1 and API-REDIR-001 AC4 (D-252). The destination is not
+/// matched by prefix or pattern: either the request named one of the client's registered
+/// destinations or it did not, and a pushed request is an authorization request validated
+/// as one (RFC 9126 section 2.1), so one that named another is refused with
 /// <c>invalid_request</c>, no description and no reference (OAuth 2.1 section 2.3.5). A
-/// request naming none takes the registered one. It is judged where the request is
+/// request naming none takes the registered one where the client holds one, and is
+/// refused where a public application holds several, since none is then the registered
+/// one (RFC 6749 section 3.1.2.3). It is judged where the request is
 /// pushed, because every authorization request is (AUTH-OIDC-006 AC2) and the one the
 /// browser then carries holds only what was kept here.
 /// </remarks>
@@ -50,7 +54,9 @@ internal sealed class RegisteredDestination(
             return;
         }
 
-        if (context.RedirectUri is null)
+        IReadOnlyList<string> registered = RedirectValidation.Registered(client);
+
+        if (context.RedirectUri is null && registered.Count is 1)
         {
             context.Request.RedirectUri = client.Redirect;
             context.SetRedirectUri(client.Redirect);
@@ -58,7 +64,8 @@ internal sealed class RegisteredDestination(
             return;
         }
 
-        if (string.Equals(context.RedirectUri, client.Redirect, StringComparison.Ordinal))
+        if (context.RedirectUri is string asked
+            && registered.Contains(asked, StringComparer.Ordinal))
         {
             return;
         }
@@ -67,7 +74,7 @@ internal sealed class RegisteredDestination(
             log,
             context.Transaction.GetHttpRequest()?.HttpContext.TraceIdentifier ?? string.Empty,
             client.ClientId,
-            context.RedirectUri);
+            context.RedirectUri ?? string.Empty);
 
         context.Reject(error: OpenIddictConstants.Errors.InvalidRequest);
     }
