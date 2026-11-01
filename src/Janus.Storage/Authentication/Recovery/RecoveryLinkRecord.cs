@@ -48,4 +48,10 @@ internal sealed class RecoveryLinkRecord
     /// the session showed recovery codes.
     /// </summary>
     public DateTimeOffset? CodesShownAt { get; set; }
+
+    /// <summary>
+    /// The <c>replaced_at</c> column, and nothing while the session's replace has applied
+    /// no swap.
+    /// </summary>
+    public DateTimeOffset? ReplacedAt { get; set; }
 }
