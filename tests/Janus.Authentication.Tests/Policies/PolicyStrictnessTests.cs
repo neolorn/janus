@@ -103,6 +103,30 @@ public sealed class PolicyStrictnessTests
     }
 
     /// <summary>
+    /// IDN-ATTR-002 AC6, OPS-CFG-002 (D-249): an organization may state photos on over a
+    /// system policy that has them off; its stated value is in force and its own, and
+    /// turning them on is still a loosening. Stated off, they are off whatever the
+    /// system policy says.
+    /// </summary>
+    [Fact]
+    public void IDN_ATTR_002_AC6_AnOrganizationTurnsPhotosOnOverASystemPolicyThatHasThemOff()
+    {
+        Policy off = StrictSystem with { Photos = false };
+        PolicyOverride stated = PolicyOverride.None with { Photos = true };
+        Policy tightened = PolicyStrictness.Tighten(off, stated);
+
+        Assert.Null(PolicyStrictness.BelowSystem(off, stated));
+        Assert.True(tightened.Photos);
+        Assert.True(PolicyStrictness.Loosens(off, tightened));
+        Assert.True(PolicyStrictness.InForce(off, tightened, stated).Photos);
+        Assert.False(PolicyStrictness.Tighten(off with { Photos = true }, PolicyOverride.None with { Photos = false }).Photos);
+        Assert.False(PolicyStrictness.Tighten(off, PolicyOverride.None).Photos);
+        Assert.Equal(
+            "selfServiceRecovery",
+            PolicyStrictness.BelowSystem(off, stated with { SelfServiceRecovery = true }));
+    }
+
+    /// <summary>
     /// IDN-ATTR-007 and chapter 10 section 4.1a (D-236): the grammatical gender is a
     /// loosening in neither direction, an organization may state it on over a system
     /// policy that has it off, and its stated value is in force and its own.

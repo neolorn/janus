@@ -207,6 +207,36 @@ public sealed class PhotoFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", Path)).Status);
     }
 
+    /// <summary>
+    /// IDN-ATTR-002 AC6 (D-249): an organization whose policy turns photos on over a system
+    /// policy that has them off shows its members' photos, while an account of no
+    /// organization follows the system policy and sets none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_AC6_AnOrganizationShowsPhotosWhereTheSystemPolicyDoesNotAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        var organization = OrganizationId.New(_deployment.Clock);
+
+        _deployment.Configuration.Set(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            PolicyOverride.None with { Photos = true });
+
+        Answer withheld = await browser.SendAsync("PUT", Path, Upload, contentType: Png);
+
+        _deployment.Memberships.Place(subject, organization);
+
+        Answer uploaded = await browser.SendAsync("PUT", Path, Upload, contentType: Png);
+        Answer read = await browser.SendAsync("GET", Path);
+
+        Assert.Equal(ErrorCodes.PhotoNotEnabled.ToString(), withheld.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, uploaded.Status);
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+    }
+
     // IDN-ATTR-002: photos are the policy's to show, and the browser's account belongs
     // to no organization, so the system policy is the one that shows them.
     private void ShowsPhotos() =>

@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An organization's policy may set `photos` to `true` while the system policy has it
+  `false`: it is no longer refused `config.policy.belowsystem`, and it is still a
+  loosening that asks `system:administer` and the step-up. Members of that
+  organization show photos; an account of no organization follows the system policy.
 - `POST /auth/begin` takes `identifier` as optional, and `IAuthentication.BeginAsync`
   takes it as nullable: without one it opens a passkey challenge with no allow-list,
   answers `available` `["passkey"]`, and the passkey's user handle names the account at
