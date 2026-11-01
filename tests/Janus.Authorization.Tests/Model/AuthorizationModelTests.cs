@@ -421,12 +421,12 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
-    /// AUTHZ-GRANT-004 and LIB-HOST-001 (D-237): <c>GrantsMustEnd()</c> makes the grants of
+    /// AUTHZ-GRANT-004 AC8 and LIB-HOST-001 (D-237): <c>GrantsMustEnd()</c> makes the grants of
     /// the role declared before it end, and of no other; with no role before it, the
     /// declaration is refused as it is built.
     /// </summary>
     [Fact]
-    public void AUTHZ_GRANT_004_ADeclaredRoleWhoseGrantsMustEndIsKeptSo()
+    public void AUTHZ_GRANT_004_AC8_ADeclaredRoleWhoseGrantsMustEndIsKeptSo()
     {
         var model = AuthorizationModel.Of(HostDomain.Declared()
             .Role("writer", "article:read")

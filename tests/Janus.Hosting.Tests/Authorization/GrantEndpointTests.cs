@@ -323,13 +323,13 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// AUTHZ-GRANT-003 (D-237): a grant of a role whose grants must end, an allow or a
+    /// AUTHZ-GRANT-003 AC7 (D-237): a grant of a role whose grants must end, an allow or a
     /// deny, is refused 422 <c>authz.grant.endrequired</c> naming the role where it
     /// carries no expiry, and nothing is written; with an expiry it is written.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_003_AGrantOfARoleWhoseGrantsMustEndCarriesAnEndAsync()
+    public async Task AUTHZ_GRANT_003_AC7_AGrantOfARoleWhoseGrantsMustEndCarriesAnEndAsync()
     {
         var ending = RoleName.Parse("contractor");
 
@@ -354,6 +354,29 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         }
 
         Assert.Equal(now.AddDays(30), (await StoredAsync(ended)).ExpiresAt);
+        Assert.Single(await HeldAsync(Branch));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC8 (D-237): once a role's grants must end, its open-ended grant
+    /// made before stands, and the next grant of it without an expiry is refused.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC8_TheNextOpenGrantOfARoleTurnedToEndIsRefusedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        Answer before = await GrantedAsync(administrator, "document", "d-1");
+
+        await _deployment.Roles.RecordAsync(
+            Role.Of(Reader, [Permission.Parse("document:read")], grantsMustEnd: true),
+            CancellationToken.None);
+
+        Answer after = await GrantedAsync(administrator, "organization", Branch.ToString());
+
+        Assert.Null((await StoredAsync(before)).ExpiresAt);
+        Assert.Equal(ErrorCodes.GrantEndRequired.ToString(), after.Text("code"));
         Assert.Single(await HeldAsync(Branch));
     }
 

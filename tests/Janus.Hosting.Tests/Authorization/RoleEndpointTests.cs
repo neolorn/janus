@@ -409,19 +409,26 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// AUTHZ-GRANT-004 and AUTHZ-GRANT-003 (D-237): a role is defined with whether its
+    /// AUTHZ-GRANT-004 AC8 and AUTHZ-GRANT-003 (D-237): a role is defined with whether its
     /// grants must end, which reads back with it, a body naming nothing giving it
-    /// <c>false</c>; turning it on is recorded before and after, and leaves an open-ended
-    /// grant of the role standing.
+    /// <c>false</c>, and one that is not a boolean is malformed naming it; turning it on is
+    /// recorded before and after, and leaves an open-ended grant of the role standing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_004_ARoleCarriesWhetherItsGrantsMustEndAsync()
+    public async Task AUTHZ_GRANT_004_AC8_ARoleCarriesWhetherItsGrantsMustEndAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
 
         Answer created = await DefinedAsync(administrator, Editing);
         Answer ending = await DefinedAsync(administrator, Reading, name: "reader", grantsMustEnd: true);
+        Answer unreadable = await administrator.SendAsync(
+            "POST",
+            "/admin/roles",
+            ("name", "writer"),
+            ("permissions", Reading),
+            ("grantsMustEnd", "yes"),
+            ("reason", "Needs it."));
 
         await GrantOfAsync(Editor, actor, expiresAt: null);
 
@@ -432,6 +439,8 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status201Created, created.Status);
         Assert.Equal(StatusCodes.Status201Created, ending.Status);
         Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
+        Assert.Equal(StatusCodes.Status400BadRequest, unreadable.Status);
+        Assert.Equal("grantsMustEnd", unreadable.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Equal(
             [("editor", true), ("reader", true)],
             read.Json()

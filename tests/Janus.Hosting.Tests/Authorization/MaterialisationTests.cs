@@ -106,13 +106,13 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     }
 
     /// <summary>
-    /// AUTHZ-GRANT-003 (D-237): a derivation's grant comes from the host's data and ends
+    /// AUTHZ-GRANT-003 AC7 (D-237): a derivation's grant comes from the host's data and ends
     /// with it, so a role whose grants must end is materialised with no end, and confers
     /// what it allows.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_003_ARoleWhoseGrantsMustEndIsMaterialisedWithNoEndAsync()
+    public async Task AUTHZ_GRANT_003_AC7_ARoleWhoseGrantsMustEndIsMaterialisedWithNoEndAsync()
     {
         Reviewed reviewed = await ReviewedAsync();
 
