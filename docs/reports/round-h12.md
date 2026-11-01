@@ -129,5 +129,9 @@
   green.
 - Commit-message gate, the other gates and the full-history secret scan before the
   push: green.
+- The pipeline's first run, on 5271b883, failed three cases of one integration test:
+  `JmapMailServerAgainstStalwartTests.INT_MAIL_001_AC6_ADisabledPushChangesAuthenticationAloneAsync`
+  still expected a listed account with no name. The expectation is corrected in
+  99b74908.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
