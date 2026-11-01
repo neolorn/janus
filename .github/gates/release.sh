@@ -16,8 +16,10 @@
 # permissions, and the commands of the command-line tool with their arguments,
 # standard input and output and exit codes (D-206).
 # CONV-VCS-003 AC2: a commit that breaks the contract as released carries the breaking
-# marker; it breaks it where it removes or changes a shipped line, marks one removed in
-# an unshipped file, or takes away an entry of a list the previous release held. A
+# marker; it breaks it where it removes or changes a line the newest final release
+# shipped, marks one removed in an unshipped file, or takes away an entry of a list
+# that release held. A release candidate is never that baseline, and before the first
+# final release no commit breaks the contract (D-232). A
 # commit with two parents is the merge commit the platform writes, which carries no
 # change of its own, so only single-parent commits are inspected.
 
@@ -84,10 +86,29 @@ shipped() {
     | grep -c . || true
 }
 
-# How many shipped lines a commit marks removed in an unshipped file, which is how the
-# analyser records a shipped line taken away before the release that drops it.
-removed() {
-  git diff "$1" "$2" -- '*PublicAPI.Unshipped.txt' | grep -cE '^\+\*REMOVED\*' || true
+# The lines of the shipped files at a commit, each named for its file, blank lines and
+# the nullable marker aside.
+published() {
+  local file
+
+  for file in $(git ls-tree -r --name-only "$1" | grep -E '(^|/)PublicAPI\.Shipped\.txt$' || true); do
+    git show "$1:${file}" | grep -vE '^(#nullable enable)?[[:space:]]*$' | sed "s|^|${file} |" || true
+  done | LC_ALL=C sort -u
+}
+
+# The shipped lines a commit took away, a line changed among them, and those it marks
+# removed in an unshipped file, which is how the analyser records a shipped line taken
+# away before the release that drops it; each is named for its shipped file.
+withdrawn() {
+  {
+    git diff "$1" "$2" -- '*PublicAPI.Shipped.txt' | awk '
+      /^--- / { file = substr($0, 7); next }
+      /^\+\+\+ / { next }
+      /^-/ { line = substr($0, 2); if (line !~ /^(#nullable enable)?[[:space:]]*$/) print file " " line }'
+    git diff "$1" "$2" -- '*PublicAPI.Unshipped.txt' | awk '
+      /^\+\+\+ / { file = substr($0, 7); sub(/PublicAPI\.Unshipped\.txt$/, "PublicAPI.Shipped.txt", file); next }
+      /^\+\*REMOVED\*/ { print file " " substr($0, 11) }'
+  } | LC_ALL=C sort -u
 }
 
 # The contract's lists at a commit, one entry a line and each named for its list: the
@@ -239,31 +260,36 @@ for commit in $commits; do
   after=$(versions "$commit")
   from=${parent:-$nothing}
   latest=$(printf '%s\n' "$before" | head -n 1)
+  final=$(printf '%s\n' "$before" | grep -vF -- '-rc.' | head -n 1 || true)
   lost=$(shipped "$from" "$commit" -)
   gained=$(shipped "$from" "$commit" +)
 
   breaking=""
 
-  if [ "$lost" -gt 0 ]; then
-    breaking="it removes or changes a shipped line"
-  elif [ "$(removed "$from" "$commit")" -gt 0 ]; then
-    breaking="it marks a shipped line removed"
-  elif [ -n "$latest" ] && ! git diff --quiet "$parent" "$commit" -- "${listed[@]}"; then
-    holder=$(released "$parent" "$latest")
+  if [ -n "$final" ]; then
+    holder=$(released "$parent" "$final")
 
     if [ -z "$holder" ]; then
-      echo "${commit}: the commit that released ${latest} is not in the history, so what the commit takes away cannot be judged."
+      echo "${commit}: the commit that released ${final} is not in the history, so what the commit takes away cannot be judged."
       status=1
-    elif legible "$holder" && legible "$parent" && legible "$commit"; then
-      taken=$(LC_ALL=C comm -12 \
-        <(LC_ALL=C comm -23 <(contract "$parent") <(contract "$commit")) \
-        <(contract "$holder"))
-
-      if [ -n "$taken" ]; then
-        breaking="it takes away what ${latest} released: $(printf '%s\n' "$taken" | paste -sd ';' - | sed 's/;/; /g')"
-      fi
     else
-      status=1
+      gone=$(LC_ALL=C comm -12 <(withdrawn "$from" "$commit") <(published "$holder"))
+
+      if [ -n "$gone" ]; then
+        breaking="it removes, changes or marks removed what ${final} shipped: $(printf '%s\n' "$gone" | paste -sd ';' - | sed 's/;/; /g')"
+      elif ! git diff --quiet "$parent" "$commit" -- "${listed[@]}"; then
+        if legible "$holder" && legible "$parent" && legible "$commit"; then
+          taken=$(LC_ALL=C comm -12 \
+            <(LC_ALL=C comm -23 <(contract "$parent") <(contract "$commit")) \
+            <(contract "$holder"))
+
+          if [ -n "$taken" ]; then
+            breaking="it takes away what ${final} released: $(printf '%s\n' "$taken" | paste -sd ';' - | sed 's/;/; /g')"
+          fi
+        else
+          status=1
+        fi
+      fi
     fi
   fi
 
@@ -324,7 +350,7 @@ for commit in $commits; do
   # judged against the newest final release, never a release candidate, and
   # X.Y.Z-rc.N is held to what X.Y.Z needs.
   previous=$latest
-  baseline=$(printf '%s\n' "$before" | grep -vF -- '-rc.' | head -n 1 || true)
+  baseline=$final
   target=${added%%-rc.*}
   part=major
 
@@ -393,7 +419,8 @@ for commit in $commits; do
     fi
   fi
 
-  if [ "$part" = major ]; then
+  # CONV-VCS-005 AC3 (D-232): a release candidate's section opens no major version.
+  if [ "$part" = major ] && [ "$target" = "$added" ]; then
     linked=0
 
     for target in $(section "$commit" "$added" | grep -oE '\]\([^)#:]+\)' | sed -E 's/^\]\((.*)\)$/\1/' || true); do
