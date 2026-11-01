@@ -198,7 +198,7 @@ public sealed class ContinuationTests : IAsyncDisposable
         Answer read = await browser.SendAsync("GET", "/auth/session");
 
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
-        Assert.False(completed.Json().TryGetProperty("continueTo", out _));
+        Assert.Empty(completed.Body);
         Assert.False(read.Json().TryGetProperty("continueTo", out _));
         Assert.True(read.Json().TryGetProperty("landing", out _));
     }

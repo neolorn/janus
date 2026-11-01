@@ -35,6 +35,8 @@ internal static class RegistrationEndpoints
 
     private static readonly IResult Nothing = TypedResults.NoContent();
 
+    private static readonly IResult Made = TypedResults.StatusCode(StatusCodes.Status201Created);
+
     /// <summary>
     /// Mounts them.
     /// </summary>
@@ -498,11 +500,14 @@ internal static class RegistrationEndpoints
             completed.Browser,
             time.GetUtcNow() + remembered);
 
-        return TypedResults.Json(
-            new RegistrationCompletedView(continueTo),
-            RegistrationJson.Default.RegistrationCompletedView,
-            contentType: null,
-            StatusCodes.Status201Created);
+        // FE-REG-005 AC5: with nothing waiting, the end names no address at all.
+        return continueTo is null
+            ? Made
+            : TypedResults.Json(
+                new RegistrationCompletedView(continueTo),
+                RegistrationJson.Default.RegistrationCompletedView,
+                contentType: null,
+                StatusCodes.Status201Created);
     }
 
     private static async Task<IResult> VerifyAsync(
