@@ -1346,8 +1346,8 @@ declared, startup fails with `model.startup.declarationmissing`, `details.key`
 
 **An organization turns photos on (D-249).** An organization's policy MAY set `photos`
 to `true` whatever the system policy says: it is not refused as below the system policy
-(`config.policy.belowsystem`), and it stays a loosening for what OPS-CFG-002 asks of
-one. It reaches that organization's members as AUTH-PRIN-002 resolves every field; an
+(`config.policy.belowsystem`), and it stays a loosening, so the policy route still asks
+`system:administer` and its step-up for it (OPS-CFG-002). It reaches that organization's members as AUTH-PRIN-002 resolves every field; an
 account with no membership follows the system policy, so customers keep photos off
 while it says so. Every other field of an override is judged against the system policy
 as before.
@@ -1356,8 +1356,9 @@ as before.
 of another current member of the same organization, where that organization's policy
 has `photos` on (`09` `GET /organizations/{id}/members/{account}/photo`, and its library
 call `IAccounts.MemberPhotoAsync`, `07` LIB-API-005). No permission beyond the two
-memberships is asked, and a system principal is refused. The rule above governs this
-read too, so the member's photo is read only where it is shown. Anything else (either
+memberships is asked, and a system principal is refused with `authz.denied`. The rule
+above governs this read too, so the photo is read only where every organization the
+colleague belongs to enables photos. Anything else (either
 not a current member, photos off, no photo set) is answered 404 `identity.photo.notfound`
 alike, so the read discloses nothing about membership to an outsider. Each admitted
 read counts one record toward the reader's read volume (`06` OPS-ALERT-005); no audit
@@ -1379,9 +1380,10 @@ row is written.
    shows none (D-249).
 7. A current member reads a colleague's photo in an organization whose policy has
    photos on, and the read counts one record toward their read volume and writes no
-   audit row; a caller or a colleague who is not a current member, photos off and no
-   photo set are each answered 404 `identity.photo.notfound` in identical bytes
-   (D-250).
+   audit row; a caller or a colleague who is not a current member, photos off, a
+   colleague of a second organization that keeps photos off, and no photo set are each
+   answered 404 `identity.photo.notfound` in identical bytes; a system principal is
+   refused `authz.denied` (D-250).
 
 ---
 

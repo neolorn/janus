@@ -453,7 +453,8 @@ reason is refused with `config.change.reasonrequired`, `details.key` naming the 
 
 **Photos over the system policy (D-249).** An organization's policy setting `photos` to
 `true` is admitted whatever the system policy says, and is not refused as below it; it
-stays a loosening for what this item asks of one (`01` IDN-ATTR-002). No other field
+stays a loosening, asking `system:administer` and the step-up as every loosening does
+(`01` IDN-ATTR-002). No other field
 changes: every other override is still judged against the system policy.
 
 *Source: D-010, D-166, D-249*

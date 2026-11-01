@@ -248,7 +248,8 @@ and `GrantsMustEnd`. Its endpoint is `GET /admin/grants/assignable?organization=
 
 **A colleague's photo (D-250).** `IAccounts.MemberPhotoAsync`, taking the caller's access
 context, the organization and the member, answers the member's photo where `01`
-IDN-ATTR-002 admits the read, and refuses a system principal. Its endpoint is
+IDN-ATTR-002 admits the read, and refuses a system principal with `authz.denied`. Its
+endpoint is
 `GET /organizations/{id}/members/{account}/photo` (`09`).
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
