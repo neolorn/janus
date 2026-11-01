@@ -20307,6 +20307,20 @@ refresh token. Every other client is unchanged. The owner approved the trade-off
 
 ## D-253 — A current member of the administrative organization gains a mailbox
 
+> **Amended.** 2026-11-01. Decisions on the questions its carrying raised:
+> 1. `integration.mailserver.unavailable`: 422, with `details.requires`
+>    `integration.mailserver.endpoint`, as `config.value.notallowed` does.
+> 2. Success: 201 with `{ "id", "address", "state" }` of the mailbox.
+> 3. An `{id}` that is not the administrative organization: 404
+>    `identity.membership.notfound`. The route exists only there, and the answer is the
+>    same as for a non-member, so nothing is disclosed.
+> 4. Audit action: `identity.mailbox.given`, in `10` section 5.24, with the reason.
+> 5. Address rules: (a) no lock on the member's existing emails; (b) the given address
+>    counts against `identifiers.email.max`, refused `identity.identifier.maximum` at the
+>    limit; (c) an address another account holds as an ordinary email is refused with
+>    the code an identifier add already answers for an address another account holds,
+>    `auth.code.expired` (`10` section 1.2).
+
 **Date:** 2026-11-01 · **Status:** accepted · **Amends:** REG-MAIL-001, INT-MAIL-006
 
 **TL;DR.** A person already a member of the administrative organization, the bootstrap
@@ -20337,13 +20351,21 @@ production release.
 **Propagated to:** `20` REG-MAIL-001 (the route beside the invitation); `05`
 INT-MAIL-006; `07` LIB-API (`IMemberships.GiveMailboxAsync`); `09` (the route); `10`
 section 1 (`identity.mailbox.held`, `integration.mailserver.unavailable`,
-`identity.mailbox.taken`), section 5a (`invitation:issue`), section 5.25
-(`identifier-added`) and section 5b (`IdentifierAdded`, `IdentifierPrimaryChanged`);
-`implementation-plan.md` (round H12).
+`identity.mailbox.taken`, `identity.membership.notfound`, `identity.identifier.maximum`,
+`auth.code.expired`), section 5a (`invitation:issue`), section 5.24
+(`identity.mailbox.given`), section 5.25 (`identifier-added`) and section 5b
+(`IdentifierAdded`, `IdentifierPrimaryChanged`); `implementation-plan.md` (round H12).
 
 ---
 
 ## D-254 — Reconciliation leaves the mail server's own accounts alone
+
+> **Amended.** 2026-11-01. Decisions on the questions its carrying raised:
+> 6. D-254 changes what `IMailServer` asks of a host: a host's own adapter lists each
+>    account's type and name, and refuses a push that meets an own account as a
+>    conflict (`07` LIB-EXT-001, LIB-HOST-001).
+> 7. An "account name" is the name the mail server gives the account (Stalwart's
+>    `name`), not an email address.
 
 **Date:** 2026-11-01 · **Status:** accepted · **Amends:** INT-MAIL-007
 
@@ -20367,7 +20389,8 @@ the library's management account, the operator's), each raising the alert daily.
 **Propagated to:** `05` INT-MAIL-007 (and the listing of INT-MAIL-001 where it names
 the accounts read); `10` section 4 (`integration.mailserver.ownaccounts`, and section
 4.8 as a protected key) and section 1 (`integration.mailserver.conflict`); `06`
-OPS-CFG-004 (the protected list); `implementation-plan.md` (round H12).
+OPS-CFG-004 (the protected list); `07` LIB-EXT-001 and LIB-HOST-001 (what a host's own
+`IMailServer` lists and refuses); `implementation-plan.md` (round H12).
 
 ---
 

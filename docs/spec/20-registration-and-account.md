@@ -1283,12 +1283,18 @@ uniqueness, and `formerMailbox` for a mailbox held before, `identity.invitation.
 without it), and, the membership being current, owed `enabled` at once (`05` INT-MAIL-006,
 INT-MAIL-007). The address SHALL become a verified email of the account, and its primary
 email where the account holds none from the organization's domain; the account's other
-emails stay. Taking it on SHALL be notified once to the security-notice set as it stood
-before, and recorded with its reason. It SHALL be refused for an account that already
-holds a mailbox (`identity.mailbox.held`, 409), an account that holds no current
-membership of the administrative organization, an account neither `active` nor
-`restricted`, the `emergency` account (OPS-BOOT-002), and a deployment with no mail
-server registered (`integration.mailserver.unavailable`). It hands out no role, so
+emails stay, and no lock falls on them. The address counts against
+`identifiers.email.max`. Taking it on SHALL be notified once to the security-notice set
+as it stood before, and recorded as `identity.mailbox.given` with its reason. It SHALL be
+refused for an account that already holds a mailbox (`identity.mailbox.held`, 409), an
+account whose emails already fill the kind (`identity.identifier.maximum`, 409), an
+address another account holds as an ordinary email (`auth.code.expired`, 422, the code an
+identifier add answers for it, REG-IDENT-004), an account that holds no current
+membership of the administrative organization and an `{id}` that is not that
+organization alike (`identity.membership.notfound`, 404, so nothing is disclosed), an
+account neither `active` nor `restricted`, the `emergency` account (OPS-BOOT-002), and a
+deployment with no mail server registered (`integration.mailserver.unavailable`, 422).
+It answers 201 with the mailbox's `id`, `address` and `state`. It hands out no role, so
 AUTHZ-GRANT-005 does not bear on it, and a system administrator may give themselves a
 mailbox.
 
@@ -1324,12 +1330,19 @@ security notices reach the personal address as well.
    administrator bootstrapped without `--mailbox` included, is given one: the mailbox is
    reserved and owed `enabled` at once, the address becomes a verified email and the
    primary where the account held none from the organization's domain, its other emails
-   stay, and the security-notice set as it stood before is notified once (D-253).
+   stay unlocked, the security-notice set as it stood before is notified once, the
+   giving is recorded as `identity.mailbox.given`, and the answer is 201 with the
+   mailbox's `id`, `address` and `state` (D-253).
 10. Giving a mailbox is refused, and nothing written, for an account that already holds
-    one (`identity.mailbox.held`), one with no current membership of the administrative
-    organization, one neither `active` nor `restricted`, the `emergency` account, and a
-    deployment with no mail server registered (`integration.mailserver.unavailable`);
-    a system administrator gives themselves one (D-253).
+    one (`identity.mailbox.held`), one whose emails fill `identifiers.email.max`
+    (`identity.identifier.maximum`), an address another account holds as an ordinary
+    email (`auth.code.expired`), one with no current membership of the administrative
+    organization and an `{id}` that is not that organization, alike
+    (`identity.membership.notfound`), one neither `active` nor `restricted`, the
+    `emergency` account, and a deployment with no mail server registered
+    (`integration.mailserver.unavailable`, `details.requires`
+    `integration.mailserver.endpoint`); a system administrator gives themselves one
+    (D-253).
 
 ---
 

@@ -261,11 +261,11 @@ must resolve at the mail server (INT-MAIL-007). A push that meets an account the
 holds under a name `integration.mailserver.ownaccounts` lists changes nothing there and
 is answered `integration.mailserver.conflict` the same way, whatever its `description`
 carries (D-254). The listing is `x:Account/query` with `x:Account/get` of `@type`,
-`name`, `emailAddress`, `description` and `permissions`; it leaves out every account
-whose `@type` is not `User` and every account whose `name` the list of own accounts
-names, neither of which reconciliation counts or acts on (INT-MAIL-007, D-254), and
-answers for each other account the mailbox identifier its `description` carries (none
-where it carries none),
+`name`, `emailAddress`, `description` and `permissions`, and answers for each account
+its type (individual where `@type` is `User`) and its name, the name the server gives
+the account and not an email address, so that reconciliation neither counts nor acts on
+an account that is not individual or that the list of own accounts names (INT-MAIL-007,
+D-254); the mailbox identifier its `description` carries (none where it carries none),
 its address (none where `emailAddress` is absent, is not text, or does not read as an
 email address, D-187) and whether it is enabled; an account is listed enabled exactly
 where `authenticate` is not disabled and, under `Replace`, is enabled. App passwords are
@@ -294,10 +294,10 @@ called with the management key on the person's account, which the request-level
 7. Criteria 3 to 6, and INT-MAIL-010's calls, are decided by tests in the pipeline
    against a real Stalwart server of the release the adapter is written for, 1.0, its
    container image pinned by digest, and never by a fake alone (CONV-TEST-002, D-224).
-8. Against that server, the listing leaves out a group account and an account
-   `integration.mailserver.ownaccounts` names, and a push that meets an account that
-   list names changes nothing there and is answered `integration.mailserver.conflict`
-   (D-254).
+8. Against that server, the listing answers a group account as not individual and each
+   account's name, and a push that meets an account
+   `integration.mailserver.ownaccounts` names changes nothing there and is answered
+   `integration.mailserver.conflict` (D-254).
 
 ---
 
