@@ -114,7 +114,7 @@ internal sealed class RoleService(
             return Result.Failure<bool>(Malformed("reason"));
         }
 
-        var defined = Role.Of(role.Name, role.Permissions, role.HandsOut);
+        var defined = Role.Of(role.Name, role.Permissions, role.HandsOut, role.GrantsMustEnd);
 
         // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
         // on the role as it stands without a lock, so the step-up, which may ask the
@@ -340,7 +340,8 @@ internal sealed class RoleService(
         new(
             role.Name,
             [.. role.Permissions.OrderBy(permission => permission.ToString(), StringComparer.Ordinal)],
-            [.. role.HandsOut.OrderBy(handed => handed.ToString(), StringComparer.Ordinal)]);
+            [.. role.HandsOut.OrderBy(handed => handed.ToString(), StringComparer.Ordinal)],
+            role.GrantsMustEnd);
 
     // AUTHZ-GRANT-005 (D-212): a role hands out roles the deployment holds; one naming
     // itself names a role that stands once it is defined. Inside the unit of work the

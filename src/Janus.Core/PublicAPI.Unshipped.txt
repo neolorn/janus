@@ -443,6 +443,7 @@ Janus.Core.AuthorizationDeclarationBuilder.Role(string! name, System.Collections
 Janus.Core.AuthorizationDeclarationBuilder.SensitiveCategory(string! category) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.ServesPurpose(string! permission, string! purpose) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.StepUpGate(string! permission, string! gate) -> Janus.Core.AuthorizationDeclarationBuilder!
+Janus.Core.AuthorizationDeclarationBuilder.GrantsMustEnd() -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.BackupChoice
 Janus.Core.BackupChoice.AllVerified = 0 -> Janus.Core.BackupChoice
 Janus.Core.BackupChoice.Named = 2 -> Janus.Core.BackupChoice
@@ -855,8 +856,8 @@ Janus.Core.DefinedGroup.Name.get -> string!
 Janus.Core.DefinedGroup.Name.init -> void
 Janus.Core.DefinedRole
 Janus.Core.DefinedRole.<Clone>$() -> Janus.Core.DefinedRole!
-Janus.Core.DefinedRole.Deconstruct(out Janus.Core.RoleName Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! HandsOut) -> void
-Janus.Core.DefinedRole.DefinedRole(Janus.Core.RoleName Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! HandsOut) -> void
+Janus.Core.DefinedRole.Deconstruct(out Janus.Core.RoleName Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! HandsOut, out bool GrantsMustEnd) -> void
+Janus.Core.DefinedRole.DefinedRole(Janus.Core.RoleName Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! HandsOut, bool GrantsMustEnd = false) -> void
 Janus.Core.DefinedRole.HandsOut.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
 Janus.Core.DefinedRole.HandsOut.init -> void
 Janus.Core.DefinedRole.Equals(Janus.Core.DefinedRole? other) -> bool
@@ -2899,7 +2900,7 @@ Janus.Core.RoleChanged.Role.init -> void
 Janus.Core.RoleChanged.RoleChanged(System.DateTimeOffset RaisedAt, string! IdempotencyKey, string! Role, Janus.Core.RoleChange Change) -> void
 Janus.Core.RoleDeclaration
 Janus.Core.RoleDeclaration.<Clone>$() -> Janus.Core.RoleDeclaration!
-Janus.Core.RoleDeclaration.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<string!>! HandsOut) -> void
+Janus.Core.RoleDeclaration.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<string!>! HandsOut, out bool GrantsMustEnd) -> void
 Janus.Core.RoleDeclaration.HandsOut.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.RoleDeclaration.HandsOut.init -> void
 Janus.Core.RoleDeclaration.Equals(Janus.Core.RoleDeclaration? other) -> bool
@@ -2907,7 +2908,7 @@ Janus.Core.RoleDeclaration.Name.get -> string!
 Janus.Core.RoleDeclaration.Name.init -> void
 Janus.Core.RoleDeclaration.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
 Janus.Core.RoleDeclaration.Permissions.init -> void
-Janus.Core.RoleDeclaration.RoleDeclaration(string! Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<string!>! HandsOut) -> void
+Janus.Core.RoleDeclaration.RoleDeclaration(string! Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<string!>! HandsOut, bool GrantsMustEnd = false) -> void
 Janus.Core.RoleName
 Janus.Core.RoleName.Equals(Janus.Core.RoleName other) -> bool
 Janus.Core.RoleName.RoleName() -> void
@@ -5256,3 +5257,8 @@ Janus.Core.SendRequest.SendRequest(Janus.Core.SendReference Reference, Janus.Cor
 Janus.Core.IMailServer.RevokeAppPasswordAsync(Janus.Core.MailboxId mailbox, Janus.Core.EmailAddress address, Janus.Core.AppPasswordId id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMailServer.CreateAppPasswordAsync(Janus.Core.MailboxId mailbox, Janus.Core.EmailAddress address, string! label, System.DateTimeOffset? expiresAt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedAppPassword!>>
 Janus.Core.IMailServer.AppPasswordsAsync(Janus.Core.MailboxId mailbox, Janus.Core.EmailAddress address, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AppPassword!>!>>
+Janus.Core.DefinedRole.GrantsMustEnd.get -> bool
+Janus.Core.DefinedRole.GrantsMustEnd.init -> void
+Janus.Core.RoleDeclaration.GrantsMustEnd.get -> bool
+Janus.Core.RoleDeclaration.GrantsMustEnd.init -> void
+static Janus.Core.ErrorCodes.GrantEndRequired.get -> Janus.Core.ErrorCode

@@ -649,7 +649,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     /// of its name stands for, recorded <c>authz.role.defined</c> under the start
     /// principal <c>role-declaration</c> with the reason <c>AUTHZ-GRANT-004</c>, and
     /// leaves one an administrator made before it was declared as it stands; each name
-    /// is kept as seeded, and the roles each hands out are seeded with it (D-212). A role an
+    /// is kept as seeded, and the roles each hands out are seeded with it (D-212), as is
+    /// whether its grants must end, recorded with it (D-237). A role an
     /// administrator changed or removed afterwards is not defined again at the next start.
     /// Each definition is announced once as <c>RoleChanged</c> (chapter 10 section 5b,
     /// D-218).
@@ -665,7 +666,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         string premade = "premade-" + suffix;
         RoleDeclaration[] roles =
         [
-            new(changed, [HostPermissions.Read, HostPermissions.Edit], ["auditor"]),
+            new(changed, [HostPermissions.Read, HostPermissions.Edit], ["auditor"], GrantsMustEnd: true),
             new(removed, [HostPermissions.Read], []),
             new(premade, [HostPermissions.Read], []),
         ];
@@ -688,6 +689,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal("document:edit", await PermissionsOfAsync(premade));
         Assert.Equal(["document:edit document:read"], await SeedingsRecordedAsync(changed));
         Assert.Equal("auditor", await HandedOutAsync(changed));
+        Assert.True(await GrantsMustEndAsync(changed));
+        Assert.False(await GrantsMustEndAsync(removed));
         Assert.Equal(["document:read"], await SeedingsRecordedAsync(removed));
         Assert.Empty(await SeedingsRecordedAsync(premade));
         Assert.Equal(3, await SeededAsync(suffix));
@@ -2395,6 +2398,23 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
     // AUTHZ-GRANT-005 (D-212): the roles a role hands out, as its row and the record of
     // its seeding both carry them, or nothing where they differ.
+    // Whether the role's grants must end, as its row holds it and its seeding recorded it.
+    private async Task<bool?> GrantsMustEndAsync(string role)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<bool?>(
+            """
+            SELECT roles.grants_must_end
+            FROM identity.roles
+            JOIN identity.audit_records AS seeded
+              ON seeded.action = 'authz.role.defined' AND seeded.details ->> 'role' = roles.name
+            WHERE roles.name = @role
+              AND seeded.details -> 'after' -> 'grantsMustEnd' = to_jsonb(roles.grants_must_end)
+            """,
+            new { role });
+    }
+
     private async Task<string?> HandedOutAsync(string role)
     {
         await using NpgsqlConnection connection = await host.OpenAsync();

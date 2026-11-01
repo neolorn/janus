@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A role can require that every grant of it carries an end: `grantsMustEnd` on
+  `/admin/roles` (default `false`), and `GrantsMustEnd()` after a role declared with
+  `AuthorizationDeclarationBuilder.Role`. A grant of such a role without `expiresAt`,
+  through `POST /admin/grants` or `IGrants.GrantAsync`, is refused 422
+  `authz.grant.endrequired` naming the role in `details.role`. Turning it on leaves the
+  open-ended grants already made as they are, and a derived or materialised grant is
+  not bound by it. The role's audit records carry it before and after.
 - A stored system policy or organization override whose gates still name the retired
   step-up action `alerting:destinations` reads past that gate, so a deployment
   bootstrapped before its removal starts and gates every current action as before; a

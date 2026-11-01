@@ -3072,6 +3072,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("name");
 
+                b.Property<bool>("GrantsMustEnd")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false)
+                    .HasColumnName("grants_must_end");
+
                 b.PrimitiveCollection<string[]>("HandsOut")
                     .IsRequired()
                     .ValueGeneratedOnAdd()

@@ -31,7 +31,8 @@ public sealed class RoleAuditTests(DatabaseFixture database)
 
     /// <summary>
     /// AUTHZ-GRANT-004 and IDN-AUD-001 AC1: a definition is recorded with the role, what
-    /// it permitted and handed out, what it permits and hands out (D-212), the reason, and the actor as both identities.
+    /// it permitted and handed out, what it permits and hands out (D-212), whether its
+    /// grants must end before and after (D-237), the reason, and the actor as both identities.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -47,7 +48,8 @@ public sealed class RoleAuditTests(DatabaseFixture database)
                 new DefinedRole(
                     Editor,
                     [Permission.Parse("document:edit"), Permission.Parse("document:read")],
-                    [RoleName.Parse("reviewer")]),
+                    [RoleName.Parse("reviewer")],
+                    GrantsMustEnd: true),
                 "Editors now edit.",
                 actor,
                 breakGlassReason: null,
@@ -68,6 +70,8 @@ public sealed class RoleAuditTests(DatabaseFixture database)
         Assert.Equal(0, read.Details["before"].GetProperty("handsOut").GetArrayLength());
         Assert.Equal(2, read.Details["after"].GetProperty("permissions").GetArrayLength());
         Assert.Equal("reviewer", read.Details["after"].GetProperty("handsOut")[0].GetString());
+        Assert.False(read.Details["before"].GetProperty("grantsMustEnd").GetBoolean());
+        Assert.True(read.Details["after"].GetProperty("grantsMustEnd").GetBoolean());
         Assert.Equal("Editors now edit.", read.Details["reason"].GetString());
     }
 

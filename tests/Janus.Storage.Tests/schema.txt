@@ -1158,6 +1158,7 @@ table role_permissions
 table roles
   column name text not null
   column hands_out text[] not null default '{}'::text[]
+  column grants_must_end boolean not null default false
   constraint pk_roles PRIMARY KEY (name)
 table seeded_roles
   column name text not null

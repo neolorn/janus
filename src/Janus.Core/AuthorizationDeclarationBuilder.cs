@@ -390,6 +390,28 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Makes every grant of the role declared last carry an end: a grant of it without
+    /// <c>expiresAt</c> is refused.
+    /// </summary>
+    /// <returns>This builder.</returns>
+    /// <exception cref="InvalidOperationException">No role is declared before it.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-003, AUTHZ-GRANT-004 and LIB-HOST-001 (D-237). It is seeded
+    /// with the role, and from then on is the administrators' to change as the role is.
+    /// </remarks>
+    public AuthorizationDeclarationBuilder GrantsMustEnd()
+    {
+        if (_roles.Count is 0)
+        {
+            throw new InvalidOperationException("No role is declared for its grants to end.");
+        }
+
+        _roles[^1] = _roles[^1] with { GrantsMustEnd = true };
+
+        return this;
+    }
+
+    /// <summary>
     /// Declares one of the host's background jobs. Its principal is
     /// <see cref="SystemPrincipal.ForOrganization"/> naming it, which acts for one
     /// organization.

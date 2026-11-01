@@ -421,6 +421,27 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-004 and LIB-HOST-001 (D-237): <c>GrantsMustEnd()</c> makes the grants of
+    /// the role declared before it end, and of no other; with no role before it, the
+    /// declaration is refused as it is built.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GRANT_004_ADeclaredRoleWhoseGrantsMustEndIsKeptSo()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared()
+            .Role("writer", "article:read")
+            .Role("contractor", "article:read", "article:edit")
+            .GrantsMustEnd()
+            .Role("reviewer", "article:read")
+            .Build());
+
+        Assert.Equal(
+            [("writer", false), ("contractor", true), ("reviewer", false)],
+            model.DeclaredRoles.Select(role => (role.Name.ToString(), role.GrantsMustEnd)));
+        Assert.Throws<InvalidOperationException>(() => HostDomain.Declared().GrantsMustEnd());
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-004, AUTHZ-GRANT-005 (D-212): a declared role hands out the roles it
     /// names where each is declared or a role chapter 10 section 3 seeds; one naming any
     /// other stops the deployment with <c>model.startup.declarationinvalid</c>, naming

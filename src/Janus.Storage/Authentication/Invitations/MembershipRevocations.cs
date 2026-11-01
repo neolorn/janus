@@ -76,7 +76,7 @@ internal sealed class MembershipRevocations(
             {
                 Role read = await roles.FindAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
 
-                touched.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut]));
+                touched.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut], read.GrantsMustEnd));
             }
 
             var change = new HandOut(

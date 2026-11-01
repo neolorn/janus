@@ -892,11 +892,12 @@ public sealed class ModelTests
             "resources.resource_type",
             "resources.subject",
 
-            // Authorization: what a role allows (AUTHZ-GRANT-004) and the roles its
-            // holders hand out (AUTHZ-GRANT-005), read live so that editing it takes
-            // effect at once.
+            // Authorization: what a role allows (AUTHZ-GRANT-004), the roles its holders
+            // hand out (AUTHZ-GRANT-005) and whether its grants must end (D-237), read
+            // live so that editing it takes effect at once.
             "role_permissions.permission",
             "role_permissions.role",
+            "roles.grants_must_end",
             "roles.hands_out",
             "roles.name",
 

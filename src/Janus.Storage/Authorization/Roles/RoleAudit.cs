@@ -84,15 +84,19 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
             .ConfigureAwait(false);
     }
 
-    // 10 section 5.24 (D-212): each side is the role's permissions and the roles it
-    // hands out, written in the order the role's reading answers them.
+    // 10 section 5.24 (D-212, D-237): each side is the role's permissions, the roles it
+    // hands out, written in the order the role's reading answers them, and whether its
+    // grants must end.
     private static JsonElement Written(DefinedRole? role) =>
         role is null
             ? JsonSerializer.SerializeToElement<object?>(null)
-            : JsonSerializer.SerializeToElement(new Dictionary<string, string[]>(capacity: 2, StringComparer.Ordinal)
+            : JsonSerializer.SerializeToElement(new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
             {
-                ["permissions"] = [.. role.Permissions.Select(permission => permission.ToString())],
-                ["handsOut"] = [.. role.HandsOut.Select(handed => handed.ToString())],
+                ["permissions"] = JsonSerializer.SerializeToElement<string[]>(
+                    [.. role.Permissions.Select(permission => permission.ToString())]),
+                ["handsOut"] = JsonSerializer.SerializeToElement<string[]>(
+                    [.. role.HandsOut.Select(handed => handed.ToString())]),
+                ["grantsMustEnd"] = JsonSerializer.SerializeToElement(role.GrantsMustEnd),
             });
 
     private static Dictionary<string, JsonElement> Details(

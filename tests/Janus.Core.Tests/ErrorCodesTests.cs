@@ -72,6 +72,7 @@ public sealed class ErrorCodesTests
         "authz.denied",
         "authz.derivation.sourcesmissing",
         "authz.grant.duplicate",
+        "authz.grant.endrequired",
         "authz.grant.expired",
         "authz.grant.notfound",
         "authz.grant.reasonrequired",

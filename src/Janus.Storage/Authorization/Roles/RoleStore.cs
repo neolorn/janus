@@ -42,7 +42,7 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return Role.Of(name, permissions, Handed(role));
+        return Role.Of(name, permissions, Handed(role), role.GrantsMustEnd);
     }
 
     /// <inheritdoc/>
@@ -82,7 +82,8 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
             .. roles.Select(role => Role.Of(
                 role.Name,
                 permissions.Where(row => row.Role == role.Name).Select(row => row.Permission),
-                Handed(role))),
+                Handed(role),
+                role.GrantsMustEnd)),
         ];
     }
 
@@ -92,7 +93,9 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
         ArgumentNullException.ThrowIfNull(role);
 
         await context.Roles
-            .AddAsync(new RoleRecord { Name = role.Name, HandsOut = Written(role) }, cancellationToken)
+            .AddAsync(
+                new RoleRecord { Name = role.Name, HandsOut = Written(role), GrantsMustEnd = role.GrantsMustEnd },
+                cancellationToken)
             .ConfigureAwait(false);
 
         await context.RolePermissions
@@ -111,6 +114,7 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
             ?? throw new InvalidOperationException("The role has no row to carry it onto.");
 
         held.HandsOut = Written(role);
+        held.GrantsMustEnd = role.GrantsMustEnd;
 
         List<RolePermissionRecord> stored = await context.RolePermissions
             .Where(row => row.Role == role.Name)

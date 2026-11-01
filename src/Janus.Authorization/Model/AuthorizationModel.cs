@@ -1004,7 +1004,11 @@ internal sealed class AuthorizationModel
                 handsOut.Add(handedName);
             }
 
-            declared.Add(new DefinedRole(name, [.. role.Permissions.Distinct()], [.. handsOut.Distinct()]));
+            declared.Add(new DefinedRole(
+                name,
+                [.. role.Permissions.Distinct()],
+                [.. handsOut.Distinct()],
+                role.GrantsMustEnd));
         }
 
         return declared;

@@ -176,6 +176,35 @@ public sealed class RoleStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-004 and AUTHZ-GRANT-003 (D-237): whether a role's grants must end is
+    /// kept with it, read back with it and changed as its permissions are.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_WhetherARolesGrantsMustEndIsKeptWithItAsync()
+    {
+        var ending = RoleName.Parse("role" + Guid.NewGuid().ToString("n")[..8]);
+
+        await WriteAsync(Role.Of(ending, [Permissions.GrantRead], grantsMustEnd: true));
+
+        Assert.True((await ReadAsync(ending)).GrantsMustEnd);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            await new RoleStore(writing).RecordAsync(
+                Role.Of(ending, [Permissions.GrantRead]),
+                TestContext.Current.CancellationToken);
+
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.False((await ReadAsync(ending)).GrantsMustEnd);
+    }
+
+    /// <summary>
     /// IDN-READ-004, OPS-MIG-001 (D-218): a deployment bootstrap stood up before the five
     /// reads existed gives its <c>system-administrator</c> role each of them once
     /// migrated, every other role keeping what it held, so the role holds every
