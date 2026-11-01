@@ -19726,8 +19726,10 @@ migration, as every organization now starts with it on (Q22).
   refused at issue, **422** `authz.grant.endrequired` naming the role, and nothing is
   written. It applies to the must-end roles' grants only: when the membership attaches,
   each grant of such a role ends at `grantEndsAt`, and the grants of the invitation's
-  other roles stay open-ended. An invitation already issued before this decision
-  attaches as issued.
+  other roles stay open-ended. A `grantEndsAt` not later than the invitation's own
+  expiry, or given where no role named has `grantsMustEnd`, is refused **400**
+  `api.request.malformed`, `details.member` `grantEndsAt`. An invitation already issued
+  before this decision attaches as issued.
 - **Older organizations (Q22).** A migration sets `grammaticalGender` to `true` in every
   stored organization override that lacks the field, leaving any override that states it
   as it is. The system policy is untouched.
@@ -19762,7 +19764,8 @@ and no rule let the leaver, a job or the host do it.
   `identity.membership.noend`. An end already past, or no membership, answers **404**
   `identity.membership.notfound`. The reserved account's membership of the
   administrative organization answers **403** `authz.denied`, as the job keeps it. The
-  library never sets a new end through it, and never moves one later.
+  library never sets a new end through it, and never moves one later. A restricted
+  account is admitted: bringing an end forward only takes access away.
 - **What the end does.** It is the same end as the `membership-ends` job's: the membership
   ends, its allow grants and group memberships are revoked by the library, and the
   revocations are not judged against the member's hand-out lists (the scheduler's were).
@@ -19779,11 +19782,11 @@ and no rule let the leaver, a job or the host do it.
 - **Waiting for the sweep:** the leaver keeps access for the rest of the day.
 
 **Propagated to:**
-- `01` IDN-MEM-001;
+- `01` IDN-MEM-001, IDN-ACCT-007 (what a restricted account keeps);
 - `03` AUTHZ-GRANT-005;
-- `09` the route;
-- `10` sections 1 and 5;
-- `18` (the account's memberships);
+- `09` the route, and section 6's list of what a restricted account keeps;
+- `10` sections 1 (`identity.membership.noend`, `identity.membership.notfound`,
+  `authz.restricted`) and 5.24;
 - `implementation-plan.md` (round H6).
 
 ---

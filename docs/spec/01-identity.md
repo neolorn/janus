@@ -197,7 +197,7 @@ typed a capital.
 | `deleting` | Deletion requested, grace window (`account.deletion.grace`, default 30 days) running — **cancellable until it elapses** | No |
 | `deleted` | Personal data removed or key-destroyed, anonymised record retained | No |
 
-*Source: D-006, D-037, D-026.1, D-113, D-146, D-166, D-183, D-188, D-189*
+*Source: D-006, D-037, D-026.1, D-113, D-146, D-166, D-183, D-188, D-189, D-240*
 
 Entering `deleting` is the customer's exercise of the erasure right (PRIV-RIGHT-001);
 no separate privacy request is created for it. There is no `pending` state: an account
@@ -212,9 +212,10 @@ signs in and reads, as the table states; every modifying action stays refused th
 the gate (AUTHZ-GATE-006). While restricted, rectification of the account's own fields
 is a request (`POST /privacy/requests`, type `rectification`); ending sessions,
 reporting a credential lost, listing and revoking app passwords, the link-borne undo of
-an identifier change, and a credential set by recovery or enrolled where a policy hold
-stops its sign-in (AUTH-FACT-017) stay available, since each grants nothing or restores
-the sign-in the table grants (D-166). A restriction the person asked for does not cut
+an identifier change, a credential set by recovery or enrolled where a policy hold
+stops its sign-in (AUTH-FACT-017), and a member's bringing their own scheduled
+membership end forward (IDN-MEM-001, D-240) stay available, since each grants nothing,
+takes access away or restores the sign-in the table grants (D-166). A restriction the person asked for does not cut
 them off from their mail: a mailbox is owed `enabled` while its holder is `active` or
 `restricted` (INT-MAIL-006), and a `restricted` account keeps its app passwords but
 cannot create one (D-166); recording that its recovery codes were exported changes their
@@ -463,7 +464,9 @@ itself if it wishes. A membership with no end set is refused with
 `identity.membership.noend` (409); an end already past, or no current membership, with
 `identity.membership.notfound` (404); the reserved account's membership of the
 administrative organization with 403 `authz.denied`, as the job keeps it. The library
-never sets a new end through it and never moves one later. The end is recorded as
+never sets a new end through it and never moves one later. A restricted account is
+admitted, since bringing an end forward only takes access away (IDN-ACCT-007). The end
+is recorded as
 `identity.membership.ended` with the member acting, the reason `broughtforward`, and
 the end it replaced in `details.endsAt`, as `identity.membership.endset` names it; each
 revocation and removal it writes carries the member and that reason.
@@ -500,7 +503,8 @@ revocation and removal it writes carries the member and that reason.
     replaced end in `details.endsAt`. With no end set it is refused
     `identity.membership.noend`; with the end past or no membership,
     `identity.membership.notfound`; for the reserved account's membership of the
-    administrative organization, `authz.denied` (D-240).
+    administrative organization, `authz.denied`. A restricted member is admitted
+    (D-240).
 
 ---
 

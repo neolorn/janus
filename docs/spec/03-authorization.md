@@ -126,7 +126,9 @@ naming such a role without it SHALL be refused at issue with `authz.grant.endreq
 (422), naming the role in `details.role`, and nothing written. It applies to the
 must-end roles' grants only: when the membership attaches (`20` REG-INV-001), each grant
 of such a role ends at `grantEndsAt`, and the grants of the invitation's other roles stay
-open-ended. An invitation issued before D-239 attaches as issued.
+open-ended. A `grantEndsAt` not later than the invitation's own expiry, or given where no
+role named has `grantsMustEnd`, SHALL be refused with 400 `api.request.malformed`,
+`details.member` `grantEndsAt`. An invitation issued before D-239 attaches as issued.
 
 A grant no person made SHALL record the nil subject as its granter, never its holder:
 the grants bootstrap makes carry the reason `OPS-BOOT-001`, and a materialised grant the
@@ -177,7 +179,9 @@ migration across every query later.
 8. An invitation naming a role with `grantsMustEnd` and no `grantEndsAt` is refused at
    issue with `authz.grant.endrequired` and nothing is written; one carrying
    `grantEndsAt` attaches a grant of that role ending then, and a grant of each other
-   role it names with no end (D-239).
+   role it names with no end; a `grantEndsAt` not later than the invitation's expiry,
+   or one on an invitation naming no such role, is refused 400 `api.request.malformed`
+   naming `grantEndsAt` (D-239).
 
 ---
 
