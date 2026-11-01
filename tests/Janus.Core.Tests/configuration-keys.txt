@@ -65,6 +65,8 @@ notification.languages text-list R minimum=1
 oidc.accesstoken.lifetime duration R ceiling=PT1H
 oidc.code.lifetime duration R ceiling=PT10M
 oidc.continuation.lifetime duration R ceiling=PT1H
+oidc.discovery.ratelimit integer R
+oidc.jwks.ratelimit integer R
 organization.deletion.grace duration R floor=P7D
 organization.multiplememberships flag R
 outbox.claim.timeout duration R floor=PT30S ceiling=PT10M

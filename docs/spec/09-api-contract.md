@@ -248,10 +248,10 @@ steps enrolled under `security.secondStep` (D-162, D-166).
 | `POST /register/identifiers` · `PUT /register/identifiers/{id}` · `DELETE /register/identifiers/{id}` | 4 | Adds a further email or phone within `identifiers.email.max` and `identifiers.phone.max`; Change on an unlocked identifier (re-verification follows); removes an unverified extra. On a locked phone not yet verified, `PUT /register/identifiers/{id}` takes only its own number and sends a new code. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands; `auth.restriction.exceeded` with `retryAt` where a restriction refuses the code's send, identical for a value another account holds or an undo reserves, and nothing is staged (AUTH-ABUSE-004). **409** `identity.identifier.maximum` where the kind's maximum is reached; `identity.identifier.lastofkind` where removal would leave the required minimum unmet; `identity.identifier.locked` for any other value on a locked identifier; **422** `identity.identifier.domainnotallowed` under a domain lock (REG-DOM-001) |
 | `POST /register/confirm` | 4 | Completes the confirm step. **409** `identity.registration.incomplete` while any staged identifier is unverified (REG-SESS-004) |
 | `PUT /register/security` | 5 | Password (**422** `auth.password.blocklisted`, `auth.password.tooshort`, `auth.password.toolong`) and the second-step choice (**400** `api.request.malformed` naming `secondStep` where the choice is none of the four). WebAuthn and TOTP enrolment (`/auth/webauthn/register/*`, `/account/factors/totp/*`) accept the registration session in place of an account session for this step (REG-SESS-006); a label is required (AUTH-FACT-001). Recovery codes are returned once when a second step is enrolled beside a password (AUTH-RECOV-006) |
-| `POST /register/terms` | 6 | Records terms accepted, notice presented, the derived affirmation and the consent controls (REG-SESS-007), runs the one transaction that creates the account `active`, emits `AccountRegistered` once, and signs the person in at the assurance the security step proved. The client captured at `POST /register` is kept on the session this step establishes and read back as `landing` at `GET /auth/session` (REG-SESS-008). **201** with the session cookie set. **422** `identity.affirmation.required` where the affirmation record is absent; **422** `privacy.purpose.noconsent` for a ticked control whose purpose takes no consent; **409** `privacy.notice.unpublished` for a ticked control whose governing document has no published version; **409** `identity.registration.incomplete` where the account would be created without a terms version or a notice version (REG-SESS-007). **422** `privacy.consent.superseded` naming `termsVersion` or `noticeVersion` where it is not the current version of `terms` or `privacy-notice`; **409** `privacy.notice.unpublished` naming the document where none of its versions is published (`10` section 5.52, D-222). Nothing is written on any refusal save one: where a staged identifier was taken or reserved since it was staged, the session ends, a kept write (CONV-DESIGN-003), and the request is answered **401** `auth.session.expired` with no `details`, as for an ended session (REG-SESS-005, D-186) |
+| `POST /register/terms` | 6 | Records terms accepted, notice presented, the derived affirmation and the consent controls (REG-SESS-007), runs the one transaction that creates the account `active`, emits `AccountRegistered` once, and signs the person in at the assurance the security step proved. The client captured at `POST /register` is kept on the session this step establishes and read back as `landing` at `GET /auth/session` (REG-SESS-008). Where the browser's pending authorization waits, the rotation carries it into that session as a sign-in's completion does, and the answer carries `continueTo`, which wins over `landing` where both stand; one that lapsed during the registration is not carried, and the member is absent (AUTH-SESS-012, D-242). **201** with the session cookie set, carrying `continueTo` where a pending authorization was carried. **422** `identity.affirmation.required` where the affirmation record is absent; **422** `privacy.purpose.noconsent` for a ticked control whose purpose takes no consent; **409** `privacy.notice.unpublished` for a ticked control whose governing document has no published version; **409** `identity.registration.incomplete` where the account would be created without a terms version or a notice version (REG-SESS-007). **422** `privacy.consent.superseded` naming `termsVersion` or `noticeVersion` where it is not the current version of `terms` or `privacy-notice`; **409** `privacy.notice.unpublished` naming the document where none of its versions is published (`10` section 5.52, D-222). Nothing is written on any refusal save one: where a staged identifier was taken or reserved since it was staged, the session ends, a kept write (CONV-DESIGN-003), and the request is answered **401** `auth.session.expired` with no `details`, as for an ended session (REG-SESS-005, D-186) |
 
 *Source: D-146; REG-SESS-002 to REG-SESS-007, REG-IDENT-010, REG-DOM-001, D-162, D-166,
-D-186, D-187*
+D-186, D-187, D-242*
 
 Steps 7 to 10 (about you, preferences, membership, done) run on the account
 application in the new session through `PUT /account/profile`,
@@ -562,12 +562,12 @@ D-183*
 ### `POST /auth/begin`
 
 Starts authentication. Takes **one** `identifier` field of any kind (email, phone or,
-where enabled, username); the kind is detected and the value canonicalised
-(REG-IDENT-003). Returns the factors available, or an indistinguishable response where
-the identifier resolves to nothing.
+where enabled, username), optional (D-244); the kind is detected and the value
+canonicalised (REG-IDENT-003). Returns the factors available, or an indistinguishable
+response where the identifier resolves to nothing.
 
 ```json
-{ "identifier": "..." }
+{ "identifier": "..." }   // optional: absent opens a passkey challenge alone (D-244)
 ```
 
 **200**
@@ -579,7 +579,10 @@ the identifier resolves to nothing.
 }
 ```
 
-*Source: AUTH-FACT-002, AUTH-ABUSE-003, D-076, D-146, D-226*
+**429**: `auth.throttled` with `retryAt`, for a begin with no `identifier` while the
+source's delay stands; no challenge opens (AUTH-ABUSE-001, D-244)
+
+*Source: AUTH-FACT-002, AUTH-ABUSE-003, D-076, D-146, D-226, D-244*
 
 Every verified identifier of an account signs in, and a non-primary one behaves
 exactly as the primary (REG-IDENT-003). While `identifiers.username.enabled` is off a
@@ -601,6 +604,16 @@ pre-authentication session the browser carries (BFF-CSRF-005a), or to none where
 carries none, as a browser holding a live session does. A sign-in link's press and a
 fresh device code are judged against that binding (`POST /auth/link`,
 `POST /auth/device/resend`).
+
+**Without an identifier (D-244).** A begin with no `identifier` opens a passkey
+challenge with no allow-list, bound to the pre-authentication session, and answers
+**200** with `available` `["passkey"]`, so it discloses nothing about any account. The
+passkey's user handle names the account at `POST /auth/factor` (Passkey assertions), and
+an assertion with no user handle is refused, as REG-PM-001 refuses one. A
+pre-authentication session holds at most one challenge opened without an identifier:
+each such begin replaces it, so page loads cannot open challenges without bound. The
+source's delay is asked before the challenge opens (AUTH-ABUSE-001). With an
+identifier, begin is unchanged.
 
 ---
 
@@ -784,7 +797,7 @@ requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
 AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195, D-197,
-D-198, D-199, D-200, D-233, D-238*
+D-198, D-199, D-200, D-233, D-238, D-242*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -792,9 +805,9 @@ completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
 **`continueTo`** (AUTH-SESS-012, D-224). Where the browser's pending authorization
 waits, the answer that completes the sign-in carries `continueTo`, the absolute address
 of `GET /oidc/authorize/continue` under the provider address, and the page sends the
-browser there; the member is absent otherwise. `POST /auth/device/verify` and
-`POST /auth/break-glass` carry it alike, and `GET /auth/session` gives it for a sign-in
-a navigation completed.
+browser there; the member is absent otherwise. `POST /auth/device/verify`,
+`POST /auth/break-glass` and registration's completion, `POST /register/terms` (D-242),
+carry it alike, and `GET /auth/session` gives it for a sign-in a navigation completed.
 
 Throttling responses are identical whether or not the account exists
 (AUTH-ABUSE-002).
@@ -905,7 +918,8 @@ already accepted (D-193); with none left, answered as AUTH-STEP-002 step 2 answe
 call after which no combination still offered can be completed: **200** `complete` where
 the factors accepted on the challenge reach the weakest of the policy's gates (D-197),
 and otherwise **403** `auth.stepup.required` with the outcome AUTH-STEP-002 gives
-(`report-loss`, `enrol`, or `pending` with `pendingUntil`, D-189); and **200** with
+(`report-loss`, `enrol`, `signIn`, or `pending` with `pendingUntil`, D-189, D-243); and
+**200** with
 `required` empty where the session already meets the strictest of the policy's gates,
 field by field, as AUTH-STEP-002 step 1 judges it (AUTH-FACT-002, AUTH-FACT-002b, D-187,
 D-188). The shape's refusals of a presented factor are this route's too: **422** with
@@ -925,7 +939,7 @@ D-197).
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
 *Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188, D-189, D-190,
-D-191, D-192, D-193, D-197, D-205, D-206, D-209*
+D-191, D-192, D-193, D-197, D-205, D-206, D-209, D-243*
 
 Rotates the identifier the session's cookie carries on success; the record's `SessionId`
 is kept (BFF-SESS-004).
@@ -944,7 +958,7 @@ report (LIB-HOST-004), carries `required`, `outcome` `present`, empty `options` 
   "code": "auth.stepup.required",
   "details": {
     "required": { "level": "aal2", "phishingResistant": false, "maxAge": 900 },
-    "outcome": "present",            // present | enrol | report-loss | pending
+    "outcome": "present",            // present | enrol | report-loss | signIn | pending
     "options": [ ["password", "totp"], ["password", "recoveryCodes"], ["passkey"] ],
     "pendingUntil": null             // set when outcome is pending
   }
@@ -961,6 +975,11 @@ never reached the level — the frontend offers enrolment in place (AUTH-STEP-00
 gone — the frontend offers `POST /recovery/report-loss`. `pending` means a loss report
 is already running and `pendingUntil` is when it completes; the answer is still a 403,
 since the operation did not proceed, and the frontend presents it as a status.
+`signIn` means the gate asks `delegated`, what the session reached since its last
+downgrade is below it, and every usable factor of the account is social, which a
+step-up refuses (AUTH-STEP-005): the frontend sends the person through the provider's
+sign-in, and the gate is judged on the `delegated` instant the new session holds
+(AUTH-STEP-002, D-243).
 `pendingUntil` is present in every refusal and null unless the outcome is `pending`.
 `maxAge` is the gate's maximum age in whole seconds, truncated, and null where the gate
 asks none (a `delegated` gate, AUTH-STEP-007, D-193). Factor names appear here as
@@ -1037,7 +1056,7 @@ application.
 }
 ```
 
-*Source: AUTH-SESS-001, REG-SESS-008, D-166, D-191*
+*Source: AUTH-SESS-001, REG-SESS-008, D-166, D-191, D-242*
 
 **No organization is returned.** Authorization resolves the organization from the
 resource, never from the session (IDN-MEM-003, AUTHZ-SCOPE-001) — returning one here
@@ -1049,7 +1068,12 @@ established, so every application session bound to that record answers it, the a
 application's among them, where the done step runs; the done step of registration reads
 it here and never from a request (REG-SESS-008, D-166, D-224). `continueTo` is the
 address of the browser's pending authorization, for a sign-in a navigation completed (a
-social provider's return), as `POST /auth/factor` gives it (D-224).
+social provider's return), as `POST /auth/factor` gives it (D-224). After a registration
+whose terms step carried a pending authorization, it is answered while that pending
+authorization lives, on every application session bound to the record the terms step
+established, the account application's among them, and the done step goes there rather
+than to `landing`; once it has lapsed, `continueTo` is absent and `landing` applies
+(REG-SESS-008, D-242).
 
 **401** — no valid session
 
@@ -2716,6 +2740,32 @@ marks a grant a revocation refuses
 
 ---
 
+### `GET /admin/grants/assignable?organization={id}`
+
+The roles the caller may hand out in the organization: exactly those a grant by the
+caller there would not be refused as `authz.role.notassignable`, judged as
+AUTHZ-GRANT-005 judges the grant, with `system:administer`'s reach as the grant itself
+allows it, sorted by name. Asked under `grant:manage` in that organization, the
+permission a grant there needs. Not a step-up action: step-up guards changes (`10`
+section 5a). A role's permissions are not answered, and stay `role:manage`'s to read
+(`GET /admin/roles`). Its library call is `IGrants.AssignableAsync` (LIB-API-005), which
+refuses a system principal's context with `authz.denied`, as AUTHZ-GRANT-004 keeps roles
+a person's. The read records nothing: it is a read of the deployment's roles, not of a
+person. A refused read is recorded as any refused request is (AUTHZ-CONCEAL-004), and
+nothing more.
+
+**200**: `[ { name, grantsMustEnd } ]`
+**400**: `api.request.malformed` naming `organization` where it is absent or not well
+formed
+**403**: `authz.denied` where the caller does not hold `grant:manage` in the
+organization
+**404**: `identity.organization.notfound` where the organization named is none the
+deployment holds
+
+*Source: AUTHZ-GRANT-005, D-247*
+
+---
+
 ### `GET|POST|DELETE /admin/roles`
 
 Runtime role management, under `role:manage` in the administrative organization for
@@ -3043,8 +3093,8 @@ configuration change's missing reason excepted, below). **404**
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/organizations` | `{ name, reason }`: creates an organization and writes its policy key `policy.<organization>` as `{}` in the same transaction, recorded as a configuration change (OPS-CFG-005) and as `identity.organization.created`. Not gated. **201** `{ id }` (IDN-ORG-002). The organization holds no grant: its first grants, `membership:manage` and `grant:manage` among them, are written through `POST /admin/grants` under `system:administer` held in the administrative organization (AUTHZ-SCOPE-001, D-207). **422** `identity.identifier.mixedscript` for a name that mixes scripts within a word, judged on its comparison key (IDN-ACCT-005) |
-| `PUT /admin/organizations/{id}/policy` | Replaces the organization's policy overrides: the policy object of `10` §4.1a without `emailDomains` (`requiredAssurance`, `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery`, `photos`, `grammaticalGender`, D-236), and `reason`. Omitted fields inherit `policy.default`; the domain lock in force is kept. Every replacement, a tightening included, is the `policy:change` step-up action and carries `reason` (**422** `config.change.reasonrequired`, `details.key` `policy.<organization>`, where it is absent or blank). A replacement under which the organization's members resolve to a policy granting more on any field, by the direction column of `10` §4.1a, is a loosening (OPS-CFG-002) and also requires `system:administer` (**403** `authz.denied`, before the step-up). **422** `config.policy.belowsystem` where a stated field is looser than the system default, `details.field` naming the first in the order of `10` §4.1a (AUTH-STEP-002a); **422** `config.value.belowfloor`, `details.field` `requiredAssurance`, where the administrative organization's members would resolve below `aal2` (AUTH-SESS-005b); **422** `config.value.notallowed` for a value a field does not take, and for `photos` `true` while the host declares no image codec (`details.field` `photos`, `details.requires` `imageCodec`); **400** `api.request.malformed` for a body that is no object (the code alone) or a member the object does not have, `emailDomains` included (naming it), refused at the endpoint before the service. **204**. `GET` returns the resolved policy: **200** `{ requiredAssurance, loginFactors, gates, credentialRedundancy, selfServiceRecovery, photos, grammaticalGender, emailDomains }`, each field `{ value, overridden }`, `gates` an object keyed by the `10` §5a action name whose members are `{ value: { level, phishingResistant, maxAge }, overridden }`; `overridden` is true where the organization states the field or the action and the value in force is its own, and false where the system policy's value is in force; `emailDomains` is a list of domains in their ASCII form, and `off` is the empty list (D-143) |
+| `POST /admin/organizations` | `{ name, reason }`: creates an organization and writes its policy key `policy.<organization>` as `{}` in the same transaction, recorded as a configuration change (OPS-CFG-005) and as `identity.organization.created`. Not gated. **201** `{ id }` (IDN-ORG-002). The `Janus.Cli` command `organization` creates one as this route does, from the server (`06` OPS-BOOT-001, D-248). The organization holds no grant: its first grants, `membership:manage` and `grant:manage` among them, are written through `POST /admin/grants` under `system:administer` held in the administrative organization (AUTHZ-SCOPE-001, D-207). **422** `identity.identifier.mixedscript` for a name that mixes scripts within a word, judged on its comparison key (IDN-ACCT-005) |
+| `PUT /admin/organizations/{id}/policy` | Replaces the organization's policy overrides: the policy object of `10` §4.1a without `emailDomains` (`requiredAssurance`, `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery`, `photos`, `grammaticalGender`, D-236), and `reason`. Omitted fields inherit `policy.default`; the domain lock in force is kept. Every replacement, a tightening included, is the `policy:change` step-up action and carries `reason` (**422** `config.change.reasonrequired`, `details.key` `policy.<organization>`, where it is absent or blank). A replacement under which the organization's members resolve to a policy granting more on any field, by the direction column of `10` §4.1a, is a loosening (OPS-CFG-002) and also requires `system:administer` (**403** `authz.denied`, before the step-up). **422** `config.policy.belowsystem` where a stated field is looser than the system default, `details.field` naming the first in the order of `10` §4.1a (AUTH-STEP-002a); **422** `config.value.belowfloor`, `details.field` `requiredAssurance`, where the administrative organization's members would resolve below `aal2` (AUTH-SESS-005b); **422** `config.value.notallowed` for a value a field does not take, and for `photos` `true` while the host declares no image codec (`details.field` `photos`, `details.requires` `imageCodec`); **400** `api.request.malformed` for a body that is no object (the code alone) or a member the object does not have, `emailDomains` included (naming it), refused at the endpoint before the service. **204**. `GET` returns the resolved policy: **200** `{ requiredAssurance, loginFactors, gates, credentialRedundancy, selfServiceRecovery, photos, grammaticalGender, emailDomains }`, each field `{ value, overridden }`, `gates` an object keyed by the `10` §5a action name whose members are `{ value: { level, phishingResistant, maxAge }, overridden }`; `overridden` is true where the organization states the field or the action and the value in force is its own, and false where the system policy's value is in force; `emailDomains` is a list of domains in their ASCII form, and `off` is the empty list (D-143). The `Janus.Cli` command `organization` writes a policy as this `PUT` does, with the same value checks and codes, from the server; the loosening rule's step-up and `system:administer` do not apply to it, the command being the deployment's own act (`06` OPS-BOOT-001, D-248) |
 | `POST /admin/organizations/{id}/delete` · `/delete/cancel` | `{ reason }`: request, suspend, grace, erasure, cancellable (IDN-ORG-003). The request ends every session of every current member in the same transaction, and the organization's grants confer nothing until it is cancelled. Each requires step-up (`organization:delete`) and is recorded (`identity.organization.deletionrequested`, `identity.organization.deletioncancelled`). **204**, also for a request on an organization already being deleted and a cancellation where none is pending, which change and record nothing. **409** `identity.organization.protected` for the administrative organization. **422** `identity.deletion.windowelapsed` for a cancellation at or after `organization.deletion.grace` from the request, or after the erasure, whether or not the erasure has run. The erasure erases no account |
 | `POST /admin/organizations/{id}/domains` · `POST /admin/organizations/{id}/domains/{domain}/verify` · `DELETE /admin/organizations/{id}/domains/{domain}` | Domain lock (REG-DOM-001, IDN-ORG-006): adds a domain to the policy field `emailDomains`, verifies it by the DNS TXT record the add response names (one TXT value equal to the record value, compared exactly; a lookup that cannot be made proves nothing; **422** `identity.domain.unverified`, nothing written; **404** `identity.domain.notfound` for a domain not listed, never listed or removed; verifying a verified domain or adding a listed one answers it as it stands and changes nothing; removing an unlisted one is **204** and changes nothing), removes it. A domain that does not read as a domain is **400** `api.request.malformed` naming `domain`. Every change is the `domain:manage` step-up action and carries `reason` (**422** `config.change.reasonrequired` where it is absent or blank), and is recorded. Adding and verifying a domain are loosenings, and so is a removal that leaves the list empty (OPS-CFG-002): each also requires `system:administer` (**403** `authz.denied`). Adding a domain while the host registers no DNS resolver is refused **422** `config.value.notallowed`, `details.requires` `dnsResolver`. The lock is on from the first domain listed, verified or not, and while no listed domain is verified it admits no address. Removal stops new sign-ins with addresses in the domain until it is listed anew, whether or not the list holds another domain, and raises an alert (OPS-ALERT-001). Re-verification runs every `domain.reverify.interval` on the sweep; a failure alerts and revokes nothing. The record is `_identity-verify.<domain>` TXT with value `identity-domain-verification=<32 random bytes, base64url>`, one token per organization and domain, never reused (D-153). `GET` answers an array of `{ domain, recordName, recordValue, addedAt, verifiedAt, checkedAt, lastCheckPassed }`, the domain in its ASCII form (REG-DOM-001). `POST .../domains` takes `{ domain, reason }` and answers **201** with one such object; `POST .../{domain}/verify` takes `{ reason }` and answers **200** with it; `DELETE .../{domain}` takes `{ reason }` and answers **204**. Each change writes `identity.organization.domainadded`, `.domainverified` or `.domainremoved` with details `{ domain, reason }`; each change to the list is also a configuration change of `policy.<organization>` (OPS-CFG-005) |
 
@@ -3208,8 +3258,8 @@ Standard endpoints for first-party, manually registered clients.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /.well-known/openid-configuration` | Discovery |
-| `GET /oidc/jwks` | The public keys of the next signing key, the current one and each replaced one within its overlap (AUTH-KEY-001); a retired key's kept public key is never published |
+| `GET /.well-known/openid-configuration` | Discovery. Machine profile, in the set that ignores cookies: a cookie sent is never read, and no session is issued or written (BFF-MACH-001, D-241); past `oidc.discovery.ratelimit` per source, **429** with `Retry-After` |
+| `GET /oidc/jwks` | The public keys of the next signing key, the current one and each replaced one within its overlap (AUTH-KEY-001); a retired key's kept public key is never published. Machine profile, in the set that ignores cookies: a cookie sent is never read, and no session is issued or written (BFF-MACH-001, D-241); past `oidc.jwks.ratelimit` per source, **429** with `Retry-After` |
 | `POST /oidc/par` | Pushed Authorization Request (RFC 9126): the client posts the authorization parameters over the back channel and receives a single-use `request_uri` valid for 60 seconds; required for every client (AUTH-OIDC-006, D-164); a `redirect_uri` that is not exactly the client's registered destination is refused with `invalid_request` and no `request_uri` is issued (RFC 9126 section 2.1), and an absent one takes the registered destination; a browser application's request asking for `offline_access` is refused with `invalid_request` (AUTH-OIDC-002) |
 | `GET /oidc/authorize` | Authorization code with PKCE, by `request_uri` from `/oidc/par` only; direct parameters are refused with `invalid_request` — **redirects to the authentication application; never renders a page**. Honours `prompt=none` for silent sign-on (AUTH-SESS-012) |
 | `POST /oidc/token` | Token issuance and refresh — machine profile (BFF-MACH-001) |
@@ -3244,7 +3294,7 @@ provider address the host declares (LIB-HOST-001): the issuer is that address ex
 each route is that address followed by the route's path, and a request for one of them
 anywhere else is not the provider's and reaches the host's routing.
 
-*Source: AUTH-OIDC-001, AUTH-KEY-001, D-041, D-166, D-181, D-224*
+*Source: AUTH-OIDC-001, AUTH-KEY-001, D-041, D-166, D-181, D-224, D-241*
 
 **Two kinds of client share the registry.** Protocol clients (a client a deployment
 registers for the mail server, INT-MAIL-004; future native clients) receive access and

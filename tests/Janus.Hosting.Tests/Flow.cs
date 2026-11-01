@@ -54,10 +54,11 @@ internal static class Flow
     /// session the endpoint carried onto it.
     /// </summary>
     /// <param name="deployment">What it talks to.</param>
+    /// <param name="browser">The browser to begin it in, or nothing for a new one.</param>
     /// <returns>The browser.</returns>
-    public static async Task<Browser> BegunAsync(Deployment deployment)
+    public static async Task<Browser> BegunAsync(Deployment deployment, Browser? browser = null)
     {
-        var browser = new Browser(deployment);
+        browser ??= new Browser(deployment);
 
         _ = await browser.SendAsync("GET", "/register");
         _ = await browser.SendAsync("POST", "/register", ("clientId", Client));
@@ -87,10 +88,11 @@ internal static class Flow
     /// A browser that has answered the age step and staged an address.
     /// </summary>
     /// <param name="deployment">What it talks to.</param>
+    /// <param name="browser">The browser to register in, or nothing for a new one.</param>
     /// <returns>The browser.</returns>
-    public static async Task<Browser> AwaitingAsync(Deployment deployment)
+    public static async Task<Browser> AwaitingAsync(Deployment deployment, Browser? browser = null)
     {
-        Browser browser = await BegunAsync(deployment);
+        browser = await BegunAsync(deployment, browser);
 
         _ = await browser.SendAsync("PUT", "/register/age", ("dateOfBirth", "1990-01-01"));
         _ = await browser.SendAsync("PUT", "/register/email", ("value", Address));
@@ -103,10 +105,11 @@ internal static class Flow
     /// confirm step passed and a password that stands alone set.
     /// </summary>
     /// <param name="deployment">What it talks to.</param>
+    /// <param name="browser">The browser to register in, or nothing for a new one.</param>
     /// <returns>The browser.</returns>
-    public static async Task<Browser> SecuredAsync(Deployment deployment)
+    public static async Task<Browser> SecuredAsync(Deployment deployment, Browser? browser = null)
     {
-        Browser browser = await ConfirmedAsync(deployment);
+        browser = await ConfirmedAsync(deployment, browser);
 
         Assert.Equal(
             StatusCodes.Status200OK,
@@ -120,10 +123,11 @@ internal static class Flow
     /// the confirm step passed, with nothing to sign in by yet.
     /// </summary>
     /// <param name="deployment">What it talks to.</param>
+    /// <param name="browser">The browser to register in, or nothing for a new one.</param>
     /// <returns>The browser.</returns>
-    public static async Task<Browser> ConfirmedAsync(Deployment deployment)
+    public static async Task<Browser> ConfirmedAsync(Deployment deployment, Browser? browser = null)
     {
-        Browser browser = await AwaitingAsync(deployment);
+        browser = await AwaitingAsync(deployment, browser);
 
         await VerifiedAsync(deployment, browser, IdentifierKind.Email);
 

@@ -139,7 +139,9 @@ internal static class AuthenticationEndpoints
 
     // AUTH-ABUSE-001 AC5: the browser's own tokens travel with the sign-in it opens, so
     // a browser the account knows is not held by an attack on the account; the
-    // sign-in is bound to the browser's pre-authentication session (D-226).
+    // sign-in is bound to the browser's pre-authentication session (D-226). An absent
+    // identifier opens the passkey alone, and an empty one is malformed (REG-IDENT-003,
+    // D-244).
     private static async Task<IResult> BeginAsync(
         IAuthentication authentication,
         HttpContext context,
@@ -152,12 +154,12 @@ internal static class AuthenticationEndpoints
             .ReadAsync<SignInRequest>(context.Request, cancellationToken)
             .ConfigureAwait(false);
 
-        return request.Identifier is not { Length: > 0 } identifier
+        return request.Identifier is { Length: 0 }
             ? Answers.Malformed("identifier")
             : Answers.Of(
                 await authentication
                     .BeginAsync(
-                        identifier,
+                        request.Identifier,
                         RequestOrigin.Source(context.Request),
                         Carried(context.Request, BrowserCookies.Browser),
                         Carried(context.Request, BrowserCookies.Device),

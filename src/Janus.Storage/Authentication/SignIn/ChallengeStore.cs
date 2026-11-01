@@ -99,6 +99,19 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
     }
 
     /// <inheritdoc/>
+    public async ValueTask RemoveUnnamedAsync(byte[] browser, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(browser);
+
+        context.SignInChallenges.RemoveRange(await context.SignInChallenges
+            .Where(challenge => challenge.Browser == browser
+                && challenge.Subject == null
+                && challenge.Identifier == null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false));
+    }
+
+    /// <inheritdoc/>
     public async ValueTask AddAsync(Challenge challenge, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(challenge);
@@ -135,6 +148,7 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
             ?? throw new InvalidOperationException("The sign-in has no row to carry the change.");
 
         record.LandingHandle = challenge.LandingFingerprint;
+        record.Subject = challenge.Subject;
         record.ExpiresAt = challenge.ExpiresAt;
         record.HeldAt = challenge.HeldAt;
         record.Presented = Spellings(challenge);

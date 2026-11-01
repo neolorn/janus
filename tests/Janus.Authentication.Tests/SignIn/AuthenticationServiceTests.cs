@@ -1340,6 +1340,36 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-002 AC11, AUTH-STEP-005 (D-243): a social credential presented at a
+    /// step-up is refused before anything is verified, the answer that sends the person
+    /// through a new sign-in with the provider being no way past the gate here.
+    /// </summary>
+    /// <param name="provider">The social factor presented.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(Factor.Google)]
+    [InlineData(Factor.Apple)]
+    public async Task AUTH_STEP_002_AC11_ASocialCredentialPresentedAtAStepUpIsStillRefusedAsync(Factor provider)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, provider);
+
+        SessionId held = Opened(subject, AssuranceLevel.Delegated);
+        SignInChallenge began = await BeganAsync(Address);
+
+        Result<SignInProgress> stepped = await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            held,
+            began.Challenge,
+            new FactorPresentation(provider) { Value = "a-provider-assertion" },
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorNotPermitted, Refused(stepped));
+    }
+
+    /// <summary>
     /// AUTH-STEP-002 step 3, `09` `POST /auth/step-up`: a refusal the step-up itself
     /// answers is judged against the weakest of the policy's gates, field by field, and
     /// carries that gate's values: an account that reaches it and cannot present it is
@@ -3113,6 +3143,185 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal(
             9u,
             (await _authenticators.FindAsync(credential, TestContext.Current.CancellationToken))!.WebAuthn!.Counter);
+    }
+
+    /// <summary>
+    /// REG-IDENT-003 AC3 (D-244): a begin with no identifier answers the passkey alone
+    /// and a WebAuthn challenge, and holds one challenge that names no account and no
+    /// identifier, bound to the browser's pre-authentication session.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_003_AC3_ABeginWithoutAnIdentifierOffersThePasskeyAloneAsync()
+    {
+        await AccountAsync();
+
+        SignInChallenge began = await UnnamedAsync("a-pre-authentication-session");
+
+        Challenge held = Assert.Single(_challenges.Held);
+
+        Assert.Equal([Factor.Passkey], began.Available);
+        Assert.False(string.IsNullOrEmpty(began.WebAuthn.Challenge));
+        Assert.Equal(
+            (null, null, null, true),
+            (held.Subject, held.Identifier, held.Email, held.BoundTo(SignInLinks.Fingerprint("a-pre-authentication-session"))));
+        Assert.Equal(OpaqueToken.Of(began.Challenge).Fingerprint(), held.Fingerprint);
+    }
+
+    /// <summary>
+    /// REG-IDENT-003 AC3 (D-244): a passkey's assertion against a begin with no
+    /// identifier signs in the account its user handle names, and the sign-in then
+    /// names that account.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_003_AC3_APasskeyAgainstABeginWithoutAnIdentifierSignsInTheAccountItsHandleNamesAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+
+        _ = Counting(subject, Factor.Passkey, key, counter: 9);
+        Remembered(subject);
+
+        SignInChallenge began = await UnnamedAsync("a-pre-authentication-session");
+
+        SignInProgress signedIn = Reached(await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Handed(key, began.WebAuthn.Challenge, subject) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal((SignInStatus.Complete, AssuranceLevel.Aal2), (signedIn.Status, signedIn.AssuranceLevel));
+        Assert.Equal(subject, Assert.Single(await _live.LiveOfAsync(subject, _clock.GetUtcNow(), TestContext.Current.CancellationToken)).Subject);
+        Assert.Empty(_throttle.Failures);
+    }
+
+    /// <summary>
+    /// REG-IDENT-003 AC3, AUTH-ABUSE-001 AC15 (D-244): an assertion with no user handle
+    /// against a begin with no identifier is refused, and counted against the source
+    /// alone, as no account and no identifier is named.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_003_AC3_AnAssertionWithNoUserHandleIsRefusedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+
+        _ = Counting(subject, Factor.Passkey, key, counter: 9);
+        Remembered(subject);
+
+        SignInChallenge began = await UnnamedAsync("a-pre-authentication-session");
+
+        Result<SignInProgress> refused = await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Synced(key, began.WebAuthn.Challenge, counter: 10) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(refused));
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Failures);
+        Assert.Empty(await _live.LiveOfAsync(subject, _clock.GetUtcNow(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-003 AC3 (D-244): a second begin with no identifier from the same
+    /// pre-authentication session replaces the first's challenge, which then opens
+    /// nothing; one from another browser, and a begin with an identifier, replace
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_003_AC3_ASecondBeginWithoutAnIdentifierReplacesTheFirstsChallengeAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+
+        _ = Counting(subject, Factor.Passkey, key, counter: 9);
+        Remembered(subject);
+
+        SignInChallenge named = await BeganAsync(Address, "a-pre-authentication-session");
+        SignInChallenge first = await UnnamedAsync("a-pre-authentication-session");
+        SignInChallenge elsewhere = await UnnamedAsync("another-browsers-session");
+        SignInChallenge second = await UnnamedAsync("a-pre-authentication-session");
+
+        Assert.Equal(
+            [named.Challenge, elsewhere.Challenge, second.Challenge],
+            new[] { named, first, elsewhere, second }
+                .Where(began => _challenges.Held.Any(held =>
+                    held.Fingerprint.AsSpan().SequenceEqual(OpaqueToken.Of(began.Challenge).Fingerprint())))
+                .Select(began => began.Challenge));
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refused(await Service.PresentAsync(
+                first.Challenge,
+                new FactorPresentation(Factor.Passkey) { Assertion = Handed(key, first.WebAuthn.Challenge, subject) },
+                Browser,
+                Source,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC15 (D-244): at a sign-in opened without an identifier, a refused
+    /// assertion counts against the source, and against the account its user handle
+    /// names where it names one, and under no identifier.
+    /// </summary>
+    /// <param name="naming">Whether the user handle names an account.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_ABUSE_001_AC15_ARefusedAssertionCountsAgainstTheSourceAndTheAccountItsHandleNamesAsync(bool naming)
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+        var forger = SoftwareAuthenticator.Holding(credentialId: key.CredentialId);
+        SubjectId handed = naming ? subject : SubjectId.New(_randomness);
+
+        _ = Counting(subject, Factor.Passkey, key, counter: 9);
+        Remembered(subject);
+
+        SignInChallenge began = await UnnamedAsync("a-pre-authentication-session");
+
+        Result<SignInProgress> refused = await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Handed(forger, began.WebAuthn.Challenge, handed) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        (ThrottleScope, string)[] expected = naming
+            ? [(ThrottleScope.Source, Source), (ThrottleScope.Account, subject.ToString())]
+            : [(ThrottleScope.Source, Source)];
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(refused));
+        Assert.Equal(expected, _throttle.Failures);
+        Assert.DoesNotContain(_throttle.Counted, counter => counter.Scope is ThrottleScope.Identifier);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC15, `09` `POST /auth/begin` (D-244): a begin with no identifier
+    /// from a source under a delay is answered `auth.throttled` with `retryAt`, and no
+    /// challenge opens.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC15_ABeginWithoutAnIdentifierFromADelayedSourceOpensNoChallengeAsync()
+    {
+        await AccountAsync();
+        await FailedAsync(Elsewhere, Source, times: 3);
+
+        int held = _challenges.Held.Count;
+
+        Result<SignInChallenge> began = await Service.BeginAsync(
+            identifier: null,
+            Source,
+            remembered: null,
+            trusted: null,
+            "a-pre-authentication-session",
+            TestContext.Current.CancellationToken);
+
+        Error delayed = Assert.IsType<Error>(Delayed(began));
+
+        Assert.Equal(ErrorCodes.Throttled, delayed.Code);
+        Assert.True(delayed.Details["retryAt"].GetDateTimeOffset() > _clock.GetUtcNow());
+        Assert.Equal(held, _challenges.Held.Count);
     }
 
     /// <summary>
@@ -7268,6 +7477,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private ValueTask<SignInChallenge> BeganAsync(string identifier) => BeganAsync(identifier, browser: null);
 
     // A sign-in opened from a browser carrying a pre-authentication session, or none.
+    // REG-IDENT-003 (D-244): a begin with no identifier from the browser.
+    private async ValueTask<SignInChallenge> UnnamedAsync(string browser) =>
+        (await Service.BeginAsync(
+            identifier: null,
+            Source,
+            remembered: null,
+            trusted: null,
+            browser,
+            TestContext.Current.CancellationToken))
+        .Match(
+            challenge => challenge,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
     private async ValueTask<SignInChallenge> BeganAsync(string identifier, string? browser) =>
         (await Service.BeginAsync(
             identifier,
@@ -7445,6 +7667,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 | SoftwareAuthenticator.BackupEligible
                 | SoftwareAuthenticator.BackedUp,
             counter);
+
+    // A synced passkey's assertion returning the user handle of the account named.
+    private static AuthenticatorAssertion Handed(SoftwareAuthenticator authenticator, string challenge, SubjectId named) =>
+        authenticator.Asserted(
+            challenge,
+            "https://example.test",
+            "example.test",
+            SoftwareAuthenticator.UserPresent
+                | SoftwareAuthenticator.UserVerified
+                | SoftwareAuthenticator.BackupEligible
+                | SoftwareAuthenticator.BackedUp,
+            10,
+            userHandle: WebAuthnService.Handle(named));
 
     // The credentials a request names, each as its identifier and its transports.
     private static (string Id, string Transports)[] Described(WebAuthnRequestOptions options) =>

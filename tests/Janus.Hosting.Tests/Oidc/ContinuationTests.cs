@@ -1,5 +1,7 @@
 using System;
+using System.Text;
 using System.Threading.Tasks;
+using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
@@ -124,6 +126,85 @@ public sealed class ContinuationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-012 AC11, REG-SESS-008 AC4 (D-242): a browser sent to register by an
+    /// authorization that found no session is sent back as a signed-in one is:
+    /// registration's completion carries the authorization to the session it establishes
+    /// and answers <c>continueTo</c>, every session bound to the record answers it beside
+    /// <c>landing</c> until the continuation spends it, and following it issues the code
+    /// once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC11_ARegistrationThatCompletesIsSentBackWithTheCodeAsync()
+    {
+        await RegisteringAsync();
+
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync(
+            "GET",
+            await RelyingParty.AuthorizeAsync(_deployment, RelyingParty.Application, silent: false));
+
+        Answer completed = await (await Flow.SecuredAsync(_deployment, browser)).SendAsync(
+            "POST",
+            "/register/terms",
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
+
+        Flow.Carried(_deployment);
+
+        Answer before = await browser.SendAsync("GET", "/auth/session");
+        Answer continued = await browser.SendAsync("GET", Continuation);
+        Answer after = await browser.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status201Created, completed.Status);
+        Assert.Equal(ContinueTo, completed.Text("continueTo"));
+        Assert.Equal(ContinueTo, before.Text("continueTo"));
+        Assert.True(before.Json().TryGetProperty("landing", out _));
+        Assert.StartsWith(RelyingParty.Destination + "?", RelyingParty.Where(continued), StringComparison.Ordinal);
+        Assert.Equal("the-state", RelyingParty.Returned(continued, "state"));
+        Assert.False(after.Json().TryGetProperty("continueTo", out _));
+        Assert.True(after.Json().TryGetProperty("landing", out _));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-012 AC11, REG-SESS-008 AC4, FE-REG-005 (D-242): a registration that
+    /// completes once the authorization's lifetime has run out carries nothing: its
+    /// answer is an empty 201 and the session answers <c>landing</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC11_ARegistrationPastTheContinuationLifetimeLeavesTheLandingAsync()
+    {
+        await RegisteringAsync();
+
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync(
+            "GET",
+            await RelyingParty.AuthorizeAsync(_deployment, RelyingParty.Application, silent: false));
+
+        Browser secured = await Flow.SecuredAsync(_deployment, browser);
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(31));
+
+        Answer completed = await secured.SendAsync(
+            "POST",
+            "/register/terms",
+            Flow.TermsVersion(_deployment),
+            Flow.NoticeVersion(_deployment));
+
+        Flow.Carried(_deployment);
+
+        Answer read = await browser.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status201Created, completed.Status);
+        Assert.Empty(completed.Body);
+        Assert.False(read.Json().TryGetProperty("continueTo", out _));
+        Assert.True(read.Json().TryGetProperty("landing", out _));
+    }
+
+    /// <summary>
     /// AUTH-SESS-012 (D-224): the session a sign-in a navigation completed is read with
     /// says where its authorization waits, until the continuation spends it.
     /// </summary>
@@ -193,6 +274,18 @@ public sealed class ContinuationTests : IAsyncDisposable
 
     // A person who registered on this browser and signed out, so that the browser holds
     // no session and is one the person has used before.
+    // The clients, and the one a registration captures, whose origin is its landing.
+    private async Task RegisteringAsync()
+    {
+        await RelyingParty.RegisteredAsync(_deployment);
+        Flow.Prepare(_deployment);
+        await _deployment.Clients.AddAsync(
+            new OidcClient("web", "web", OidcClientKind.BrowserApplication, "https://app.example.test:8443/signin/callback", ["openid"]),
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
+            _deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+    }
+
     private async Task<Browser> SignedOutAsync()
     {
         Browser browser = await RelyingParty.PreparedAsync(_deployment);

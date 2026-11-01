@@ -176,6 +176,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Decided.NotAssignable),
         ("an allow grant to the caller itself, of a role the caller hands out", Decided.WidensOwnAccess),
         (
+            "the roles the caller may hand out read, the role its role lists among them and no other, by a caller managing grants",
+            Decided.Allowed),
+        ("the roles the caller may hand out read, by a caller managing no grants", Decided.Denied),
+        (
             "a grant of a role carrying system administration that a role of the caller lists, by a caller managing grants",
             Decided.Denied),
         (
@@ -2052,6 +2056,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "an allow grant to the caller itself, of a role the caller hands out":
                 return await HandedOutAsync(deployment, role, caller, scenario);
 
+            // AUTHZ-GRANT-005 (D-247): the roles a caller may hand out are read as a grant
+            // judges them, and only where the caller manages grants.
+            case "the roles the caller may hand out read, the role its role lists among them and no other, by a caller managing grants":
+            case "the roles the caller may hand out read, by a caller managing no grants":
+                return await AssignableReadAsync(deployment, role, caller, scenario);
+
             // AUTHZ-GRANT-005 (D-212, D-213): an end hands out every role its revocations
             // reach, and a role carrying system administration is handed out by no list.
             case "an end of a membership reaching a role carrying system administration that a role of the caller lists, by a caller managing memberships":
@@ -3262,6 +3272,34 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     "The reason the grant was asked for."),
                 cancellationToken))
             .Match(_ => Decided.Allowed, Refused);
+    }
+
+    // AUTHZ-GRANT-005 (D-247): the read answers the case's role, which the caller's
+    // managing role lists, and not a role no role of the caller lists; a caller holding no
+    // grant is refused.
+    private async Task<Decided> AssignableReadAsync(
+        Deployment deployment,
+        RoleName role,
+        SubjectId caller,
+        string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        _ = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+
+        SubjectId asking = scenario.EndsWith("by a caller managing no grants", StringComparison.Ordinal)
+            ? await deployment.AccountAsync(cancellationToken)
+            : caller;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IGrants>()
+                .AssignableAsync(AccessContext.Of(asking), deployment.Organization, cancellationToken))
+            .Match(
+                assignable => assignable.Select(held => held.Name).SequenceEqual([role])
+                    ? Decided.Allowed
+                    : throw new InvalidOperationException("The roles read are not the ones a grant admits."),
+                Refused);
     }
 
     // AUTHZ-GRANT-005 (D-213): the end of a membership whose account holds, across the

@@ -122,11 +122,13 @@ data intact.
 can reach AAL2, password + TOTP, password + recovery code, password + security key, or a
 passkey, the subject choosing among them; for a password-only customer, the password. A
 combination that does not reach the gate is never shown, so a bare password is never
-offered on an account that reaches AAL2 (AUTH-STEP-002). The prompt has **two
+offered on an account that reaches AAL2 (AUTH-STEP-002). The prompt has **three
 non-dead-end outcomes** beside presenting a factor: `enrol` (the frontend initiates
 enrolment in place, and the original request completes afterwards); `report-loss` (the
 frontend offers to report the missing factor lost, `POST /recovery/report-loss`,
-explaining that the action becomes available when the window completes). A `pending`
+explaining that the action becomes available when the window completes); `signIn` (the
+frontend sends the person through a new sign-in with the provider, and the gate is
+judged on the `delegated` instant the new session holds, D-243). A `pending`
 outcome shows the completion time (`pendingUntil`) and, for a credential
 `GET /account/credentials` lists as `cancellable`, the cancel option (D-197); it is a
 status, not an error, though it arrives as a 403 because the operation did not proceed
@@ -148,7 +150,7 @@ for is answered `auth.stepup.required` and handled as this item states, its opti
 judged under the organization's policy.
 
 *Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188, D-190,
-D-191, D-197*
+D-191, D-197, D-243*
 
 **Acceptance criteria**
 1. A form submission interrupted by step-up **or by session expiry** completes after
@@ -163,10 +165,13 @@ D-191, D-197*
    subject holding password and TOTP is shown password + TOTP, never the password
    alone.
 4. A subject with no usable combination is offered enrolment or a loss report, and
-   the original request completes afterwards where the gate can still be met.
+   the original request completes afterwards where the gate can still be met; one
+   answered `signIn` is handled as criterion 7 states.
 5. Social sign-in never appears as a step-up option.
 6. A pending loss report is shown with its completion time, and a cancel option where
    its credential is `cancellable`, not as an error.
+7. A step-up answered `signIn` sends the person through a new sign-in with the
+   provider, and offers no loss report (D-243).
 
 ---
 
@@ -500,7 +505,8 @@ show every identifier with its verification state and SHALL allow adding further
 and phones within `identifiers.email.max` and `identifiers.phone.max` (REG-SESS-004).
 The security screen SHALL follow REG-SESS-006 and FE-REG-003. The final step SHALL show
 a summary of what was set up and what was left for later and SHALL return the person per
-REG-SESS-008, to the origin `GET /auth/session` answers as `landing`: the terms step
+REG-SESS-008, to the origin `GET /auth/session` answers as `landing`, or to the
+`continueTo` it answers where it answers one (D-242): the terms step
 keeps the client captured at step 1 on the session it establishes, and no destination
 crosses between the applications in the frontend's hands. The wizard SHALL read the
 registration session's state from the server (`GET /register`, `GET /register/events`)
@@ -512,7 +518,7 @@ a provider round trip started to register and returned with `error`
 `auth.session.expired` means the same (`09`, D-192).
 
 *Source: D-146; REG-SESS-002, REG-SESS-004, REG-SESS-006, REG-SESS-008, REG-IDENT-010,
-API-REDIR-002, D-166, D-186, D-192, D-224*
+API-REDIR-002, D-166, D-186, D-192, D-224, D-242*
 
 The first six steps run on the authentication application against the registration
 session; the account exists from the end of step 6; steps 7 to 10 run on the account
@@ -530,6 +536,12 @@ moving on replaces the history entry. The membership step reads its invitation f
 account application, whose session is bound to the record the terms step established
 (REG-SESS-008).
 
+**Back to the application that sent the person (D-242).** Where the terms step carried
+a pending authorization, `GET /auth/session` answers `continueTo` while it lives, and
+the done step goes to `continueTo` where it is answered, and to `landing` otherwise, a
+lapsed one leaving `landing`. The steps between are unchanged: the wizard keeps its ten
+steps.
+
 **Acceptance criteria**
 1. The steps appear in the order of REG-SESS-002; no step is reachable before its
    predecessor completes and no control returns to a completed step.
@@ -544,6 +556,8 @@ account application, whose session is bound to the record the terms step establi
 5. The final step shows the summary and lands, with an established session, on the
    `landing` origin `GET /auth/session` answers, the origin of the client's registered
    address; no destination parameter is sent (FE-REG-001).
+6. Where `GET /auth/session` answers `continueTo` after a registration, the final step
+   goes there instead of `landing`, and steps 7 to 10 are each shown before it (D-242).
 
 ---
 
@@ -750,7 +764,12 @@ the server enforces (AUTH-PASS-001, AUTH-PASS-004).
 request with **conditional mediation** and **no `allowCredentials`**, so a manager
 can offer a passkey inside the field.
 
-*Source: D-146; AUTH-FACT-002 (conditional UI), D-201*
+*Source: D-146; AUTH-FACT-002 (conditional UI), D-201, D-244*
+
+**The challenge on load (D-244).** The conditional request's challenge is the one
+`POST /auth/begin` opens without an `identifier` (`20` REG-IDENT-003), and the selected
+passkey's assertion is presented at `POST /auth/factor` against it; its user handle names
+the account.
 
 **Acceptance criteria**
 1. The identifier field carries both tokens.
@@ -758,9 +777,9 @@ can offer a passkey inside the field.
    carries an empty or absent `allowCredentials`.
 3. Selecting the offered passkey signs in without the identifier being typed.
 
-A known issue is carried into Milestone 2 by `implementation-plan.md` section 4: no
-route opens a passkey sign-in without an identifier (`09` `POST /auth/begin` always
-takes one), so criteria 2 and 3 do not hold until Milestone 2 answers it (D-201).
+The known issue `implementation-plan.md` section 4 carried into Milestone 2 (D-201), that
+no route opened a passkey sign-in without an identifier, is closed by D-244:
+`POST /auth/begin` takes `identifier` as optional, and criteria 2 and 3 hold.
 
 ---
 

@@ -229,6 +229,64 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
         Assert.Null((await store.FindAsync(unbound.Fingerprint, cancellationToken))?.Browser);
     }
 
+    /// <summary>
+    /// REG-IDENT-003 AC3 (D-244): the sign-ins a browser opened without an identifier
+    /// and that name no account end together, while one another browser opened, one
+    /// opened with an identifier and one a passkey has named stand; the account a
+    /// passkey names is carried to the row.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_003_AC3_ABrowsersUnnamedSignInsEndTogetherAndANamedOneIsCarriedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var deployment = new Deployment(database);
+        SubjectId subject = await deployment.AccountAsync(Noon);
+        byte[] browser = RandomNumberGenerator.GetBytes(Fingerprint.Length);
+        Challenge unnamed = Unnamed(browser);
+        Challenge elsewhere = Unnamed(RandomNumberGenerator.GetBytes(Fingerprint.Length));
+        Challenge identified = Opened(RandomNumberGenerator.GetBytes(Fingerprint.Length), browser, Noon);
+        Challenge named = Unnamed(browser);
+
+        await using (StoreContext writing = database.Context())
+        {
+            var challenges = new ChallengeStore(writing, Deployment.Fingerprints);
+
+            foreach (Challenge opened in new[] { unnamed, elsewhere, identified, named })
+            {
+                await challenges.AddAsync(opened, cancellationToken);
+            }
+
+            _ = await writing.SaveChangesAsync(cancellationToken);
+        }
+
+        await using (StoreContext naming = database.Context())
+        {
+            var challenges = new ChallengeStore(naming, Deployment.Fingerprints);
+            Challenge found = Assert.IsType<Challenge>(await challenges.FindAsync(named.Fingerprint, cancellationToken));
+
+            found.Name(subject);
+            found.Accepted(Factor.Passkey);
+
+            await challenges.RecordAsync(found, cancellationToken);
+            _ = await naming.SaveChangesAsync(cancellationToken);
+        }
+
+        await using (StoreContext replacing = database.Context())
+        {
+            await new ChallengeStore(replacing, Deployment.Fingerprints).RemoveUnnamedAsync(browser, cancellationToken);
+            _ = await replacing.SaveChangesAsync(cancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        var store = new ChallengeStore(reading, Deployment.Fingerprints);
+
+        Assert.Null(await store.FindAsync(unnamed.Fingerprint, cancellationToken));
+        Assert.NotNull(await store.FindAsync(elsewhere.Fingerprint, cancellationToken));
+        Assert.NotNull(await store.FindAsync(identified.Fingerprint, cancellationToken));
+        Assert.Equal(subject, (await store.FindAsync(named.Fingerprint, cancellationToken))?.Subject);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _randomness.Dispose();
 
@@ -280,6 +338,18 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
                 "SELECT count(*)::int FROM identity.signin_challenges WHERE handle = @Handle OR landing_handle = @Landing;",
                 new { Handle = opened.Fingerprint, Landing = handle.Fingerprint() }));
     }
+
+    // A sign-in a browser opened without an identifier (D-244).
+    private Challenge Unnamed(byte[] browser) =>
+        Challenge.Open(
+            OpaqueToken.Draw(_randomness),
+            subject: null,
+            email: null,
+            identifier: null,
+            "a-value-an-assertion-signs",
+            browser,
+            Noon,
+            TimeSpan.FromMinutes(10));
 
     private Challenge Opened(byte[] identifier, byte[]? browser, DateTimeOffset at) =>
         Challenge.Open(
