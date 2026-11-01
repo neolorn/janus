@@ -31,7 +31,8 @@ echo "Run one: from empty."
 create migrated_from_empty
 apply "$cli" migrated_from_empty
 
-previous=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+# D-232: a release candidate's tag sorts before the final release of its version.
+previous=$(git -c versionsort.suffix=-rc. tag --list 'v*' --sort=-v:refname | head -n 1)
 
 echo "Run two: from the previous release's schema."
 create migrated_from_previous
