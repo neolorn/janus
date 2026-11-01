@@ -19840,6 +19840,8 @@ Found in round H3's review.
 - **The answer.** It answers `continueTo` where it carried a pending authorization.
   `continueTo` wins over `landing` where both stand, and `landing` (REG-SESS-008) answers
   otherwise.
+- **When.** `GET /auth/session` answers `continueTo` while the pending authorization
+  lives, and the done step goes there. The steps between are unchanged.
 - **Expiry.** The pending authorization keeps its 30 minutes from its creation. One that
   lapsed during the registration is not carried, and `landing` applies. Nothing extends it.
 
@@ -19852,6 +19854,7 @@ Found in round H3's review.
 - `02` AUTH-SESS-012;
 - `20` REG-SESS-008;
 - `09` (the completion's answer, `continueTo`);
+- `18` FE-REG-005;
 - `implementation-plan.md` (round H8).
 
 ---
@@ -20029,6 +20032,8 @@ Found by Cura's step 4.
   roles the caller's held roles hand out, with `system:administer`'s reach as the grant
   itself allows it. Not a role's permissions, which stay `role:manage`'s to read.
 - **What it records.** Nothing: it is a read of the deployment's roles, not of a person.
+  A refused read is recorded as any refused request is, and nothing more.
+- **No step-up.** The read asks none: step-up guards changes.
 
 *Rejected:*
 - **Opening `GET /admin/roles` to `grant:manage`:** it shows every role's permissions to
@@ -20039,6 +20044,8 @@ Found by Cura's step 4.
 - `03` AUTHZ-GRANT-005;
 - `07` LIB-API-005 (`IGrants.AssignableAsync`, `AssignableRole`);
 - `09` (the route, beside `GET /admin/grants`);
+- `10` section 2.1 (`grant:manage`, the read) and section 5a (`grant:manage`, the
+  changing routes alone);
 - `implementation-plan.md` (round H8).
 
 ---

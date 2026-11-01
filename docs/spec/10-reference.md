@@ -248,7 +248,7 @@ IDN-READ-004 names, `record:read` and `record:erase`, and no other (D-218, D-221
 | Permission | Governs |
 |---|---|
 | `grant:read` | Viewing grants (`GET /admin/grants`), the "who can access this?" view, and which accounts may exercise a permission (`GET /admin/access/admitted`, AUTHZ-GATE-007, D-218) |
-| `grant:manage` | Creating and revoking grants; asked in the organization the grant is scoped to, and for a grant in an organization other than the administrative organization also met by `system:administer` held in the administrative organization, save for an invitation's roles, which need `grant:manage` held in the invitation's own organization (AUTHZ-SCOPE-001, D-207) |
+| `grant:manage` | Creating and revoking grants, and reading the roles its holder may give (D-247); asked in the organization the grant is scoped to, and for a grant in an organization other than the administrative organization also met by `system:administer` held in the administrative organization, save for an invitation's roles, which need `grant:manage` held in the invitation's own organization (AUTHZ-SCOPE-001, D-207) |
 | `role:manage` | Reading, creating and changing roles, in the administrative organization |
 | `group:manage` | Creating groups, nesting them, and changing their members (D-106); asked in the organization the group belongs to (AUTHZ-SCOPE-001) |
 | `organization:manage` | Organization lifecycle, policy, and deletion cancellation; asked in the administrative organization, whatever organization the request names |
@@ -1567,7 +1567,7 @@ another person's account or loosens a control has one (`09` section 8a).
 | `recovery:approve` | Approve a recovery | `POST /admin/recovery/approve` |
 | `invitation:issue` | Issue an invitation | `POST /admin/organizations/{id}/invitations`; an invitation naming a role also passes `grant:manage`, and a `formerMailbox` (section 5.44) is stepped up with the issue |
 | `membership:end` | End a membership | `DELETE /admin/organizations/{id}/memberships/{subject}` (IDN-MEM-001, REG-MAIL-003) |
-| `grant:manage` | Grant, revoke or change roles and grants; change a group's members | `/admin/grants/*`, `/admin/roles/*`, `POST` · `DELETE /admin/groups/{id}/members` |
+| `grant:manage` | Grant, revoke or change roles and grants; change a group's members | `POST /admin/grants`, `DELETE /admin/grants/{id}`, `/admin/roles/*`, `POST` · `DELETE /admin/groups/{id}/members`; `GET /admin/grants/assignable` is not gated, as step-up guards changes (D-247) |
 | `account:suspend` | Suspend an account | `POST /admin/accounts/{subject}/suspend` |
 | `account:reactivate` | Reactivate a suspended account | `POST /admin/accounts/{subject}/reactivate` |
 | `account:restrictionlift` | Lift a processing restriction | `POST /admin/accounts/{subject}/restriction/lift` (PRIV-RIGHT-004) |

@@ -315,9 +315,11 @@ hand out, with `system:administer`'s reach as the grant itself allows it. Each r
 answered with its name and whether its grants must end (`grantsMustEnd`), sorted by
 name, and not with its permissions, which stay `role:manage`'s to read. It is asked
 under the caller's `grant:manage` in that organization, the permission a grant there
-needs, and refused `authz.denied` without it. A system principal's context is refused
-with `authz.denied`, as AUTHZ-GRANT-004 keeps roles a person's. The read records
-nothing: it is a read of the deployment's roles, not of a person.
+needs, and refused `authz.denied` without it. It asks no step-up: step-up guards
+changes. A system principal's context is refused with `authz.denied`, as AUTHZ-GRANT-004
+keeps roles a person's. The read records nothing: it is a read of the deployment's
+roles, not of a person. A refused read is recorded as any refused request is
+(AUTHZ-CONCEAL-004), and nothing more.
 
 *Source: D-212, D-213, D-216, D-217, D-240, D-247*
 
@@ -356,8 +358,9 @@ the record of who gave what, when and why is the control.
    and its revocation of that role's grant is not refused `authz.role.notassignable`
    (D-240).
 10. The roles a caller may hand out in an organization, as read, are exactly those a
-    grant by the caller there admits, each with its `grantsMustEnd`; a caller without
-    `grant:manage` there is refused `authz.denied`; the read records nothing (D-247).
+    grant by the caller there admits, each with its `grantsMustEnd`, and the read asks
+    no step-up; a caller without `grant:manage` there is refused `authz.denied`,
+    recorded as a refusal; an admitted read records nothing (D-247).
 
 ---
 

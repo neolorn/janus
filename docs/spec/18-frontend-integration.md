@@ -505,7 +505,8 @@ show every identifier with its verification state and SHALL allow adding further
 and phones within `identifiers.email.max` and `identifiers.phone.max` (REG-SESS-004).
 The security screen SHALL follow REG-SESS-006 and FE-REG-003. The final step SHALL show
 a summary of what was set up and what was left for later and SHALL return the person per
-REG-SESS-008, to the origin `GET /auth/session` answers as `landing`: the terms step
+REG-SESS-008, to the origin `GET /auth/session` answers as `landing`, or to the
+`continueTo` it answers where it answers one (D-242): the terms step
 keeps the client captured at step 1 on the session it establishes, and no destination
 crosses between the applications in the frontend's hands. The wizard SHALL read the
 registration session's state from the server (`GET /register`, `GET /register/events`)
@@ -517,7 +518,7 @@ a provider round trip started to register and returned with `error`
 `auth.session.expired` means the same (`09`, D-192).
 
 *Source: D-146; REG-SESS-002, REG-SESS-004, REG-SESS-006, REG-SESS-008, REG-IDENT-010,
-API-REDIR-002, D-166, D-186, D-192, D-224*
+API-REDIR-002, D-166, D-186, D-192, D-224, D-242*
 
 The first six steps run on the authentication application against the registration
 session; the account exists from the end of step 6; steps 7 to 10 run on the account
@@ -535,6 +536,12 @@ moving on replaces the history entry. The membership step reads its invitation f
 account application, whose session is bound to the record the terms step established
 (REG-SESS-008).
 
+**Back to the application that sent the person (D-242).** Where the terms step carried
+a pending authorization, `GET /auth/session` answers `continueTo` while it lives, and
+the done step goes to `continueTo` where it is answered, and to `landing` otherwise, a
+lapsed one leaving `landing`. The steps between are unchanged: the wizard keeps its ten
+steps.
+
 **Acceptance criteria**
 1. The steps appear in the order of REG-SESS-002; no step is reachable before its
    predecessor completes and no control returns to a completed step.
@@ -549,6 +556,8 @@ account application, whose session is bound to the record the terms step establi
 5. The final step shows the summary and lands, with an established session, on the
    `landing` origin `GET /auth/session` answers, the origin of the client's registered
    address; no destination parameter is sent (FE-REG-001).
+6. Where `GET /auth/session` answers `continueTo` after a registration, the final step
+   goes there instead of `landing`, and steps 7 to 10 are each shown before it (D-242).
 
 ---
 

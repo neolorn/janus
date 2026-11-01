@@ -1017,9 +1017,11 @@ was doing is the application's responsibility.
 `/oidc/authorize` and registered instead of signing in, the terms step SHALL carry the
 browser's pending authorization into the session it establishes, as a sign-in's
 completion does, and SHALL answer `continueTo` (`02` AUTH-SESS-012). `continueTo` wins
-over `landing` where both stand, and `landing` answers otherwise. A pending
-authorization that lapsed during the registration is not carried, and `landing`
-applies; nothing extends it.
+over `landing` where both stand, and `landing` answers otherwise. `GET /auth/session`
+SHALL answer `continueTo` while that pending authorization lives, and the done step
+SHALL go there where it is answered, and to `landing` otherwise; the steps between are
+unchanged (`18` FE-REG-005). A pending authorization that lapsed during the registration
+is not carried, and `landing` applies; nothing extends it.
 
 *Source: D-146, D-162, D-166; D-057, D-198, D-224, D-242*
 
@@ -1031,9 +1033,10 @@ applies; nothing extends it.
    the terms step established, answers the same `landing` the authentication
    application does.
 4. A registration begun while a pending authorization waits is answered `continueTo` at
-   the terms step, and following it returns the person to the application that sent
-   them; one whose pending authorization lapsed during the registration is answered no
-   `continueTo`, and `landing` applies (D-242).
+   the terms step and by `GET /auth/session` while it lives, and the done step, reached
+   through steps 7 to 10, goes there and returns the person to the application that
+   sent them; one whose pending authorization lapsed is answered no `continueTo`, and
+   `landing` applies (D-242).
 
 ---
 

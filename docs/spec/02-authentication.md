@@ -1406,7 +1406,9 @@ browser's hands (API-REDIR-001), and the pushed request keeps its 60 seconds
 (`20` REG-SESS-008), rotates the pre-authentication session with the pending
 authorization's record as a sign-in's completion does, under the same binding to the
 browser, and answers `continueTo` where it carried one. `continueTo` wins over `landing`
-where both stand, and `landing` answers otherwise. The pending authorization keeps its
+where both stand, and `landing` answers otherwise. `GET /auth/session` answers it while
+the pending authorization lives, and registration's done step goes there, the steps
+between unchanged (`20` REG-SESS-008). The pending authorization keeps its
 `oidc.continuation.lifetime` from its creation: one that lapsed during the registration
 is not carried, and `landing` applies. Nothing extends it.
 

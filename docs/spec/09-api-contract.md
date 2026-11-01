@@ -1056,7 +1056,7 @@ application.
 }
 ```
 
-*Source: AUTH-SESS-001, REG-SESS-008, D-166, D-191*
+*Source: AUTH-SESS-001, REG-SESS-008, D-166, D-191, D-242*
 
 **No organization is returned.** Authorization resolves the organization from the
 resource, never from the session (IDN-MEM-003, AUTHZ-SCOPE-001) — returning one here
@@ -1068,7 +1068,12 @@ established, so every application session bound to that record answers it, the a
 application's among them, where the done step runs; the done step of registration reads
 it here and never from a request (REG-SESS-008, D-166, D-224). `continueTo` is the
 address of the browser's pending authorization, for a sign-in a navigation completed (a
-social provider's return), as `POST /auth/factor` gives it (D-224).
+social provider's return), as `POST /auth/factor` gives it (D-224). After a registration
+whose terms step carried a pending authorization, it is answered while that pending
+authorization lives, on every application session bound to the record the terms step
+established, the account application's among them, and the done step goes there rather
+than to `landing`; once it has lapsed, `continueTo` is absent and `landing` applies
+(REG-SESS-008, D-242).
 
 **401** — no valid session
 
@@ -2741,11 +2746,13 @@ The roles the caller may hand out in the organization: exactly those a grant by 
 caller there would not be refused as `authz.role.notassignable`, judged as
 AUTHZ-GRANT-005 judges the grant, with `system:administer`'s reach as the grant itself
 allows it, sorted by name. Asked under `grant:manage` in that organization, the
-permission a grant there needs. A role's permissions are not answered, and stay
-`role:manage`'s to read (`GET /admin/roles`). Its library call is
-`IGrants.AssignableAsync` (LIB-API-005), which refuses a system principal's context with
-`authz.denied`, as AUTHZ-GRANT-004 keeps roles a person's. The read records nothing: it
-is a read of the deployment's roles, not of a person.
+permission a grant there needs. Not a step-up action: step-up guards changes (`10`
+section 5a). A role's permissions are not answered, and stay `role:manage`'s to read
+(`GET /admin/roles`). Its library call is `IGrants.AssignableAsync` (LIB-API-005), which
+refuses a system principal's context with `authz.denied`, as AUTHZ-GRANT-004 keeps roles
+a person's. The read records nothing: it is a read of the deployment's roles, not of a
+person. A refused read is recorded as any refused request is (AUTHZ-CONCEAL-004), and
+nothing more.
 
 **200**: `[ { name, grantsMustEnd } ]`
 **400**: `api.request.malformed` naming `organization` where it is absent or not well
