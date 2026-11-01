@@ -666,13 +666,15 @@ internal sealed class SessionService(
             .WaitsAsync(live.Spine, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
+        // D-242: where an authorization waits, the way back to it wins over the client's
+        // landing, which answers once it is spent or has lapsed.
         return Result.Success(new SessionDetail(
             live.Subject,
             live.Attained,
             live.PhishingResistant,
             live.Aal2At,
             live.IdleExpiry < live.AbsoluteExpiry ? live.IdleExpiry : live.AbsoluteExpiry,
-            captured is null ? null : RedirectValidation.Landing(captured))
+            captured is null || waiting ? null : RedirectValidation.Landing(captured))
         {
             AuthorizationWaiting = waiting,
         });

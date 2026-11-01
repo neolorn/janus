@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A registration begun from an application's `/oidc/authorize` that found no session
+  returns to that request as a sign-in does: `POST /register/terms` carries the
+  browser's pending authorization to the session it establishes and answers
+  `continueTo` (201 `{ continueTo }`), and `GET /auth/session` answers it in place of
+  `landing` until the continuation spends it. One that lapsed during the registration is
+  not carried, and `landing` stands.
 - A member brings forward the end an administrator set on their membership with
   `POST /account/memberships/{organization}/end` or
   `IInvitations.BringMembershipEndForwardAsync`, under their live session alone: no
