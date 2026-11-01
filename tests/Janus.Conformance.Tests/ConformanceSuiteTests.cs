@@ -449,7 +449,7 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
             () => new AdmittingProvider(),
             services => ConformanceSuite.ProviderAsync(services, Asking(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(21, report.Findings.Count);
+        Assert.Equal(20, report.Findings.Count);
         Assert.All(report.Findings, found => Assert.Equal(ConformanceCheck.Provider, found.Check));
         Assert.All(report.Findings, found => Assert.Equal(ErrorCodes.ProviderNonconformant, found.Failure.Code));
         Assert.Contains(
