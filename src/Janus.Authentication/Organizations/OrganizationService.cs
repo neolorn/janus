@@ -581,9 +581,9 @@ internal sealed class OrganizationService(
 
         Error? failure = null;
 
-        Replacement judged = (await JudgedAsync(context, organization, standing, replacement, cancellationToken)
+        PolicyReplacement judged = (await JudgedAsync(context, organization, standing, replacement, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Held<Replacement>(error, ref failure));
+            .Match(value => value, error => Held<PolicyReplacement>(error, ref failure));
 
         if (failure is not null)
         {
@@ -672,7 +672,7 @@ internal sealed class OrganizationService(
     // policy in force, or the refusal it meets: below the system policy, below the
     // administrative organization's floor, or a loosening the caller may not make. It
     // reads the values as they stand, held where the caller holds their rows.
-    private async ValueTask<Result<Replacement>> JudgedAsync(
+    private async ValueTask<Result<PolicyReplacement>> JudgedAsync(
         AccessContext context,
         OrganizationId organization,
         OrganizationStanding standing,
@@ -690,48 +690,27 @@ internal sealed class OrganizationService(
 
         if (failure is not null)
         {
-            return Result.Failure<Replacement>(failure);
+            return Result.Failure<PolicyReplacement>(failure);
         }
 
-        PolicyOverride after = replacement with { EmailDomains = before.EmailDomains };
+        PolicyReplacement judged = PolicyReplacement.Of(system, before, replacement, standing.IsAdministrative)
+            .Match(value => value, error => Held<PolicyReplacement>(error, ref failure));
 
-        // AUTH-STEP-002a: an organization may tighten any field and may not loosen one
-        // below the system policy.
-        if (PolicyStrictness.BelowSystem(system, after) is string looser)
+        if (failure is not null)
         {
-            return Result.Failure<Replacement>(
-                Error.From(
-                    ErrorCodes.ConfigurationPolicyBelowSystem,
-                    "field",
-                    JsonSerializer.SerializeToElement(looser)));
+            return Result.Failure<PolicyReplacement>(failure);
         }
-
-        Policy was = PolicyStrictness.Tighten(system, before);
-        Policy becomes = PolicyStrictness.Tighten(system, after);
-
-        // AUTH-SESS-005b: the administrative organization is held to a stated floor of
-        // AAL2, which no change of its policy takes it below.
-        if (standing.IsAdministrative && becomes.RequiredAssurance < AssuranceLevel.Aal2)
-        {
-            return Result.Failure<Replacement>(
-                Error.From(
-                    ErrorCodes.ConfigurationValueBelowFloor,
-                    "field",
-                    JsonSerializer.SerializeToElement("requiredAssurance")));
-        }
-
-        bool loosening = PolicyStrictness.Loosens(was, becomes);
 
         // OPS-CFG-002 and chapter 10 section 2.1: a loosening of runtime configuration
         // also needs the permission to loosen the deployment.
-        if (loosening
+        if (judged.Loosening
             && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
                 is Error withheld)
         {
-            return Result.Failure<Replacement>(withheld);
+            return Result.Failure<PolicyReplacement>(withheld);
         }
 
-        return Result.Success(new Replacement(before, after, was, becomes, loosening));
+        return Result.Success(judged);
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
@@ -761,11 +740,4 @@ internal sealed class OrganizationService(
 
     private static string Key(string kind, OrganizationId organization, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{kind}:{organization.Value}@{at.UtcTicks}");
-
-    private sealed record Replacement(
-        PolicyOverride Before,
-        PolicyOverride After,
-        Policy Was,
-        Policy Becomes,
-        bool Loosening);
 }
