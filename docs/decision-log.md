@@ -19456,7 +19456,9 @@ final.
 
 *Rejected:* versions `0.y.z` (the owner asked for release candidates of 1.0.0).
 
-**Propagated to:** `07` LIB-VER-001; `08` CONV-VCS-005 (the tag and changelog forms);
+**Propagated to:** `07` LIB-VER-001, LIB-API-001, LIB-TEST-002 (criterion 1); `08`
+CONV-VCS-003 (criterion 2), CONV-VCS-005 (the tag and changelog forms; criterion 3),
+section 10 (the pruning of pre-release versions); `06` OPS-MIG-005 (criterion 3);
 `implementation-plan.md` section 4 (step 2 becomes release `1.0.0-rc.1`, on the lead's
 message; the final 1.0.0 is the owner's).
 
@@ -19486,8 +19488,8 @@ the sign-in).
 
 **Propagated to:** `09` `POST /auth/factor` (the 200 and the link-token paragraph), the
 `POST /auth/link` paragraph on the landing route; `02` AUTH-FACT-003 if it describes the
-answer; `10` section 5 where the sign-in answer's members are listed; `18` where the
-landing page's flow is described; `implementation-plan.md`, the next round's row.
+answer; `18` where the landing page's flow is described; `implementation-plan.md`, the
+next round's row.
 
 ## D-234 — An enrolment session replaces a lost mailbox in any mode
 
@@ -19508,19 +19510,22 @@ the new-device code and every later recovery go to a mailbox they no longer hold
   takes the replaced one's place, primary included. Outside that session the replace stays
   a single-address-mode operation.
 - **Nothing else opens.** The session still cannot add (`POST /account/identifiers`) or
-  remove an identifier; a person who lost more than one address replaces the one the
-  enrolment names and tidies the rest after an ordinary sign-in.
+  remove an identifier, and it takes one replace, of an email `GET /enrol`'s
+  `identifiers` lists, named by its identifier in the route; a person who lost more than
+  one address replaces one of them there and tidies the rest after an ordinary sign-in.
 
 *Rejected:* opening add and remove to the enrolment session (two operations where one
 swap does, and a window with both addresses live); asking hosts in multi-address mode to
 recover lost mailboxes by hand (the library already holds the recorded confirmation that
 stands in for the old address).
 
-**Propagated to:** `09` `PUT /account/identifiers/{id}/replace` (its opening paragraph)
-and the enrolment session's route list; `02` AUTH-RECOV-002; `20` REG-IDENT-007;
-`implementation-plan.md`, the next round's row. Cura shows the replace wherever
-`mailboxLost` once it pins the round that ships this; until then its fallback text stands
-where `maxima.email` is not 1, marked "until Janus".
+**Propagated to:** `09` `PUT /account/identifiers/{id}/replace` (its opening paragraph
+and its 422) and the enrolment session's route list; `02` AUTH-RECOV-002; `20`
+REG-IDENT-007; `01` IDN-LIFE-008; `10` section 1.1 (`identity.identifier.invalid`),
+section 4 (`identifiers.email.max`) and section 5a (the `identifier:add` row); `11`
+section 4 (step 6); `implementation-plan.md`, the next round's row. Cura shows the
+replace wherever `mailboxLost` once it pins the round that ships this; until then its
+fallback text stands where `maxima.email` is not 1, marked "until Janus".
 
 ## D-235 — A stored policy reads past a retired step-up action
 
@@ -19545,7 +19550,7 @@ bootstrapped before the removal stops at upgrade, with no tool to repair it); ig
 unknown name (a damaged row would pass unseen).
 
 **Propagated to:** `10` section 5a (gates name current actions; stored retired ones are dropped
-at read and by the migration); `06` the upgrade notes; `implementation-plan.md`, the next
+at read and by the migration); `06` OPS-MIG-001; `implementation-plan.md`, the next
 round's row; a test that a policy stored with `alerting:destinations` starts the host and gates
 every current action as before.
 

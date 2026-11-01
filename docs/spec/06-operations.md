@@ -176,7 +176,10 @@ runs `migrate` before its own migrations (OPS-MIG-004); the library's own pipeli
 applies its migrations the same way, the double run of OPS-MIG-007 included, so there is
 one way to apply them.
 
-*Source: D-018, D-204, D-206, D-209, D-225*
+**Retired step-up gates (D-235).** A migration removes from the stored policies and
+overrides every gate that names a retired step-up action (`10` section 5a).
+
+*Source: D-018, D-204, D-206, D-209, D-225, D-235*
 
 Startup migration means instances racing each other on deploy, failures surfacing as
 crash loops rather than failed pipelines, and the running application holding
@@ -298,15 +301,17 @@ Host tables may reference library tables; the reverse never occurs.
 against the **previous** application version. Renaming or dropping SHALL NOT occur in
 the same release that changes the code using it.
 
-*Source: D-018, D-166*
+*Source: D-018, D-166, D-232*
 
 Both versions run briefly during rollout.
 
 **Acceptance criteria**
 1. A new column is added nullable; the constraint is tightened in a later release.
 2. A migration is tested against the previous release's application build.
-3. Before the first release no previous version exists: a column added by a migration
-   of the first release carries its final constraint from that migration.
+3. Before the first final release nothing binds (D-232): a migration need not upgrade an
+   earlier release candidate's database, though the migrations still run in order, and
+   a column added by a migration before the first final release carries its final
+   constraint from that migration.
 
 ---
 

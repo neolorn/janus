@@ -1795,18 +1795,19 @@ platform writes when a pull request is merged, or the merge of a local branch in
 branch it was cut from, which carries the resolution of its conflicts, D-182) is outside
 this item: the gate inspects single-parent commits only (D-158).
 
-*Source: D-149, D-158, D-166, D-182*
+*Source: D-149, D-158, D-166, D-182, D-232*
 
 **Acceptance criteria**
 1. A commit message that does not parse under Conventional Commits 1.0.0, whose
    description exceeds 72 characters, or whose body has a line that does not begin
    with a dash or exceeds 72 characters, fails a check on push and on pull request;
    commits with two parents are skipped by the check.
-2. Every commit that removes or changes what the latest release published carries the
-   breaking marker: a line of a `PublicAPI.Shipped.txt`, a shipped line marked
-   `*REMOVED*` in an unshipped file, or an entry of a contract list the latest release
-   held (LIB-TEST-002, REF-001 AC2). Removing or changing what no release published is
-   not a break.
+2. Every commit that removes or changes what the newest final release published carries
+   the breaking marker: a line of a `PublicAPI.Shipped.txt`, a shipped line marked
+   `*REMOVED*` in an unshipped file, or an entry of a contract list that release held
+   (LIB-TEST-002, REF-001 AC2). A release candidate is never that baseline: removing or
+   changing what no final release published is not a break, and before the first final
+   release no commit is one (D-232).
 
 ---
 
@@ -1862,7 +1863,8 @@ the suffix rules the conversion sets aside being reviewed and updated with the l
    file.
 3. A major-version section of the changelog links the migration note of LIB-VER-002, a
    file in the repository; the release gate refuses a section that opens a major version
-   without the link.
+   without the link. A release candidate's section opens no major version, and the gate
+   asks it for no link to a migration note (D-232).
 4. A release's offline leaked-password list and Public Suffix List are drawn for that
    release and carry the date they were drawn, and the pin of the suffix rules set aside
    matches the list drawn.
@@ -2023,7 +2025,7 @@ Recorded so they are not rediscovered.
 |---|---|
 | Cannot approve one's own pull request | Status checks rather than approvals (CONV-VCS-002) |
 | Secret scanning and push protection unavailable on personal plans | Scanning moved into the pipeline (OPS-DEP-004) |
-| 2 GB package storage | Prune pre-release versions |
+| 2 GB package storage | Prune only pre-release versions older than the newest final release; until the first final release, keep every release candidate (D-232) |
 
 ---
 

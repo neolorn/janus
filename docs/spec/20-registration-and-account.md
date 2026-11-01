@@ -332,7 +332,8 @@ before the swap, except within an admin-assisted enrolment session (AUTH-RECOV-0
 where the approver's recorded confirmation stands in for the old address and the new
 address confirms alone. Within an admin-assisted enrolment session opened for a lost
 mailbox (`mailboxLost`), a replace of an email the enrolment lists SHALL be taken
-whatever `identifiers.email.max` is, the new address taking the replaced one's place,
+whatever `identifiers.email.max` is, with no step-up, the session being itself the proof
+(`10` section 5a), the new address taking the replaced one's place,
 primary included; outside that session a replace is taken in single-address mode alone,
 and the session adds and removes no identifier (AUTH-RECOV-002, D-234). The
 confirmation is the message `identifier-change-confirm` under the sending purpose

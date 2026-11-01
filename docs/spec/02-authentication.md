@@ -2246,10 +2246,11 @@ old one. The remaining security-notice set is still notified and receives the un
 the session replaces an email the enrolment lists (`09` `GET /enrol`, `identifiers`)
 whatever `identifiers.email.max` is, verified by the new address alone, and the new
 address takes the replaced one's place, primary included, so the new-device code and
-every later recovery reach a mailbox the person holds (REG-IDENT-007). Nothing else
-opens: the session adds no identifier and removes none, and a person who lost more than
-one address replaces the one the enrolment names and tidies the rest after an ordinary
-sign-in.
+every later recovery reach a mailbox the person holds (REG-IDENT-007). The session takes
+one replace: of an email `GET /enrol`'s `identifiers` lists, named by its identifier in
+the route (`PUT /account/identifiers/{id}/replace`). Nothing else opens: the session adds
+no identifier and removes none, and a person who lost more than one address replaces
+one of them there and tidies the rest after an ordinary sign-in.
 
 **Acceptance criteria**
 1. The link expires and cannot be reused.

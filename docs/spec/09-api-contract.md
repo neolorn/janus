@@ -1605,7 +1605,8 @@ operation (REG-IDENT-007). Within an admin-assisted enrolment session opened wit
 `identifiers` lists is taken whatever `identifiers.email.max` is, verified by the new
 address alone, and the new address takes the replaced one's place, primary included;
 outside that session the replace stays a single-address-mode operation (D-234).
-Step-up; the new value is verified by `POST /account/identifiers/{id}/verify`; on
+Step-up, save under that session, which is itself the proof (`10` section 5a); the new
+value is verified by `POST /account/identifiers/{id}/verify`; on
 verification the swap applies at once and the undo goes to the remaining channels of the
 account. **Only where the account has no other channel at all** does the old address
 confirm before the swap, except within an admin-assisted enrolment session
