@@ -20305,6 +20305,68 @@ refresh token. Every other client is unchanged. The owner approved the trade-off
 
 ---
 
+## D-253 — A current member of the administrative organization gains a mailbox
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** REG-MAIL-001, INT-MAIL-006
+
+**TL;DR.** A person already a member of the administrative organization, the bootstrap
+administrator first among them, can be given a mailbox without an invitation. Until now a
+mailbox came only with an invitation (REG-MAIL-001) or `bootstrap --mailbox`, so an
+administrator bootstrapped without one could never have it. Found by Cura's first
+production release.
+
+- **The route.** `POST /admin/organizations/{id}/members/{account}/mailbox` with
+  `{ "address", "formerMailbox"?, "reason" }`, `{id}` the administrative organization,
+  admitted under `membership:manage` there, with the step-up the invitation route asks.
+  The library call is `IMemberships.GiveMailboxAsync`.
+- **What it does.** It reserves the mailbox at `address` as REG-MAIL-001 reserves an
+  invitation's, under the same address rules (the organization's domain, uniqueness,
+  `formerMailbox` for a mailbox held before, `identity.invitation.mailboxheld` without
+  it), and since the membership is current, owes it `enabled` at once (INT-MAIL-006,
+  INT-MAIL-007). The address becomes a verified identifier of the account, and the
+  primary email where the account holds none from the organization's domain; the
+  account's other emails stay. It is notified once to the security-notice set and
+  recorded with its reason.
+- **What it refuses.** An account that already holds a mailbox
+  (`identity.mailbox.held`, 409), a member of another organization, an account not
+  `active` or `restricted`, the emergency account (OPS-BOOT-002), and a deployment with
+  no mail server registered (`integration.mailserver.unavailable`).
+- **Oneself.** It hands out no role, so AUTHZ-GRANT-005 does not bear on it; a system
+  administrator may give themselves a mailbox.
+
+**Propagated to:** `20` REG-MAIL-001 (the route beside the invitation); `05`
+INT-MAIL-006; `07` LIB-API (`IMemberships.GiveMailboxAsync`); `09` (the route); `10`
+section 1 (`identity.mailbox.held`); `implementation-plan.md` (round H12).
+
+---
+
+## D-254 — Reconciliation leaves the mail server's own accounts alone
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** INT-MAIL-007
+
+**TL;DR.** The daily reconciliation counts as `unknown` only an individual account the
+library could have made. A group account, and an account the deployment names as its
+own, is never the library's and no longer raises `degradation`. Found by Cura's mail
+server, which holds shared mailboxes (groups) and its own service accounts (the sender,
+the library's management account, the operator's), each raising the alert daily.
+
+- **Groups.** An account whose type is not an individual one (in Stalwart 1.0,
+  `@type` other than `User`) is outside reconciliation: neither counted nor acted on. The
+  library never creates one.
+- **The deployment's own accounts.** `integration.mailserver.ownaccounts` (none by
+  default; a list of account names, redeploy-scoped) names individual accounts the
+  library leaves alone. Each is neither counted nor acted on, and a push that meets one is
+  refused as today's conflict is (`integration.mailserver.conflict`), so a mailbox can
+  never be given an address the deployment keeps for itself.
+- **What stays.** Every other account without a mailbox identifier is counted in
+  `unknown` as before.
+
+**Propagated to:** `05` INT-MAIL-007 (and the listing of INT-MAIL-001 where it names
+the accounts read); `10` section 4 (`integration.mailserver.ownaccounts`);
+`implementation-plan.md` (round H12).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
