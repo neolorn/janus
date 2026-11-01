@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /.well-known/openid-configuration` and `GET /oidc/jwks` are served on the machine
+  profile and ignore any cookie: a fetch issues, writes and sets no pre-authentication
+  session. Each holds a source to its own limit, `oidc.discovery.ratelimit` and
+  `oidc.jwks.ratelimit` (60 a minute, fixed window), and over it answers 429 with
+  `Retry-After` and no body.
 - A person who gives roles reads which roles they may give in an organization:
   `GET /admin/grants/assignable?organization={id}` and `IGrants.AssignableAsync` answer
   200 `[ { name, grantsMustEnd } ]`, sorted by name, exactly the roles a grant by them

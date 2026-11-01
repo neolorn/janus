@@ -5300,3 +5300,5 @@ Janus.Core.AssignableRole.Equals(Janus.Core.AssignableRole? other) -> bool
 Janus.Core.AssignableRole.<Clone>$() -> Janus.Core.AssignableRole!
 Janus.Core.AssignableRole.Deconstruct(out Janus.Core.RoleName Name, out bool GrantsMustEnd) -> void
 Janus.Core.AssignableRole.AssignableRole(Janus.Core.RoleName Name, bool GrantsMustEnd) -> void
+static Janus.Core.Configuration.Settings.OidcJwksRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.OidcDiscoveryRateLimit.get -> Janus.Core.Configuration.IntegerSetting!

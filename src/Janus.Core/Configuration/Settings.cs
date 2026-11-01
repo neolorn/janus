@@ -341,6 +341,14 @@ public static class Settings
     public static IntegerSetting IntegrationCallbackRateLimit { get; } =
         new("integration.callback.ratelimit", SettingScope.Runtime, 60, loosening: SettingDirection.Increase);
 
+    /// <summary>Fetches of the provider's discovery document admitted from one source a minute (D-241).</summary>
+    public static IntegerSetting OidcDiscoveryRateLimit { get; } =
+        new("oidc.discovery.ratelimit", SettingScope.Runtime, 60, loosening: SettingDirection.Increase);
+
+    /// <summary>Fetches of the provider's key set admitted from one source a minute (D-241).</summary>
+    public static IntegerSetting OidcJwksRateLimit { get; } =
+        new("oidc.jwks.ratelimit", SettingScope.Runtime, 60, loosening: SettingDirection.Increase);
+
     /// <summary>
     /// How long an unsettled claim on a host callback's event stands before a delivery
     /// of the event takes it over.
@@ -965,6 +973,8 @@ public static class Settings
         AbuseSourceSiteLimit,
         AbuseBotDefenceRepeatedAttempts,
         IntegrationCallbackRateLimit,
+        OidcDiscoveryRateLimit,
+        OidcJwksRateLimit,
         IntegrationCallbackClaimTimeout,
         IntegrationMailServerEndpoint,
         Restrictions,

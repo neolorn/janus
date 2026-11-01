@@ -114,7 +114,25 @@ public static class PipelineProfiles
                     PassedUnmarked(branch);
                 })
             .UseWhen(
-                context => MachineRoutes.IgnoresCookie(context.Request.Path),
+                context => MachineRoutes.IsFetched(context.Request.Path) && AtProvider(context),
+                branch =>
+                {
+                    // D-241: a fetch of discovery or the key set is held to its own limit
+                    // and answered by the provider, reading no cookie and writing no
+                    // session.
+                    Marked(branch);
+                    _ = branch.Use((context, next) => FetchRateLimiting.InvokeAsync(
+                        context,
+                        next,
+                        keySet: MachineRoutes.IsKeySet(context.Request.Path),
+                        context.RequestAborted));
+                    PassedMarked(branch);
+                    _ = branch.UseAuthentication();
+                    PassedUnmarked(branch);
+                })
+            .UseWhen(
+                context => MachineRoutes.IgnoresCookie(context.Request.Path)
+                    && !MachineRoutes.IsFetched(context.Request.Path),
                 Marked);
     }
 

@@ -613,7 +613,7 @@ public sealed class BrowserProfileTests : IDisposable
             Reading("GetEndpoint", "Metadata"));
         Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);
 
-        Assert.Equal(["SourceRateLimiting.cs"], Reading("IConfigurationStore", "Settings."));
+        Assert.Equal(["FetchRateLimiting.cs", "SourceRateLimiting.cs"], Reading("IConfigurationStore", "Settings."));
         Assert.Equal(
             ["Settings.AbuseSourceRateLimit", "Settings.AbuseSourceSiteLimit"],
             Regex.Matches(Repository.Source("SourceRateLimiting"), @"Settings\.\w+").Select(read => read.Value));
