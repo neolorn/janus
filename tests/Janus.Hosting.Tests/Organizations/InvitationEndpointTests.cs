@@ -631,8 +631,9 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-MEM-001 (D-240): <c>POST /account/memberships/{organization}/end</c> under the
-    /// member's live session, a day after it was proved and holding no permission, ends
-    /// their own membership whose end is set and ahead and answers <c>204</c>; with no end
+    /// member's live session, a day after it was proved, holding no permission and
+    /// restricted, ends their own membership whose end is set and ahead and answers
+    /// <c>204</c>; with no end
     /// set it is <c>409</c> <c>identity.membership.noend</c>, and once ended <c>404</c>
     /// <c>identity.membership.notfound</c>.
     /// </summary>
@@ -646,6 +647,8 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
         _deployment.Memberships.Place(member, Branch);
         _deployment.Clock.Advance(TimeSpan.FromDays(1));
+        _deployment.Restriction.Restrict(member);
+        _deployment.Gate.Restrict(member);
 
         Answer unscheduled = await browser.SendAsync("POST", path);
 

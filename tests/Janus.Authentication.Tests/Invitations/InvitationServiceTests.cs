@@ -2532,7 +2532,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     /// forward to now under their own session, asking no permission, no step-up and no
     /// hand-out list: the membership ends, its grants are revoked in the member's name
     /// with the reason <c>broughtforward</c>, and the record names the member and the end
-    /// it replaced; the job then finds nothing left to end.
+    /// it replaced; the job then finds nothing left to end. A restricted member is
+    /// admitted, since bringing an end forward only takes access away.
     /// </summary>
     [Fact]
     public async Task IDN_MEM_001_AMemberBringsTheirScheduledEndForwardAsync()
@@ -2545,6 +2546,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Accepted(await SetEndAsync(Customer, holder, endsAt));
         _revocations.Give(holder, Customer, clerk);
         _clock.Advance(TimeSpan.FromDays(1));
+        _gate.Restrict(holder);
+        _restriction.Restrict(holder);
         _work.Reset();
 
         Accepted(await BringForwardAsync(AccessContext.Of(holder), Customer));

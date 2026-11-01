@@ -18,7 +18,7 @@ against the public contract of LIB-API-001.
   with no end set answers 409 `identity.membership.noend`, and one whose end has passed
   404 `identity.membership.notfound`. Its `identity.membership.ended` record names
   the member as actor, with the reason `broughtforward` and the end it replaced in
-  `endsAt`.
+  `endsAt`. A restricted member is admitted, and no session ends.
 - A pressed sign-in link that leaves a second step or the new-browser code answers
   `challengeId`, a second handle of the challenge drawn at the press and kept only as
   its fingerprint, so the page the link landed on completes the sign-in itself; the
