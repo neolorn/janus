@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
@@ -74,6 +75,77 @@ public sealed class PasskeyFlowTests : IAsyncDisposable
         Assert.Equal("complete", answered.Text("status"));
         Assert.True(browser.Cookies.ContainsKey(Session));
         Assert.Equal(7u, Assert.Single(_deployment.Authenticators.All).WebAuthn!.Counter);
+    }
+
+    /// <summary>
+    /// REG-IDENT-003 AC3, `09` `POST /auth/begin` (D-244): a begin with no identifier
+    /// answers 200 with `available` `["passkey"]` and a WebAuthn challenge, and a
+    /// passkey's assertion against it signs in the account its user handle names; a
+    /// second such begin from the browser replaces the first, whose challenge then
+    /// signs nobody in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_003_AC3_APasskeySignsInFromABeginWithoutAnIdentifierOverTheWireAsync()
+    {
+        var authenticator = SoftwareAuthenticator.Holding();
+
+        _ = await RegisteredAsync(authenticator);
+
+        Authenticator held = Assert.Single(_deployment.Authenticators.All);
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer first = await browser.SendAsync("POST", "/auth/begin", "{}");
+        Answer second = await browser.SendAsync("POST", "/auth/begin", "{}");
+
+        Answer replaced = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            Presented(first.Text("challengeId"), authenticator.Asserted(
+                first.Json().GetProperty("webauthn").GetProperty("challenge").GetString()!,
+                Origin,
+                RelyingPartyId,
+                counter: 7,
+                userHandle: WebAuthnService.Handle(held.Subject))));
+        Answer answered = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            Presented(second.Text("challengeId"), authenticator.Asserted(
+                second.Json().GetProperty("webauthn").GetProperty("challenge").GetString()!,
+                Origin,
+                RelyingPartyId,
+                counter: 8,
+                userHandle: WebAuthnService.Handle(held.Subject))));
+
+        Assert.Equal(StatusCodes.Status200OK, first.Status);
+        Assert.Equal(
+            ["passkey"],
+            first.Json().GetProperty("available").EnumerateArray().Select(factor => factor.GetString()));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, replaced.Status);
+        Assert.Equal(ErrorCodes.FactorRejected.ToString(), replaced.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.Equal("complete", answered.Text("status"));
+        Assert.True(browser.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
+    /// REG-IDENT-003, `09` `POST /auth/begin`: an identifier that is given empty is
+    /// malformed, as only its absence opens the passkey alone (D-244).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_003_AnEmptyIdentifierIsMalformedAsync()
+    {
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer empty = await browser.SendAsync("POST", "/auth/begin", ("identifier", string.Empty));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, empty.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), empty.Text("code"));
     }
 
     /// <summary>

@@ -323,6 +323,23 @@ new version is deployed, and SHALL NOT require them at application startup.
 
 ---
 
+**INF-DEP-003**: A deployment's runtime SHALL be its base image's, and the host SHALL
+keep that image on the runtime's floating minor tag (`10.0`), rebuilt by the host's own
+update tool, so the runtime's servicing releases arrive without a calendar task.
+
+*Source: CONV-DEP-004, D-205, D-246*
+
+A package the shared framework serves is met by the runtime's servicing release, which
+no lockfile or alert brings (`08` CONV-DEP-004). The library's own pipeline is told of a
+newer SDK by its servicing workflow; a deployment, built from the host's repository,
+takes the runtime from its image.
+
+**Acceptance criteria**
+1. The deployment's image names the runtime's floating minor tag, not a patch version,
+   and the host's update tool rebuilds it.
+
+---
+
 ## 8. Observability
 
 **INF-OBS-001** — *Retired by D-225. Delivering alerts is the host's (`06`

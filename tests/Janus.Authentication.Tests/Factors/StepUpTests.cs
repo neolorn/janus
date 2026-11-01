@@ -397,6 +397,76 @@ public sealed class StepUpTests : IDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-002 AC11 (D-243): a session of an account whose only usable factors
+    /// are social, downgraded since it reached <c>delegated</c>, is answered
+    /// <c>signIn</c> at a <c>delegated</c> gate and offered nothing to present, and the
+    /// session a new sign-in with the provider establishes passes that gate.
+    /// </summary>
+    /// <param name="providers">The social factors the account holds.</param>
+    [Theory]
+    [InlineData(new[] { Factor.Google })]
+    [InlineData(new[] { Factor.Google, Factor.Apple })]
+    public void AUTH_STEP_002_AC11_ADowngradedSocialOnlySessionIsToldToSignInAgain(Factor[] providers)
+    {
+        Gate gate = Gate(GateLevel.Reachable, phishingResistant: false);
+        HeldFactors held = Held(password: false, providers);
+        Session downgraded = Signed(new Assurance(AssuranceLevel.Delegated, PhishingResistant: false));
+
+        downgraded.Downgrade(Noon + TimeSpan.FromMinutes(1));
+
+        StepUpChallenge asked = StepUp.ToEnrol(
+            downgraded,
+            gate,
+            held,
+            Factor.Passkey,
+            Noon + TimeSpan.FromMinutes(2));
+
+        Assert.Equal(
+            (StepUpOutcome.SignIn, AssuranceLevel.Delegated, true),
+            (asked.Outcome, asked.Required, asked.Downgraded));
+        Assert.Empty(asked.Combinations);
+        Assert.Null(asked.LossCompletes);
+
+        var signedAgain = Session.Begin(
+            SessionId.New(TimeProvider.System),
+            downgraded.Subject,
+            new Assurance(AssuranceLevel.Delegated, PhishingResistant: false),
+            Origin(),
+            Noon + TimeSpan.FromMinutes(3),
+            TimeSpan.FromMinutes(30),
+            TimeSpan.FromHours(1),
+            breakGlassReason: null);
+
+        Assert.Equal(
+            StepUpOutcome.Satisfied,
+            StepUp.ToEnrol(signedAgain, gate, held, Factor.Passkey, Noon + TimeSpan.FromMinutes(4)).Outcome);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC11 (D-243), AUTH-STEP-005 AC1: <c>signIn</c> is the answer only
+    /// where every usable factor of the account is social; one that holds a factor of
+    /// its own beside them is offered that factor, and the social one never, though at
+    /// a <c>delegated</c> gate it would reach the level.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC11_AnAccountHoldingAFactorOfItsOwnIsNotToldToSignInAgain()
+    {
+        Session downgraded = Signed(new Assurance(AssuranceLevel.Delegated, PhishingResistant: false));
+
+        downgraded.Downgrade(Noon + TimeSpan.FromMinutes(1));
+
+        StepUpChallenge asked = StepUp.ToEnrol(
+            downgraded,
+            Gate(GateLevel.Reachable, phishingResistant: false),
+            new HeldFactors(Set(Factor.Google, Factor.Password), Set(Factor.Google, Factor.Password), null),
+            Factor.Google,
+            Noon + TimeSpan.FromMinutes(2));
+
+        Assert.Equal(StepUpOutcome.Present, asked.Outcome);
+        Assert.Equal([[Factor.Password]], Offered(asked));
+    }
+
+    /// <summary>
     /// AUTH-STEP-002 AC3, AUTH-STEP-007: only a gate whose level is <c>delegated</c>
     /// asks no maximum age, so an enrolment gated at a level above it is challenged
     /// once the session last reached that level longer ago than the maximum age.

@@ -134,6 +134,7 @@ public static class HostingRegistration
         services.AddScoped<OriginValidation>();
         services.AddSingleton<SourceAdmissions>();
         services.AddScoped<SourceRateLimiting>();
+        services.AddSingleton<FetchAdmissions>();
         services.AddScoped<RequestSession>();
 
         // BFF-HOST-001: a host's own endpoint reads what stage 5 established for the

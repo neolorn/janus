@@ -3,7 +3,10 @@ namespace Janus.Hosting.Authentication;
 /// <summary>
 /// One identifier, as the person entered it.
 /// </summary>
-/// <param name="Identifier">The email, the phone or, where enabled, the username.</param>
+/// <param name="Identifier">
+/// The email, the phone or, where enabled, the username, or nothing for a passkey
+/// sign-in that names no account (D-244).
+/// </param>
 /// <remarks>
 /// Implements AUTH-FACT-002 and AUTH-ABUSE-003. The kind is detected from the value,
 /// so nothing here says which kind was meant.

@@ -77,4 +77,24 @@ public interface IGrants
         OrganizationId organization,
         GrantSubject holder,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the roles the caller may give in an organization: exactly those a grant by
+    /// the caller there would not refuse as <c>authz.role.notassignable</c>, judged now as
+    /// the grant judges them (AUTHZ-GRANT-005, D-247). It records nothing, and answers no
+    /// role's permissions.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">Where they would give them.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The roles, sorted by name, or the refusal: <c>authz.denied</c> where no person asks
+    /// or the caller may not manage grants in the organization,
+    /// <c>identity.organization.notfound</c> where the deployment holds no such
+    /// organization.
+    /// </returns>
+    ValueTask<Result<IReadOnlyList<AssignableRole>>> AssignableAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken);
 }

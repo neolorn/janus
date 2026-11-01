@@ -588,7 +588,7 @@ serving as the CSRF token's binding target before a real session exists.
 the registration session it carries being bound to it; no separate key. Its cookie ends
 with the browser's session, as the notice lists it (BFF-SESS-002, PRIV-CONS-006a, D-203).
 
-*Source: D-092, D-146, D-166, D-202, D-203, D-224, D-226*
+*Source: D-092, D-146, D-166, D-202, D-203, D-224, D-226, D-241*
 
 `/register`, `/auth/begin`, `/auth/link`, `/auth/factor` and `/recovery/begin` are
 state-changing browser endpoints reached before any session exists. Without this, an implementer must
@@ -611,12 +611,20 @@ frontend holding none of the library's cookies therefore makes its first request
 and sends the rest once its answer has set them (`18` FE-API-002). A token accepted from
 any browser within a window would bind nothing.
 
+**Discovery and the key set (D-241).** `/.well-known/openid-configuration` and
+`/oidc/jwks` are mounted on the machine profile, in the set that ignores cookies
+(BFF-MACH-001), so a fetch of either is no first contact: no pre-authentication session
+is issued or written for it. Their fetchers are servers (relying parties, the BFFs, the
+mail server), and under the browser profile every fetch wrote one.
+
 **Acceptance criteria**
 1. A pre-authentication session is issued on first contact with any pre-session
    endpoint, a host endpoint marked with `AllowNoSession()` among them (BFF-HOST-002).
 2. Its token is validated identically to an authenticated one.
 3. Authentication rotates it rather than issuing a second session alongside.
 4. It carries no identity and grants no access.
+5. A fetch of `/.well-known/openid-configuration` or `/oidc/jwks`, with or without a
+   cookie, issues and writes no pre-authentication session and sets no cookie (D-241).
 
 ---
 
@@ -698,7 +706,7 @@ subtle failure.
 **BFF-MACH-001** — A second pipeline profile SHALL exist for **non-browser traffic**,
 carrying no session and no CSRF protection.
 
-*Source: D-070, D-166, D-188, D-189*
+*Source: D-070, D-166, D-188, D-189, D-241*
 
 A protocol client calling the token endpoint, the BFFs pushing their sign-on requests
 and exchanging the codes (BFF-SESS-006), the social providers posting their security
@@ -715,13 +723,23 @@ callback, once the rate limit admits it, 422 `integration.callback.rejected`, co
 a rejection (`09` section 10); an OIDC route its protocol error `invalid_request`
 (D-188, D-189).
 
+**Discovery and the key set (D-241).** `GET /.well-known/openid-configuration` and
+`GET /oidc/jwks` are mounted on this profile and join the break-glass endpoint in the set
+that ignores cookies: a cookie sent with a fetch is never read, and no session is issued
+or written for one (BFF-CSRF-005a). Their fetchers are servers (relying parties, the
+BFFs, the mail server). Both answers are unchanged, public and cacheable as before, and
+carry no cookie.
+
 **No source rate limit of its own.** The profile has no stage 4 (BFF-ORDER-001); each
 machine endpoint carries its own limit. A callback is admitted
 `integration.callback.ratelimit` requests per source per minute before any lookup
 (BFF-MACH-003, INT-GEN-003); the provider's endpoints that act for a client
 authenticate it with the secret the library generated for it (OPS-SEC-002); the
-break-glass endpoint is held by its global limit and the source delay (OPS-BOOT-004). A
-volumetric flood is the reverse proxy's to absorb, not the library's.
+break-glass endpoint is held by its global limit and the source delay (OPS-BOOT-004);
+discovery is admitted `oidc.discovery.ratelimit` requests per source per minute and the
+key set `oidc.jwks.ratelimit`, each a fixed window, and over it each answers 429 with
+`Retry-After` (D-241). A volumetric flood is the reverse proxy's to absorb, not the
+library's.
 
 **Acceptance criteria**
 1. A browser endpoint cannot be moved to this profile by configuration or attribute.
@@ -732,8 +750,13 @@ volumetric flood is the reverse proxy's to absorb, not the library's.
    Otherwise a stale cookie for the domain would produce an inexplicable refusal, during
    an emergency, for the system's one non-technical user. The provider return
    `/callbacks/providers/{provider}/return` likewise ignores any cookie, and only
-   re-addresses the browser by `303` to its browser-profile continuation.
+   re-addresses the browser by `303` to its browser-profile continuation. Discovery and
+   the key set likewise ignore any cookie, and issue or write no session for one
+   (D-241).
 3. The token endpoint and every callback authenticate successfully.
+4. Past `oidc.discovery.ratelimit` fetches of discovery, or `oidc.jwks.ratelimit`
+   fetches of the key set, from one source in a minute, the route answers 429 with
+   `Retry-After` (D-241).
 
 ---
 

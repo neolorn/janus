@@ -23,9 +23,14 @@ public interface IAuthentication
     /// a browser that may carry the tokens a remembered or trusted browser holds
     /// (AUTH-ABUSE-001 AC5), bound to the browser's pre-authentication session where it
     /// carries one (D-226). An in-process caller carries no browser and passes none of
-    /// the three.
+    /// the three. Opened without an identifier, it offers the passkey alone and the
+    /// passkey's user handle names the account; a browser holds one such sign-in, each
+    /// replacing the one before (REG-IDENT-003, D-244).
     /// </summary>
-    /// <param name="identifier">The email, phone or username as it was entered.</param>
+    /// <param name="identifier">
+    /// The email, phone or username as it was entered, or nothing for a passkey sign-in
+    /// that names no account.
+    /// </param>
     /// <param name="source">
     /// The address the attempt came from, which the progressive delay counts it
     /// against.
@@ -44,7 +49,7 @@ public interface IAuthentication
     /// delays.
     /// </returns>
     ValueTask<Result<SignInChallenge>> BeginAsync(
-        string identifier,
+        string? identifier,
         string source,
         string? remembered,
         string? trusted,

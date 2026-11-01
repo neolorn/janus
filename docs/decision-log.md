@@ -19791,6 +19791,265 @@ and no rule let the leaver, a job or the host do it.
 
 ---
 
+## D-241 — Discovery and the key set on the machine profile
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** BFF-MACH-001 (D-188, D-189), BFF-CSRF-005a (D-224)
+
+**TL;DR.** `/.well-known/openid-configuration` and `/oidc/jwks` are mounted on the
+machine profile, in the set that ignores cookies, each with a per-source limit of its own.
+Their fetchers are servers (relying parties, the BFFs, the mail server), so under the
+browser profile every fetch was a first contact that wrote a pre-authentication session:
+an unauthenticated write per request, at polling rates. Found in round H3's review.
+
+- **The mount.** Both routes join the break-glass route in the machine profile's
+  cookie-ignored set. A cookie sent with a fetch is never read, and no session is issued
+  or written for one.
+- **The limits.** Each carries its own per-source limit, as BFF-MACH-001 asks of every
+  machine endpoint: `oidc.discovery.ratelimit` and `oidc.jwks.ratelimit`, each 60 per
+  `PT1M` per source, fixed window, raising is loosening. Over it, the route answers 429
+  with `Retry-After`, as the machine profile's other limits do.
+- **What stays.** Both answers are unchanged, public and cacheable as before, and carry no
+  cookie.
+
+*Rejected:*
+- **Skipping first contact for them inside the browser profile:** a per-route exception is
+  the flag-like opt-out BFF-MACH-001's no-opt-out rule forbids.
+- **Leaving them:** a row per fetch, bounded only by the browser profile's per-source limit.
+
+**Propagated to:**
+- `17` BFF-MACH-001 (the routes on the machine profile), BFF-CSRF-005a (first contact);
+- `09` (the two routes' profile);
+- `10` (the two limit keys);
+- `implementation-plan.md` (round H8).
+
+---
+
+## D-242 — Registration carries a pending authorization
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** AUTH-SESS-012 (D-226), REG-SESS-008
+
+**TL;DR.** A person sent from an application's `/oidc/authorize` who registers instead of
+signing in returns to that request, as one who signs in does. Registration's completion
+carries the pending authorization into the new session and answers `continueTo`. Until
+now it carried nothing, and the person landed on the client's origin to start again.
+Found in round H3's review.
+
+- **The carry.** The completion rotates the pre-authentication session with the pending
+  authorization's record, as a sign-in's completion does (AUTH-SESS-012), under the same
+  binding to the browser. No destination passes through the browser's hands.
+- **The answer.** It answers `continueTo` where it carried a pending authorization.
+  `continueTo` wins over `landing` where both stand, and `landing` (REG-SESS-008) answers
+  otherwise.
+- **When.** `GET /auth/session` answers `continueTo` while the pending authorization
+  lives, and the done step goes there. The steps between are unchanged.
+- **Expiry.** The pending authorization keeps its 30 minutes from its creation. One that
+  lapsed during the registration is not carried, and `landing` applies. Nothing extends it.
+
+*Rejected:*
+- **Leaving it:** the person starts the application's sign-in again.
+- **Extending the pending authorization for a registration:** a longer life for a request
+  the browser holds.
+
+**Propagated to:**
+- `02` AUTH-SESS-012;
+- `20` REG-SESS-008;
+- `09` (the completion's answer, `continueTo`);
+- `18` FE-REG-005;
+- `implementation-plan.md` (round H8).
+
+---
+
+## D-243 — A social-only session's way back after a downgrade
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** AUTH-STEP-002, AUTH-STEP-008 (D-197)
+
+**TL;DR.** Step 3 of the step-up answer gains a fourth answer, `signIn`, for an account
+whose only usable factors are social, once a downgrade has left its session below a
+`delegated` gate. The frontend sends the person through a new sign-in with the provider,
+and the new session's `delegated` instant counts. Until now step 3 answered
+`report-loss`, which told the person to report a loss they never had. This closes
+Milestone 2's first known issue (D-197).
+
+- **When.** Step 3 answers `signIn` where all three hold:
+  - the gate asks `delegated`;
+  - what the session reached since its last downgrade is below it (AUTH-STEP-002 step 1);
+  - every usable factor of the account is social, so AUTH-STEP-005 refuses each at
+    step-up.
+- **What the frontend does.** It sends the person through the provider's sign-in. The new
+  session holds the `delegated` instant that sign-in reached and nothing more
+  (AUTH-SESS-005a), and the gate is judged on it.
+- **The invariant.** AUTH-STEP-008's third reads: satisfy; or enrol, report a loss, or
+  sign in again, then satisfy.
+- **Nothing weakens.** The new sign-in reaches exactly what the first did, and a social
+  credential stays refused at step-up.
+
+*Rejected:*
+- **Exempting `delegated` from the downgrade:** a session would keep a level the tightened
+  policy has not seen proved again, against AUTH-SESS-009.
+- **The text alone:** the person is still told to report a loss.
+
+**Propagated to:**
+- `02` AUTH-STEP-002, AUTH-STEP-008 (invariant 3 and the known issue closed),
+  AUTH-FACT-002 (criterion 7's list of step 3's answers);
+- `09` (step-up's step 3 answer);
+- `10` section 1 (`auth.stepup.required`, its `outcome`);
+- `18` (the frontend's handling of `signIn`);
+- `implementation-plan.md` (round H8; Milestone 2's known issues).
+
+---
+
+## D-244 — A passkey sign-in opened without an identifier
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** REG-IDENT-003, FE-PM-004 (D-201), AUTH-ABUSE-001
+
+**TL;DR.** `POST /auth/begin` takes `identifier` as optional. Without one it opens a
+passkey challenge with no allow-list, bound to the pre-authentication session, and the
+passkey's user handle names the account at `/auth/factor`. FE-PM-004 asks for a passkey
+offered on the page's load, and no route opened such a challenge. This closes Milestone
+2's second known issue (D-201).
+
+- **Begin without an identifier.** It answers the challenge with `available: ["passkey"]`
+  and no allow-list, so it discloses nothing about any account. With an identifier, begin
+  is unchanged.
+- **One per session.** A pre-authentication session holds at most one challenge opened
+  without an identifier. Each such begin replaces it, so page loads cannot open challenges
+  without bound.
+- **The factor.** `/auth/factor` against that challenge takes a discoverable assertion,
+  and its user handle names the account. An assertion with no user handle is refused, as
+  REG-PM-001 already refuses one.
+- **Counting (AUTH-ABUSE-001).** A refused assertion counts against the source always,
+  and against the account once its user handle resolves to one. There is no identifier
+  count, as none was given. The delay is asked before the challenge opens, against the
+  source.
+
+*Rejected:*
+- **A route of its own:** one more browser route for the same ceremony.
+- **An assertion against a challenge held without an identifier of its own:** it changes
+  D-190's one-challenge model.
+
+**Propagated to:**
+- `20` REG-IDENT-003;
+- `02` AUTH-ABUSE-001;
+- `09` (`/auth/begin`'s body and answer);
+- `18` FE-PM-004;
+- `implementation-plan.md` (round H8; Milestone 2's known issues).
+
+---
+
+## D-245 — The release workflow
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** LIB-PKG-003 (D-225), `implementation-plan.md` section 4
+
+**TL;DR.** One workflow, on a `v*` tag, checks the changelog, packs every package and
+attaches them to the tag's GitHub release, a pre-release for `-rc.N`. It publishes to no
+registry and holds no registry credential. Plan section 4's step 1 drops "publishing them
+to a private package feed where the owner names one", which contradicted LIB-PKG-003 (the
+feed is the host's, D-225). A workflow dispatched by hand draws the leaked-password list.
+
+- **`release.yml`, on `v*` tags:**
+  - it fails where the changelog has no section for the version;
+  - it packs every LIB-PKG-001 package, the `Janus.Cli` tool package and `Janus.Testing`,
+    at the tag's MinVer version;
+  - it creates the release with the `.nupkg` files attached, a pre-release for `-rc.N`;
+  - its job alone holds `contents: write`, and nothing else.
+- **No registry.** The workflow holds no registry credential, and consumers take the
+  packages from the release.
+- **The leaked-password list.** A `workflow_dispatch` workflow runs `tools/leaked-passwords/`
+  on a hosted runner. Its artifact is the dated list CONV-VCS-005 refreshes at each
+  release.
+- **Tags.** The lead pushes a release candidate's tag after the review, green checks and
+  the merge, and the final `1.0.0` is pushed on the owner's word (D-232).
+
+*Rejected:*
+- **A private feed:** the feed is the host's (D-225).
+- **A tag ruleset:** every actor works under the owner's one account, so it adds no check,
+  and the repository's settings are the owner's.
+
+**Propagated to:**
+- `07` LIB-PKG-003;
+- `implementation-plan.md` (section 4, steps 1 and 2; round H8).
+
+---
+
+## D-246 — Servicing the SDK
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** CONV-DEP-004 (D-205), R-M20
+
+**TL;DR.** A scheduled workflow reads the official .NET 10.0 release metadata every day
+and, where an SDK newer than `global.json`'s pin is out in its feature band, opens one
+issue, or updates the open one, naming the version and whether it carries security fixes.
+The bump is an ordinary commit in the project's form. Dependency alerting sees only the
+lockfile's packages, so nothing brought the shared framework's servicing releases until
+now. This closes Milestone 2's third known issue (D-205).
+
+- **The workflow.** It runs daily and when dispatched, reads the 10.0 channel's release
+  metadata from Microsoft's published location, and compares the newest SDK in the pin's
+  feature band with `global.json`. It holds `issues: write` and nothing else.
+- **Never a commit.** It opens no pull request and writes no commit: a bot's commit would
+  break the rule that every commit is the owner's, and a pull request opened with the
+  workflow's token runs no gates.
+- **The bump.** `global.json`'s version moves in an ordinary commit, merged when the checks
+  pass. A security release is applied promptly (CONV-DEP-004).
+- **Deployments.** A deployment's runtime is its base image's. `19` states the host's duty:
+  the image on a floating minor tag (`10.0`), rebuilt by the host's own update tool, so
+  servicing releases arrive without a calendar task.
+
+*Rejected:*
+- **Dependabot version updates for the SDK:** its prose commit bodies fail CONV-VCS-003,
+  and exempting them weakens a rule.
+- **By hand:** a calendar task, which CONV-DEP-004 forbids.
+
+**Propagated to:**
+- `08` CONV-DEP-004;
+- `13` R-M20;
+- `15` (the compromised dependency row);
+- `19` (the deployment's runtime, INF-DEP-003);
+- `implementation-plan.md` (round H8; Milestone 2's known issues).
+
+---
+
+## D-247 — The roles a giver may hand out
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** AUTHZ-GRANT-005, LIB-API-005
+
+**TL;DR.** A person who gives roles can read which roles they may give in an organization:
+`GET /admin/grants/assignable?organization={id}` and its library call answer exactly the
+roles a grant by them there would not be refused as `authz.role.notassignable`, each with
+its name and whether its grants must end. Until now only `role:manage`, judged in the
+administrative organization, read the roles, so a host's form for giving a role could
+only guess from its own declaration and drifted from the roles an administrator changed.
+Found by Cura's step 4.
+
+- **The read.** `IGrants.AssignableAsync(AccessContext context, OrganizationId
+  organization, ...)` answers `Result<IReadOnlyList<AssignableRole>>`, sorted by name.
+  `AssignableRole` holds `Name` and `GrantsMustEnd`. The route answers **200**
+  `[ { name, grantsMustEnd } ]`.
+- **Who may read it.** The caller's `grant:manage` in that organization, the permission a
+  grant there needs. Without it the route answers **403** `authz.denied`, and an unknown
+  organization **404**. A system principal is refused, as AUTHZ-GRANT-004 keeps roles a
+  person's.
+- **What it holds.** The same judgement AUTHZ-GRANT-005 makes at the grant, read now: the
+  roles the caller's held roles hand out, with `system:administer`'s reach as the grant
+  itself allows it. Not a role's permissions, which stay `role:manage`'s to read.
+- **What it records.** Nothing: it is a read of the deployment's roles, not of a person.
+  A refused read is recorded as any refused request is, and nothing more.
+- **No step-up.** The read asks none: step-up guards changes.
+
+*Rejected:*
+- **Opening `GET /admin/roles` to `grant:manage`:** it shows every role's permissions to
+  everyone who gives any role.
+- **The host's own declaration:** it misses every role changed at runtime (AUTHZ-GRANT-004).
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-005;
+- `07` LIB-API-005 (`IGrants.AssignableAsync`, `AssignableRole`);
+- `09` (the route, beside `GET /admin/grants`);
+- `10` section 2.1 (`grant:manage`, the read) and section 5a (`grant:manage`, the
+  changing routes alone);
+- `implementation-plan.md` (round H8).
+
+---
+
 ## D-248 — A deployment creates a business organization from the command line
 
 **Date:** 2026-11-01 · **Status:** accepted · **Amends:** OPS-BOOT-001, IDN-ORG-002
@@ -20095,6 +20354,13 @@ release.
 | The handle a pressed link answers | D-238 |
 | Round H5's questions: an invitation's must-end role, and older organizations' gender | D-239 |
 | A member brings their own scheduled end forward | D-240 |
+| Discovery and the key set on the machine profile | D-241 |
+| Registration carries a pending authorization | D-242 |
+| A social-only session's way back after a downgrade | D-243 |
+| A passkey sign-in opened without an identifier | D-244 |
+| The release workflow | D-245 |
+| Servicing the SDK | D-246 |
+| The roles a giver may hand out | D-247 |
 | A deployment creates a business organization from the command line | D-248 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.

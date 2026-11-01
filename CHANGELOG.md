@@ -10,6 +10,34 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /auth/begin` takes `identifier` as optional, and `IAuthentication.BeginAsync`
+  takes it as nullable: without one it opens a passkey challenge with no allow-list,
+  answers `available` `["passkey"]`, and the passkey's user handle names the account at
+  `POST /auth/factor`. A browser holds one such sign-in, each begin replacing the one
+  before. Its delay is the source's, and a refused assertion counts against the source
+  and the account its user handle names, under no identifier.
+- A step-up answered for a session of an account whose only usable factors are social,
+  downgraded since it reached `delegated`, at a `delegated` gate carries `outcome`
+  `signIn` in `auth.stepup.required`: the person signs in again with the provider. A
+  social factor is never among the step-up `options`, at any gate.
+- `GET /.well-known/openid-configuration` and `GET /oidc/jwks` are served on the machine
+  profile and ignore any cookie: a fetch issues, writes and sets no pre-authentication
+  session. Each holds a source to its own limit, `oidc.discovery.ratelimit` and
+  `oidc.jwks.ratelimit` (60 a minute, fixed window), and over it answers 429 with
+  `Retry-After` and no body.
+- A person who gives roles reads which roles they may give in an organization:
+  `GET /admin/grants/assignable?organization={id}` and `IGrants.AssignableAsync` answer
+  200 `[ { name, grantsMustEnd } ]`, sorted by name, exactly the roles a grant by them
+  there would not refuse as `authz.role.notassignable`. It needs `grant:manage` in that
+  organization (403 `authz.denied` otherwise, and for a system principal), answers 404
+  `identity.organization.notfound` for an organization the deployment does not hold,
+  shows no role's permissions and records nothing.
+- A registration begun from an application's `/oidc/authorize` that found no session
+  returns to that request as a sign-in does: `POST /register/terms` carries the
+  browser's pending authorization to the session it establishes and answers
+  `continueTo` (201 `{ continueTo }`), and `GET /auth/session` answers it beside
+  `landing` while it lives, so the done step goes there. One that lapsed during the
+  registration is not carried, and `landing` applies.
 - A member brings forward the end an administrator set on their membership with
   `POST /account/memberships/{organization}/end` or
   `IInvitations.BringMembershipEndForwardAsync`, under their live session alone: no

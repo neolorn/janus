@@ -9,10 +9,12 @@ using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Hosting.Registration;
 
@@ -128,7 +130,7 @@ internal static class RegistrationEndpoints
                     ErrorCodes.NoticeUnpublished, ErrorCodes.AffirmationRequired,
                     ErrorCodes.PurposeNoConsent, ErrorCodes.ConsentSuperseded))
             .Accepts<TermsRequest>(MediaTypeNames.Application.Json)
-            .Produces(StatusCodes.Status201Created);
+            .Produces<RegistrationCompletedView>(StatusCodes.Status201Created);
         _ = group.MapPost("/verify/{id}", VerifyAsync)
             .Declares(EndpointDeclaration
                 .Answering(
@@ -476,12 +478,19 @@ internal static class RegistrationEndpoints
         }
 
         // BFF-CSRF-005a AC3: the pre-authentication session becomes the real one
-        // rather than standing beside it, so it ends here and not at its expiry.
-        if (context.Request.Cookies[BrowserCookies.PreAuthentication] is { Length: > 0 } first)
+        // rather than standing beside it, so it ends here and not at its expiry. The
+        // rotation carries the authorization the browser had waiting to the session's
+        // record, as a sign-in's does, and the answer says where it waits (D-242).
+        string? continueTo = null;
+
+        if (context.Request.Cookies[BrowserCookies.PreAuthentication] is { Length: > 0 } first
+            && await contacts
+                .RotateAsync(OpaqueToken.Of(first), completed.Session.Id, cancellationToken)
+                .ConfigureAwait(false))
         {
-            await contacts
-                .RotateAsync(OpaqueToken.Of(first), cancellationToken)
-                .ConfigureAwait(false);
+            continueTo = context.RequestServices.GetService<AuthenticationAddresses>() is AuthenticationAddresses addresses
+                ? OidcRegistration.Continuing(addresses)
+                : null;
         }
 
         cookies.Write(context.Response, completed.Session);
@@ -491,7 +500,14 @@ internal static class RegistrationEndpoints
             completed.Browser,
             time.GetUtcNow() + remembered);
 
-        return Made;
+        // FE-REG-005 AC5: with nothing waiting, the end names no address at all.
+        return continueTo is null
+            ? Made
+            : TypedResults.Json(
+                new RegistrationCompletedView(continueTo),
+                RegistrationJson.Default.RegistrationCompletedView,
+                contentType: null,
+                StatusCodes.Status201Created);
     }
 
     private static async Task<IResult> VerifyAsync(

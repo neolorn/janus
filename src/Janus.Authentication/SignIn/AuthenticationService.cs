@@ -104,29 +104,30 @@ internal sealed class AuthenticationService(
     }.ToFrozenSet();
 
     /// <inheritdoc/>
-    /// <exception cref="ArgumentNullException">The identifier is absent.</exception>
     /// <remarks>
-    /// Implements AUTH-ABUSE-001 AC5. A browser the account knows by a token that
-    /// stands for this account is not held by the components an attacker raises from
-    /// anywhere; a token that stands for nothing, or for another account, exempts it
-    /// from nothing. The challenge is bound to the browser's pre-authentication session,
-    /// or to none where it carries none, which a sign-in link's press and a fresh code
-    /// of the new-device check are judged against (D-226).
+    /// Implements AUTH-ABUSE-001 AC5 and REG-IDENT-003 (D-244). A browser the account
+    /// knows by a token that stands for this account is not held by the components an
+    /// attacker raises from anywhere; a token that stands for nothing, or for another
+    /// account, exempts it from nothing. The challenge is bound to the browser's
+    /// pre-authentication session, or to none where it carries none, which a sign-in
+    /// link's press and a fresh code of the new-device check are judged against (D-226).
     /// </remarks>
     public async ValueTask<Result<SignInChallenge>> BeginAsync(
-        string identifier,
+        string? identifier,
         string source,
         [NeverLogged] string? remembered,
         [NeverLogged] string? trusted,
         [NeverLogged] string? browser,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(identifier);
-
         Error? failure = null;
 
-        (SubjectId? subject, IdentifierId? email, byte[] counted) = await OpenerAsync(identifier, cancellationToken)
-            .ConfigureAwait(false);
+        // REG-IDENT-003, AUTH-ABUSE-001 (D-244): a begin without an identifier names no
+        // account and no identifier, so the delay it asks before the challenge opens is
+        // the source's alone.
+        (SubjectId? subject, IdentifierId? email, byte[]? counted) = identifier is null
+            ? (null, null, null)
+            : await OpenerAsync(identifier, cancellationToken).ConfigureAwait(false);
 
         var attempt = new ThrottleAttempt(source, counted)
         {
@@ -159,11 +160,19 @@ internal sealed class AuthenticationService(
 
         var handle = OpaqueToken.Draw(randomness);
         var ceremony = OpaqueToken.Draw(randomness);
+        byte[]? bound = SignInLinks.Fingerprint(browser);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInChallenge>(notBegun);
+        }
+
+        // REG-IDENT-003 (D-244): a browser holds one sign-in opened without an
+        // identifier, so page loads open no challenges without bound.
+        if (identifier is null && bound is not null)
+        {
+            await challenges.RemoveUnnamedAsync(bound, cancellationToken).ConfigureAwait(false);
         }
 
         await challenges
@@ -174,7 +183,7 @@ internal sealed class AuthenticationService(
                     email,
                     counted,
                     ceremony.Value,
-                    SignInLinks.Fingerprint(browser),
+                    bound,
                     time.GetUtcNow(),
                     lifetime),
                 cancellationToken)
@@ -189,10 +198,11 @@ internal sealed class AuthenticationService(
         // The list is the deployment's enabled primary set and never the account's, so
         // that the answer is the same for an identifier that exists and one that does
         // not; what the account holds surfaces only after a factor succeeds
-        // (AUTH-ABUSE-003, 09 section 3).
+        // (AUTH-ABUSE-003, 09 section 3). Without an identifier it is the discoverable
+        // credential alone, which names its own account (D-244).
         return Result.Success(new SignInChallenge(
             handle.Value,
-            Available(system),
+            identifier is null ? [FactorCatalogue.Discoverable] : Available(system),
             new WebAuthnChallenge(party.Id, ceremony.Value)));
     }
 
@@ -617,12 +627,20 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorNotPermitted));
         }
 
+        // REG-IDENT-003, AUTH-ABUSE-001 (D-244): a sign-in opened without an identifier
+        // is for the account the passkey's user handle names, where it names one, and
+        // the presentation counts against it as against any account.
+        SubjectId? account = open?.Subject
+            ?? (open is { Unnamed: true }
+                ? await HandedAsync(presented, cancellationToken).ConfigureAwait(false)
+                : null);
+
         // AUTH-ABUSE-001 AC5: only a token that stands for this sign-in's account
         // recognises the browser; carrying one proves nothing.
         var attempt = new ThrottleAttempt(origin.Source, open?.Identifier)
         {
-            Account = open?.Subject,
-            Recognised = await RecognisedAsync(open?.Subject, remembered, trusted, cancellationToken)
+            Account = account,
+            Recognised = await RecognisedAsync(account, remembered, trusted, cancellationToken)
                 .ConfigureAwait(false),
         };
 
@@ -636,8 +654,10 @@ internal sealed class AuthenticationService(
         // An identifier that resolved to nothing, and a handle that opens nothing,
         // reach exactly this point and stop, having been told what an account with the
         // wrong password is told (AUTH-ABUSE-003), and are recorded and counted as it
-        // is (CONV-LOG-005).
-        if (open?.Subject is not SubjectId subject
+        // is (CONV-LOG-005). So does a sign-in opened without an identifier that no
+        // user handle names an account for (D-244).
+        if (open is null
+            || account is not SubjectId subject
             || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
                 is not (AccountState.Active or AccountState.Restricted))
         {
@@ -681,6 +701,12 @@ internal sealed class AuthenticationService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
+        }
+
+        // D-244: the passkey accepted names the account the sign-in goes on for.
+        if (open.Unnamed)
+        {
+            open.Name(subject);
         }
 
         await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
@@ -1630,6 +1656,17 @@ internal sealed class AuthenticationService(
 
         return (holder.Subject, kind is IdentifierKind.Email ? holder.Identifier : null, counted);
     }
+
+    // REG-IDENT-003, AUTH-ABUSE-001 (D-244): the account a discoverable credential's
+    // user handle names, where that account exists; a handle that is absent or names
+    // nobody names nothing, and only a discoverable credential's assertion is read for
+    // one.
+    private async ValueTask<SubjectId?> HandedAsync(FactorPresentation presented, CancellationToken cancellationToken) =>
+        FactorCatalogue.Of(presented.Factor) is { IsWebAuthn: true, IsDiscoverable: true }
+            && WebAuthnService.Holder(presented.Assertion?.UserHandle) is SubjectId named
+            && await accounts.StateAsync(named, cancellationToken).ConfigureAwait(false) is not null
+            ? named
+            : null;
 
     // AUTH-ABUSE-001 AC5: a browser is recognised by a token that resolves, stands for
     // the account being signed into and has not lapsed; asking changes nothing about the

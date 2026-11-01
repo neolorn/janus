@@ -246,14 +246,15 @@ public sealed class BrowserCookieTests : IDisposable
 
     /// <summary>
     /// BFF-SESS-002 AC2: no configuration key weakens an attribute, there being no
-    /// key read anywhere the attributes are decided. The one file of the boundary that
-    /// reads a key is the flood limit of stage 4, which writes no cookie.
+    /// key read anywhere the attributes are decided. The files of the boundary that read
+    /// a key are the flood limit of stage 4 and the limit on fetches of the provider's
+    /// documents (D-241), neither of which writes a cookie.
     /// </summary>
     [Fact]
     public void BFF_SESS_002_AC2_NoConfigurationKeyWeakensAnAttribute()
     {
         Assert.Equal(
-            ["SourceRateLimiting.cs"],
+            ["FetchRateLimiting.cs", "SourceRateLimiting.cs"],
             Repository
                 .Sources()
                 .Where(file => File.ReadLines(file).Any(line =>
