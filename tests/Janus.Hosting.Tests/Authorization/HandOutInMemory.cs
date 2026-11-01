@@ -91,6 +91,32 @@ internal sealed class HandOutInMemory(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<DefinedRole>> AssignableAsync(
+        AccessContext context,
+        OrganizationId organization,
+        IReadOnlyList<DefinedRole> roles,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(roles);
+
+        List<DefinedRole> assignable = [];
+
+        foreach (DefinedRole role in roles)
+        {
+            if ((await AdmitAsync(
+                    context,
+                    new HandOut(Permissions.GrantManage, organization, Resource: null, [role], Widened: []),
+                    cancellationToken)
+                .ConfigureAwait(false)).Match(() => true, _ => false))
+            {
+                assignable.Add(role);
+            }
+        }
+
+        return assignable;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result> AdmitAsync(
         AccessContext context,
         Janus.Authorization.Gate.RoleChange change,

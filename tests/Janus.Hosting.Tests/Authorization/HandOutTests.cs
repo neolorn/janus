@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -54,6 +56,43 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
         Assert.Equal(ErrorCodes.RoleNotAssignable, Code(refused));
         Assert.Equal(1, await LiveGrantsAsync(account));
         Assert.Equal(refusals + 1, await RefusalsAsync(held.Actor));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-005 (D-247): the roles a giver may hand out in an organization, read
+    /// from the gate over the grants the deployment holds, are exactly the roles a grant
+    /// by them there admits: the role their role lists and not one it does not list, nor
+    /// the role they hold to manage grants. The read records no refusal, and a system
+    /// principal is refused.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_TheRolesAGiverMayHandOutAreTheOnesAGrantAdmitsAsync()
+    {
+        Case held = await CaseAsync();
+        SubjectId account = await held.Deployment.AccountAsync(TestContext.Current.CancellationToken);
+        RoleName unlisted = await held.Deployment.RoleAsync([HostPermissions.Read], TestContext.Current.CancellationToken);
+        int refusals = await RefusalsAsync(held.Actor);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IGrants grants = scope.ServiceProvider.GetRequiredService<IGrants>();
+
+        IReadOnlyList<AssignableRole> assignable = (await grants.AssignableAsync(
+                AccessContext.Of(held.Actor),
+                held.Deployment.Organization,
+                TestContext.Current.CancellationToken))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+        ErrorCode? principal = (await grants.AssignableAsync(
+                AccessContext.Of(SystemPrincipal.ForDeployment("reports", "AUTHZ-GRANT-005", SystemOperation.ExpirySweep)),
+                held.Deployment.Organization,
+                TestContext.Current.CancellationToken))
+            .Match(_ => (ErrorCode?)null, error => error.Code);
+
+        Assert.Equal([held.Listed], assignable.Select(role => role.Name));
+        Assert.Equal(refusals, await RefusalsAsync(held.Actor));
+        Assert.Null(Code(await GrantedAsync(held, GrantSubject.Of(account), held.Listed)));
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Code(await GrantedAsync(held, GrantSubject.Of(account), unlisted)));
+        Assert.Equal(ErrorCodes.Denied, principal);
     }
 
     /// <summary>

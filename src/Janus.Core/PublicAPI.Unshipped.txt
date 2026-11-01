@@ -1476,6 +1476,7 @@ Janus.Core.IGrants
 Janus.Core.IGrants.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GrantRequest! request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GrantId>>
 Janus.Core.IGrants.HeldAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.GrantSubject holder, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.HeldGrant!>!>>
 Janus.Core.IGrants.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GrantId grant, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IGrants.AssignableAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AssignableRole!>!>>
 Janus.Core.IGroups
 Janus.Core.IGroups.AddMemberAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GroupId group, Janus.Core.GrantSubject member, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IGroups.CreateAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, string! name, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GroupId>>
@@ -5285,3 +5286,17 @@ Janus.Core.AttachedInvitation.GrantEndsAt.get -> System.DateTimeOffset?
 Janus.Core.AttachedInvitation.GrantEndsAt.init -> void
 Janus.Core.StandingInvitation.GrantEndsAt.get -> System.DateTimeOffset?
 Janus.Core.StandingInvitation.GrantEndsAt.init -> void
+Janus.Core.AssignableRole.Name.get -> Janus.Core.RoleName
+Janus.Core.AssignableRole.Name.init -> void
+Janus.Core.AssignableRole.GrantsMustEnd.get -> bool
+Janus.Core.AssignableRole.GrantsMustEnd.init -> void
+Janus.Core.AssignableRole
+override Janus.Core.AssignableRole.ToString() -> string!
+static Janus.Core.AssignableRole.operator !=(Janus.Core.AssignableRole? left, Janus.Core.AssignableRole? right) -> bool
+static Janus.Core.AssignableRole.operator ==(Janus.Core.AssignableRole? left, Janus.Core.AssignableRole? right) -> bool
+override Janus.Core.AssignableRole.GetHashCode() -> int
+override Janus.Core.AssignableRole.Equals(object? obj) -> bool
+Janus.Core.AssignableRole.Equals(Janus.Core.AssignableRole? other) -> bool
+Janus.Core.AssignableRole.<Clone>$() -> Janus.Core.AssignableRole!
+Janus.Core.AssignableRole.Deconstruct(out Janus.Core.RoleName Name, out bool GrantsMustEnd) -> void
+Janus.Core.AssignableRole.AssignableRole(Janus.Core.RoleName Name, bool GrantsMustEnd) -> void

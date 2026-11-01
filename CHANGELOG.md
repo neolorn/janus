@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A person who gives roles reads which roles they may give in an organization:
+  `GET /admin/grants/assignable?organization={id}` and `IGrants.AssignableAsync` answer
+  200 `[ { name, grantsMustEnd } ]`, sorted by name, exactly the roles a grant by them
+  there would not refuse as `authz.role.notassignable`. It needs `grant:manage` in that
+  organization (403 `authz.denied` otherwise, and for a system principal), answers 404
+  `identity.organization.notfound` for an organization the deployment does not hold,
+  shows no role's permissions and records nothing.
 - A registration begun from an application's `/oidc/authorize` that found no session
   returns to that request as a sign-in does: `POST /register/terms` carries the
   browser's pending authorization to the session it establishes and answers
