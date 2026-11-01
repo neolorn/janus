@@ -20003,6 +20003,44 @@ now. This closes Milestone 2's third known issue (D-205).
 
 ---
 
+## D-247 — The roles a giver may hand out
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** AUTHZ-GRANT-005, LIB-API-005
+
+**TL;DR.** A person who gives roles can read which roles they may give in an organization:
+`GET /admin/grants/assignable?organization={id}` and its library call answer exactly the
+roles a grant by them there would not be refused as `authz.role.notassignable`, each with
+its name and whether its grants must end. Until now only `role:manage`, judged in the
+administrative organization, read the roles, so a host's form for giving a role could
+only guess from its own declaration and drifted from the roles an administrator changed.
+Found by Cura's step 4.
+
+- **The read.** `IGrants.AssignableAsync(AccessContext context, OrganizationId
+  organization, ...)` answers `Result<IReadOnlyList<AssignableRole>>`, sorted by name.
+  `AssignableRole` holds `Name` and `GrantsMustEnd`. The route answers **200**
+  `[ { name, grantsMustEnd } ]`.
+- **Who may read it.** The caller's `grant:manage` in that organization, the permission a
+  grant there needs. Without it the route answers **403** `authz.denied`, and an unknown
+  organization **404**. A system principal is refused, as AUTHZ-GRANT-004 keeps roles a
+  person's.
+- **What it holds.** The same judgement AUTHZ-GRANT-005 makes at the grant, read now: the
+  roles the caller's held roles hand out, with `system:administer`'s reach as the grant
+  itself allows it. Not a role's permissions, which stay `role:manage`'s to read.
+- **What it records.** Nothing: it is a read of the deployment's roles, not of a person.
+
+*Rejected:*
+- **Opening `GET /admin/roles` to `grant:manage`:** it shows every role's permissions to
+  everyone who gives any role.
+- **The host's own declaration:** it misses every role changed at runtime (AUTHZ-GRANT-004).
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-005;
+- `07` LIB-API-005 (`IGrants.AssignableAsync`, `AssignableRole`);
+- `09` (the route, beside `GET /admin/grants`);
+- `implementation-plan.md` (round H8).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -20259,6 +20297,7 @@ now. This closes Milestone 2's third known issue (D-205).
 | A passkey sign-in opened without an identifier | D-244 |
 | The release workflow | D-245 |
 | Servicing the SDK | D-246 |
+| The roles a giver may hand out | D-247 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
