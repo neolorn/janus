@@ -173,8 +173,9 @@ public sealed partial class ApplicationJsonTests : IAsyncDisposable
     /// <summary>
     /// CONV-DESIGN-007 AC9: with the application's options reading names in any case, a
     /// member of a library body spelled in another case is not read, so the endpoint
-    /// refuses the body as one without it; spelled as <c>09</c> spells it, it is read and
-    /// answered under the library's names, not the host's naming policy.
+    /// answers the body as one without it, a begin with no identifier offering the
+    /// passkey alone (D-244); spelled as <c>09</c> spells it, it is read and answered under
+    /// the library's names, not the host's naming policy.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -187,13 +188,15 @@ public sealed partial class ApplicationJsonTests : IAsyncDisposable
         Answer cased = await browser.SendAsync("POST", "/auth/begin", ("Identifier", Flow.Address));
         Answer spelled = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
 
-        Assert.Equal(StatusCodes.Status400BadRequest, cased.Status);
-        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), cased.Text("code"));
-        Assert.Equal("identifier", cased.Json().GetProperty("details").GetProperty("member").GetString());
-        Assert.True(cased.Json().TryGetProperty("correlationId", out _));
+        Assert.Equal(StatusCodes.Status200OK, cased.Status);
+        Assert.Equal(["passkey"], Available(cased));
         Assert.Equal(StatusCodes.Status200OK, spelled.Status);
+        Assert.NotEqual(["passkey"], Available(spelled));
         Assert.True(spelled.Json().TryGetProperty("challengeId", out _));
         Assert.False(spelled.Json().TryGetProperty("challenge_id", out _));
+
+        static string?[] Available(Answer began) =>
+            [.. began.Json().GetProperty("available").EnumerateArray().Select(factor => factor.GetString())];
     }
 
     /// <summary>

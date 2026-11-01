@@ -85,6 +85,16 @@ internal sealed class WebAuthnService(
         Base64Url.EncodeToString(subject.Value.ToByteArray(bigEndian: true));
 
     /// <summary>
+    /// The account a user handle names, read as <see cref="Handle"/> writes it, or
+    /// nothing where it is absent or is no handle the library issues. Whether an
+    /// account holds the identifier is not asked here.
+    /// </summary>
+    /// <param name="handle">The user handle an assertion returned, base64url.</param>
+    /// <returns>The account it names, or nothing.</returns>
+    public static SubjectId? Holder(string? handle) =>
+        handle is { Length: > 0 } && Named(handle) is Guid named ? new SubjectId(named) : null;
+
+    /// <summary>
     /// The request options an answer carries where the factors it offers include a
     /// WebAuthn credential its authenticator does not keep, which answers only a
     /// request that names it.

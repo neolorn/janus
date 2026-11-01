@@ -49,6 +49,15 @@ internal interface IChallengeStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Ends every challenge a browser opened without an identifier that names no
+    /// account yet, which the next one it opens replaces (REG-IDENT-003, D-244).
+    /// </summary>
+    /// <param name="browser">What the browser's pre-authentication session hashes to.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing.</returns>
+    ValueTask RemoveUnnamedAsync(byte[] browser, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a new challenge.
     /// </summary>
     /// <param name="challenge">The challenge.</param>

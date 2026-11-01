@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /auth/begin` takes `identifier` as optional, and `IAuthentication.BeginAsync`
+  takes it as nullable: without one it opens a passkey challenge with no allow-list,
+  answers `available` `["passkey"]`, and the passkey's user handle names the account at
+  `POST /auth/factor`. A browser holds one such sign-in, each begin replacing the one
+  before. Its delay is the source's, and a refused assertion counts against the source
+  and the account its user handle names, under no identifier.
 - A step-up answered for a session of an account whose only usable factors are social,
   downgraded since it reached `delegated`, at a `delegated` gate carries `outcome`
   `signIn` in `auth.stepup.required`: the person signs in again with the provider. A

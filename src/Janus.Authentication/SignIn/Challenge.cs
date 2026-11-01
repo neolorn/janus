@@ -13,9 +13,10 @@ namespace Janus.Authentication.SignIn;
 /// Implements AUTH-ABUSE-001, AUTH-ABUSE-003, AUTH-FACT-014, AUTH-FACT-016 and
 /// REG-DOM-001. A challenge exists for an identifier that resolves to nothing exactly as
 /// for one that resolves to an account, because the two answers have to be the same; it
-/// simply never accepts a factor. It carries the keyed hash of the identifier it was
-/// opened with, so that a factor refused against it is counted against that identifier
-/// whether or not an account holds it. Where it was opened with an email address the
+/// simply never accepts a factor. One opened without an identifier names no account
+/// until a passkey's user handle names it (D-244). It carries the keyed hash of the
+/// identifier it was opened with, so that a factor refused against it is counted against
+/// that identifier whether or not an account holds it. Where it was opened with an email address the
 /// account holds, it names that identifier, which is what a domain lock judges once a
 /// factor has succeeded. It is bound, when it is opened, to the pre-authentication
 /// session the browser carries, or to none, and a sign-in link's press and a fresh code
@@ -57,9 +58,10 @@ internal sealed class Challenge
     public byte[]? LandingFingerprint { get; private set; }
 
     /// <summary>
-    /// Whose sign-in, or nothing where the identifier resolved to no account.
+    /// Whose sign-in, or nothing where the identifier resolved to no account, or where
+    /// it was opened without one and no passkey has named the account yet (D-244).
     /// </summary>
-    public SubjectId? Subject { get; }
+    public SubjectId? Subject { get; private set; }
 
     /// <summary>
     /// The email address the sign-in was opened with, where the account holds it.
@@ -96,6 +98,12 @@ internal sealed class Challenge
 
     /// <summary>What has been presented against it and accepted.</summary>
     public IReadOnlyList<Factor> Presented => _presented;
+
+    /// <summary>
+    /// Whether it was opened without an identifier and names no account yet, so a
+    /// passkey's user handle is what names one (REG-IDENT-003, D-244).
+    /// </summary>
+    public bool Unnamed => Subject is null && Identifier is null;
 
     /// <summary>
     /// Opens one.
@@ -234,6 +242,22 @@ internal sealed class Challenge
     /// </summary>
     /// <param name="at">Now.</param>
     public void Held(DateTimeOffset at) => HeldAt ??= at;
+
+    /// <summary>
+    /// Names the account a sign-in opened without an identifier is for, once a passkey
+    /// its user handle names has been accepted against it (D-244).
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <exception cref="InvalidOperationException">It already names an account or an identifier.</exception>
+    public void Name(SubjectId subject)
+    {
+        if (!Unnamed)
+        {
+            throw new InvalidOperationException("Only a sign-in opened without an identifier is named by its passkey.");
+        }
+
+        Subject = subject;
+    }
 
     /// <summary>
     /// Records a factor accepted against it.
