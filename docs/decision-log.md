@@ -20243,6 +20243,19 @@ path from that role to `system:administer`.
 > 4. Scopes: as AUTH-OIDC-001 for every client, a registered scope is issued only where
 >    the request asks for it, and an unregistered one is refused `invalid_scope`.
 
+> **Amended.** 2026-11-01. CORS and the audience:
+> - CORS. A `public-application` client may run its code exchange in the browser
+>   (Stalwart's WebUI has no server side). So `POST /oidc/token`, the discovery document
+>   and `GET /oidc/jwks` SHALL answer CORS for the origin of each registered
+>   `public-application` return address: that origin exactly, no credentials, the
+>   methods and headers the token request needs, and the preflight answered. No other
+>   route and no other origin gains CORS. A browser request to them from any other origin
+>   gets no CORS headers.
+> - `--audience` stays optional. Where it is absent, each token's `aud` is the client
+>   itself. A deployment may list its public clients directly among the mail server's
+>   accepted audiences (INT-MAIL-004), with no client registered for the mail server
+>   alone.
+
 **Date:** 2026-11-01 · **Status:** accepted · **Amends:** AUTH-OIDC-001, AUTH-OIDC-002,
 AUTH-OIDC-006, INT-MAIL-004, `10` section 5.13
 
@@ -20300,6 +20313,8 @@ refresh token. Every other client is unchanged. The owner approved the trade-off
 - the amendment: `02` AUTH-KEY-001, AUTH-OIDC-004 (the lifetime a public-application
   token is issued with), AUTH-OIDC-006 criterion 4; `06` OPS-SEC-002; `10` section 4.9
   (`token.signing.rotation`);
+- the CORS and audience amendment: `02` AUTH-OIDC-006 (CORS, with its criteria); `05`
+  INT-MAIL-004; `09` section 9;
 - `10` section 5.13 (the kind) and section 4 (`oidc.publicapplication.accesstoken.lifetime`);
 - `implementation-plan.md` (round H11).
 
