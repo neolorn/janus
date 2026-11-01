@@ -19,9 +19,11 @@ against the public contract of LIB-API-001.
   `organization.multiplememberships` where asked, in one transaction, each change
   recorded under the system principal `organization` with the reason given, and prints
   the organization's identifier. Run again it writes only what differs. A name two
-  organizations hold is refused `api.request.malformed` naming `name`, a deployment not
-  bootstrapped `authz.denied`, and a missing or empty reason
-  `config.change.reasonrequired`; nothing of a refused run is written. It writes no
+  organizations hold is refused `api.request.malformed` naming `name`, a policy file
+  that does not read or does not hold the policy object `api.request.malformed` naming
+  `policy`, a deployment not bootstrapped `authz.denied`, and a missing or empty reason
+  `config.change.reasonrequired`; nothing of a refused run is written. A policy that
+  loosens is written with no step-up and no `system:administer`. It writes no
   grant and no membership, and never turns `photos` on, since it reads no host
   declaration. `organization` is now a reserved principal name no host job may take.
 - `POST /auth/begin` takes `identifier` as optional, and `IAuthentication.BeginAsync`

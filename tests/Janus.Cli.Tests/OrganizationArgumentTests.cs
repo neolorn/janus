@@ -109,12 +109,12 @@ public sealed class OrganizationArgumentTests : IDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC13 (D-248): a command line without <c>--reason</c> is refused with
+    /// OPS-BOOT-001 AC11 (D-248): a command line without <c>--reason</c> is refused with
     /// <c>config.change.reasonrequired</c> before the database is reached.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_001_AC13_ACommandLineWithoutAReasonIsRefusedAsync()
+    public async Task OPS_BOOT_001_AC11_ACommandLineWithoutAReasonIsRefusedAsync()
     {
         Invocation run = await Invocation.TypedAsync(["organization", "--name", "Northwind Clinics", "--policy", _policy]);
 
@@ -122,12 +122,11 @@ public sealed class OrganizationArgumentTests : IDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC13 and IDN-ORG-002 AC4 (D-248): the file is read as the policy
-    /// route reads its policy object, before the database is reached: one that cannot
-    /// be read, is not JSON or holds no object is refused naming <c>policy</c>; a member
-    /// the object does not have, <c>emailDomains</c> and <c>reason</c> among them, is
-    /// refused with <c>api.request.malformed</c> naming it; and a value a field does not
-    /// take is refused with <c>config.value.notallowed</c> naming <c>policy</c>.
+    /// OPS-BOOT-001 AC11 (D-248): the file is read before the database is reached. One
+    /// that does not read or does not hold the policy object, a member the object does
+    /// not have among them (<c>emailDomains</c>, <c>reason</c>), is refused with
+    /// <c>api.request.malformed</c> naming <c>policy</c>, and a value a field does not
+    /// take with the policy route's <c>config.value.notallowed</c>, naming it too.
     /// </summary>
     /// <param name="written">What the file holds, or nothing where there is no file.</param>
     /// <param name="code">The refusal's code.</param>
@@ -137,10 +136,10 @@ public sealed class OrganizationArgumentTests : IDisposable
     [InlineData(null, "api.request.malformed", "policy")]
     [InlineData("requiredAssurance: aal2", "api.request.malformed", "policy")]
     [InlineData("""["aal2"]""", "api.request.malformed", "policy")]
-    [InlineData("""{ "emailDomains": ["northwind.example.test"] }""", "api.request.malformed", "emailDomains")]
-    [InlineData("""{ "reason": "Production is set up." }""", "api.request.malformed", "reason")]
+    [InlineData("""{ "emailDomains": ["northwind.example.test"] }""", "api.request.malformed", "policy")]
+    [InlineData("""{ "reason": "Production is set up." }""", "api.request.malformed", "policy")]
     [InlineData("""{ "requiredAssurance": "aal9" }""", "config.value.notallowed", "policy")]
-    public async Task OPS_BOOT_001_AC13_APolicyFileThePolicyRouteWouldRefuseIsRefusedAsync(
+    public async Task OPS_BOOT_001_AC11_APolicyFileThePolicyRouteWouldRefuseIsRefusedAsync(
         string? written,
         string code,
         string member)

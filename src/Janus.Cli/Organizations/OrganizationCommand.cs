@@ -124,10 +124,11 @@ internal static class OrganizationCommand
             .Match(organization => Result.Success(organization.ToString()), Result.Failure<string>);
     }
 
-    // D-248 and chapter 09 section 8a: the file holds the policy object the policy route
-    // takes, without the reason the command line gives, and is read as that route reads
-    // it. A file that cannot be read, is not JSON or holds no object is refused as the
-    // argument that named it, and a value the object does not take names it too.
+    // OPS-BOOT-001 and D-248: the file holds the policy object the policy route takes,
+    // without the reason the command line gives. A file that does not read or does not
+    // hold that object, a member it does not have among them, is refused as the argument
+    // that named it, and a value a field does not take is refused with the route's code,
+    // naming it too.
     private static async Task<Result<PolicyOverride>> PolicyAsync(string path, CancellationToken cancellationToken)
     {
         JsonDocument document;
@@ -151,14 +152,10 @@ internal static class OrganizationCommand
                 return Result.Failure<PolicyOverride>(Malformed());
             }
 
-            Error? failure = null;
-
-            string fields = PolicyObject.Written(document.RootElement, FrozenSet<string>.Empty)
-                .Match(written => written, error => Withheld<string>(error, ref failure));
-
-            return failure is not null
-                ? Result.Failure<PolicyOverride>(failure)
-                : Settings.OrganizationPolicy.EnteredIn(Policy, fields);
+            return PolicyObject.Written(document.RootElement, FrozenSet<string>.Empty)
+                .Match(
+                    fields => Settings.OrganizationPolicy.EnteredIn(Policy, fields),
+                    _ => Result.Failure<PolicyOverride>(Malformed()));
         }
     }
 

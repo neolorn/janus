@@ -131,17 +131,15 @@ public sealed class OrganizationFromServerTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC11 (D-248): where one organization holds the name, the command
-    /// creates nothing, and with the file and the setting as they stand it writes and
-    /// records nothing and answers the organization; with another file it writes the
-    /// policy alone, as a change from what stood.
+    /// OPS-BOOT-001 AC11 (D-248): where one organization holds the name, matched on its
+    /// comparison key, the command creates nothing, and with the file and the setting as
+    /// they stand it writes and records nothing and answers the organization.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_001_AC11_AnOrganizationThatStandsIsChangedOnlyWhereTheFileDiffersAsync()
+    public async Task OPS_BOOT_001_AC11_RunAgainTheCommandWritesNothingAsync()
     {
         var standing = new OrganizationId(Guid.NewGuid());
-        ConfigurationKey policy = Settings.OrganizationPolicy.For(standing.ToString());
 
         _organizations.Seed(standing, name: Name);
         _configuration.Set(Settings.OrganizationPolicy, standing.ToString(), Stricter);
@@ -151,13 +149,25 @@ public sealed class OrganizationFromServerTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Equal(standing, same);
-        Assert.False(_settings.Written.ContainsKey(policy));
-        Assert.False(_settings.Written.ContainsKey(Settings.OrganizationMultipleMemberships.Key));
-        Assert.Empty(_changes.Principals);
-        Assert.Empty(_audit.Principals);
-        Assert.Empty(_events.Published);
+        AssertNothingWritten();
+    }
 
+    /// <summary>
+    /// OPS-BOOT-001 AC12 (D-248): a policy whose write loosens the organization's is
+    /// written with no step-up and no permission, the command asking neither, and is
+    /// recorded as a loosening under the command's principal; it writes the policy
+    /// alone and creates nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC12_ALooseningIsWrittenWithNoStepUpAndNoPermissionAsync()
+    {
+        var standing = new OrganizationId(Guid.NewGuid());
+        ConfigurationKey policy = Settings.OrganizationPolicy.For(standing.ToString());
         PolicyOverride wider = Stricter with { RequiredAssurance = null };
+
+        _organizations.Seed(standing, name: Name);
+        _configuration.Set(Settings.OrganizationPolicy, standing.ToString(), Stricter);
 
         OrganizationId changed = Succeeded(await Command.RunAsync(
             new OrganizationFromServerRequest(Name, wider, Reason, MultipleMemberships: null),
@@ -169,18 +179,20 @@ public sealed class OrganizationFromServerTests : IAsyncDisposable
         Assert.Equal(
             (policy, Settings.OrganizationPolicy.Write(Stricter), Settings.OrganizationPolicy.Write(wider), true, "organization"),
             (written.Key, written.Before, written.After, written.Loosening, written.Principal));
+        Assert.Equal(Settings.OrganizationPolicy.Write(wider), _settings.Written[policy]);
         Assert.Empty(_audit.Principals);
-        Assert.Empty(_events.Published);
+        Assert.Empty(_events.Of<OrganizationCreated>());
+        Assert.Equal((1, 1, 0), (_work.Opened, _work.Committed, _work.RolledBack));
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC12 (D-248): a name two organizations hold names no one
+    /// OPS-BOOT-001 AC11 (D-248): a name two organizations hold names no one
     /// organization, so the command is refused naming <c>name</c>, rolls its unit of
     /// work back and writes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_001_AC12_ANameTwoOrganizationsHoldIsRefusedAsync()
+    public async Task OPS_BOOT_001_AC11_ANameTwoOrganizationsHoldIsRefusedAsync()
     {
         _organizations.Seed(new OrganizationId(Guid.NewGuid()), name: Name);
         _organizations.Seed(new OrganizationId(Guid.NewGuid()), name: Name.ToUpperInvariant());
@@ -195,12 +207,12 @@ public sealed class OrganizationFromServerTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC13 (D-248): before bootstrap marked an administrative organization
+    /// OPS-BOOT-001 AC11 (D-248): before bootstrap marked an administrative organization
     /// the command sets nothing up and is refused with <c>authz.denied</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_001_AC13_ADeploymentNotBootstrappedIsRefusedAsync()
+    public async Task OPS_BOOT_001_AC11_ADeploymentNotBootstrappedIsRefusedAsync()
     {
         _administrative.Organization = null;
 
@@ -214,7 +226,7 @@ public sealed class OrganizationFromServerTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC13 (D-248): every change the command makes carries the reason, so
+    /// OPS-BOOT-001 AC11 (D-248): every change the command makes carries the reason, so
     /// an empty one is refused with <c>config.change.reasonrequired</c> before any
     /// transaction begins.
     /// </summary>
@@ -223,7 +235,7 @@ public sealed class OrganizationFromServerTests : IAsyncDisposable
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task OPS_BOOT_001_AC13_AnEmptyReasonIsRefusedAsync(string reason)
+    public async Task OPS_BOOT_001_AC11_AnEmptyReasonIsRefusedAsync(string reason)
     {
         Error refused = Refused(await Command.RunAsync(
             new OrganizationFromServerRequest(Name, Stricter, reason, MultipleMemberships: true),
@@ -235,7 +247,7 @@ public sealed class OrganizationFromServerTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC13 and IDN-ORG-002 AC4 (D-248): a policy the policy route refuses
+    /// OPS-BOOT-001 AC11 (D-248): a policy the policy route refuses
     /// is refused with that route's code: a field looser than the system's, photos with
     /// no image codec declared (the command reads no declaration), and the
     /// administrative organization's members resolving below AAL2. Nothing is written.
@@ -246,7 +258,7 @@ public sealed class OrganizationFromServerTests : IAsyncDisposable
     [InlineData("belowsystem")]
     [InlineData("photos")]
     [InlineData("belowfloor")]
-    public async Task IDN_ORG_002_AC4_APolicyThePolicyRouteRefusesIsRefusedWithItsCodeAsync(string refusal)
+    public async Task OPS_BOOT_001_AC11_APolicyThePolicyRouteRefusesIsRefusedWithItsCodeAsync(string refusal)
     {
         (string named, PolicyOverride policy, ErrorCode code, string field) = refusal switch
         {

@@ -104,8 +104,8 @@ public sealed class OrganizationTests(BootstrappedDeployment deployment) : IClas
     }
 
     /// <summary>
-    /// IDN-ORG-002 AC4 (D-248): the policy the command writes from the file is stored as
-    /// the policy route stores the same fields.
+    /// IDN-ORG-002 AC4 (D-248): the organization the command creates holds the policy
+    /// its file states, stored as the policy route stores the same fields, and no grant.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -127,16 +127,18 @@ public sealed class OrganizationTests(BootstrappedDeployment deployment) : IClas
                 Settings.OrganizationPolicy.Read(created.ToString(), fields)
                     .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()))),
             await ValueAsync(connection, Settings.OrganizationPolicy.For(created.ToString()).ToString()));
+        Assert.Equal(0, await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM identity.grants WHERE organization = @Id",
+            new { Id = created.Value }));
     }
 
     /// <summary>
     /// OPS-BOOT-001 AC11 (D-248): run again with the same arguments the command changes
-    /// and records nothing and prints the same identifier; run with another file it
-    /// writes and records the policy alone.
+    /// and records nothing and prints the same identifier.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_001_AC11_RunAgainTheCommandWritesOnlyWhatDiffersAsync()
+    public async Task OPS_BOOT_001_AC11_RunAgainTheCommandWritesNothingAsync()
     {
         string[] arguments = ["--name", "Fabrikam Labs", "--policy", _policy, "--reason", Reason, "--multiplememberships", "false"];
 
@@ -153,6 +155,26 @@ public sealed class OrganizationTests(BootstrappedDeployment deployment) : IClas
         Reported.Success(again);
         Assert.Equal(first, Created(again));
         Assert.Equal(before, await RecordedAsync(connection));
+    }
+
+    /// <summary>
+    /// OPS-BOOT-001 AC12 (D-248): a file that loosens the organization's policy is
+    /// written with no step-up and no <c>system:administer</c>, which the command asks of
+    /// no one, and the one change recorded is the policy's, marked a loosening.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC12_ALooseningIsWrittenWithNoStepUpAndNoPermissionAsync()
+    {
+        string[] arguments = ["--name", "Litware Opticians", "--policy", _policy, "--reason", Reason];
+
+        await File.WriteAllTextAsync(_policy, Stricter, TestContext.Current.CancellationToken);
+
+        OrganizationId first = Created(await OrganizationAsync(arguments));
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        long before = await RecordedAsync(connection);
 
         await File.WriteAllTextAsync(_policy, """{ "requiredAssurance": "aal2" }""", TestContext.Current.CancellationToken);
 
@@ -162,21 +184,21 @@ public sealed class OrganizationTests(BootstrappedDeployment deployment) : IClas
         Assert.Equal(first, Created(changed));
         Assert.Equal(before + 1, await RecordedAsync(connection));
         Assert.Equal(
-            Settings.OrganizationPolicy.For(first.ToString()).ToString(),
-            await connection.ExecuteScalarAsync<string>(
+            (Settings.OrganizationPolicy.For(first.ToString()).ToString(), true),
+            await connection.QuerySingleAsync<(string, bool)>(
                 """
-                SELECT details->>'key' FROM identity.audit_records
+                SELECT details->>'key', (details->>'loosening')::boolean FROM identity.audit_records
                 WHERE principal = 'organization' ORDER BY occurred_at DESC, id DESC LIMIT 1
                 """));
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC12 (D-248): where two organizations hold the name, the command is
+    /// OPS-BOOT-001 AC11 (D-248): where two organizations hold the name, the command is
     /// refused with <c>api.request.malformed</c> naming <c>name</c> and writes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_001_AC12_ANameTwoOrganizationsHoldIsRefusedAsync()
+    public async Task OPS_BOOT_001_AC11_ANameTwoOrganizationsHoldIsRefusedAsync()
     {
         await File.WriteAllTextAsync(_policy, Stricter, TestContext.Current.CancellationToken);
 
@@ -205,12 +227,12 @@ public sealed class OrganizationTests(BootstrappedDeployment deployment) : IClas
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC13 (D-248): on a deployment the migrations raised and bootstrap has
+    /// OPS-BOOT-001 AC11 (D-248): on a deployment the migrations raised and bootstrap has
     /// not stood up, the command is refused and creates nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_001_AC13_ADeploymentNotBootstrappedIsRefusedAsync()
+    public async Task OPS_BOOT_001_AC11_ADeploymentNotBootstrappedIsRefusedAsync()
     {
         string fresh = await deployment.CreateDatabaseAsync("not_bootstrapped");
 
@@ -231,14 +253,14 @@ public sealed class OrganizationTests(BootstrappedDeployment deployment) : IClas
     }
 
     /// <summary>
-    /// OPS-BOOT-001 AC13 and IDN-ORG-002 AC4 (D-248): a policy the policy route refuses
+    /// OPS-BOOT-001 AC11 (D-248): a policy the policy route refuses
     /// is refused with that route's code once the database is read, a field looser than
     /// the system's among them, and a reason missing or empty with
     /// <c>config.change.reasonrequired</c>; nothing of a refused run is written.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_001_AC13_ARefusedRunWritesNothingAsync()
+    public async Task OPS_BOOT_001_AC11_ARefusedRunWritesNothingAsync()
     {
         const string name = "Wingtip Clinics";
 
