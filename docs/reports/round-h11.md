@@ -125,5 +125,9 @@ answers them.
 - Unit and contract tests before the push: 5291, green.
 - Commit-message gate, the other gates and the full-history secret scan before the
   push: green.
+- The pipeline's first run, on 92f50779, failed one integration test:
+  `ConformanceSuiteTests.AUTH_OIDC_006_AC1_AProviderAdmittingWhatItShouldRefuseIsReportedAsync`
+  still counted the discovery requirement among the findings (section 3). The count
+  is corrected in ebe7f686.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
