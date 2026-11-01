@@ -503,6 +503,41 @@ internal sealed class AccountAdministration(
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Implements IDN-ATTR-002, IDN-ATTR-003 and OPS-ALERT-005 (D-250). Whether the
+    /// caller is a member, whether the member is one, whether photos are shown and
+    /// whether a photo is set are answered alike, so the read tells an outsider nothing
+    /// about who belongs; only an image returned is counted. The photo is shown as
+    /// IDN-ATTR-002 shows it to its own account, where every organization the member
+    /// belongs to enables photos.
+    /// </remarks>
+    public async ValueTask<Result<ReadOnlyMemory<byte>>> MemberPhotoAsync(
+        AccessContext context,
+        OrganizationId organization,
+        SubjectId member,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.IsSystem || context.Effective is not SubjectId reader)
+        {
+            return Result.Failure<ReadOnlyMemory<byte>>(Error.From(ErrorCodes.Denied));
+        }
+
+        if (!(await memberships.OfAsync(reader, cancellationToken).ConfigureAwait(false)).Contains(organization)
+            || !(await memberships.OfAsync(member, cancellationToken).ConfigureAwait(false)).Contains(organization))
+        {
+            return Result.Failure<ReadOnlyMemory<byte>>(Error.From(ErrorCodes.PhotoNotFound));
+        }
+
+        Result<ReadOnlyMemory<byte>> read = await photos.ReadOfAsync(member, cancellationToken).ConfigureAwait(false);
+
+        return read.Match(image => (ReadOnlyMemory<byte>?)image, _ => null) is ReadOnlyMemory<byte> shown
+            ? await CountedAsync(context, shown, cancellationToken).ConfigureAwait(false)
+            : read;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result<AccountView>> ReadAsync(
         AccessContext context,
         SubjectId subject,

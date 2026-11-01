@@ -47,6 +47,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     private readonly AuthenticatorStoreInMemory _authenticators = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly MembershipLookupInMemory _memberships = new();
+    private readonly ReadVolumeInMemory _volume = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly AccessGateInMemory _gate = new();
@@ -113,7 +114,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             new RecordDirectoryInMemory(),
             _memberships,
             Declared,
-            new ReadVolumeInMemory(),
+            _volume,
             _work,
             _clock);
 
@@ -629,6 +630,98 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ATTR-002 AC7, OPS-ALERT-005 AC3 (D-250): a current member of an organization
+    /// whose policy shows photos reads the photo of another current member of it, asking
+    /// no permission, and the read counts one record toward the reader's volume and
+    /// records nothing.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_002_AC7_AMemberReadsAColleaguesPhotoAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        var colleague = SubjectId.New(_randomness);
+        byte[] image = [0xFF, 0xD8, 0xFF, 0xD9];
+
+        _directory.Stands(colleague, AccountState.Active);
+        _memberships.Place(_member, organization);
+        _memberships.Place(colleague, organization);
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            PolicyOverride.None with { Photos = true });
+        _directory.Shows(_member, image);
+
+        Result<ReadOnlyMemory<byte>> read = await ColleagueAsync(AccessContext.Of(colleague), organization, _member);
+
+        Assert.Equal(image, read.Match(shown => shown.ToArray(), _ => []));
+        Assert.Equal(1, Assert.Single(_volume.Returned).Records);
+        Assert.Empty(_audit.Administered);
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-002 AC7 (D-250): every read of a colleague's photo that is not admitted
+    /// is answered `identity.photo.notfound` alike and counts nothing: a reader or a
+    /// colleague who is no current member of the organization, an organization the
+    /// deployment does not hold, a policy that keeps photos off, a colleague of a second
+    /// organization that keeps photos off, and a colleague who shows none. A system
+    /// principal is refused `authz.denied`.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_002_AC7_AColleaguesPhotoIsConcealedAlikeWhereTheReadIsNotAdmittedAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        var other = OrganizationId.New(_clock);
+        var hidden = OrganizationId.New(_clock);
+        var colleague = SubjectId.New(_randomness);
+        var outsider = SubjectId.New(_randomness);
+        var divided = SubjectId.New(_randomness);
+        var bare = SubjectId.New(_randomness);
+        byte[] image = [0xFF, 0xD8, 0xFF, 0xD9];
+
+        foreach (SubjectId standing in new[] { colleague, outsider, divided, bare })
+        {
+            _directory.Stands(standing, AccountState.Active);
+        }
+
+        _memberships.Place(_member, organization);
+        _memberships.Place(_member, hidden);
+        _memberships.Place(colleague, organization);
+        _memberships.Place(divided, organization);
+        _memberships.Place(divided, hidden);
+        _memberships.Place(bare, organization);
+        _memberships.Place(outsider, other);
+        _configuration.Set(Settings.OrganizationPolicy, organization.ToString(), PolicyOverride.None with { Photos = true });
+        _configuration.Set(Settings.OrganizationPolicy, other.ToString(), PolicyOverride.None with { Photos = true });
+
+        foreach (SubjectId showing in new[] { colleague, outsider, divided })
+        {
+            _directory.Shows(showing, image);
+        }
+
+        ErrorCode[] refused =
+        [
+            Refused(await ColleagueAsync(AccessContext.Of(outsider), organization, colleague)),
+            Refused(await ColleagueAsync(AccessContext.Of(_member), organization, outsider)),
+            Refused(await ColleagueAsync(AccessContext.Of(_member), other, outsider)),
+            Refused(await ColleagueAsync(AccessContext.Of(_member), OrganizationId.New(_clock), colleague)),
+            Refused(await ColleagueAsync(AccessContext.Of(_member), hidden, divided)),
+            Refused(await ColleagueAsync(AccessContext.Of(_member), organization, divided)),
+            Refused(await ColleagueAsync(AccessContext.Of(_member), organization, bare)),
+        ];
+
+        Assert.All(refused, code => Assert.Equal(ErrorCodes.PhotoNotFound, code));
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await ColleagueAsync(
+                AccessContext.Of(SystemPrincipal.ForDeployment("photos", "D-250", SystemOperation.Monitoring)),
+                organization,
+                colleague)));
+        Assert.Equal(image, (await ColleagueAsync(AccessContext.Of(_member), organization, colleague)).Match(read => read.ToArray(), _ => []));
+        Assert.Single(_volume.Returned);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC5: a suspension refused under the account's lock, for a deletion
     /// begun since it was first judged, rolls its unit of work back and commits nothing.
     /// </summary>
@@ -788,6 +881,12 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         outcome.Match(
             () => throw new Xunit.Sdk.XunitException("The operation was admitted."),
             error => error);
+
+    private async Task<Result<ReadOnlyMemory<byte>>> ColleagueAsync(
+        AccessContext context,
+        OrganizationId organization,
+        SubjectId member) =>
+        await Administration.MemberPhotoAsync(context, organization, member, TestContext.Current.CancellationToken);
 
     private async Task<Result<ReadOnlyMemory<byte>>> PhotoAsync(AccessContext context, SubjectId subject) =>
         await Administration.ReadPhotoAsync(context, subject, TestContext.Current.CancellationToken);

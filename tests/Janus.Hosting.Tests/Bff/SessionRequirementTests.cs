@@ -92,6 +92,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /admin/restrictions/{name}",
         "GET /admin/roles",
         "GET /auth/session",
+        "GET /organizations/{id}/members/{account}/photo",
         "GET /privacy/consents",
         "GET /privacy/export",
         "GET /privacy/objections",

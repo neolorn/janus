@@ -123,6 +123,27 @@ public interface IAccounts
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The profile photo a current member of an organization shows, read by another
+    /// current member of it, where the organization's policy shows photos. No
+    /// permission is asked beyond the two memberships, and the read is counted toward
+    /// the reader's read volume and recorded nowhere else (IDN-ATTR-003, D-250).
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">The organization both belong to.</param>
+    /// <param name="member">Whose photo.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The stored JPEG, or <c>identity.photo.notfound</c> alike where either is no
+    /// current member of the organization, where its policy shows no photos, where the
+    /// member shows none, and for a system principal.
+    /// </returns>
+    ValueTask<Result<ReadOnlyMemory<byte>>> MemberPhotoAsync(
+        AccessContext context,
+        OrganizationId organization,
+        SubjectId member,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Another person's account, under <c>account:read</c>.
     /// </summary>
     /// <param name="context">Who is asking.</param>
