@@ -451,7 +451,13 @@ direction, as every edit of the named restriction set is `restriction:edit`
 (OPS-CFG-008); a loosening of it also requires `system:administer`. A change without a
 reason is refused with `config.change.reasonrequired`, `details.key` naming the setting.
 
-*Source: D-010, D-166*
+**Photos over the system policy (D-249).** An organization's policy setting `photos` to
+`true` is admitted whatever the system policy says, and is not refused as below it; it
+stays a loosening, asking `system:administer` and the step-up as every loosening does
+(`01` IDN-ATTR-002). No other field
+changes: every other override is still judged against the system policy.
+
+*Source: D-010, D-166, D-249*
 
 **Settings with no direction**, approver counts among them, are classified **as
 loosening**, requiring step-up, a reason and an audit entry (D-225).
@@ -823,18 +829,21 @@ actor's mean daily count over `exfiltration.readvolume.baselinewindow` **and** e
 `exfiltration.readvolume.minimum`; the minimum keeps a low-volume actor's first busy
 day silent. The host reports the records each gate-filtered query and each export
 returned through `IReadVolume`; the library's own routes run no gate-filtered query.
-The actor is the acting person; work of a system principal is not counted. The mean is
-the sum over the days of the window before today divided by the window's length, a day
-without reads counting as zero; both comparisons are strict. Counts older than the
-window are forgotten by the daily recount.
+An admitted read of a colleague's photo counts one record toward the reader's read
+volume (`01` IDN-ATTR-002, D-250). The actor is the acting person; work of a system
+principal is not counted. The mean is the sum over the days of the window before today
+divided by the window's length, a day without reads counting as zero; both comparisons
+are strict. Counts older than the window are forgotten by the daily recount.
 
-*Source: D-045, D-071, D-166*
+*Source: D-045, D-071, D-166, D-250*
 
 A warehouse clerk's normal differs from an account manager's.
 
 **Acceptance criteria**
 1. An actor reading far beyond their own pattern raises an alert.
 2. An actor whose normal volume is high does not alert continuously.
+3. Each admitted read of a colleague's photo adds one to the reader's count for the
+   day, and a refused one adds nothing (D-250).
 
 ---
 
