@@ -1,9 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Storage.Migrations;
 using Janus.Storage.Settings;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Xunit;
 using Catalogue = Janus.Core.Configuration.Settings;
 
@@ -278,4 +285,105 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
 
         return code;
     }
+
+    /// <summary>
+    /// Chapter 10 section 5a (D-235): the migration deletes the gates the system policy
+    /// and an organization's override still name for a retired step-up action, keeps
+    /// every other gate, and leaves a row naming none, and the other keys under the
+    /// prefix, as they were.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_STEP_001_TheMigrationRemovesTheGatesOfARetiredActionAsync()
+    {
+        string moved = await database.CreateDatabaseAsync("retired_gates");
+        string removing;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            removing = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(RemoveTheGatesOfARetiredAction), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, removing) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        string system = Catalogue.PolicyDefault.Write(Catalogue.PolicyDefault.Default);
+        string stated = Catalogue.OrganizationPolicy.Write(PolicyOverride.None with
+        {
+            Gates = new Dictionary<StepUpAction, Gate>
+            {
+                [StepUpAction.FactorRemove] = new(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)),
+            },
+        });
+
+        var values = new
+        {
+            system = Catalogue.PolicyDefault.Key.ToString(),
+            systemValue = Retiring(system),
+            organization = Catalogue.OrganizationPolicy.For(Guid.CreateVersion7().ToString()).ToString(),
+            organizationValue = Retiring(stated),
+            untouched = Catalogue.OrganizationPolicy.For(Guid.CreateVersion7().ToString()).ToString(),
+            untouchedValue = stated,
+            grace = Catalogue.PolicyEnforcementGrace.Key.ToString(),
+        };
+
+        await using var connection = new NpgsqlConnection(moved);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.settings (key, value)
+            VALUES (@system, @systemValue), (@organization, @organizationValue), (@untouched, @untouchedValue),
+                (@grace, 'PT1H');
+            """,
+            values);
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(removing, TestContext.Current.CancellationToken);
+        }
+
+        async Task<string> ValueAsync(string key) =>
+            await connection.QuerySingleAsync<string>(
+                "SELECT value FROM identity.settings WHERE key = @key",
+                new { key });
+
+        Assert.Equal(Gates(system), Gates(await ValueAsync(values.system)));
+        Assert.Equal(Gates(stated), Gates(await ValueAsync(values.organization)));
+        Assert.Equal(stated, await ValueAsync(values.untouched));
+        Assert.Equal("PT1H", await ValueAsync(values.grace));
+    }
+
+    // A written policy with the gate of the retired alerting:destinations added, as a
+    // deployment written before the action was retired holds it.
+    private static string Retiring(string written)
+    {
+        JsonObject policy = JsonNode.Parse(written)!.AsObject();
+
+        if (policy["gates"] is not JsonObject gates)
+        {
+            gates = [];
+            policy["gates"] = gates;
+        }
+
+        gates["alerting:destinations"] = new JsonObject
+        {
+            ["level"] = "aal2",
+            ["phishingResistant"] = false,
+            ["maxAge"] = "PT15M",
+        };
+
+        return policy.ToJsonString();
+    }
+
+    // The gates a written policy holds, each as its name and its three values, read
+    // whatever order the stored object keeps its fields in.
+    private static string[] Gates(string written) =>
+        [.. JsonNode.Parse(written)!["gates"]!.AsObject()
+            .Select(gate => gate.Key + " " + gate.Value!["level"] + " " + gate.Value["phishingResistant"] + " " + gate.Value["maxAge"])
+            .Order(StringComparer.Ordinal)];
 }

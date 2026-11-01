@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Janus.Core.Configuration;
 using Xunit;
 
@@ -268,6 +269,133 @@ public sealed class SettingWrittenFormTests
             .Switch(_ => { }, failure => code = failure.Code);
 
         Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, code);
+    }
+
+    /// <summary>
+    /// Chapter 10 section 5a (D-235): a stored system policy whose gates still name
+    /// <c>alerting:destinations</c>, written before the action was retired, reads past
+    /// that gate and gates every current action as it did.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_001_AStoredPolicyReadsPastARetiredAction()
+    {
+        Policy written = Settings.PolicyDefault.Default;
+
+        Policy? read = Read(Settings.PolicyDefault, Retiring(Settings.PolicyDefault.Write(written)));
+
+        Assert.NotNull(read);
+        Assert.Equal(Enum.GetValues<StepUpAction>().Length, read.Gates.Count);
+        Assert.All(
+            Enum.GetValues<StepUpAction>(),
+            action => Assert.Equal(written.Gates[action], read.Gates[action]));
+    }
+
+    /// <summary>
+    /// Chapter 10 section 5a (D-235): a stored organization override reads past a gate
+    /// naming a retired action and keeps the gates it states for current ones.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_001_AStoredOverrideReadsPastARetiredAction()
+    {
+        var gate = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
+        PolicyOverride stated = PolicyOverride.None with
+        {
+            Gates = new Dictionary<StepUpAction, Gate> { [StepUpAction.FactorRemove] = gate },
+        };
+
+        PolicyOverride? read = null;
+
+        Settings.OrganizationPolicy
+            .Read("a", Retiring(Settings.OrganizationPolicy.Write(stated)))
+            .Switch(value => read = value, _ => { });
+
+        Assert.NotNull(read?.Gates);
+        Assert.Equal(StepUpAction.FactorRemove, Assert.Single(read.Gates).Key);
+        Assert.Equal(gate, read.Gates[StepUpAction.FactorRemove]);
+    }
+
+    /// <summary>
+    /// Chapter 10 section 5a (D-235): a stored gate naming an action neither current nor
+    /// retired was written by nothing, so it is a damaged row and the read refuses it, in
+    /// the system policy and in an override alike.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_001_AStoredGateNamingNoActionIsRefused()
+    {
+        ErrorCode? system = null;
+        ErrorCode? organization = null;
+
+        Settings.PolicyDefault
+            .Read(Retiring(Settings.PolicyDefault.Write(Settings.PolicyDefault.Default), "alerting:destination"))
+            .Switch(_ => { }, failure => system = failure.Code);
+        Settings.OrganizationPolicy
+            .Read("a", Retiring(Settings.OrganizationPolicy.Write(PolicyOverride.None), "alerting:destination"))
+            .Switch(_ => { }, failure => organization = failure.Code);
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, system);
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, organization);
+    }
+
+    /// <summary>
+    /// Chapter 10 section 5a (D-235): a policy or an override written through the
+    /// administration interface or the command-line tool names current actions only, and
+    /// a retired name is refused with the error a misspelled one gets.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_001_AnEnteredRetiredActionIsRefusedAsAMisspelledOne()
+    {
+        string system = Settings.PolicyDefault.Write(Settings.PolicyDefault.Default);
+        string organization = Settings.OrganizationPolicy.Write(PolicyOverride.None);
+
+        Assert.Equal(
+            Refusal(Settings.PolicyDefault.Received(JsonElementOf(Retiring(system, "alerting:destination")))),
+            Refusal(Settings.PolicyDefault.Received(JsonElementOf(Retiring(system)))));
+        Assert.Equal(
+            Refusal(Settings.PolicyDefault.Entered(Retiring(system, "alerting:destination"))),
+            Refusal(Settings.PolicyDefault.Entered(Retiring(system))));
+        Assert.Equal(
+            Refusal(Settings.OrganizationPolicy.Entered("a", Retiring(organization, "alerting:destination"))),
+            Refusal(Settings.OrganizationPolicy.Entered("a", Retiring(organization))));
+        Assert.NotNull(Refusal(Settings.PolicyDefault.Entered(Retiring(system))));
+        Assert.NotNull(Refusal(Settings.OrganizationPolicy.Entered("a", Retiring(organization))));
+    }
+
+    // The written policy with one gate more, named as the caller says: by default the
+    // retired alerting:destinations, at the gate a policy of the time gave it.
+    private static string Retiring(string written, string name = "alerting:destinations")
+    {
+        JsonObject policy = JsonNode.Parse(written)!.AsObject();
+
+        if (policy["gates"] is not JsonObject gates)
+        {
+            gates = [];
+            policy["gates"] = gates;
+        }
+
+        gates[name] = new JsonObject
+        {
+            ["level"] = "aal2",
+            ["phishingResistant"] = false,
+            ["maxAge"] = "PT15M",
+        };
+
+        return policy.ToJsonString();
+    }
+
+    private static JsonElement JsonElementOf(string written)
+    {
+        using var document = JsonDocument.Parse(written);
+
+        return document.RootElement.Clone();
+    }
+
+    private static string? Refusal<TValue>(Result<TValue> read)
+    {
+        string? refused = null;
+
+        read.Switch(_ => { }, failure => refused = failure.Code + " " + JsonSerializer.Serialize(failure.Details));
+
+        return refused;
     }
 
     private static TValue? Read<TValue>(Setting<TValue> setting, string stored)

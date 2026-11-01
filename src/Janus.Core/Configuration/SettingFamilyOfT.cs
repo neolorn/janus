@@ -61,6 +61,17 @@ public sealed class SettingFamily<TValue> : SettingFamily
         _form.Parse(stored, Malformed(parameter));
 
     /// <summary>
+    /// Reads a member's value as the administration interface received it, which names
+    /// only what the library has now.
+    /// </summary>
+    /// <param name="parameter">The organization identifier or the declared category.</param>
+    /// <param name="entered">The value as it was received.</param>
+    /// <returns>The value, or the failure naming what the text misses.</returns>
+    /// <remarks>Implements OPS-CFG-008 and chapter 10 section 5a (D-235).</remarks>
+    internal Result<TValue> Entered(string parameter, string entered) =>
+        _form.Enter(entered, Malformed(parameter));
+
+    /// <summary>
     /// Writes a member's value as the settings table holds it.
     /// </summary>
     /// <param name="value">The value.</param>

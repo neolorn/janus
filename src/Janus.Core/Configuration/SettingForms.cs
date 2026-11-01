@@ -15,26 +15,33 @@ internal static class SettingForms
     /// A length of time, written in ISO 8601.
     /// </summary>
     public static SettingForm<TimeSpan> Duration { get; } =
-        new(ReadDuration, XmlConvert.ToString, "an ISO 8601 duration");
+        new(ReadDuration, ReadDuration, XmlConvert.ToString, "an ISO 8601 duration");
 
     /// <summary>
     /// What an organization changes about the system policy, written as chapter 10
     /// section 4.1a writes the policy object with every field optional.
     /// </summary>
     public static SettingForm<PolicyOverride> Override { get; } =
-        new(ReadOverride, WriteOverride, "a policy override");
+        new(ReadOverride, EnterOverride, WriteOverride, "a policy override");
 
     private static Result<TimeSpan> ReadDuration(string stored, Error malformed) =>
         Configuration.Duration.TryParse(stored, out TimeSpan duration)
             ? Result.Success(duration)
             : Result.Failure<TimeSpan>(malformed);
 
+    // Chapter 10 section 5a (D-235): a stored override reads past a gate naming a
+    // retired step-up action, and an entered one names current actions only.
     private static Result<PolicyOverride> ReadOverride(string stored, Error malformed) =>
         SettingText
             .Shape<Written>(stored, malformed)
-            .Match(written => Read(written, malformed), Result.Failure<PolicyOverride>);
+            .Match(written => Read(written, malformed, readsPastRetired: true), Result.Failure<PolicyOverride>);
 
-    private static Result<PolicyOverride> Read(Written written, Error malformed)
+    private static Result<PolicyOverride> EnterOverride(string entered, Error malformed) =>
+        SettingText
+            .Shape<Written>(entered, malformed)
+            .Match(written => Read(written, malformed, readsPastRetired: false), Result.Failure<PolicyOverride>);
+
+    private static Result<PolicyOverride> Read(Written written, Error malformed, bool readsPastRetired)
     {
         AssuranceLevel? assurance = null;
 
@@ -88,6 +95,11 @@ internal static class SettingForms
 
             foreach (KeyValuePair<string, WrittenGate> entry in bound)
             {
+                if (readsPastRetired && RetiredStepUpActions.Names.Contains(entry.Key))
+                {
+                    continue;
+                }
+
                 if (entry.Value is null
                     || entry.Value.Level is null
                     || entry.Value.MaxAge is null

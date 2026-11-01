@@ -35,8 +35,24 @@ public sealed class PolicySetting : Setting<Policy>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Chapter 10 section 5a (D-235): a gate naming a retired step-up action is read
+    /// past, and nothing is written at the read.
+    /// </remarks>
     private protected override Result<Policy> Parse(string stored) =>
-        SettingText.Shape<Written>(stored, Malformed()).Match(Read, Result.Failure<Policy>);
+        SettingText
+            .Shape<Written>(stored, Malformed())
+            .Match(written => Read(written, readsPastRetired: true), Result.Failure<Policy>);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Chapter 10 section 5a (D-235): a policy written through the administration
+    /// interface or the command-line tool names current actions only.
+    /// </remarks>
+    private protected override Result<Policy> ParseEntered(string entered) =>
+        SettingText
+            .Shape<Written>(entered, Malformed())
+            .Match(written => Read(written, readsPastRetired: false), Result.Failure<Policy>);
 
     /// <inheritdoc />
     private protected override string Render(Policy value) =>
@@ -56,7 +72,7 @@ public sealed class PolicySetting : Setting<Policy>
                 [.. value.EmailDomains],
                 value.Photos));
 
-    private Result<Policy> Read(Written written)
+    private Result<Policy> Read(Written written, bool readsPastRetired)
     {
         if (written.RequiredAssurance is null
             || written.LoginFactors is null
@@ -86,6 +102,11 @@ public sealed class PolicySetting : Setting<Policy>
 
         foreach (KeyValuePair<string, WrittenGate> entry in written.Gates)
         {
+            if (readsPastRetired && RetiredStepUpActions.Names.Contains(entry.Key))
+            {
+                continue;
+            }
+
             if (entry.Value is null
                 || entry.Value.Level is null
                 || entry.Value.MaxAge is null

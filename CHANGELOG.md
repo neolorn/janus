@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A stored system policy or organization override whose gates still name the retired
+  step-up action `alerting:destinations` reads past that gate, so a deployment
+  bootstrapped before its removal starts and gates every current action as before; a
+  migration deletes those gates. A policy or override written through the API or the
+  command-line tool names current actions only, and a retired name is refused as a
+  misspelled one is.
 - An enrolment session opened for a lost mailbox replaces an email with
   `PUT /account/identifiers/{id}/replace` whatever `identifiers.email.max` is, the new
   address taking the replaced one's place, primary included. Outside that session the
