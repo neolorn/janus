@@ -19736,6 +19736,48 @@ older overrides as written (one deployment would treat organizations differently
 `01` the invitation requirement; `10` section 4.1 (`policy.<organization>`);
 `06` OPS-MIG-001; `implementation-plan.md` (round H6).
 
+
+---
+
+## D-240 — A member brings their own scheduled end forward
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** IDN-MEM-001, AUTHZ-GRANT-005 (D-213)
+
+**TL;DR.** A member whose membership already has an end scheduled, set by someone allowed
+to set it, may bring that end forward to now, under their own session. Nothing else about
+their membership is theirs to change. Found by Cura's step 4: a leaving field
+representative's phone, once its offline queue is sent, must end their access at once,
+and no rule let the leaver, a job or the host do it.
+
+- **The call.** `POST /account/memberships/{organization}/end`, and its library call, ends
+  the caller's own membership of that organization at once, where its `endsAt` is set
+  and still ahead. It needs the caller's live session, and no step-up and no permission:
+  the end was judged when it was scheduled, and bringing it forward only takes access
+  away.
+- **What it refuses.** A membership with no scheduled end answers **409**
+  `identity.membership.noend`, and an end already past answers as for an ended membership.
+  The library never sets a new end through it, and never moves one later.
+- **What the end does.** It is the same end as the `membership-ends` job's: the membership
+  ends, its allow grants and group memberships are revoked by the library, and the
+  revocations are not judged against the member's hand-out lists (the scheduler's were).
+  The member's sessions in that organization's applications end.
+- **The audit.** `identity.membership.ended` records `actor` as the member, with `reason`
+  `broughtforward` and the scheduled end it replaced.
+
+*Rejected:*
+- **A job holding `membership:manage`:** it widens what every job may do.
+- **A general self-leave:** a member could drop out of an organization nobody decided they
+  should leave.
+- **Waiting for the sweep:** the leaver keeps access for the rest of the day.
+
+**Propagated to:**
+- `01` IDN-MEM-001;
+- `03` AUTHZ-GRANT-005;
+- `09` the route;
+- `10` sections 1 and 5;
+- `18` (the account's memberships);
+- `implementation-plan.md` (round H6).
+
 ---
 
 # Index — all items closed
@@ -19987,6 +20029,7 @@ older overrides as written (one deployment would treat organizations differently
 | A role whose grants must end | D-237 |
 | The handle a pressed link answers | D-238 |
 | Round H5's questions: an invitation's must-end role, and older organizations' gender | D-239 |
+| A member brings their own scheduled end forward | D-240 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
