@@ -126,15 +126,15 @@ public sealed class ContinuationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-SESS-012 (D-242): a browser sent to register by an authorization that found
+    /// AUTH-SESS-012 AC11 (D-242): a browser sent to register by an authorization that found
     /// no session is sent back as a signed-in one is: registration's completion carries
     /// the authorization to the session it establishes and answers <c>continueTo</c>,
-    /// the session answers it in place of <c>landing</c> until the continuation spends
-    /// it, and following it issues the code once; afterwards <c>landing</c> stands.
+    /// every session bound to the record answers it beside <c>landing</c> until the
+    /// continuation spends it, and following it issues the code once.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_SESS_012_ARegistrationThatCompletesIsSentBackWithTheCodeAsync()
+    public async Task AUTH_SESS_012_AC11_ARegistrationThatCompletesIsSentBackWithTheCodeAsync()
     {
         await RegisteringAsync();
 
@@ -159,7 +159,7 @@ public sealed class ContinuationTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
         Assert.Equal(ContinueTo, completed.Text("continueTo"));
         Assert.Equal(ContinueTo, before.Text("continueTo"));
-        Assert.False(before.Json().TryGetProperty("landing", out _));
+        Assert.True(before.Json().TryGetProperty("landing", out _));
         Assert.StartsWith(RelyingParty.Destination + "?", RelyingParty.Where(continued), StringComparison.Ordinal);
         Assert.Equal("the-state", RelyingParty.Returned(continued, "state"));
         Assert.False(after.Json().TryGetProperty("continueTo", out _));
@@ -167,13 +167,13 @@ public sealed class ContinuationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-SESS-012 (D-242): a registration that completes once the authorization's
+    /// AUTH-SESS-012 AC11 (D-242): a registration that completes once the authorization's
     /// lifetime has run out carries nothing: its answer has no <c>continueTo</c> and the
     /// session answers <c>landing</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_SESS_012_ARegistrationPastTheContinuationLifetimeLeavesTheLandingAsync()
+    public async Task AUTH_SESS_012_AC11_ARegistrationPastTheContinuationLifetimeLeavesTheLandingAsync()
     {
         await RegisteringAsync();
 
