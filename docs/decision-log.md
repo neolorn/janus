@@ -19594,7 +19594,7 @@ then take their default form. Requested by the owner for Cura's gendered positio
   `PUT /account/profile`). It is never asked at registration, and is changeable and
   clearable at any time.
 - **Who reads it.**
-  - The person, in `GET /account/profile`.
+  - The person, in `GET /account` (its `profile`).
   - An administrator, in `GET /admin/accounts/{subject}` under `account:read`.
   - A host, in the account read of IDN-READ (`IAccounts`), under the reach that read
     already has.
