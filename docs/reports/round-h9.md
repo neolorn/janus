@@ -60,7 +60,10 @@ carried (318dc612) were taken back in 6cd89c2c before the docs branch was merged
     and the committed `commands.txt` (contract);
   - the command added to `CommandTests.OPS_SEC_001_EveryCommandReportsARefusalAsOneLineOnStandardErrorAsync`,
     `BootstrapRefusalTests.OPS_SEC_001_AC4_EveryCommandRefusesAConnectionAbsentBlankOrNotAStringAsMalformedAsync`
-    and `AuthorizationModelTests.IDN_PRIN_001_AC7_AJobDeclaredUnderAReservedNameFailsStartup`.
+    and `AuthorizationModelTests.IDN_PRIN_001_AC7_AJobDeclaredUnderAReservedNameFailsStartup`;
+  - `TruthTableTests.AUTHZ_TEST_001_AC2_EveryJobCaseDecidesTheSameWayThroughBothPathsAsync`
+    restates the job decision under the reserved names as D-248 leaves them, as D-225's
+    did (CONV-VCS-004): the names changed, no permission decision.
 
 ## 2. Items not implemented
 
@@ -105,7 +108,7 @@ None. Defects for the lead, outside D-248's "Propagated to":
 
 - Fast checks on every commit: the build with warnings as errors, the analysers and
   `dotnet format --verify-no-changes` are green.
-- Unit and contract tests before the push: green; the round's integration tests, run
-  here against PostgreSQL, green.
+- Unit and contract tests before the push: green; the round's integration tests and the
+  truth table's job cases, run here against PostgreSQL, green.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
