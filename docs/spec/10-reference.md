@@ -75,7 +75,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.invitation.mailboxheld` | An invitation names a corporate address whose mailbox has been held before, by anyone (the invitee included; the address of an erased holder is not recognised, REG-MAIL-003), and its body carries no `formerMailbox` (section 5.44); the issue checks nothing about who the invitee is, and no mailbox changes; 409 | REG-MAIL-001, REG-MAIL-003, INT-MAIL-006, D-166, D-178 |
 | `identity.mailbox.taken` | The corporate address an invitation asserts is held by a member, or reserved by a standing invitation that has not expired; `details.member` is `corporateEmail`; also the address a current member is given a mailbox at (`09` `POST /admin/organizations/{id}/members/{account}/mailbox`, D-253), `details.member` `address`; 409 | REG-MAIL-001, INT-MAIL-006, D-166, D-253 |
 | `identity.mailbox.held` **(new)** | A current member of the administrative organization is given a mailbox (`09` `POST /admin/organizations/{id}/members/{account}/mailbox`) while the account already holds one; nothing is written; 409 | REG-MAIL-001, D-253 |
-| `identity.mailbox.notfound` | The account holds no mailbox the mail server is told to enable, or the deployment registers no mail server; the app-password endpoints are not present for it; a creation from the break-glass session, or a session another application opened from it, is `authz.denied` instead, decided at the gate step before the mailbox is looked up (OPS-BOOT-002); 404 | INT-MAIL-006, REG-MAIL-002, OPS-BOOT-002, D-166, D-179 |
+| `identity.mailbox.notfound` | The account holds no mailbox the mail server is told to enable, or the deployment registers no mail server; the app-password endpoints are not present for it; a creation from the break-glass session, or a session another application opened from it, is `authz.denied` instead, decided at the gate step before the mailbox is looked up (OPS-BOOT-002); also `formerMailbox` `adopt`, on an invitation or a mailbox given to a current member, where the mail server holds no account at the address, nothing written (REG-MAIL-003, D-255); 404 | INT-MAIL-006, REG-MAIL-002, REG-MAIL-003, OPS-BOOT-002, D-166, D-179, D-255 |
 | `identity.registration.signedin` | `POST /register` from a browser holding a live session: nothing is staged, no account document is answered, and the frontend sends the person to the account application; where the request carries an invitation token, the invitation is first attached to the signed-in account (REG-INV-002), the attachment committed with the refusal, a kept write (CONV-DESIGN-003, D-207); also a provider round trip started to register from such a browser, carried in `error` (`09`, D-192); 409 | REG-SESS-002, D-162, D-166, D-192, D-207 |
 | `identity.registration.incomplete` | A registration request for a step the session has not reached: its predecessor is incomplete, or it is complete already; a confirmation (`POST /register/confirm`) while a staged identifier is unverified; also a session that reaches account creation without its terms and notice versions; 409 | REG-SESS-002 AC1, REG-SESS-004, REG-SESS-007, D-162, D-166 |
 | `identity.reactivation.tokeninvalid` | Reactivation link token unknown, expired or consumed (`POST /account/reactivate`); 422 | IDN-LIFE-013, D-147, D-166 |
@@ -229,7 +229,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `integration.callback.inprogress` | A delivery of an event whose earlier delivery is still being carried: its claim is unsettled and younger than `integration.callback.claimtimeout`. Not recorded as a rejection and not counted toward `alerting.callback.threshold`; 409 | BFF-MACH-002 AC3, D-166 |
 | `integration.endpoint.insecure` **(new)** | Startup, a change by `configure` (OPS-CFG-004), or a change of `password.blocklist.selfhosted.address` through `PUT /admin/config/{key}` (422, D-198): a key naming an endpoint the library calls (`integration.mailserver.endpoint`, `password.blocklist.selfhosted.address`) holds a value that is not an absolute `https` address; `details.key` names the key | INT-GEN-001, INF-TLS-004, D-162, D-166, D-198 |
 | `integration.mailserver.unavailable` **(new)** | A mailbox is given to a current member of the administrative organization (`09` `POST /admin/organizations/{id}/members/{account}/mailbox`) where the deployment registers no mail server; `details.requires` is `integration.mailserver.endpoint`, as `config.value.notallowed` names what a value requires; nothing is written; 422 | REG-MAIL-001, INT-MAIL-001, D-253 |
-| `integration.mailserver.conflict` **(new)** | A mail server's answer to a mailbox push, never a route's: the server holds an account at the mailbox's name that does not carry the mailbox's identifier, or one `integration.mailserver.ownaccounts` names whatever it carries (D-254), so the push adopts nothing and changes nothing there. The push is marked failed at that attempt and raises `degradation` scoped `mailbox.conflict:<mailbox id>` | INT-MAIL-001, INT-MAIL-007, LIB-HOST-001, REG-MAIL-003, D-177, D-254 |
+| `integration.mailserver.conflict` **(new)** | A mail server's answer to a mailbox push, never a route's: the server holds an account at the mailbox's name that does not carry the mailbox's identifier, or one `integration.mailserver.ownaccounts` names whatever it carries (D-254); under `formerMailbox` `adopt`, an account carrying another mailbox's identifier, a group account or an own account (D-255), so the push adopts nothing and changes nothing there. The push is marked failed at that attempt and raises `degradation` scoped `mailbox.conflict:<mailbox id>` | INT-MAIL-001, INT-MAIL-007, LIB-HOST-001, REG-MAIL-003, D-177, D-254, D-255 |
 | `integration.sms.windowactive` | *Retired by D-146. See `auth.restriction.exceeded` (AUTH-ABUSE-004).* | |
 | `integration.sms.balancefloor` | *Retired by D-225. The library keeps no gateway floor.* | |
 
@@ -1087,6 +1087,7 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `identity.invitation.acknowledged` | security | An invitation was acknowledged and its membership attached; `details.invitation`; the person acknowledging is the actor; filed under the organization | REG-INV-001, IDN-LIFE-009a |
 | `identity.invitation.issued` | security | An invitation into an organization was issued; `details.invitation` and nothing it binds, and `details.formerMailbox` with its reason where the invitation names one because the corporate address's mailbox has been held before (section 5.44); filed under the organization | IDN-LIFE-009a, REG-INV-001, REG-MAIL-001 |
 | `identity.invitation.revoked` | security | An unacknowledged invitation was revoked, or replaced by a later one for the same corporate address; `details.invitation` | IDN-LIFE-009a, REG-MAIL-001 |
+| `identity.mailbox.adopted` | security | An invitation, or a mailbox given to a current member, named `formerMailbox` `adopt`, so the push takes as the mailbox an individual account the mail server already holds at the address (REG-MAIL-003, D-255); the administrator acting; `details.mailbox`, `details.reason`, and never the address; filed under the administrative organization | REG-MAIL-003, INT-MAIL-001, D-255 |
 | `identity.mailbox.given` | security | A current member of the administrative organization was given a mailbox without an invitation (`09` `POST /admin/organizations/{id}/members/{account}/mailbox`); the administrator acting, the member the `subject`; `details.mailbox`, `details.reason`, and `details.formerMailbox` where the request names one, and never the address; filed under the administrative organization | REG-MAIL-001, D-253 |
 | `identity.membership.ended` | security | An administrator ended a membership, or the job `membership-ends` ended it at the instant one set, or the member brought that instant forward to now (`09` `POST /account/memberships/{organization}/end`); `details.membership`, `details.reason`; the administrator acting, the member the `subject`; where the job ended it, its principal `membership-ends` with reason `IDN-MEM-001`, `details.endSetBy` the administrator who set the end and `details.reason` the reason given; where the member brought it forward, the member acting, `details.reason` `broughtforward` and `details.endsAt` the end it replaced, as `identity.membership.endset` names it (D-240); filed under the organization | IDN-MEM-001, REG-MAIL-003, D-213, D-217, D-240 |
 | `identity.membership.endset` | security | An administrator set, moved or cancelled the instant a membership ends; `details.membership`, `details.endsAt` (absent where cancelled), `details.reason`; the administrator acting, the member the `subject`; filed under the organization | IDN-MEM-001, D-213 |
@@ -1420,7 +1421,9 @@ under `loss-report`.
 ### 5.44 Former mailbox
 
 `transfer` (the invitee receives the mailbox and the mail in it) · `replace` (the old
-mailbox is removed and a new one reserved)
+mailbox is removed and a new one reserved) · `adopt` (an individual account the mail
+server already holds at the address, carrying no mailbox identifier, is taken as the
+mailbox with its mail, D-255)
 
 The `formerMailbox` member of `POST /admin/organizations/{id}/invitations`, required
 where the corporate address's mailbox has been held before, by anyone, the invitee
@@ -1431,15 +1434,21 @@ issue checks nothing about who the invitee is. Either value is stepped up with t
 issue, carries the reason and is recorded. No mailbox anyone has held passes to a holder
 without it, and the library removes such a mailbox only under `replace`. The mail-server
 adapter adopts an existing server account only where its description carries the
-identifier of the mailbox being pushed; a refusal to adopt is answered
-`integration.mailserver.conflict`, and the push that met the account is marked failed at
-once and raises `degradation` scoped `mailbox.conflict:<mailbox id>` (section 5.23).
+identifier of the mailbox being pushed, or, under `adopt`, where it is an individual
+account carrying no mailbox identifier that `integration.mailserver.ownaccounts` does not
+name; `adopt` is also a member of the body of
+`POST /admin/organizations/{id}/members/{account}/mailbox`, is stepped up, carries the
+reason, is recorded as `identity.mailbox.adopted` and is refused
+`identity.mailbox.notfound` where the server holds no account at the address (D-255); a
+refusal to adopt is answered `integration.mailserver.conflict`, and the push that met
+the account is marked failed at once and raises `degradation` scoped
+`mailbox.conflict:<mailbox id>` (section 5.23).
 Under `replace` the old mailbox's row records the instant it was replaced, is owed
 `removed` and keeps its fingerprint until its last holder is erased, the new mailbox's
 row stands for the address, and the new mailbox's push waits until the server has
 confirmed the old one's removal (INT-MAIL-006, INT-MAIL-007).
 
-*Source: REG-MAIL-001, REG-MAIL-003, INT-MAIL-001, INT-MAIL-006, INT-MAIL-007, D-166, D-177, D-178*
+*Source: REG-MAIL-001, REG-MAIL-003, INT-MAIL-001, INT-MAIL-006, INT-MAIL-007, D-166, D-177, D-178, D-255*
 
 ### 5.45 Mailbox states
 

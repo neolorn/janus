@@ -218,7 +218,8 @@ others.
 | App passwords | **Stored by Stalwart**, never by this system; managed for the person by the library with the mail server's management key (INT-MAIL-010, D-226) |
 | Storage | Stalwart's own database, not co-located with business data |
 
-*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187, D-188, D-224, D-226, D-254*
+*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187, D-188, D-224, D-226, D-254,
+D-255*
 
 **Restated** (D-146): every management operation happens through JMAP objects, so
 "management API" means JMAP and nothing else. The four concerns are unchanged. Should the edition change,
@@ -252,8 +253,12 @@ is changed to merge them when it is disabled, `authenticate` its only disabled o
 under the mailbox's name, the removal is done. A push that meets an account the server
 already holds under the mailbox's name acts on it only where its `description` carries
 the mailbox's identifier (a create adopts it, a change of state alters it, a removal
-destroys it); otherwise the adapter changes nothing and answers
-`integration.mailserver.conflict`, and the push is marked failed at that attempt and
+destroys it), or, for a mailbox reserved under `formerMailbox` `adopt`, where it is an
+individual account that carries no mailbox identifier and that
+`integration.mailserver.ownaccounts` does not name: the push then writes the mailbox's
+identifier into its `description` and acts on it as on one that carried it, the account
+keeping its mail, aliases and group memberships (`20` REG-MAIL-003, D-255); otherwise
+the adapter changes nothing and answers `integration.mailserver.conflict`, and the push is marked failed at that attempt and
 raises `degradation` scoped `mailbox.conflict:<mailbox id>`, naming the mailbox by its
 identifier and never by its address, without waiting for `outbox.retry.maxattempts`,
 since retrying within the run of `outbox.retry.*` cannot resolve a conflict that someone
@@ -298,6 +303,12 @@ called with the management key on the person's account, which the request-level
    account's name, and a push that meets an account
    `integration.mailserver.ownaccounts` names changes nothing there and is answered
    `integration.mailserver.conflict` (D-254).
+9. Against that server, a push of a mailbox reserved under `adopt` that meets an
+   individual account carrying no mailbox identifier writes the mailbox's identifier
+   into its `description`, leaves its mail, aliases and group memberships as they were,
+   and sets `authenticate` as the state owed; one that meets an account carrying another
+   mailbox's identifier, a group account or an own account changes nothing and is
+   answered `integration.mailserver.conflict` (D-255).
 
 ---
 
@@ -425,10 +436,14 @@ last holder was erased is not recognised, REG-MAIL-003), SHALL be refused unless
 administrator names what becomes of it (`formerMailbox`: `transfer` gives the invitee
 the mailbox and its mail, `replace` removes it and reserves a new one; REG-MAIL-003); no
 mailbox passes to a holder without that choice, and the issue checks nothing about who
-the invitee is. An invitation that names `formerMailbox` where no such mailbox stands
+the invitee is. `formerMailbox` `adopt` takes as the mailbox an individual account the
+mail server already holds at the address and that carries no mailbox identifier, the
+account keeping its mail, aliases and group memberships and its `authenticate`
+permission then following the mailbox's state as any mailbox's does (REG-MAIL-003,
+INT-MAIL-001, D-255); it is never implicit. An invitation that names `formerMailbox` where no such mailbox stands
 SHALL be refused with `api.request.invalid`, `details.member` `formerMailbox`.
 
-*Source: D-148, D-166; D-006, D-074, D-144, D-146, D-177, D-178, D-253*
+*Source: D-148, D-166; D-006, D-074, D-144, D-146, D-177, D-178, D-253, D-255*
 
 **A mailbox is for a person.** The reserved `emergency` account (OPS-BOOT-002) is a
 member of the administrative organization but is not a person (it is a role a human
@@ -475,6 +490,9 @@ pre-creation for those who receive mail *at* the company.
    mailbox for an open or expired invitation as expected, not as drift.
 1d. A mailbox given to a current member of the administrative organization is owed
    `enabled` at once and created on the first successful push (D-253).
+1e. A mailbox reserved under `formerMailbox` `adopt` is the account the mail server
+   held, with its mail, once the push has adopted it, and that account's
+   `authenticate` follows the state the mailbox is owed (D-255).
 2. Registering a customer account provisions **no** mailbox.
 3. Mail to a newly provisioned staff address is accepted without prior sign-in.
 4. Mail-server unavailability does not block customer registration.

@@ -20394,6 +20394,39 @@ OPS-CFG-004 (the protected list); `07` LIB-EXT-001 and LIB-HOST-001 (what a host
 
 ---
 
+## D-255 — Adopting a mail account the server already holds
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** REG-MAIL-001, REG-MAIL-003,
+INT-MAIL-001, INT-MAIL-006, D-253
+
+**TL;DR.** An invitation, or D-253's route, MAY name `formerMailbox: adopt` for an
+address where the mail server already holds an individual account that carries no
+mailbox identifier: the library then takes that account as the mailbox, writing its
+mailbox identifier into the account's description, instead of answering
+`integration.mailserver.conflict`. The owner wants the deployment's mail accounts
+created before the people join. Taking over an account that holds mail is a deliberate
+act, so it is never implicit.
+
+- **Who and how:** as `transfer` and `replace` are: the route's step-up, a reason,
+  recorded (`identity.mailbox.adopted`), notified once.
+- **What it refuses:** an account that carries another mailbox's identifier
+  (`integration.mailserver.conflict`), a group account or an account
+  `integration.mailserver.ownaccounts` names (`integration.mailserver.conflict`), and
+  `adopt` where the server holds no account at the address (`identity.mailbox.notfound`,
+  404, or the nearest existing code you find).
+- **The adopted account** keeps its mail, aliases and group memberships; its
+  `authenticate` permission then follows the mailbox's state like any other
+  (INT-MAIL-006).
+- **Without `adopt`,** everything is unchanged: an unmarked account at the address is
+  still a conflict.
+
+**Propagated to:** `20` REG-MAIL-001 and REG-MAIL-003 (`formerMailbox` gains `adopt`);
+`05` INT-MAIL-001 (the push that adopts), INT-MAIL-006; `09` (the invitation and D-253
+routes' bodies); `10` (codes and `identity.mailbox.adopted`); `implementation-plan.md`
+(round H12).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -20654,6 +20687,11 @@ OPS-CFG-004 (the protected list); `07` LIB-EXT-001 and LIB-HOST-001 (what a host
 | A deployment creates a business organization from the command line | D-248 |
 | An organization turns photos on where the system policy has them off | D-249 |
 | A member sees a colleague's photo | D-250 |
+| A recovery's approver reaches every role the account holds | D-251 |
+| A browser application without a secret, for the mail server | D-252 |
+| A current member of the administrative organization gains a mailbox | D-253 |
+| Reconciliation leaves the mail server's own accounts alone | D-254 |
+| Adopting a mail account the server already holds | D-255 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

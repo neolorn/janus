@@ -1280,7 +1280,8 @@ there with the step-up the invitation's issue asks (`invitation:issue`), and its
 call `IMemberships.GiveMailboxAsync`. The mailbox SHALL be reserved at the address given
 as an invitation's is, under the same address rules (the organization's domain lock,
 uniqueness, and `formerMailbox` for a mailbox held before, `identity.invitation.mailboxheld`
-without it), and, the membership being current, owed `enabled` at once (`05` INT-MAIL-006,
+without it, or `adopt` for an account the mail server already holds, REG-MAIL-003,
+D-255), and, the membership being current, owed `enabled` at once (`05` INT-MAIL-006,
 INT-MAIL-007). The address SHALL become a verified email of the account, and its primary
 email where the account holds none from the organization's domain; the account's other
 emails stay, and no lock falls on them. The address counts against
@@ -1298,7 +1299,7 @@ It answers 201 with the mailbox's `id`, `address` and `state`. It hands out no r
 AUTHZ-GRANT-005 does not bear on it, and a system administrator may give themselves a
 mailbox.
 
-*Source: D-148; D-146, D-166, D-178, D-253, amends D-144 (provisioning moves from acceptance to invitation)*
+*Source: D-148; D-146, D-166, D-178, D-253, D-255, amends D-144 (provisioning moves from acceptance to invitation)*
 
 A temporary mailbox password for reading a code is rejected: staff reach mail through
 the library's OIDC provider and app passwords created after sign-in (INT-MAIL-005), the
@@ -1414,7 +1415,8 @@ whose last holder was erased is treated as never held (below). An invitation nam
 SHALL be made at issue, since issuing an invitation tells nothing about accounts. The
 library SHALL remove a mailbox anyone has held only under `replace`, and SHALL NOT adopt
 for a new reservation a mail-server account that does not carry the new mailbox's
-identifier; the mail server answers that refusal `integration.mailserver.conflict`, and
+identifier, save under `adopt` (below); the mail server answers that refusal
+`integration.mailserver.conflict`, and
 the push that met the account is marked failed at once and raises `degradation` scoped
 `mailbox.conflict:<mailbox id>`, naming the mailbox by its identifier (INT-MAIL-001,
 INT-MAIL-007). Under `replace` the old mailbox's row SHALL record the instant it was
@@ -1425,18 +1427,35 @@ waits, spending no attempt, until the server has confirmed the old one's removal
 (INT-MAIL-006, INT-MAIL-007). A mailbox is held before, for this rule, only where it
 stands for the address: a mailbox replaced or released no longer does.
 
+**Adopting an account the mail server holds (D-255).** An invitation, or a mailbox given
+to a current member (REG-MAIL-001), MAY name `formerMailbox` `adopt` for an address at
+which the mail server already holds an individual account that carries no mailbox
+identifier: the push then takes that account as the mailbox, writing the mailbox's
+identifier into the account's description (`05` INT-MAIL-001), instead of answering
+`integration.mailserver.conflict`. Taking over an account that holds mail is a deliberate
+act, so it is never implicit: `adopt`, as `transfer` and `replace` do, SHALL pass the
+route's step-up, carry a reason, be recorded (`identity.mailbox.adopted`) and be
+notified once. The adopted account keeps its mail, aliases and group memberships, and
+its `authenticate` permission then follows the mailbox's state like any other
+(INT-MAIL-006). An account that carries another mailbox's identifier, a group account
+and an account `integration.mailserver.ownaccounts` names are still answered
+`integration.mailserver.conflict`, and `adopt` where the server holds no account at the
+address SHALL be refused with `identity.mailbox.notfound` (404). Without `adopt`
+everything is unchanged: an unmarked account at the address is still a conflict.
+
 An erasure leaves nothing that recognises a mailbox's address: the address is under the
 erased key and its fingerprint is neutralised (PRIV-RIGHT-005). A later invitation of
 the address whose last holder was erased SHALL therefore be treated as one of an address
 never held, and SHALL name no `formerMailbox`; keeping anything that would still match
 the address would undo the erasure. The erased person's mail still never passes: the
-mail-server account they left is never adopted, so the new mailbox's push is answered
+mail-server account they left is never adopted, `adopt` included, since it carries the
+erased mailbox's identifier, so the new mailbox's push is answered
 `integration.mailserver.conflict` while that account stands, and the new mailbox is
 created by the daily attempt that follows the operator's erasure of that account at the
 mail server (D-101, INT-MAIL-007); reconciliation has counted the account as unknown
 since the person was erased.
 
-*Source: D-148; D-146, D-166, D-177, D-178, `16-offboarding-procedure`*
+*Source: D-148; D-146, D-166, D-177, D-178, D-255, `16-offboarding-procedure`*
 
 Every account into an integrated-mail organization is created with a verified personal
 email (REG-MAIL-001), so the account never holds zero verified emails (REG-IDENT-001) and
@@ -1471,6 +1490,15 @@ address behaves as unknown at every path, including recovery.
    `formerMailbox`; while the erased holder's account stands at the mail server the new
    mailbox's push is answered `integration.mailserver.conflict` and adopts nothing, and
    once that account is gone the next attempt creates the new mailbox.
+9. Under `formerMailbox` `adopt`, an individual account at the address carrying no
+   mailbox identifier is taken as the mailbox, its description given the mailbox's
+   identifier, its mail, aliases and group memberships kept and its `authenticate`
+   permission following the mailbox's state; the adoption is recorded as
+   `identity.mailbox.adopted` with its reason. An account carrying another mailbox's
+   identifier, a group account and an account `integration.mailserver.ownaccounts`
+   names are answered `integration.mailserver.conflict`; `adopt` where the server holds
+   no account at the address is refused `identity.mailbox.notfound`; without `adopt`, an
+   unmarked account at the address is still a conflict (D-255).
 
 ---
 
