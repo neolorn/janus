@@ -68,6 +68,12 @@ internal sealed class Invitation
     /// <summary>The documents the person is shown and acknowledges.</summary>
     public IReadOnlyList<InvitationDocument> Documents { get; }
 
+    /// <summary>
+    /// The end the grants of its roles whose grants must end carry, and those roles, as
+    /// they stood at issue; nothing where none of its roles had to end (D-239).
+    /// </summary>
+    public InvitedGrantEnd? GrantEnd { get; private init; }
+
     /// <summary>The corporate mailbox reserved for it, where the organization's mail is integrated.</summary>
     public MailboxId? Mailbox { get; }
 
@@ -120,6 +126,7 @@ internal sealed class Invitation
     /// <param name="token">What is stored against the link's token.</param>
     /// <param name="issuedAt">When it is issued.</param>
     /// <param name="lifetime">How long its link opens it.</param>
+    /// <param name="grantEnd">The end its must-end roles' grants carry, where any must end.</param>
     /// <returns>The invitation, open.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static Invitation Issued(
@@ -132,7 +139,8 @@ internal sealed class Invitation
         MailboxId? mailbox,
         [NeverLogged] byte[] token,
         DateTimeOffset issuedAt,
-        TimeSpan lifetime)
+        TimeSpan lifetime,
+        InvitedGrantEnd? grantEnd = null)
     {
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(roles);
@@ -151,6 +159,7 @@ internal sealed class Invitation
             issuedAt + lifetime)
         {
             Identifiers = identifiers,
+            GrantEnd = grantEnd,
         };
     }
 
@@ -173,6 +182,7 @@ internal sealed class Invitation
     /// <param name="attachedAt">When its link was opened, where it was.</param>
     /// <param name="acknowledgedAt">When it was acknowledged, where it was.</param>
     /// <param name="revokedAt">When it was revoked, where it was.</param>
+    /// <param name="grantEnd">The end its must-end roles' grants carry, where any must end.</param>
     /// <returns>The invitation.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static Invitation Existing(
@@ -190,7 +200,8 @@ internal sealed class Invitation
         SubjectId? invitee,
         DateTimeOffset? attachedAt,
         DateTimeOffset? acknowledgedAt,
-        DateTimeOffset? revokedAt)
+        DateTimeOffset? revokedAt,
+        InvitedGrantEnd? grantEnd = null)
     {
         ArgumentNullException.ThrowIfNull(token);
         ArgumentNullException.ThrowIfNull(roles);
@@ -213,6 +224,7 @@ internal sealed class Invitation
             AttachedAt = attachedAt,
             AcknowledgedAt = acknowledgedAt,
             RevokedAt = revokedAt,
+            GrantEnd = grantEnd,
         };
     }
 

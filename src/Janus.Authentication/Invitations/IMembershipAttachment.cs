@@ -54,6 +54,10 @@ internal interface IMembershipAttachment
     /// principal.
     /// </param>
     /// <param name="multiple">What <c>organization.multiplememberships</c> allows.</param>
+    /// <param name="grantEnd">
+    /// The end the grants of the roles it names carry, as the invitation was issued; nothing
+    /// where every grant is made open-ended (D-239).
+    /// </param>
     /// <param name="at">When the person acknowledged.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
@@ -70,6 +74,7 @@ internal interface IMembershipAttachment
         string reason,
         AccessContext acting,
         bool multiple,
+        InvitedGrantEnd? grantEnd,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 }

@@ -52,6 +52,17 @@ internal sealed class InvitationRecord
     /// <summary>The <c>expires_at</c> column.</summary>
     public DateTimeOffset ExpiresAt { get; set; }
 
+    /// <summary>
+    /// The <c>grant_ends_at</c> column: when the grants of its must-end roles stop, where
+    /// any of its roles had to end at issue (D-239).
+    /// </summary>
+    public DateTimeOffset? GrantEndsAt { get; set; }
+
+    /// <summary>
+    /// The <c>grant_ending_roles</c> column: the roles <see cref="GrantEndsAt"/> applies to.
+    /// </summary>
+    public string[]? GrantEndingRoles { get; set; }
+
     /// <summary>The <c>session</c> column: the registration it attached to.</summary>
     public RegistrationSessionId? Session { get; set; }
 

@@ -413,6 +413,8 @@ public sealed class ModelTests
             "invitations.documents",
             "invitations.enc_identifiers",
             "invitations.expires_at",
+            "invitations.grant_ending_roles",
+            "invitations.grant_ends_at",
             "invitations.id",
             "invitations.invitee",
             "invitations.inviter",

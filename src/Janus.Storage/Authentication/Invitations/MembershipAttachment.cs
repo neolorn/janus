@@ -68,6 +68,7 @@ internal sealed class MembershipAttachment(
         string reason,
         AccessContext acting,
         bool multiple,
+        InvitedGrantEnd? grantEnd,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
@@ -143,7 +144,7 @@ internal sealed class MembershipAttachment(
                     on: null,
                     deny: false,
                     GrantKind.Stored,
-                    expiresAt: null,
+                    grantEnd?.Roles.Contains(role) is true ? grantEnd.At : null,
                     grantedBy,
                     at,
                     reason)

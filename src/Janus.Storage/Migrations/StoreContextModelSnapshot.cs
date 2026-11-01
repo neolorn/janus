@@ -953,6 +953,14 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
 
+                b.PrimitiveCollection<string[]>("GrantEndingRoles")
+                    .HasColumnType("text[]")
+                    .HasColumnName("grant_ending_roles");
+
+                b.Property<DateTimeOffset?>("GrantEndsAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("grant_ends_at");
+
                 b.Property<Guid?>("Invitee")
                     .HasColumnType("uuid")
                     .HasColumnName("invitee");
@@ -1022,6 +1030,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_invitations_attached", "session IS NULL OR invitee IS NULL");
 
                         t.HasCheckConstraint("ck_invitations_forgotten", "enc_identifiers IS NULL OR (revoked_at IS NULL AND acknowledged_at IS NULL)");
+
+                        t.HasCheckConstraint("ck_invitations_grant_end", "(grant_ends_at IS NULL) = (grant_ending_roles IS NULL)");
 
                         t.HasCheckConstraint("ck_invitations_invitee_not_max_uuid", "invitee <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 

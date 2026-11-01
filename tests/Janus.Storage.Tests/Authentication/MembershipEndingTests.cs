@@ -178,6 +178,7 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
                     "invitation:reason",
                     AccessContext.Of(subject),
                     multiple: false,
+                    grantEnd: null,
                     at,
                     TestContext.Current.CancellationToken))
             .Match(made => made, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));

@@ -46,7 +46,15 @@ against the public contract of LIB-API-001.
   through `POST /admin/grants` or `IGrants.GrantAsync`, is refused 422
   `authz.grant.endrequired` naming the role in `details.role`. Turning it on leaves the
   open-ended grants already made as they are, and a derived or materialised grant is
-  not bound by it. The role's audit records carry it before and after.
+  not bound by it. The role's audit records carry it before and after. An invitation
+  naming such a role carries `grantEndsAt`, later than its own expiry, through
+  `POST /admin/organizations/{id}/invitations` or `InvitationRequest.GrantEndsAt`;
+  without it the issue is refused 422 `authz.grant.endrequired` naming the role, and
+  one not later than the expiry, or given where no role named must end, 400
+  `api.request.malformed` naming `grantEndsAt`. The membership it attaches grants
+  those roles ending then and the others open-ended, and `GET /account/invitation` and
+  `GET /admin/organizations/{id}/invitations` answer it. An invitation issued before
+  attaches as issued.
 - A stored system policy or organization override whose gates still name the retired
   step-up action `alerting:destinations` reads past that gate, so a deployment
   bootstrapped before its removal starts and gates every current action as before; a

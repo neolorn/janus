@@ -290,6 +290,7 @@ GET /account/invitation
       organizationName: string
       invitedBy: string
       roles[]: string
+      grantEndsAt: DateTimeOffset?
       documents[].document: string
       documents[].version: string
       expiresAt: DateTimeOffset
@@ -1248,6 +1249,7 @@ GET /admin/organizations/{id}/invitations
     application/json
       [].id: Guid
       [].roles[]: string
+      [].grantEndsAt: DateTimeOffset?
       [].issuedAt: DateTimeOffset
       [].expiresAt: DateTimeOffset
       [].issuer: Guid
@@ -1267,6 +1269,7 @@ POST /admin/organizations/{id}/invitations
     documents[]: string
     formerMailbox: FormerMailbox?
     reason: string
+    grantEndsAt: DateTimeOffset?
   201
     application/json
       id: Guid
@@ -1277,7 +1280,7 @@ POST /admin/organizations/{id}/invitations
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
   404 identity.organization.notfound
   409 identity.invitation.mailboxheld identity.mailbox.taken
-  422 api.request.invalid authz.grant.unresolved identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.invitation.addressrequired
+  422 api.request.invalid authz.grant.endrequired authz.grant.unresolved identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.invitation.addressrequired
   429 auth.restriction.exceeded
 DELETE /admin/organizations/{id}/invitations/{invitationId}
   204

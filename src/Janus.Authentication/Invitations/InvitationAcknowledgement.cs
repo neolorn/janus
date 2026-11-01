@@ -279,6 +279,7 @@ internal sealed class InvitationAcknowledgement(
                     Reason(invitation.Id),
                     context,
                     multiple,
+                    invitation.GrantEnd,
                     now,
                     cancellationToken)
                 .ConfigureAwait(false))

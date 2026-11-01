@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Janus.Core;
@@ -38,4 +39,11 @@ public sealed record InvitationRequest(
     /// Why, where the invitation names a <see cref="FormerMailbox"/>.
     /// </summary>
     public string? Reason { get; init; }
+
+    /// <summary>
+    /// When the grants of the named roles whose grants must end stop, later than the
+    /// invitation's own expiry; required where any named role's grants must end, and
+    /// applied to those roles' grants only (AUTHZ-GRANT-003, D-239).
+    /// </summary>
+    public DateTimeOffset? GrantEndsAt { get; init; }
 }

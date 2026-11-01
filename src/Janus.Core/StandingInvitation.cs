@@ -24,4 +24,11 @@ public sealed record StandingInvitation(
     SubjectId Issuer,
     string? Email,
     string? Phone,
-    string? CorporateAddress);
+    string? CorporateAddress)
+{
+    /// <summary>
+    /// When the grants of the roles whose grants must end will end, or nothing where the
+    /// invitation carries no such end (AUTHZ-GRANT-003, D-239).
+    /// </summary>
+    public DateTimeOffset? GrantEndsAt { get; init; }
+}

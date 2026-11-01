@@ -5279,3 +5279,9 @@ Janus.Core.GrammaticalGender
 Janus.Core.SignInLanding.ChallengeId.get -> string?
 Janus.Core.SignInLanding.ChallengeId.init -> void
 static Janus.Core.ErrorCodes.MembershipNoEnd.get -> Janus.Core.ErrorCode
+Janus.Core.InvitationRequest.GrantEndsAt.init -> void
+Janus.Core.InvitationRequest.GrantEndsAt.get -> System.DateTimeOffset?
+Janus.Core.AttachedInvitation.GrantEndsAt.get -> System.DateTimeOffset?
+Janus.Core.AttachedInvitation.GrantEndsAt.init -> void
+Janus.Core.StandingInvitation.GrantEndsAt.get -> System.DateTimeOffset?
+Janus.Core.StandingInvitation.GrantEndsAt.init -> void

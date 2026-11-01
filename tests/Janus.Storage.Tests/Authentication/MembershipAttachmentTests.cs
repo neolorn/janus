@@ -46,6 +46,8 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
 
     private static readonly RoleName Clerk = RoleName.Parse("clerk");
 
+    private static readonly RoleName Reader = RoleName.Parse("reader");
+
     // How long a case waits for the second attachment to reach the lock, or to finish,
     // before it fails rather than hangs.
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
@@ -95,6 +97,50 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         Assert.Equal((inviter, Noon, "invitation:reason"), (grant.GrantedBy, grant.GrantedAt, grant.Reason));
         Assert.Null(grant.ResourceType);
         Assert.Null(grant.ExpiresAt);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC8 (D-239): an invitation's end for its must-end roles is kept with
+    /// those roles and read back as written, one issued without it reads none, and the
+    /// acknowledgement grants those roles ending then and the others open-ended.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC8_TheInvitationsEndIsKeptAndGrantedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId inviter = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        var end = new InvitedGrantEnd(Noon.AddDays(90), [Clerk]);
+
+        await RoleAsync();
+        await RoleAsync(Reader);
+
+        InvitationId ending = await IssuedAsync(organization, inviter, [Clerk, Reader], end);
+        InvitationId open = await IssuedAsync(organization, inviter);
+
+        await using (StoreContext reading = database.Context())
+        {
+            var store = new InvitationStore(reading, _deployment.DataKey(reading), _deployment.Randomness);
+            Invitation? kept = await store.FindAsync(ending, TestContext.Current.CancellationToken);
+
+            Assert.Equal(end.At, kept?.GrantEnd?.At);
+            Assert.Equal([Clerk], kept?.GrantEnd?.Roles);
+            Assert.Null((await store.FindAsync(open, TestContext.Current.CancellationToken))?.GrantEnd);
+        }
+
+        _ = await AttachAsync(subject, organization, [], [Clerk, Reader], inviter, multiple: false, ending, end);
+
+        await using StoreContext granted = database.Context();
+
+        IReadOnlyList<Grant> held = await new GrantStore(granted, new DataConnections(granted)).HeldByAsync(
+            [GrantSubject.Of(subject)],
+            organization,
+            Noon,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(end.At, Assert.Single(held, grant => grant.Role == Clerk).ExpiresAt);
+        Assert.Null(Assert.Single(held, grant => grant.Role == Reader).ExpiresAt);
     }
 
     /// <summary>
@@ -392,6 +438,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
             "invitation:reason",
             AccessContext.Of(subject),
             multiple: false,
+            grantEnd: null,
             Noon,
             TestContext.Current.CancellationToken);
 
@@ -437,6 +484,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
             "invitation:reason",
             AccessContext.Of(subject),
             multiple: false,
+            grantEnd: null,
             Noon,
             cancellationToken);
 
@@ -451,6 +499,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
                 "invitation:reason",
                 AccessContext.Of(subject),
                 multiple: false,
+                grantEnd: null,
                 Noon,
                 cancellationToken)
             .AsTask();
@@ -586,19 +635,24 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
     }
 
 
-    private async Task<InvitationId> IssuedAsync(OrganizationId organization, SubjectId inviter)
+    private async Task<InvitationId> IssuedAsync(
+        OrganizationId organization,
+        SubjectId inviter,
+        IReadOnlyList<RoleName>? roles = null,
+        InvitedGrantEnd? grantEnd = null)
     {
         var invitation = Invitation.Issued(
             InvitationId.New(TimeProvider.System),
             organization,
             inviter,
             new InvitedIdentifiers(Guid.NewGuid().ToString("N") + "@example.test", Phone: null, CorporateEmail: null),
-            roles: [],
+            roles ?? [],
             documents: [],
             mailbox: null,
             OpaqueToken.Of(Guid.NewGuid().ToString("N")).Fingerprint(),
             Noon,
-            TimeSpan.FromDays(7));
+            TimeSpan.FromDays(7),
+            grantEnd);
 
         await using StoreContext writing = database.Context();
 
@@ -616,7 +670,8 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         IReadOnlyList<RoleName> roles,
         SubjectId inviter,
         bool multiple,
-        InvitationId? invitation = null)
+        InvitationId? invitation = null,
+        InvitedGrantEnd? grantEnd = null)
     {
         await using StoreContext writing = database.Context();
         await using UnitOfWork work = new(writing);
@@ -633,6 +688,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
                 "invitation:reason",
                 AccessContext.Of(subject),
                 multiple,
+                grantEnd,
                 Noon,
                 TestContext.Current.CancellationToken))
             .Match(made => made, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
@@ -673,14 +729,16 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         return grant.Id;
     }
 
-    private async Task RoleAsync()
+    private async Task RoleAsync(RoleName? name = null)
     {
+        RoleName role = name ?? Clerk;
+
         await using StoreContext writing = database.Context();
 
-        if (!await writing.Roles.AnyAsync(row => row.Name == Clerk, TestContext.Current.CancellationToken))
+        if (!await writing.Roles.AnyAsync(row => row.Name == role, TestContext.Current.CancellationToken))
         {
             await new RoleStore(writing).CreateAsync(
-                Role.Of(Clerk, [Permissions.GrantRead]),
+                Role.Of(role, [Permissions.GrantRead]),
                 TestContext.Current.CancellationToken);
 
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

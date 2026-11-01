@@ -473,6 +473,82 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-003 AC8 (D-239): an invitation naming a role whose grants must end and
+    /// no <c>grantEndsAt</c> is refused <c>authz.grant.endrequired</c> naming the role;
+    /// a <c>grantEndsAt</c> not later than the invitation's own expiry, or one where no
+    /// role named must end, is malformed naming <c>grantEndsAt</c>; nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC8_AnInvitationNamingAMustEndRoleCarriesItsEndAsync()
+    {
+        RoleName clerk = _roles.MustEnd(_roles.Define("clerk", Permissions.MembershipManage));
+        RoleName reader = _roles.Define("reader", Permissions.MembershipManage);
+        DateTimeOffset expiry = _clock.GetUtcNow() + Settings.LinkInvitationLifetime.Default;
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, clerk);
+        _handOut.HandsOut(_inviter, Customer, reader);
+
+        Error unended = Failure(await IssueAsync(Customer, Request(phone: Number, roles: [reader, clerk])));
+        Error early = Failure(await IssueAsync(
+            Customer,
+            Request(phone: Number, roles: [clerk]) with { GrantEndsAt = expiry }));
+        Error needless = Failure(await IssueAsync(
+            Customer,
+            Request(phone: Number, roles: [reader]) with { GrantEndsAt = expiry.AddDays(30) }));
+
+        Assert.Equal(
+            (ErrorCodes.GrantEndRequired, "clerk"),
+            (unended.Code, unended.Details["role"].GetString()));
+        Assert.Equal((ErrorCodes.RequestMalformed, "grantEndsAt"), (early.Code, Member(early)));
+        Assert.Equal((ErrorCodes.RequestMalformed, "grantEndsAt"), (needless.Code, Member(needless)));
+        Assert.Empty(_invitations.Held);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC8 (D-239): an invitation carrying <c>grantEndsAt</c> keeps it for
+    /// the roles named whose grants must end, and the membership it attaches is given that
+    /// end for those roles alone; the reads of the invitation answer it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC8_TheEndAttachesWithTheMustEndRolesAloneAsync()
+    {
+        RoleName clerk = _roles.MustEnd(_roles.Define("clerk", Permissions.MembershipManage));
+        RoleName reader = _roles.Define("reader", Permissions.MembershipManage);
+        DateTimeOffset endsAt = _clock.GetUtcNow().AddDays(90);
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, clerk);
+        _handOut.HandsOut(_inviter, Customer, reader);
+
+        string token = Accepted(await IssueAsync(
+                Customer,
+                Request(phone: Number, roles: [reader, clerk]) with { GrantEndsAt = endsAt }))
+            .Token!;
+        SubjectId holder = Holder();
+        Invitation invitation = Assert.Single(_invitations.Held);
+
+        Assert.Equal(endsAt, invitation.GrantEnd?.At);
+        Assert.Equal([clerk], invitation.GrantEnd?.Roles);
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+
+        AttachedInvitation attached = Accepted(
+            await Service.AttachedAsync(AccessContext.Of(holder), TestContext.Current.CancellationToken));
+
+        Assert.Equal(endsAt, attached.GrantEndsAt);
+
+        Accepted(await AcknowledgeAsync(holder, invitation.Id));
+
+        AttachedMembership membership = Assert.Single(_attachments.Attached);
+
+        Assert.Equal([reader, clerk], membership.Roles);
+        Assert.Equal(invitation.GrantEnd, membership.GrantEnd);
+    }
+
+    /// <summary>
     /// REG-DOM-001: at acknowledgement the lock is judged as it then stands on the
     /// address the member will sign in with: the corporate address where one is taken
     /// on, else the bound email, else a verified email the account holds, of which one

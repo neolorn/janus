@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Janus.Core;
 
@@ -22,6 +23,10 @@ namespace Janus.Hosting.Organizations;
 /// none stands for it.
 /// </param>
 /// <param name="Reason">Why, where a former mailbox is named.</param>
+/// <param name="GrantEndsAt">
+/// When the grants of the named roles whose grants must end stop; absent where none of
+/// them must end.
+/// </param>
 /// <remarks>
 /// Implements chapter 09 section 8a, IDN-LIFE-009a, REG-INV-001, REG-MAIL-001 and
 /// REG-MAIL-003.
@@ -33,7 +38,8 @@ internal sealed record InvitationBody(
     IReadOnlyList<string>? Roles,
     IReadOnlyList<string>? Documents,
     FormerMailbox? FormerMailbox,
-    string? Reason)
+    string? Reason,
+    DateTimeOffset? GrantEndsAt)
 {
     /// <summary>
     /// The invitation the body describes, or the member it cannot be read at.
@@ -67,6 +73,7 @@ internal sealed record InvitationBody(
             {
                 FormerMailbox = FormerMailbox,
                 Reason = reason,
+                GrantEndsAt = GrantEndsAt,
             },
             string.Empty);
     }

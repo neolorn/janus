@@ -51,6 +51,12 @@ internal sealed class InvitationConfiguration : IEntityTypeConfiguration<Invitat
                 "ck_invitations_outcome",
                 "revoked_at IS NULL OR acknowledged_at IS NULL");
 
+            // D-239: an end for the must-end roles' grants comes with the roles it applies
+            // to, and only with them.
+            table.HasCheckConstraint(
+                "ck_invitations_grant_end",
+                "(grant_ends_at IS NULL) = (grant_ending_roles IS NULL)");
+
             table.HasCheckConstraint(
                 "ck_invitations_inviter_not_max_uuid",
                 MaxUuid.Refused("inviter"));
@@ -86,6 +92,8 @@ internal sealed class InvitationConfiguration : IEntityTypeConfiguration<Invitat
         builder.Property(invitation => invitation.Mailbox).HasColumnName("mailbox");
         builder.Property(invitation => invitation.IssuedAt).HasColumnName("issued_at");
         builder.Property(invitation => invitation.ExpiresAt).HasColumnName("expires_at");
+        builder.Property(invitation => invitation.GrantEndsAt).HasColumnName("grant_ends_at");
+        builder.Property(invitation => invitation.GrantEndingRoles).HasColumnName("grant_ending_roles");
 
         builder.Property(invitation => invitation.Session)
             .HasColumnName("session")

@@ -163,7 +163,8 @@ internal static class OrganizationEndpoints
                     ErrorCodes.InvitationAddressRequired, ErrorCodes.IdentifierDomainNotAllowed,
                     ErrorCodes.IdentifierMixedScript, ErrorCodes.IdentifierInvalid,
                     ErrorCodes.GrantUnresolved, ErrorCodes.RequestInvalid,
-                    ErrorCodes.RestrictionExceeded, ErrorCodes.RoleNotAssignable)
+                    ErrorCodes.RestrictionExceeded, ErrorCodes.RoleNotAssignable,
+                    ErrorCodes.GrantEndRequired)
                 .Binding<OrganizationId>("id"))
             .Accepts<InvitationBody>(MediaTypeNames.Application.Json)
             .Produces<IssuedInvitationView>(StatusCodes.Status201Created);
