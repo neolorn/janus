@@ -126,7 +126,9 @@ internal interface IIdentifierDirectory
     /// The first verified of its kind becomes the primary. A reservation of its value
     /// to the account ends with the write (REG-IDENT-004, REG-IDENT-006). What asks
     /// has judged the kind's maximum against the account's verified identifiers, so it
-    /// is not judged again here.
+    /// is not judged again here. Where it is asked to, it takes the primary of its kind
+    /// in the same write, so nothing reads the account's identifiers back before the
+    /// unit of work saves them.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="id">The identifier the pending verification was held under.</param>
@@ -134,6 +136,7 @@ internal interface IIdentifierDirectory
     /// <param name="entered">The form the person entered.</param>
     /// <param name="canonical">The form it is compared under.</param>
     /// <param name="at">When it was proved.</param>
+    /// <param name="primary">Whether it becomes the primary of its kind whatever stands.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of taking it on.</returns>
     ValueTask TakeOnAsync(
@@ -143,6 +146,7 @@ internal interface IIdentifierDirectory
         string entered,
         string canonical,
         DateTimeOffset at,
+        bool primary,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -264,14 +268,21 @@ internal interface IIdentifierDirectory
 
     /// <summary>
     /// Marks verified an identifier the account holds unverified, which takes the
-    /// primary of its kind where none stands (REG-MAIL-001, D-253).
+    /// primary of its kind where none stands, or whatever stands where it is asked to,
+    /// in the same write (REG-MAIL-001, D-253).
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="id">Which identifier.</param>
     /// <param name="at">When it was confirmed.</param>
+    /// <param name="primary">Whether it becomes the primary of its kind whatever stands.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of verifying it.</returns>
-    ValueTask VerifyAsync(SubjectId subject, IdentifierId id, DateTimeOffset at, CancellationToken cancellationToken);
+    ValueTask VerifyAsync(
+        SubjectId subject,
+        IdentifierId id,
+        DateTimeOffset at,
+        bool primary,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Makes a verified identifier the primary of its kind.

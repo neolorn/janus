@@ -227,6 +227,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         string entered,
         string canonical,
         DateTimeOffset at,
+        bool primary,
         CancellationToken cancellationToken)
     {
         List<HeldIdentifier> all = Of(subject);
@@ -252,7 +253,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         Settle(subject, id);
         EndReservation(subject, kind, canonical);
 
-        return ValueTask.CompletedTask;
+        return primary ? PromoteAsync(subject, id, cancellationToken) : ValueTask.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -428,14 +429,19 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     }
 
     /// <inheritdoc/>
-    public ValueTask VerifyAsync(SubjectId subject, IdentifierId id, DateTimeOffset at, CancellationToken cancellationToken)
+    public ValueTask VerifyAsync(
+        SubjectId subject,
+        IdentifierId id,
+        DateTimeOffset at,
+        bool primary,
+        CancellationToken cancellationToken)
     {
         Replace(subject, id, identifier => identifier.IsVerified
             ? throw new InvalidOperationException("The identifier is verified already.")
             : identifier with { IsVerified = true, VerifiedAt = at });
         Settle(subject, id);
 
-        return ValueTask.CompletedTask;
+        return primary ? PromoteAsync(subject, id, cancellationToken) : ValueTask.CompletedTask;
     }
 
     /// <inheritdoc/>

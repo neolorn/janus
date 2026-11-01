@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Giving a mailbox (`IInvitations.GiveMailboxAsync`) at an address the account does not
+  hold yet, or holds as an add it began, no longer fails with `system.fault` on
+  PostgreSQL: the address takes the primary in the same write that takes it on, so
+  nothing reads the account's emails back before the transaction saves them, and a
+  refusal still writes nothing.
 - `POST /admin/organizations/{id}/members/{account}/mailbox` (`IInvitations.GiveMailboxAsync`)
   gives a current member of the administrative organization a mailbox with no
   invitation, under `membership:manage` and the `invitation:issue` step-up: reserved as

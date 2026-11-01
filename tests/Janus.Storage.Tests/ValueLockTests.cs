@@ -607,6 +607,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
             entered,
             canonical,
             Noon.AddHours(2),
+            primary: false,
             TestContext.Current.CancellationToken);
 
         return true;
@@ -706,6 +707,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
             entered,
             Canonicalised(entered),
             Noon,
+            primary: false,
             TestContext.Current.CancellationToken);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
