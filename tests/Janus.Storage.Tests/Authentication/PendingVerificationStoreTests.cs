@@ -87,6 +87,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
                 held,
                 held,
                 Noon,
+                primary: false,
                 TestContext.Current.CancellationToken);
             await Store(writing).AddAsync(
                 PendingVerification.ToAdd(
@@ -181,6 +182,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
                 held.Staged.Entered,
                 held.Staged.Canonical,
                 Noon.AddMinutes(5),
+                primary: false,
                 TestContext.Current.CancellationToken);
             await store.RemoveAsync(add, TestContext.Current.CancellationToken);
 

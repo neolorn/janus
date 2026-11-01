@@ -427,33 +427,31 @@ internal sealed class MailboxGiving(
 
         HeldIdentifier? own = Own(held, given);
         IdentifierId identifier = own?.Id ?? IdentifierId.New(time);
+        bool promoted = own is not { IsPrimary: true } && Promoted(held, given);
 
         // D-253: the address the account already holds stays its one identifier for it,
         // marked verified; an add the member began is taken on as its verification would
-        // take it on, and ended.
+        // take it on, and ended. An identifier written here is only added or changed until
+        // the unit of work saves it, so it takes the primary in the same write and is
+        // never read back first.
         if (own is null)
         {
             await identifiers
-                .TakeOnAsync(member, identifier, IdentifierKind.Email, given.Value, given.Value, now, cancellationToken)
+                .TakeOnAsync(member, identifier, IdentifierKind.Email, given.Value, given.Value, now, promoted, cancellationToken)
                 .ConfigureAwait(false);
         }
         else if (own.IsPending)
         {
             await identifiers
-                .TakeOnAsync(member, identifier, IdentifierKind.Email, own.Entered, own.Canonical, now, cancellationToken)
+                .TakeOnAsync(member, identifier, IdentifierKind.Email, own.Entered, own.Canonical, now, promoted, cancellationToken)
                 .ConfigureAwait(false);
             await pending.RemoveAsync(identifier, cancellationToken).ConfigureAwait(false);
         }
         else if (!own.IsVerified)
         {
-            await identifiers.VerifyAsync(member, identifier, now, cancellationToken).ConfigureAwait(false);
+            await identifiers.VerifyAsync(member, identifier, now, promoted, cancellationToken).ConfigureAwait(false);
         }
-
-        bool promoted = own is not { IsPrimary: true } && Promoted(held, given);
-
-        if (promoted
-            && (await identifiers.HeldAsync(member, cancellationToken).ConfigureAwait(false)).Find(identifier)
-                is not { IsPrimary: true })
+        else if (promoted)
         {
             await identifiers.PromoteAsync(member, identifier, cancellationToken).ConfigureAwait(false);
         }

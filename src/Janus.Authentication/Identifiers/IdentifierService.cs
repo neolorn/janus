@@ -2486,6 +2486,7 @@ internal sealed class IdentifierService(
                     staged.Entered,
                     staged.Canonical,
                     now,
+                    primary: false,
                     cancellationToken)
                 .ConfigureAwait(false);
         }

@@ -128,6 +128,7 @@ internal sealed class IdentifierDirectory(
         string entered,
         string canonical,
         DateTimeOffset at,
+        bool primary,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(entered);
@@ -140,6 +141,13 @@ internal sealed class IdentifierDirectory(
         // the kind, so the set is not asked to judge it again.
         set.Add(Taken(subject, id, kind, entered, canonical, at), int.MaxValue);
         set.Verify(id, at);
+
+        // The row is only added until the unit of work saves it, and a later read of the
+        // account's identifiers queries the database, so the primary is settled here.
+        if (primary)
+        {
+            set.MakePrimary(id);
+        }
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
 
@@ -310,12 +318,18 @@ internal sealed class IdentifierDirectory(
         SubjectId subject,
         IdentifierId id,
         DateTimeOffset at,
+        bool primary,
         CancellationToken cancellationToken)
     {
         IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
         set.Verify(id, at);
+
+        if (primary)
+        {
+            set.MakePrimary(id);
+        }
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
     }
