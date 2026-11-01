@@ -52,6 +52,7 @@ internal sealed class MembershipAttachmentInMemory(MembershipLookupInMemory look
         string reason,
         AccessContext acting,
         bool multiple,
+        InvitedGrantEnd? grantEnd,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
@@ -78,6 +79,7 @@ internal sealed class MembershipAttachmentInMemory(MembershipLookupInMemory look
             at)
         {
             Invitation = invitation,
+            GrantEnd = grantEnd,
         });
 
         return Result.Success(membership);

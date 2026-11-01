@@ -150,9 +150,9 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(failure);
         }
 
-        IReadOnlyList<RoleName> attached = (await RolesAsync(context, organization, request.Roles, held: false, cancellationToken)
+        NamedRoles named = (await RolesAsync(context, organization, request.Roles, held: false, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<IReadOnlyList<RoleName>>(error, ref failure));
+            .Match(value => value, error => Withheld<NamedRoles>(error, ref failure));
 
         IReadOnlyList<InvitationDocument> shown = failure is null
             ? (await DocumentsAsync(request.Documents, cancellationToken).ConfigureAwait(false))
@@ -169,6 +169,11 @@ internal sealed class InvitationService(
         }
 
         DateTimeOffset now = time.GetUtcNow();
+
+        if (GrantEnd(named, request.GrantEndsAt, now + lifetime) is Error unended)
+        {
+            return Result.Failure<IssuedInvitation>(unended);
+        }
 
         Reservation? reservation = null;
 
@@ -199,7 +204,7 @@ internal sealed class InvitationService(
 
         // REG-INV-001: a role named is granted when the membership attaches, so the
         // issue is also the step-up a grant is, judged after the issue's own.
-        if (attached.Count > 0
+        if (named.Names.Count > 0
             && await stepUp
                 .PassedAsync(acting, session, StepUpAction.GrantManage, cancellationToken)
                 .ConfigureAwait(false)
@@ -209,17 +214,6 @@ internal sealed class InvitationService(
         }
 
         var token = OpaqueToken.Draw(randomness);
-        var invitation = Invitation.Issued(
-            InvitationId.New(time),
-            organization,
-            acting,
-            bound.Identifiers,
-            attached,
-            shown,
-            reservation?.Mailbox.Id,
-            token.Fingerprint(),
-            now,
-            lifetime);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
@@ -249,13 +243,33 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.Denied));
         }
 
-        if ((await RolesAsync(context, organization, attached, held: true, cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error unnamed)
+        NamedRoles held = (await RolesAsync(context, organization, named.Names, held: true, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<NamedRoles>(error, ref failure));
+
+        // AUTHZ-GRANT-003 (D-239): which roles must end is read again under the roles'
+        // locks, so a rule turned on meanwhile is met before anything is written.
+        if ((failure ?? GrantEnd(held, request.GrantEndsAt, now + lifetime)) is Error unnamed)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<IssuedInvitation>(unnamed);
         }
+
+        var invitation = Invitation.Issued(
+            InvitationId.New(time),
+            organization,
+            acting,
+            bound.Identifiers,
+            held.Names,
+            shown,
+            reservation?.Mailbox.Id,
+            token.Fingerprint(),
+            now,
+            lifetime,
+            held.Ending.Count > 0 && request.GrantEndsAt is DateTimeOffset grantEndsAt
+                ? new InvitedGrantEnd(grantEndsAt, held.Ending)
+                : null);
 
         if (reservation is not null)
         {
@@ -540,7 +554,25 @@ internal sealed class InvitationService(
     // naming one is granting it: it asks what a grant asks, including the permission to
     // administer the deployment for a role that carries it (OPS-CFG-007), and each role
     // is one the caller may hand out (AUTHZ-GRANT-005).
-    private async ValueTask<Result<IReadOnlyList<RoleName>>> RolesAsync(
+    // AUTHZ-GRANT-003 (D-239): an invitation naming a role whose grants must end carries
+    // their end, or is refused naming the role; an end is given only where a named role
+    // must end, and later than the invitation's own expiry, or the body is malformed.
+    private static Error? GrantEnd(NamedRoles named, DateTimeOffset? grantEndsAt, DateTimeOffset expiresAt)
+    {
+        if (grantEndsAt is null)
+        {
+            return named.Ending.Count is 0
+                ? null
+                : Error.From(
+                    ErrorCodes.GrantEndRequired,
+                    "role",
+                    JsonSerializer.SerializeToElement(named.Ending[0].ToString()));
+        }
+
+        return named.Ending.Count is 0 || grantEndsAt <= expiresAt ? Malformed("grantEndsAt") : null;
+    }
+
+    private async ValueTask<Result<NamedRoles>> RolesAsync(
         AccessContext context,
         OrganizationId organization,
         IReadOnlyList<RoleName>? named,
@@ -549,21 +581,21 @@ internal sealed class InvitationService(
     {
         if (named is null)
         {
-            return Result.Failure<IReadOnlyList<RoleName>>(Malformed("roles"));
+            return Result.Failure<NamedRoles>(Malformed("roles"));
         }
 
         List<RoleName> distinct = [.. named.Distinct()];
 
         if (distinct.Count is 0)
         {
-            return Result.Success<IReadOnlyList<RoleName>>(distinct);
+            return Result.Success(new NamedRoles(distinct, []));
         }
 
         if (await RefusedAsync(context, Permissions.GrantManage, organization, cancellationToken)
                 .ConfigureAwait(false)
             is Error refused)
         {
-            return Result.Failure<IReadOnlyList<RoleName>>(refused);
+            return Result.Failure<NamedRoles>(refused);
         }
 
         List<DefinedRole> handed = [];
@@ -582,7 +614,7 @@ internal sealed class InvitationService(
             // nothing, as a grant naming one does.
             if (found is not DefinedRole defined)
             {
-                return Result.Failure<IReadOnlyList<RoleName>>(Named(ErrorCodes.GrantUnresolved, "roles"));
+                return Result.Failure<NamedRoles>(Named(ErrorCodes.GrantUnresolved, "roles"));
             }
 
             handed.Add(defined);
@@ -593,7 +625,7 @@ internal sealed class InvitationService(
                 .ConfigureAwait(false)
             is Error withheld)
         {
-            return Result.Failure<IReadOnlyList<RoleName>>(withheld);
+            return Result.Failure<NamedRoles>(withheld);
         }
 
         if (await handOut
@@ -601,10 +633,15 @@ internal sealed class InvitationService(
                 .ConfigureAwait(false)
             is Error unassignable)
         {
-            return Result.Failure<IReadOnlyList<RoleName>>(unassignable);
+            return Result.Failure<NamedRoles>(unassignable);
         }
 
-        return Result.Success<IReadOnlyList<RoleName>>(distinct);
+        return Result.Success(new NamedRoles(
+            distinct,
+            [.. handed
+                .Where(defined => defined.GrantsMustEnd)
+                .Select(defined => defined.Name)
+                .OrderBy(name => name.ToString(), StringComparer.Ordinal)]));
     }
 
     // REG-INV-001: each document is shown at the version current when the invitation
@@ -772,7 +809,10 @@ internal sealed class InvitationService(
             invitedBy,
             invitation.Roles,
             invitation.Documents,
-            invitation.ExpiresAt));
+            invitation.ExpiresAt)
+        {
+            GrantEndsAt = invitation.GrantEnd?.At,
+        });
     }
 
     /// <summary>
@@ -840,6 +880,13 @@ internal sealed class InvitationService(
         string reason,
         CancellationToken cancellationToken) =>
         end.CancelEndAsync(context, session, organization, member, reason, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> BringMembershipEndForwardAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        end.BringForwardAsync(context, organization, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Result> AcknowledgeAsync(
@@ -948,6 +995,8 @@ internal sealed class InvitationService(
     private sealed record Entered(string Value, string Canonical, EmailAddress? Address);
 
     private sealed record Bound(InvitedIdentifiers Identifiers, EmailAddress? Linked, EmailAddress? Corporate);
+
+    private sealed record NamedRoles(IReadOnlyList<RoleName> Names, IReadOnlyList<RoleName> Ending);
 
     private sealed record Reservation(Mailbox Mailbox, bool IsNew, IReadOnlyList<Invitation> Replaced, Mailbox? Former);
 }

@@ -201,6 +201,16 @@ internal static class AccountEndpoints
             .Accepts<AcknowledgeInvitationRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
+        // IDN-MEM-001 (D-240): the caller's own end, set by an administrator, brought to now.
+        // The live session is all it asks: the end was judged when it was set.
+        _ = SessionRequired.On(group.MapPost("/memberships/{organization}/end", BringMembershipEndForwardAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.OrganizationNotFound, ErrorCodes.MembershipNotFound,
+                    ErrorCodes.MembershipNoEnd)
+                .Binding<OrganizationId>("organization"))
+            .Produces(StatusCodes.Status204NoContent);
+
         return endpoints;
     }
 
@@ -325,6 +335,23 @@ internal static class AccountEndpoints
 
     // The invitation is named because what is acknowledged is what the membership
     // step showed, and never one attached after it was read.
+    private static async Task<IResult> BringMembershipEndForwardAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await invitations
+                .BringMembershipEndForwardAsync(holder, organization, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
     private static async Task<IResult> AcknowledgeInvitationAsync(
         IInvitations invitations,
         RequestSession browser,

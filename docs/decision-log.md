@@ -19709,6 +19709,86 @@ for both. D-235's log line is also given its place (Q20).
 - `18` FE-VER-001;
 - `implementation-plan.md` (round H5).
 
+
+---
+
+## D-239 — Round H5's questions: an invitation's must-end role, and older organizations' gender
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** D-236, D-237
+
+**TL;DR.** An invitation naming a role whose grants must end carries the grant's end, or
+is refused at issue (Q21). Organizations created before D-236 get the field turned on by a
+migration, as every organization now starts with it on (Q22).
+
+- **Invitations (Q21, Q23).** An invitation takes one optional member, `grantEndsAt`. It
+  is required where any role the invitation names has `grantsMustEnd`, and must be later
+  than the invitation's own expiry; an invitation naming such a role without it is
+  refused at issue, **422** `authz.grant.endrequired` naming the role, and nothing is
+  written. It applies to the must-end roles' grants only: when the membership attaches,
+  each grant of such a role ends at `grantEndsAt`, and the grants of the invitation's
+  other roles stay open-ended. A `grantEndsAt` not later than the invitation's own
+  expiry, or given where no role named has `grantsMustEnd`, is refused **400**
+  `api.request.malformed`, `details.member` `grantEndsAt`. An invitation already issued
+  before this decision attaches as issued.
+- **Older organizations (Q22).** A migration sets `grammaticalGender` to `true` in every
+  stored organization override that lacks the field, leaving any override that states it
+  as it is. The system policy is untouched.
+
+*Rejected:* refusing every invitation that names such a role (an end is enough); leaving
+older overrides as written (one deployment would treat organizations differently by age).
+
+**Propagated to:** `03` AUTHZ-GRANT-003 (invitations); `09` the invitation routes;
+`01` the invitation requirement (IDN-LIFE-009a); `10` section 4.1
+(`policy.<organization>`) and section 1 (`authz.grant.endrequired`); `06` OPS-MIG-001;
+`implementation-plan.md` (round H6).
+
+
+---
+
+## D-240 — A member brings their own scheduled end forward
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** IDN-MEM-001, AUTHZ-GRANT-005 (D-213)
+
+**TL;DR.** A member whose membership already has an end scheduled, set by someone allowed
+to set it, may bring that end forward to now, under their own session. Nothing else about
+their membership is theirs to change. Found by Cura's step 4: a leaving field
+representative's phone, once its offline queue is sent, must end their access at once,
+and no rule let the leaver, a job or the host do it.
+
+- **The call.** `POST /account/memberships/{organization}/end`, and its library call, ends
+  the caller's own membership of that organization at once, where its `endsAt` is set
+  and still ahead. It needs the caller's live session, and no step-up and no permission:
+  the end was judged when it was scheduled, and bringing it forward only takes access
+  away.
+- **What it refuses.** A membership with no scheduled end answers **409**
+  `identity.membership.noend`. An end already past, or no membership, answers **404**
+  `identity.membership.notfound`. The reserved account's membership of the
+  administrative organization answers **403** `authz.denied`, as the job keeps it. The
+  library never sets a new end through it, and never moves one later. A restricted
+  account is admitted: bringing an end forward only takes access away.
+- **What the end does.** It is the same end as the `membership-ends` job's: the membership
+  ends, its allow grants and group memberships are revoked by the library, and the
+  revocations are not judged against the member's hand-out lists (the scheduler's were).
+  It ends no session: a session belongs to the account, and access ends because the
+  grants are revoked, so a host signs the member out itself if it wishes.
+- **The audit.** `identity.membership.ended` records `actor` as the member, with `reason`
+  `broughtforward`, and the scheduled end it replaced in the detail `endsAt`, as
+  `identity.membership.endset` names it.
+
+*Rejected:*
+- **A job holding `membership:manage`:** it widens what every job may do.
+- **A general self-leave:** a member could drop out of an organization nobody decided they
+  should leave.
+- **Waiting for the sweep:** the leaver keeps access for the rest of the day.
+
+**Propagated to:**
+- `01` IDN-MEM-001, IDN-ACCT-007 (what a restricted account keeps);
+- `03` AUTHZ-GRANT-005;
+- `09` the route, and section 6's list of what a restricted account keeps;
+- `10` sections 1 (`identity.membership.noend`, `identity.membership.notfound`,
+  `authz.restricted`) and 5.24;
+- `implementation-plan.md` (round H6).
+
 ---
 
 # Index — all items closed
@@ -19959,6 +20039,8 @@ for both. D-235's log line is also given its place (Q20).
 | The profile's grammatical gender | D-236 |
 | A role whose grants must end | D-237 |
 | The handle a pressed link answers | D-238 |
+| Round H5's questions: an invitation's must-end role, and older organizations' gender | D-239 |
+| A member brings their own scheduled end forward | D-240 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

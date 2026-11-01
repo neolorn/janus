@@ -1373,9 +1373,11 @@ A `restricted` account signs in and reads its own data through the endpoints bel
 Every change it asks to its identifiers, credentials, profile and preferences is refused
 **403** `authz.restricted` (IDN-ACCT-007, AUTHZ-GATE-006), except ending a session,
 reporting a credential lost, listing and revoking app passwords, the link-borne undo of
-an identifier change, and a credential set by recovery or enrolled where a policy hold
-stops its sign-in (AUTH-FACT-017) (D-166); recording an export of its recovery codes is
-a change and is refused, save one completing an enrolment session (D-188, D-189).
+an identifier change, a credential set by recovery or enrolled where a policy hold
+stops its sign-in (AUTH-FACT-017) (D-166), and a member's bringing their own scheduled
+membership end forward (`POST /account/memberships/{organization}/end`, D-240);
+recording an export of its recovery codes is a change and is refused, save one
+completing an enrolment session (D-188, D-189).
 
 From the break-glass session, or a session another application opened from it
 (BFF-SESS-006), each of the step-up actions `password:set`, `identifier:add`,
@@ -2211,10 +2213,11 @@ Returns the standing invitation (neither acknowledged nor revoked, expired or no
 link the signed-in account opened last (REG-INV-001, REG-INV-002).
 
 **200**: `{ "id", "organization", "organizationName", "invitedBy", "roles": [ ... ],
-"documents": [ { "document", "version" } ], "expiresAt" }`. `invitedBy` is the
-inviter's display name, or their primary email where the account shows none
+"grantEndsAt", "documents": [ { "document", "version" } ], "expiresAt" }`. `invitedBy`
+is the inviter's display name, or their primary email where the account shows none
 (REG-PROF-001), or null where neither is readable; `roles` are granted across the
-organization.
+organization; `grantEndsAt` is when the grants of the roles whose grants must end will
+end, and null where the invitation carries none (AUTHZ-GRANT-003, D-239).
 **404**: `identity.invitation.notfound` when no standing invitation is attached
 
 ### `POST /account/invitation/acknowledge`
@@ -2225,7 +2228,10 @@ organization's policy does not permit (IDN-LIFE-009b), makes the corporate addre
 primary where one exists, enables the pre-provisioned mailbox (REG-MAIL-001) and
 records the acknowledgement (document list, versions, timestamp) on the membership;
 where a corporate address becomes primary, the personal email of the invitation stays
-as a verified non-primary email (REG-MAIL-001). Every live session of the account is
+as a verified non-primary email (REG-MAIL-001). The grant of each role the invitation
+names whose grants must end ends at the invitation's `grantEndsAt`, and the other roles'
+grants carry no end; an invitation issued before D-239 attaches as issued
+(AUTHZ-GRANT-003, D-239). Every live session of the account is
 downgraded as the membership attaches (AUTH-SESS-009). Everything the acknowledgement
 writes is one transaction; a refusal writes nothing. The refusals that can never be met
 (the membership limit, the email maximum) are judged before the credential policy.
@@ -2261,7 +2267,42 @@ session keeps reading, and its next request a gate asks a step-up for is answere
 **403** `auth.stepup.required`, its options judged under the organization's policy
 (AUTH-SESS-009); the frontend steps up in place and retries (FE-API-004).
 
-*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183, D-187, D-212*
+*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183, D-187, D-212,
+D-239*
+
+---
+
+### `POST /account/memberships/{organization}/end`
+
+Brings the caller's own scheduled membership end forward to now (IDN-MEM-001, D-240).
+It needs the caller's live session, and no permission and no step-up: the end was judged
+when it was set (`PUT /admin/organizations/{id}/memberships/{subject}/end`), and bringing
+it forward only takes access away. It takes no body, and its library call is the same
+operation.
+
+The membership ends as the job `membership-ends` ends it: the account's allow grants in
+the organization, save those a derivation wrote, are revoked, its deny grants standing,
+the account is taken out of the organization's groups, and, for the administrative
+organization, the same in every organization the account is not a member of; the
+revocations and removals are not judged against the member's hand-out lists
+(AUTHZ-GRANT-005). The library never sets a new end through it and never moves one
+later. It ends no session: access ends because the grants are revoked, and a host signs
+the member out itself if it wishes. A restricted account is admitted, since bringing an
+end forward only takes access away (IDN-ACCT-007).
+
+**204** · **403** `authz.denied` where the caller is the reserved `emergency` account and
+`{organization}` the administrative organization, as the job keeps it (OPS-BOOT-002) ·
+**404** `identity.membership.notfound` where the caller holds no current membership of
+the organization, or its end is already past · **409** `identity.membership.noend` where
+the membership has no end set
+
+Recorded as `identity.membership.ended` with the member acting, `details.reason`
+`broughtforward` and `details.endsAt` the end it replaced, as `identity.membership.endset`
+names it; each revocation and removal carries the member and that reason. Emits
+`MembershipChanged`, and `IdentifierRemoved` where the end retires the corporate address
+(REG-MAIL-003).
+
+*Source: IDN-MEM-001, AUTHZ-GRANT-005, D-240*
 
 ---
 
@@ -3015,7 +3056,7 @@ configuration change's missing reason excepted, below). **404**
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/organizations/{id}/invitations` | Issues a time-boxed, single-use enrolment link (IDN-LIFE-009a). The body members are `email`, `phone`, `corporateEmail`, `roles` and `documents`, and `formerMailbox` with `reason` where a mailbox is taken over (below). MAY bind `email`, `phone`, both or neither (REG-INV-001); a bound identifier is pre-filled and locked at registration, and a bound phone is verified before the membership step. Where the mail server is integrated, the invitation names a personal `email` (required; the link goes to it and its press verifies it, so the account is created with a verified personal email) and a `corporateEmail`, asserted, whose mailbox is provisioned disabled (REG-MAIL-001, D-148); `corporateEmail` where the mail is not integrated is **400** `api.request.malformed`. `roles` (optional; none where absent) names roles granted across the organization when the membership attaches; naming a role also requires `grant:manage` held in the organization itself, for which `system:administer` does not stand in (AUTHZ-SCOPE-001, D-207), and the `grant:manage` gate, and a role carrying `system:administer` also requires `system:administer` in the administrative organization (OPS-CFG-007); each role named is one the inviter may hand out (AUTHZ-GRANT-005), or the issue is refused **403** `authz.role.notassignable`. `documents` (optional; none where absent) names legal documents, each fixed at the version published when the invitation is issued, which the membership step shows and the acknowledgement records. Requires step-up (`invitation:issue`). The link is sent to the bound email only, never to the bound phone; its send is written in the transaction that issues the invitation and first attempted once that transaction commits (AUTH-ABUSE-004), and a send a restriction refuses issues nothing and answers **429** `auth.restriction.exceeded` with `retryAt`. A corporate address whose mailbox was held before, by anyone, the person invited included, never passes silently (the address of an erased holder is not recognised, REG-MAIL-003): the issue is refused **409** `identity.invitation.mailboxheld` unless the body carries `formerMailbox` (`10` section 5.44), `transfer` (the invitee receives the mailbox with its mail) or `replace` (the old mailbox is removed and a new one reserved), with a `reason`; either is stepped up with the issue and audited. The issue makes no check of who the invitee is, since issuing tells nothing about accounts; the mail-server adapter's adoption of an existing server account is REG-MAIL-003's (D-166). An organization whose deletion was requested takes no invitation: its grants confer nothing, so issuing answers **403** `authz.denied`. **201** `{ id, expiresAt, token }`: `token` is the link's token where no email is bound, answered once for the administrator to hand over and never shown again, and `null` wherever the link was sent; only its fingerprint is kept (IDN-LIFE-009a). **409** `identity.mailbox.taken` (`details.member` `corporateEmail`) where the corporate address is held by a member or reserved by a standing invitation that has not expired; an expired one is revoked in the issuing transaction and its mailbox kept. **422** `identity.invitation.addressrequired`, `details.member` naming `email` or `corporateEmail`, for an integrated-mail invitation without a personal `email`, without a `corporateEmail`, or naming the corporate address as the personal one; **422** `identity.identifier.domainnotallowed` where the address the member will sign in with (the corporate address where the mail is integrated, the bound email otherwise) is outside the organization's lock (REG-DOM-001); `identity.identifier.mixedscript` and `identity.identifier.invalid` carry `details.member` naming `email`, `phone` or `corporateEmail`; **422** `authz.grant.unresolved` (`details.member` `roles`) for a role the deployment does not hold; **422** `api.request.invalid` (`details.member` `documents`) for a document never published; **422** `api.request.invalid` (`details.member` `formerMailbox`) for a `formerMailbox` where no held mailbox stands for the corporate address. The identifier-mismatch refusal belongs to acceptance (`POST /account/invitation/acknowledge`), not to issue |
+| `POST /admin/organizations/{id}/invitations` | Issues a time-boxed, single-use enrolment link (IDN-LIFE-009a). The body members are `email`, `phone`, `corporateEmail`, `roles`, `grantEndsAt` and `documents`, and `formerMailbox` with `reason` where a mailbox is taken over (below). MAY bind `email`, `phone`, both or neither (REG-INV-001); a bound identifier is pre-filled and locked at registration, and a bound phone is verified before the membership step. Where the mail server is integrated, the invitation names a personal `email` (required; the link goes to it and its press verifies it, so the account is created with a verified personal email) and a `corporateEmail`, asserted, whose mailbox is provisioned disabled (REG-MAIL-001, D-148); `corporateEmail` where the mail is not integrated is **400** `api.request.malformed`. `roles` (optional; none where absent) names roles granted across the organization when the membership attaches; naming a role also requires `grant:manage` held in the organization itself, for which `system:administer` does not stand in (AUTHZ-SCOPE-001, D-207), and the `grant:manage` gate, and a role carrying `system:administer` also requires `system:administer` in the administrative organization (OPS-CFG-007); each role named is one the inviter may hand out (AUTHZ-GRANT-005), or the issue is refused **403** `authz.role.notassignable`. `grantEndsAt` (optional) is the end of the grants of the roles named whose grants must end (`grantsMustEnd`): required where any role named has it, later than the invitation's own expiry, and applied to those roles' grants alone, the other roles' grants staying open-ended; an invitation naming such a role without it is refused **422** `authz.grant.endrequired`, `details.role` naming the role, and nothing is written, and a `grantEndsAt` not later than the invitation's own expiry, or given where no role named has `grantsMustEnd`, is refused **400** `api.request.malformed`, `details.member` `grantEndsAt` (AUTHZ-GRANT-003, D-239). `documents` (optional; none where absent) names legal documents, each fixed at the version published when the invitation is issued, which the membership step shows and the acknowledgement records. Requires step-up (`invitation:issue`). The link is sent to the bound email only, never to the bound phone; its send is written in the transaction that issues the invitation and first attempted once that transaction commits (AUTH-ABUSE-004), and a send a restriction refuses issues nothing and answers **429** `auth.restriction.exceeded` with `retryAt`. A corporate address whose mailbox was held before, by anyone, the person invited included, never passes silently (the address of an erased holder is not recognised, REG-MAIL-003): the issue is refused **409** `identity.invitation.mailboxheld` unless the body carries `formerMailbox` (`10` section 5.44), `transfer` (the invitee receives the mailbox with its mail) or `replace` (the old mailbox is removed and a new one reserved), with a `reason`; either is stepped up with the issue and audited. The issue makes no check of who the invitee is, since issuing tells nothing about accounts; the mail-server adapter's adoption of an existing server account is REG-MAIL-003's (D-166). An organization whose deletion was requested takes no invitation: its grants confer nothing, so issuing answers **403** `authz.denied`. **201** `{ id, expiresAt, token }`: `token` is the link's token where no email is bound, answered once for the administrator to hand over and never shown again, and `null` wherever the link was sent; only its fingerprint is kept (IDN-LIFE-009a). **409** `identity.mailbox.taken` (`details.member` `corporateEmail`) where the corporate address is held by a member or reserved by a standing invitation that has not expired; an expired one is revoked in the issuing transaction and its mailbox kept. **422** `identity.invitation.addressrequired`, `details.member` naming `email` or `corporateEmail`, for an integrated-mail invitation without a personal `email`, without a `corporateEmail`, or naming the corporate address as the personal one; **422** `identity.identifier.domainnotallowed` where the address the member will sign in with (the corporate address where the mail is integrated, the bound email otherwise) is outside the organization's lock (REG-DOM-001); `identity.identifier.mixedscript` and `identity.identifier.invalid` carry `details.member` naming `email`, `phone` or `corporateEmail`; **422** `authz.grant.unresolved` (`details.member` `roles`) for a role the deployment does not hold; **422** `api.request.invalid` (`details.member` `documents`) for a document never published; **422** `api.request.invalid` (`details.member` `formerMailbox`) for a `formerMailbox` where no held mailbox stands for the corporate address. The identifier-mismatch refusal belongs to acceptance (`POST /account/invitation/acknowledge`), not to issue |
 | `DELETE /admin/organizations/{id}/invitations/{invitationId}` | Revokes an invitation not yet acknowledged, whether or not its link was opened; what it bound is forgotten and a mailbox nobody ever held is released, marked and owed `removed` (REG-MAIL-001, INT-MAIL-006). **204**, also for one already revoked. **404** `identity.invitation.notfound` where the organization issued no such invitation; **422** `identity.invitation.expired` where it was acknowledged. Not a step-up action |
 | `DELETE /admin/organizations/{id}/memberships/{subject}` | `{ reason }`, required: ends a membership; the account and organization persist, and in the same transaction the account's allow grants in the organization, save those a derivation wrote, are revoked, its deny grants standing (D-217), and the account is taken out of its groups, and, for the administrative organization, the same in every organization the account is not a member of (IDN-MEM-001, D-213). Requires step-up (`membership:end`). **204** · **400** `api.request.malformed` naming `reason` where it is absent, blank or longer than 1024 characters after trimming (D-216) · **403** `authz.denied` where `{subject}` is the reserved `emergency` account and `{id}` the administrative organization, before the step-up (OPS-BOOT-002, D-202); `authz.role.notassignable` where the actor may not hand out a role the end reaches (AUTHZ-GRANT-005) · **404** `identity.membership.notfound` where the account holds no current membership of the organization, a second end included. Recorded as `identity.membership.ended`; emits `MembershipChanged`, and `IdentifierRemoved` where the end retires the corporate address (REG-MAIL-003) |
 | `PUT /admin/organizations/{id}/memberships/{subject}/end` · `DELETE /admin/organizations/{id}/memberships/{subject}/end` | `PUT` `{ endsAt, reason }` sets or moves the instant the membership ends, which the job `membership-ends` carries out as `DELETE /admin/organizations/{id}/memberships/{subject}` would; `DELETE` `{ reason }` cancels it (IDN-MEM-001, D-213). The same permission, step-up (`membership:end`) and refusals as ending now, judged when set. **204** · **403** as ending now · **404** `identity.membership.notfound` where the account holds no current membership of the organization, and for a `DELETE` where no end is set · **422** `api.request.invalid` (`details.member` `endsAt`) where `endsAt` is not after the present. Recorded as `identity.membership.endset` |
@@ -3146,7 +3187,7 @@ the reach, a `deleted` one, and a subject no account bears are answered **404**
 | `GET /admin/organizations/{id}` | `organization:read`: **200** `{ id, name, administrative, deletionRequestedAt }` |
 | `GET /admin/organizations/{id}/members?after={subject}&limit={n}` | `membership:read`: **200** `{ members: [ { subject, membership, beganAt, endsAt, invitation } ], next }`, the current members ordered by subject, paged as the organizations are (IDN-READ-002) |
 | `GET /admin/organizations/{id}/members/{subject}` | `membership:read`: **200** one member, as listed · **404** `identity.membership.notfound` where the account holds no current membership of the organization |
-| `GET /admin/organizations/{id}/invitations` | `membership:read`: **200** `[ { id, roles, issuedAt, expiresAt, issuer, email, phone, corporateAddress } ]`, the standing invitations, an identifier the invitation does not bind null |
+| `GET /admin/organizations/{id}/invitations` | `membership:read`: **200** `[ { id, roles, grantEndsAt, issuedAt, expiresAt, issuer, email, phone, corporateAddress } ]`, the standing invitations, an identifier the invitation does not bind null, and `grantEndsAt` null where the invitation carries none (D-239) |
 | `GET /admin/accounts/{subject}?organization={id}` | `account:read`: **200** `{ subject, state, createdAt, profile: { displayName, legalName, grammaticalGender }, identifiers: { emails: [ { value, verified, primary } ], phones: [ { value, verified, primary } ], username }, preferences: { language, timeZone, declared }, memberships: [ organization ] }`, `legalName` absent while `profile.legalname` is off, and `grammaticalGender` absent while the policy does not enable it for the account or the person has given none (IDN-READ-003, IDN-ATTR-007, D-236) · **404** as above |
 | `POST /admin/accounts/find` | `account:read`: `{ identifier, organization }`, `organization` optional: the account bearing the email, phone or username, read in its canonical form (IDN-ACCT-004). **200** `{ subject }` · **404** as above |
 | `GET /admin/accounts/{subject}/contact?organization={id}` | `contact:read`: **200** `{ kind, displayName, email, phone, language, timeZone, state }`, `email` and `phone` the primary verified ones, or null; `{subject}` names an account or a person record, `kind` (`account` · `record`) saying which, and for a record `displayName` is its name, `email` and `phone` its contacts as held, verified or not, and `timeZone` null (REC-ADM-001, D-221) · **404** as above, a record outside the reach included |

@@ -13,6 +13,7 @@ namespace Janus.Hosting.Accounts;
 /// <param name="OrganizationName">What the organization is called.</param>
 /// <param name="InvitedBy">The display name of who issued it, or nothing where that account shows none.</param>
 /// <param name="Roles">The roles granted across the organization when the membership attaches.</param>
+/// <param name="GrantEndsAt">When the grants of the roles whose grants must end will end, or null (D-239).</param>
 /// <param name="Documents">The documents the person acknowledges, at the versions they are shown.</param>
 /// <param name="ExpiresAt">When it can no longer be acknowledged.</param>
 /// <remarks>Implements chapter 09 section 6a, REG-INV-002 and API-CONV-002.</remarks>
@@ -22,6 +23,7 @@ internal sealed record AttachedInvitationView(
     string OrganizationName,
     string? InvitedBy,
     IReadOnlyList<string> Roles,
+    DateTimeOffset? GrantEndsAt,
     IReadOnlyList<InvitationDocument> Documents,
     DateTimeOffset ExpiresAt)
 {
@@ -41,6 +43,7 @@ internal sealed record AttachedInvitationView(
             attached.OrganizationName,
             attached.InvitedBy,
             [.. attached.Roles.Select(role => role.ToString())],
+            attached.GrantEndsAt,
             attached.Documents,
             attached.ExpiresAt);
     }

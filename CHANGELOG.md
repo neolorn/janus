@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A member brings forward the end an administrator set on their membership with
+  `POST /account/memberships/{organization}/end` or
+  `IInvitations.BringMembershipEndForwardAsync`, under their live session alone: no
+  permission and no step-up. The membership ends now, and its grants are revoked as the
+  `membership-ends` job revokes them, judged against no hand-out list. A membership
+  with no end set answers 409 `identity.membership.noend`, and one whose end has passed
+  404 `identity.membership.notfound`. Its `identity.membership.ended` record names
+  the member as actor, with the reason `broughtforward` and the end it replaced in
+  `endsAt`. A restricted member is admitted, and no session ends.
 - A pressed sign-in link that leaves a second step or the new-browser code answers
   `challengeId`, a second handle of the challenge drawn at the press and kept only as
   its fingerprint, so the page the link landed on completes the sign-in itself; the
@@ -29,14 +38,23 @@ against the public contract of LIB-API-001.
   the policy enables it, answered in `GET /settings`'s `policy`, taken by
   `PUT /admin/organizations/{id}/policy`, exported and erased with the profile, and its
   change is audited without its value. Neither direction of the policy field is a
-  loosening.
+  loosening. A migration turns the field on in every stored organization override that
+  was written before it existed, leaving one that states it as it is.
 - A role can require that every grant of it carries an end: `grantsMustEnd` on
   `/admin/roles` (default `false`), and `GrantsMustEnd()` after a role declared with
   `AuthorizationDeclarationBuilder.Role`. A grant of such a role without `expiresAt`,
   through `POST /admin/grants` or `IGrants.GrantAsync`, is refused 422
   `authz.grant.endrequired` naming the role in `details.role`. Turning it on leaves the
   open-ended grants already made as they are, and a derived or materialised grant is
-  not bound by it. The role's audit records carry it before and after.
+  not bound by it. The role's audit records carry it before and after. An invitation
+  naming such a role carries `grantEndsAt`, later than its own expiry, through
+  `POST /admin/organizations/{id}/invitations` or `InvitationRequest.GrantEndsAt`;
+  without it the issue is refused 422 `authz.grant.endrequired` naming the role, and
+  one not later than the expiry, or given where no role named must end, 400
+  `api.request.malformed` naming `grantEndsAt`. The membership it attaches grants
+  those roles ending then and the others open-ended, and `GET /account/invitation` and
+  `GET /admin/organizations/{id}/invitations` answer it. An invitation issued before
+  attaches as issued.
 - A stored system policy or organization override whose gates still name the retired
   step-up action `alerting:destinations` reads past that gate, so a deployment
   bootstrapped before its removal starts and gates every current action as before; a

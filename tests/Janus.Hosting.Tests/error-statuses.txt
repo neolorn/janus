@@ -95,6 +95,7 @@ identity.link.lastcredential 409
 identity.mailbox.notfound 404
 identity.mailbox.taken 409
 identity.membership.limitreached 409
+identity.membership.noend 409
 identity.membership.notfound 404
 identity.organization.notfound 404
 identity.organization.protected 409

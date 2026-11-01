@@ -205,7 +205,10 @@ internal sealed class OrganizationReads(
                     invitation.Inviter,
                     invitation.Identifiers?.Email,
                     invitation.Identifiers?.Phone,
-                    invitation.Identifiers?.CorporateEmail)),
+                    invitation.Identifiers?.CorporateEmail)
+                {
+                    GrantEndsAt = invitation.GrantEnd?.At,
+                }),
             ]);
     }
 

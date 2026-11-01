@@ -629,6 +629,97 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(AuditActions.InvitationIssued, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
     }
 
+    /// <summary>
+    /// IDN-MEM-001 (D-240): <c>POST /account/memberships/{organization}/end</c> under the
+    /// member's live session, a day after it was proved, holding no permission and
+    /// restricted, ends their own membership whose end is set and ahead and answers
+    /// <c>204</c>; with no end
+    /// set it is <c>409</c> <c>identity.membership.noend</c>, and once ended <c>404</c>
+    /// <c>identity.membership.notfound</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AMemberBringsTheirEndForwardAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId member = _deployment.Directory.Created[^1].Subject;
+        string path = "/account/memberships/" + Branch + "/end";
+
+        _deployment.Memberships.Place(member, Branch);
+        _deployment.Clock.Advance(TimeSpan.FromDays(1));
+        _deployment.Restriction.Restrict(member);
+        _deployment.Gate.Restrict(member);
+
+        Answer unscheduled = await browser.SendAsync("POST", path);
+
+        _ = await _deployment.Endings.SetEndAsync(
+            member,
+            Branch,
+            _deployment.Clock.GetUtcNow().AddDays(30),
+            new SubjectId(Guid.NewGuid()),
+            "The contract ends.",
+            TestContext.Current.CancellationToken);
+
+        Answer ended = await browser.SendAsync("POST", path);
+        Answer again = await browser.SendAsync("POST", path);
+
+        Assert.Equal(StatusCodes.Status409Conflict, unscheduled.Status);
+        Assert.Equal(ErrorCodes.MembershipNoEnd.ToString(), unscheduled.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(ErrorCodes.MembershipNotFound.ToString(), again.Text("code"));
+        Assert.Equal(member, Assert.Single(_deployment.Endings.Ended).Subject);
+
+        Janus.Authentication.Tests.Organizations.OrganizationAuditInMemory.OrganizationChange recorded =
+            Assert.Single(_deployment.OrganizationChanges.Changes);
+
+        Assert.Equal((AuditActions.MembershipEnded, member, "broughtforward"), (recorded.Action, recorded.Actor, recorded.Reason));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC8 (D-239): an invitation naming a role whose grants must end and
+    /// no <c>grantEndsAt</c> is <c>422</c> <c>authz.grant.endrequired</c> naming the role;
+    /// a <c>grantEndsAt</c> not later than the invitation's expiry, or one where no role
+    /// named must end, is <c>400</c> <c>api.request.malformed</c> naming
+    /// <c>grantEndsAt</c>; one later is issued, and the standing invitations answer it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC8_AnInvitationsMustEndRoleTakesItsEndAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        RoleName clerk = _deployment.RoleCatalogue.MustEnd(
+            _deployment.RoleCatalogue.Define("clerk", Permission.Parse("article:read")));
+        RoleName reader = _deployment.RoleCatalogue.Define("reader", Permission.Parse("article:read"));
+        DateTimeOffset expiry = _deployment.Clock.GetUtcNow() + Settings.LinkInvitationLifetime.Default;
+        DateTimeOffset endsAt = expiry.AddDays(30);
+
+        _deployment.Gate.Grant(subject, Branch, Permissions.GrantManage);
+        _deployment.Gate.Grant(subject, Branch, Permissions.MembershipRead);
+        _deployment.HandOuts.HandsOut(subject, Branch, clerk);
+        _deployment.HandOuts.HandsOut(subject, Branch, reader);
+
+        Answer unended = await administrator.SendAsync("POST", PathOf(Branch), Inviting(["clerk"], null));
+        Answer early = await administrator.SendAsync("POST", PathOf(Branch), Inviting(["clerk"], expiry));
+        Answer needless = await administrator.SendAsync("POST", PathOf(Branch), Inviting(["reader"], endsAt));
+        Answer issued = await administrator.SendAsync("POST", PathOf(Branch), Inviting(["reader", "clerk"], endsAt));
+        Answer standing = await administrator.SendAsync("GET", PathOf(Branch));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unended.Status);
+        Assert.Equal(ErrorCodes.GrantEndRequired.ToString(), unended.Text("code"));
+        Assert.Equal("clerk", unended.Json().GetProperty("details").GetProperty("role").GetString());
+        Assert.Equal("grantEndsAt", Member(early));
+        Assert.Equal("grantEndsAt", Member(needless));
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), needless.Text("code"));
+        Assert.Equal(StatusCodes.Status201Created, issued.Status);
+        Assert.Equal(endsAt, Assert.Single(standing.Json().EnumerateArray()).GetProperty("grantEndsAt").GetDateTimeOffset());
+        Assert.Equal([clerk], Assert.Single(_deployment.Invitations.Held).GrantEnd?.Roles);
+    }
+
+    private static string Inviting(string[] roles, DateTimeOffset? grantEndsAt) =>
+        System.Text.Json.JsonSerializer.Serialize(new { phone = "+441632960099", roles, grantEndsAt });
+
     private static string MembershipOf(OrganizationId organization, SubjectId member) =>
         "/admin/organizations/" + organization + "/memberships/" + member;
 

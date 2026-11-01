@@ -50,6 +50,25 @@ internal interface IMembershipEnding
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Ends now the account's current membership of the organization whose end is set and
+    /// still ahead, read under its row's lock (D-240).
+    /// </summary>
+    /// <param name="subject">Whose membership.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="at">When it ends, before the end set.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The membership that ended, with the end set and the instant it was set to end at,
+    /// or nothing where the account holds no current membership of the organization, or
+    /// one with no end set, or one whose end is not after the instant.
+    /// </returns>
+    ValueTask<(MembershipEndDue Ended, DateTimeOffset Replaced)?> BringForwardAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The instant the account's current membership of the organization is set to end at,
     /// read without changing it.
     /// </summary>

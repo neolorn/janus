@@ -106,6 +106,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /account/link/apple",
         "POST /account/link/google",
         "POST /account/mail/apppasswords/",
+        "POST /account/memberships/{organization}/end",
         "POST /account/records/attach",
         "POST /account/records/attach/reference",
         "POST /account/records/find",

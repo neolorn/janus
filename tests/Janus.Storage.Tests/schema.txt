@@ -488,8 +488,11 @@ table invitations
   column attached_at timestamp with time zone
   column acknowledged_at timestamp with time zone
   column revoked_at timestamp with time zone
+  column grant_ending_roles text[]
+  column grant_ends_at timestamp with time zone
   constraint ck_invitations_attached CHECK (((session IS NULL) OR (invitee IS NULL)))
   constraint ck_invitations_forgotten CHECK (((enc_identifiers IS NULL) OR ((revoked_at IS NULL) AND (acknowledged_at IS NULL))))
+  constraint ck_invitations_grant_end CHECK (((grant_ends_at IS NULL) = (grant_ending_roles IS NULL)))
   constraint ck_invitations_invitee_not_max_uuid CHECK ((invitee <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_invitations_inviter_not_max_uuid CHECK ((inviter <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_invitations_key CHECK (((enc_identifiers IS NULL) = (wrapped_key = decode(repeat('00'::text, 32), 'hex'::text))))

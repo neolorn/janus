@@ -10,6 +10,7 @@ namespace Janus.Hosting.Organizations;
 /// </summary>
 /// <param name="Id">Its identifier.</param>
 /// <param name="Roles">The roles it names.</param>
+/// <param name="GrantEndsAt">When the grants of the roles whose grants must end will end, or null (D-239).</param>
 /// <param name="IssuedAt">When it was issued.</param>
 /// <param name="ExpiresAt">When it can no longer be acknowledged.</param>
 /// <param name="Issuer">Who issued it.</param>
@@ -20,6 +21,7 @@ namespace Janus.Hosting.Organizations;
 internal sealed record StandingInvitationView(
     Guid Id,
     IReadOnlyList<string> Roles,
+    DateTimeOffset? GrantEndsAt,
     DateTimeOffset IssuedAt,
     DateTimeOffset ExpiresAt,
     Guid Issuer,
@@ -40,6 +42,7 @@ internal sealed record StandingInvitationView(
         return new(
             invitation.Id.Value,
             [.. invitation.Roles.Select(role => role.ToString())],
+            invitation.GrantEndsAt,
             invitation.IssuedAt,
             invitation.ExpiresAt,
             invitation.Issuer.Value,

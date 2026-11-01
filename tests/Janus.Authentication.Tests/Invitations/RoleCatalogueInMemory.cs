@@ -29,6 +29,18 @@ internal sealed class RoleCatalogueInMemory : IRoleCatalogue
         return role;
     }
 
+    /// <summary>
+    /// Makes every grant of a role carry an end from now on, as <c>grantsMustEnd</c> does.
+    /// </summary>
+    /// <param name="name">Which role.</param>
+    /// <returns>The role's name.</returns>
+    public RoleName MustEnd(RoleName name)
+    {
+        _roles[name] = _roles[name] with { GrantsMustEnd = true };
+
+        return name;
+    }
+
     /// <inheritdoc/>
     public ValueTask<DefinedRole?> FindAsync(RoleName name, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_roles.GetValueOrDefault(name));

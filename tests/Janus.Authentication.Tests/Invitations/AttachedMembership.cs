@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Janus.Authentication.Invitations;
 using Janus.Core;
 
 namespace Janus.Authentication.Tests.Invitations;
@@ -31,4 +32,9 @@ internal sealed record AttachedMembership(
     /// The invitation whose acknowledgement began it, or nothing where bootstrap attached it.
     /// </summary>
     public InvitationId? Invitation { get; init; }
+
+    /// <summary>
+    /// The end the invitation gave its must-end roles' grants, where it gave one.
+    /// </summary>
+    public InvitedGrantEnd? GrantEnd { get; init; }
 }

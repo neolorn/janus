@@ -143,6 +143,27 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
     }
 
     /// <inheritdoc/>
+    public ValueTask MembershipEndBroughtForwardAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        DateTimeOffset replaced,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _changes.Add(new OrganizationChange(AuditActions.MembershipEnded, organization, MembershipEnd.BroughtForward, member, at)
+        {
+            Membership = membership,
+            Member = member,
+            EndsAt = replaced,
+            BreakGlassReason = breakGlassReason,
+        });
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask MembershipEndSetAsync(
         OrganizationId organization,
         MembershipId membership,

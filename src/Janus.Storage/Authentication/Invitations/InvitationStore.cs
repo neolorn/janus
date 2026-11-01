@@ -153,6 +153,10 @@ internal sealed class InvitationStore(
             Mailbox = invitation.Mailbox?.Value,
             IssuedAt = invitation.IssuedAt,
             ExpiresAt = invitation.ExpiresAt,
+            GrantEndsAt = invitation.GrantEnd?.At,
+            GrantEndingRoles = invitation.GrantEnd is InvitedGrantEnd end
+                ? [.. end.Roles.Select(role => role.ToString())]
+                : null,
         };
 
         await CarryAsync(invitation, record, cancellationToken).ConfigureAwait(false);
@@ -284,7 +288,10 @@ internal sealed class InvitationStore(
             record.Invitee,
             record.AttachedAt,
             record.AcknowledgedAt,
-            record.RevokedAt);
+            record.RevokedAt,
+            record is { GrantEndsAt: DateTimeOffset grantEndsAt, GrantEndingRoles: string[] ending }
+                ? new InvitedGrantEnd(grantEndsAt, [.. ending.Select(RoleName.Parse)])
+                : null);
     }
 
     private static InvitedIdentifiers? Identifiers(InvitationRecord record, byte[] deploymentKey)

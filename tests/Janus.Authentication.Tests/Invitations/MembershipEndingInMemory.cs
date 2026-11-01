@@ -182,6 +182,36 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
                 Invited(subject, organization)));
     }
 
+    /// <inheritdoc/>
+    public ValueTask<(MembershipEndDue Ended, DateTimeOffset Replaced)?> BringForwardAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Ending?.Invoke();
+
+        if (EndSetOn(subject, organization) is not { } set || set.At <= at || !lookup.Leave(subject, organization))
+        {
+            return ValueTask.FromResult<(MembershipEndDue Ended, DateTimeOffset Replaced)?>(null);
+        }
+
+        var membership = new MembershipId(Guid.CreateVersion7(at));
+
+        _ = _set.Remove((subject, organization));
+        Ended.Add(new EndedInMemory(membership, subject, organization, at));
+
+        return ValueTask.FromResult<(MembershipEndDue Ended, DateTimeOffset Replaced)?>(
+            (new MembershipEndDue(
+                membership,
+                subject,
+                organization,
+                set.SetBy,
+                set.Reason,
+                Invited(subject, organization)),
+            set.At));
+    }
+
     private InvitationId? Invited(SubjectId subject, OrganizationId organization) =>
         _invited.TryGetValue((subject, organization), out InvitationId invitation) ? invitation : null;
 

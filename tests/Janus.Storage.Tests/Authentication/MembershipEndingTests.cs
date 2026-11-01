@@ -97,6 +97,48 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
         Assert.Single(ended, end => end is not null);
     }
 
+    /// <summary>
+    /// IDN-MEM-001 (D-240): an end set and ahead is brought forward under the row's lock:
+    /// the membership ends at the instant given and the end it replaced is returned; one
+    /// with no end set, one whose end is not after the instant, and one already ended
+    /// each find nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AnEndSetAndAheadIsBroughtForwardAsync()
+    {
+        SubjectId member = await _deployment.AccountAsync(Noon);
+        SubjectId unscheduled = await _deployment.AccountAsync(Noon);
+        SubjectId passed = await _deployment.AccountAsync(Noon);
+        SubjectId setter = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        MembershipId attached = await AttachAsync(member, organization, Noon);
+
+        _ = await AttachAsync(unscheduled, organization, Noon);
+        _ = await AttachAsync(passed, organization, Noon);
+        _ = await SetEndAsync(member, organization, Noon.AddDays(30), setter);
+        _ = await SetEndAsync(passed, organization, Noon.AddDays(1), setter);
+
+        Assert.Null(await BringForwardAsync(unscheduled, organization, Noon.AddDays(2)));
+        Assert.Null(await BringForwardAsync(passed, organization, Noon.AddDays(2)));
+
+        (MembershipEndDue Ended, DateTimeOffset Replaced)? brought =
+            await BringForwardAsync(member, organization, Noon.AddDays(2));
+
+        Assert.NotNull(brought);
+        Assert.Equal((attached, member, organization, setter), (brought.Value.Ended.Membership, brought.Value.Ended.Member, brought.Value.Ended.Organization, brought.Value.Ended.SetBy));
+        Assert.Equal(Noon.AddDays(30), brought.Value.Replaced);
+        Assert.Null(await BringForwardAsync(member, organization, Noon.AddDays(3)));
+
+        await using StoreContext reading = database.Context();
+
+        Janus.Identity.Organizations.Membership ended = Assert.Single(await new MembershipStore(reading).FindBySubjectAsync(
+            member,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Noon.AddDays(2), ended.EndedAt);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -136,6 +178,7 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
                     "invitation:reason",
                     AccessContext.Of(subject),
                     multiple: false,
+                    grantEnd: null,
                     at,
                     TestContext.Current.CancellationToken))
             .Match(made => made, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
@@ -143,6 +186,43 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
         await work.CommitAsync(TestContext.Current.CancellationToken);
 
         return attached;
+    }
+
+    private async Task<MembershipId?> SetEndAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        DateTimeOffset endsAt,
+        SubjectId setBy)
+    {
+        await using StoreContext writing = database.Context();
+        await using UnitOfWork work = new(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+        MembershipId? set = await new MembershipEnding(new MembershipStore(writing))
+            .SetEndAsync(subject, organization, endsAt, setBy, "The contract ends.", TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return set;
+    }
+
+    private async Task<(MembershipEndDue Ended, DateTimeOffset Replaced)?> BringForwardAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        DateTimeOffset at)
+    {
+        await using StoreContext writing = database.Context();
+        await using UnitOfWork work = new(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+        (MembershipEndDue Ended, DateTimeOffset Replaced)? brought = await new MembershipEnding(new MembershipStore(writing))
+            .BringForwardAsync(subject, organization, at, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return brought;
     }
 
     private async Task<MembershipId?> EndAsync(SubjectId subject, OrganizationId organization, DateTimeOffset at)

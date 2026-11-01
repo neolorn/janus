@@ -179,7 +179,12 @@ one way to apply them.
 **Retired step-up gates (D-235).** A migration removes from the stored policies and
 overrides every gate that names a retired step-up action (`10` section 5a).
 
-*Source: D-018, D-204, D-206, D-209, D-225, D-235*
+**Older organizations' grammatical gender (D-239).** A migration sets `grammaticalGender`
+to `true` in every stored organization override that lacks the field, so that every
+organization holds it as one created since D-236 does; an override that states it, and
+the system policy, are left as they are (`10` sections 4.1 and 4.1a).
+
+*Source: D-018, D-204, D-206, D-209, D-225, D-235, D-239*
 
 Startup migration means instances racing each other on deploy, failures surfacing as
 crash loops rather than failed pipelines, and the running application holding
@@ -199,6 +204,9 @@ permission to alter the tables that authorize it.
    pending migrations the scan matches, its `statement` the matched statement itself and
    never the block that guards it in the script, marking as destructive exactly those
    the Values name, writes nothing where none matches, and exits 0 either way.
+6. After the migration of D-239, every stored organization override holds
+   `grammaticalGender`: `true` where it lacked the field, as it was where it stated it;
+   the system policy is unchanged.
 
 ---
 
