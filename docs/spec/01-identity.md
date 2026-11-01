@@ -197,7 +197,7 @@ typed a capital.
 | `deleting` | Deletion requested, grace window (`account.deletion.grace`, default 30 days) running — **cancellable until it elapses** | No |
 | `deleted` | Personal data removed or key-destroyed, anonymised record retained | No |
 
-*Source: D-006, D-037, D-026.1, D-113, D-146, D-166, D-183, D-188, D-189*
+*Source: D-006, D-037, D-026.1, D-113, D-146, D-166, D-183, D-188, D-189, D-240*
 
 Entering `deleting` is the customer's exercise of the erasure right (PRIV-RIGHT-001);
 no separate privacy request is created for it. There is no `pending` state: an account
@@ -212,9 +212,10 @@ signs in and reads, as the table states; every modifying action stays refused th
 the gate (AUTHZ-GATE-006). While restricted, rectification of the account's own fields
 is a request (`POST /privacy/requests`, type `rectification`); ending sessions,
 reporting a credential lost, listing and revoking app passwords, the link-borne undo of
-an identifier change, and a credential set by recovery or enrolled where a policy hold
-stops its sign-in (AUTH-FACT-017) stay available, since each grants nothing or restores
-the sign-in the table grants (D-166). A restriction the person asked for does not cut
+an identifier change, a credential set by recovery or enrolled where a policy hold
+stops its sign-in (AUTH-FACT-017), and a member's bringing their own scheduled
+membership end forward (IDN-MEM-001, D-240) stay available, since each grants nothing,
+takes access away or restores the sign-in the table grants (D-166). A restriction the person asked for does not cut
 them off from their mail: a mailbox is owed `enabled` while its holder is `active` or
 `restricted` (INT-MAIL-006), and a `restricted` account keeps its app passwords but
 cannot create one (D-166); recording that its recovery codes were exported changes their
@@ -421,7 +422,7 @@ of which the account holds no current membership. No grant row is removed
 (IDN-PRIN-003). A grant in the administrative organization SHALL confer only while its
 holder holds a current membership of that organization.
 
-*Source: D-002, D-003, D-166, D-202, D-213, D-216, D-217*
+*Source: D-002, D-003, D-166, D-202, D-213, D-216, D-217, D-240*
 
 An administrator ends a membership under `membership:manage` in the organization, as the
 `membership:end` step-up action, with a `reason` (API-CONV-002, D-216) that each record
@@ -450,6 +451,26 @@ revocation is recorded as `authz.grant.revoked` and each removal as
 ends its memberships and leaves their grants as IDN-ORG-003 gives. Access derived from
 the host's own relationships is the host's to end (AUTHZ-DERIVE-001).
 
+**A member brings their own end forward (D-240).** A member whose membership has an end
+set and still ahead MAY bring it forward to now under their own live session
+(`POST /account/memberships/{organization}/end`, or its library call), with no
+permission and no step-up: the end was judged when it was set, and bringing it forward
+only takes access away. It is the same end as the job's: the membership ends, its allow
+grants are revoked and the account taken out of the organization's groups as at the
+job's pass, and the revocations and removals are not judged against the member's
+hand-out lists (`03` AUTHZ-GRANT-005). It ends no session: a session belongs to the
+account, and access ends because the grants are revoked, so a host signs the member out
+itself if it wishes. A membership with no end set is refused with
+`identity.membership.noend` (409); an end already past, or no current membership, with
+`identity.membership.notfound` (404); the reserved account's membership of the
+administrative organization with 403 `authz.denied`, as the job keeps it. The library
+never sets a new end through it and never moves one later. A restricted account is
+admitted, since bringing an end forward only takes access away (IDN-ACCT-007). The end
+is recorded as
+`identity.membership.ended` with the member acting, the reason `broughtforward`, and
+the end it replaced in `details.endsAt`, as `identity.membership.endset` names it; each
+revocation and removal it writes carries the member and that reason.
+
 **Acceptance criteria**
 1. Ending a membership leaves both the account and the organization intact.
 2. Membership records carry created and ended timestamps.
@@ -475,6 +496,15 @@ the host's own relationships is the host's to end (AUTHZ-DERIVE-001).
 9. Ending a membership now without a `reason` is refused with `api.request.malformed`
    naming `reason`, and it stays current; with one, each revocation and removal the end
    writes, and its `identity.membership.ended`, carry that reason (D-216).
+10. A member whose membership has an end set and ahead brings it forward under their own
+    session, with no permission or step-up: the membership ends, its allow grants are
+    revoked and its group memberships removed without a hand-out judgement, no session
+    ends, and `identity.membership.ended` records the member, `broughtforward` and the
+    replaced end in `details.endsAt`. With no end set it is refused
+    `identity.membership.noend`; with the end past or no membership,
+    `identity.membership.notfound`; for the reserved account's membership of the
+    administrative organization, `authz.denied`. A restricted member is admitted
+    (D-240).
 
 ---
 
@@ -931,7 +961,7 @@ terminates every session of the account (D-190).
 **invitation flow** issuing a time-boxed enrolment link, not by public registration
 followed by a grant.
 
-*Source: D-148; D-079a, D-146, D-166*
+*Source: D-148; D-079a, D-146, D-166, D-239*
 
 The only account-creation path was public registration, so a staff member would
 register as a customer (the public application's client identifier, marketing consent,
@@ -948,7 +978,10 @@ security-notice set for the whole membership, becoming primary automatically whe
 membership ends (REG-MAIL-001, REG-MAIL-003, D-148). Membership attaches on the person's
 acknowledgement at the membership step, and the acknowledgement (documents shown,
 versions, timestamp) is recorded on the membership (REG-INV-001). A person who already
-holds an account accepts by signing in; no second account is created (REG-INV-002).
+holds an account accepts by signing in; no second account is created (REG-INV-002). An
+invitation naming a role whose grants must end carries `grantEndsAt`, later than its own
+expiry, and the grants of those roles that the acknowledgement makes end then; the
+grants of its other roles stay open-ended (`03` AUTHZ-GRANT-003, D-239).
 
 **IDN-LIFE-009b** — On gaining membership of an organization, any factor that
 organization's policy does not permit SHALL be **disabled for interactive use**. Every

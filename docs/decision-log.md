@@ -19720,11 +19720,16 @@ for both. D-235's log line is also given its place (Q20).
 is refused at issue (Q21). Organizations created before D-236 get the field turned on by a
 migration, as every organization now starts with it on (Q22).
 
-- **Invitations (Q21).** An invitation that names a role with `grantsMustEnd` must carry
-  that grant's `expiresAt`, a time after the invitation's own expiry; without one it is
+- **Invitations (Q21, Q23).** An invitation takes one optional member, `grantEndsAt`. It
+  is required where any role the invitation names has `grantsMustEnd`, and must be later
+  than the invitation's own expiry; an invitation naming such a role without it is
   refused at issue, **422** `authz.grant.endrequired` naming the role, and nothing is
-  written. The grant made when the membership attaches carries that end. An invitation
-  already issued before this decision attaches as issued.
+  written. It applies to the must-end roles' grants only: when the membership attaches,
+  each grant of such a role ends at `grantEndsAt`, and the grants of the invitation's
+  other roles stay open-ended. A `grantEndsAt` not later than the invitation's own
+  expiry, or given where no role named has `grantsMustEnd`, is refused **400**
+  `api.request.malformed`, `details.member` `grantEndsAt`. An invitation already issued
+  before this decision attaches as issued.
 - **Older organizations (Q22).** A migration sets `grammaticalGender` to `true` in every
   stored organization override that lacks the field, leaving any override that states it
   as it is. The system policy is untouched.
@@ -19733,8 +19738,9 @@ migration, as every organization now starts with it on (Q22).
 older overrides as written (one deployment would treat organizations differently by age).
 
 **Propagated to:** `03` AUTHZ-GRANT-003 (invitations); `09` the invitation routes;
-`01` the invitation requirement; `10` section 4.1 (`policy.<organization>`);
-`06` OPS-MIG-001; `implementation-plan.md` (round H6).
+`01` the invitation requirement (IDN-LIFE-009a); `10` section 4.1
+(`policy.<organization>`) and section 1 (`authz.grant.endrequired`); `06` OPS-MIG-001;
+`implementation-plan.md` (round H6).
 
 
 ---
@@ -19755,14 +19761,19 @@ and no rule let the leaver, a job or the host do it.
   the end was judged when it was scheduled, and bringing it forward only takes access
   away.
 - **What it refuses.** A membership with no scheduled end answers **409**
-  `identity.membership.noend`, and an end already past answers as for an ended membership.
-  The library never sets a new end through it, and never moves one later.
+  `identity.membership.noend`. An end already past, or no membership, answers **404**
+  `identity.membership.notfound`. The reserved account's membership of the
+  administrative organization answers **403** `authz.denied`, as the job keeps it. The
+  library never sets a new end through it, and never moves one later. A restricted
+  account is admitted: bringing an end forward only takes access away.
 - **What the end does.** It is the same end as the `membership-ends` job's: the membership
   ends, its allow grants and group memberships are revoked by the library, and the
   revocations are not judged against the member's hand-out lists (the scheduler's were).
-  The member's sessions in that organization's applications end.
+  It ends no session: a session belongs to the account, and access ends because the
+  grants are revoked, so a host signs the member out itself if it wishes.
 - **The audit.** `identity.membership.ended` records `actor` as the member, with `reason`
-  `broughtforward` and the scheduled end it replaced.
+  `broughtforward`, and the scheduled end it replaced in the detail `endsAt`, as
+  `identity.membership.endset` names it.
 
 *Rejected:*
 - **A job holding `membership:manage`:** it widens what every job may do.
@@ -19771,11 +19782,11 @@ and no rule let the leaver, a job or the host do it.
 - **Waiting for the sweep:** the leaver keeps access for the rest of the day.
 
 **Propagated to:**
-- `01` IDN-MEM-001;
+- `01` IDN-MEM-001, IDN-ACCT-007 (what a restricted account keeps);
 - `03` AUTHZ-GRANT-005;
-- `09` the route;
-- `10` sections 1 and 5;
-- `18` (the account's memberships);
+- `09` the route, and section 6's list of what a restricted account keeps;
+- `10` sections 1 (`identity.membership.noend`, `identity.membership.notfound`,
+  `authz.restricted`) and 5.24;
 - `implementation-plan.md` (round H6).
 
 ---
