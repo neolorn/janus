@@ -112,6 +112,20 @@ internal sealed class PendingVerificationStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<PendingVerification?> StagedInAsync(
+        EnrolmentSessionId enrolment,
+        CancellationToken cancellationToken)
+    {
+        EnrolmentSessionId? staging = enrolment;
+
+        PendingVerificationRecord? record = await context.IdentifierVerifications
+            .FirstOrDefaultAsync(pending => pending.Enrolment == staging, cancellationToken)
+            .ConfigureAwait(false);
+
+        return record is null ? null : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask AddAsync(PendingVerification pending, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pending);

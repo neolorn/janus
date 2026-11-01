@@ -986,14 +986,15 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-IDENT-007 AC3 and AUTH-RECOV-002 (D-234): at <c>identifiers.email.max</c> 10,
+    /// AUTH-RECOV-002 AC8 and REG-IDENT-007 (D-234): at <c>identifiers.email.max</c> 10,
     /// the enrolment session an approver opened for a lost mailbox replaces the primary
     /// address over the endpoint, and the new address takes its place, primary included,
-    /// beside the account's other address.
+    /// beside the account's other address; the session's one replace taken, another is
+    /// refused 403 <c>authz.denied</c>, and the session adds and removes no identifier.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task REG_IDENT_007_AC3_TheEnrolmentSessionReplacesTheLostAddressInAnyModeAsync()
+    public async Task AUTH_RECOV_002_AC8_TheEnrolmentSessionReplacesTheLostAddressInAnyModeAsync()
     {
         _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 10);
 
@@ -1002,7 +1003,8 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         SubjectId subject = _deployment.Directory.Created[^1].Subject;
         IdentifierId held = await EmailAsync(subject);
 
-        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "another@example.test");
+        IdentifierId another = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "another@example.test");
+        int before = (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All.Count;
 
         await LinkedAsync(subject, mailboxLost: true);
 
@@ -1018,15 +1020,37 @@ public sealed class CredentialFlowTests : IAsyncDisposable
             "POST",
             "/account/identifiers/" + held.Value + "/verify",
             ("code", Flow.Code(_deployment, IdentifierKind.Email)));
+        Answer again = await browser.SendAsync(
+            "PUT",
+            "/account/identifiers/" + another.Value + "/replace",
+            ("value", "fourth@example.test"));
+        Answer added = await browser.SendAsync(
+            "POST",
+            "/account/identifiers",
+            ("kind", "email"),
+            ("value", "fifth@example.test"));
+        Answer removed = await browser.SendAsync("DELETE", "/account/identifiers/" + another.Value);
 
+        IReadOnlyList<HeldIdentifier> all =
+            (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All;
         HeldIdentifier standing = Assert.Single(
-            (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All,
+            all,
             identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
 
+        Assert.Equal(
+            (StatusCodes.Status401Unauthorized, ErrorCodes.SessionExpired.ToString()),
+            (added.Status, added.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status401Unauthorized, ErrorCodes.SessionExpired.ToString()),
+            (removed.Status, removed.Text("code")));
+        Assert.Equal(before, all.Count);
+        Assert.Contains(all, identifier => identifier.Id == another);
         Assert.Equal(StatusCodes.Status202Accepted, replaced.Status);
         Assert.Equal(StatusCodes.Status204NoContent, verified.Status);
         Assert.Equal(held, standing.Id);
         Assert.True(standing.IsPrimary);
+        Assert.Equal(StatusCodes.Status403Forbidden, again.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), again.Text("code"));
     }
 
     /// <summary>

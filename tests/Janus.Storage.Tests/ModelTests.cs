@@ -854,6 +854,7 @@ public sealed class ModelTests
             "recovery_links.issued_at",
             "recovery_links.mailbox_lost",
             "recovery_links.purpose",
+            "recovery_links.replaced_at",
             "recovery_links.session",
             "recovery_links.spent_at",
             "recovery_links.subject",

@@ -44,6 +44,9 @@ internal sealed class RecoveryLinkConfiguration : IEntityTypeConfiguration<Recov
             table.HasCheckConstraint(
                 "ck_recovery_links_codes_shown",
                 "codes_shown_at IS NULL OR session IS NOT NULL");
+            table.HasCheckConstraint(
+                "ck_recovery_links_replaced",
+                "replaced_at IS NULL OR session IS NOT NULL");
 
             table.HasCheckConstraint(
                 "ck_recovery_links_subject_not_max_uuid",
@@ -83,6 +86,7 @@ internal sealed class RecoveryLinkConfiguration : IEntityTypeConfiguration<Recov
 
         builder.Property(link => link.SpentAt).HasColumnName("spent_at");
         builder.Property(link => link.CodesShownAt).HasColumnName("codes_shown_at");
+        builder.Property(link => link.ReplacedAt).HasColumnName("replaced_at");
 
         builder.HasIndex(link => new { link.Subject, link.Purpose })
             .HasDatabaseName("ux_recovery_links_subject_purpose")

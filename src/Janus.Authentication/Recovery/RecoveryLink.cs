@@ -73,6 +73,12 @@ internal sealed class RecoveryLink
     public DateTimeOffset? CodesShownAt { get; private set; }
 
     /// <summary>
+    /// When the replace the session it opened staged applied its swap, and nothing while
+    /// none has: the session takes one replace (AUTH-RECOV-002, REG-IDENT-007, D-234).
+    /// </summary>
+    public DateTimeOffset? ReplacedAt { get; private set; }
+
+    /// <summary>
     /// Issues one.
     /// </summary>
     /// <param name="token">The secret the message carries.</param>
@@ -106,6 +112,7 @@ internal sealed class RecoveryLink
     /// <param name="session">The session it opened, or nothing.</param>
     /// <param name="spentAt">When it was spent, or nothing.</param>
     /// <param name="codesShownAt">When its session showed recovery codes, or nothing.</param>
+    /// <param name="replacedAt">When its session's replace applied its swap, or nothing.</param>
     /// <returns>The link.</returns>
     /// <exception cref="ArgumentNullException">The fingerprint is absent.</exception>
     public static RecoveryLink Existing(
@@ -118,7 +125,8 @@ internal sealed class RecoveryLink
         bool mailboxLost,
         EnrolmentSessionId? session,
         DateTimeOffset? spentAt,
-        DateTimeOffset? codesShownAt)
+        DateTimeOffset? codesShownAt,
+        DateTimeOffset? replacedAt)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
 
@@ -134,6 +142,7 @@ internal sealed class RecoveryLink
             Session = session,
             SpentAt = spentAt,
             CodesShownAt = codesShownAt,
+            ReplacedAt = replacedAt,
         };
     }
 
@@ -178,5 +187,20 @@ internal sealed class RecoveryLink
         }
 
         CodesShownAt = at;
+    }
+
+    /// <summary>
+    /// The replace the session it opened staged applied its swap.
+    /// </summary>
+    /// <param name="at">When.</param>
+    /// <exception cref="InvalidOperationException">It opened no session.</exception>
+    public void Replace(DateTimeOffset at)
+    {
+        if (Session is null)
+        {
+            throw new InvalidOperationException("The link opened no enrolment session.");
+        }
+
+        ReplacedAt = at;
     }
 }

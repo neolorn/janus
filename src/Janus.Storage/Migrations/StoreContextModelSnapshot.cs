@@ -1887,6 +1887,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("purpose");
 
+                b.Property<DateTimeOffset?>("ReplacedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("replaced_at");
+
                 b.Property<Guid?>("Session")
                     .HasColumnType("uuid")
                     .HasColumnName("session");
@@ -1927,6 +1931,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_recovery_links_expiry", "expires_at > issued_at");
 
                         t.HasCheckConstraint("ck_recovery_links_purpose", "purpose IN ('enrolment', 'self-service')");
+
+                        t.HasCheckConstraint("ck_recovery_links_replaced", "replaced_at IS NULL OR session IS NOT NULL");
 
                         t.HasCheckConstraint("ck_recovery_links_session", "session IS NULL OR spent_at IS NOT NULL");
 

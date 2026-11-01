@@ -1310,9 +1310,15 @@ internal sealed class IdentifierService(
 
         // REG-IDENT-007: the one exception to the displaced address confirming is the
         // mailbox the approver recorded as lost, and an enrolment session opened for
-        // anything else reaches this no more than a session does.
-        return opened.MailboxLost
-            ? await StagedAsync(
+        // anything else reaches this no more than a session does. The session takes one
+        // replace, counted once its swap applies (AUTH-RECOV-002, D-234).
+        if (!opened.MailboxLost
+            || await enrolments.ReplacedAsync(opened.Id, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        return await StagedAsync(
                     asking: null,
                     opened.Subject,
                     session: null,
@@ -1321,9 +1327,18 @@ internal sealed class IdentifierService(
                     value,
                     source,
                     cancellationToken)
-                .ConfigureAwait(false)
-            : Result.Failure(Error.From(ErrorCodes.Denied));
+                .ConfigureAwait(false);
     }
+
+    // Whether the enrolment session has a replace pending for another identifier.
+    private async ValueTask<bool> ElsewhereAsync(
+        EnrolmentSessionId? enrolment,
+        IdentifierId identifier,
+        CancellationToken cancellationToken) =>
+        enrolment is EnrolmentSessionId staging
+        && await pending.StagedInAsync(staging, cancellationToken).ConfigureAwait(false)
+            is PendingVerification other
+        && other.Identifier != identifier;
 
     // AUTH-RECOV-002, REG-IDENT-007: an enrolment session stages from no browser and
     // asks nothing of the address it displaces, because the approver already
@@ -1341,8 +1356,11 @@ internal sealed class IdentifierService(
         HeldIdentifiers held = await directory.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
+        // AUTH-RECOV-002 (D-234): an enrolment session replaces an email its enrolment
+        // lists, and nothing else.
         if (held.Find(identifier) is not HeldIdentifier changing
-            || changing.Kind is IdentifierKind.Username)
+            || changing.Kind is IdentifierKind.Username
+            || (enrolment is not null && changing.Kind is not IdentifierKind.Email))
         {
             return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
         }
@@ -1368,7 +1386,7 @@ internal sealed class IdentifierService(
         // says to the account what it is doing. An enrolment session opened for a lost
         // mailbox can neither add nor remove, so it replaces an email in any mode
         // (AUTH-RECOV-002, D-234).
-        if (maximum is not 1 && !(enrolment is not null && changing.Kind is IdentifierKind.Email))
+        if (maximum is not 1 && enrolment is null)
         {
             return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
         }
@@ -1389,6 +1407,13 @@ internal sealed class IdentifierService(
         if (await pending.FindAsync(identifier, cancellationToken).ConfigureAwait(false)
                 is PendingVerification listed
             && !Repeats(listed, canonical))
+        {
+            return Result.Failure(Error.From(ErrorCodes.ChangePending));
+        }
+
+        // AUTH-RECOV-002, REG-IDENT-007 (D-234): an enrolment session holds one pending
+        // replace, whichever identifier another names.
+        if (await ElsewhereAsync(enrolment, identifier, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure(Error.From(ErrorCodes.ChangePending));
         }
@@ -1421,6 +1446,26 @@ internal sealed class IdentifierService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure(Error.From(ErrorCodes.ChangePending));
+        }
+
+        // AUTH-RECOV-002, REG-IDENT-007 (D-234): judged again with the account's set held,
+        // which a replace staged or a swap applied in the same session also holds, and
+        // the session's link under its own lock.
+        if (enrolment is EnrolmentSessionId staging)
+        {
+            Error? withheld =
+                await enrolments.ReplacedHeldAsync(staging, cancellationToken).ConfigureAwait(false)
+                    ? Error.From(ErrorCodes.Denied)
+                    : await ElsewhereAsync(staging, identifier, cancellationToken).ConfigureAwait(false)
+                        ? Error.From(ErrorCodes.ChangePending)
+                        : null;
+
+            if (withheld is not null)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure(withheld);
+            }
         }
 
         // REG-SESS-005, CONV-DESIGN-003: whether the new value is held or reserved is
@@ -2532,6 +2577,13 @@ internal sealed class IdentifierService(
         }
 
         var undo = OpaqueToken.Draw(randomness);
+
+        // AUTH-RECOV-002, REG-IDENT-007 (D-234): the enrolment session's one replace is
+        // counted as its swap applies; the session itself stays open.
+        if (waiting.Enrolment is EnrolmentSessionId staging)
+        {
+            await enrolments.ReplaceAppliedAsync(staging, now, cancellationToken).ConfigureAwait(false);
+        }
 
         // IDN-LIFE-008 AC1: the value that signed in is gone, so every session but the
         // one the change completes under ends with it, the one that staged it included.
