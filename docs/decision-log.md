@@ -20325,6 +20325,17 @@ refresh token. Every other client is unchanged. The owner approved the trade-off
 > account holds as an email is refused 409 `identity.mailbox.taken`, extended to that
 > case.
 
+> **Amended.** 2026-11-01. Decisions on round H12's questions:
+> 1. An address the account itself holds as an email (an administrator bootstrapped with
+>    the company address as the personal one, found by Cura) is not refused: that email
+>    becomes the mailbox's address and stays the account's one identifier for it, marked
+>    verified, primary by the same rule, counted once against `identifiers.email.max`.
+>    `identity.mailbox.taken` stays for an address another account holds.
+> 2. "None from the organization's domain" is the given address's domain.
+> 3. A push at a name `integration.mailserver.ownaccounts` names is refused whether or not
+>    the server holds an account at it.
+> 4. The library call is `IInvitations.GiveMailboxAsync`, beside the invitation's.
+
 **Date:** 2026-11-01 · **Status:** accepted · **Amends:** REG-MAIL-001, INT-MAIL-006
 
 **TL;DR.** A person already a member of the administrative organization, the bootstrap
