@@ -5,6 +5,10 @@
 # to the changelog, empties Unreleased and every unshipped file, and names a version
 # raised by what the shipped surface lost or gained; a section opening a major version
 # links its migration note; a release tag names the version its commit added.
+# LIB-VER-001 and CONV-VCS-005 (D-232): a release candidate is X.Y.Z-rc.N, numbered
+# from 1 for each version and tagged vX.Y.Z-rc.N. Before the first final release no
+# version is judged against the contract; from it on, a version is judged against the
+# newest final release, and a release candidate is held to what its version needs.
 # REF-001 AC2 and LIB-API-001: the version is raised as well by what the contract's
 # lists lost or gained since the previous release: the configuration keys, the
 # library-owned schema, the error codes and the status each answers with, the HTTP
@@ -12,8 +16,10 @@
 # permissions, and the commands of the command-line tool with their arguments,
 # standard input and output and exit codes (D-206).
 # CONV-VCS-003 AC2: a commit that breaks the contract as released carries the breaking
-# marker; it breaks it where it removes or changes a shipped line, marks one removed in
-# an unshipped file, or takes away an entry of a list the previous release held. A
+# marker; it breaks it where it removes or changes a line the newest final release
+# shipped, marks one removed in an unshipped file, or takes away an entry of a list
+# that release held. A release candidate is never that baseline, and before the first
+# final release no commit breaks the contract (D-232). A
 # commit with two parents is the merge commit the platform writes, which carries no
 # change of its own, so only single-parent commits are inspected.
 
@@ -55,10 +61,11 @@ else
   range="${base}..${head}"
 fi
 
-# The version sections of the changelog at a commit, newest first.
+# The version sections of the changelog at a commit, newest first, a release
+# candidate's with its suffix.
 versions() {
   git show "$1:CHANGELOG.md" 2>/dev/null \
-    | sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$/\1/p' || true
+    | sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+(-rc\.[1-9][0-9]*)?)\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$/\1/p' || true
 }
 
 # The lines a section holds, from its heading to the next heading of its level. The
@@ -79,10 +86,29 @@ shipped() {
     | grep -c . || true
 }
 
-# How many shipped lines a commit marks removed in an unshipped file, which is how the
-# analyser records a shipped line taken away before the release that drops it.
-removed() {
-  git diff "$1" "$2" -- '*PublicAPI.Unshipped.txt' | grep -cE '^\+\*REMOVED\*' || true
+# The lines of the shipped files at a commit, each named for its file, blank lines and
+# the nullable marker aside.
+published() {
+  local file
+
+  for file in $(git ls-tree -r --name-only "$1" | grep -E '(^|/)PublicAPI\.Shipped\.txt$' || true); do
+    git show "$1:${file}" | grep -vE '^(#nullable enable)?[[:space:]]*$' | sed "s|^|${file} |" || true
+  done | LC_ALL=C sort -u
+}
+
+# The shipped lines a commit took away, a line changed among them, and those it marks
+# removed in an unshipped file, which is how the analyser records a shipped line taken
+# away before the release that drops it; each is named for its shipped file.
+withdrawn() {
+  {
+    git diff "$1" "$2" -- '*PublicAPI.Shipped.txt' | awk '
+      /^--- / { file = substr($0, 7); next }
+      /^\+\+\+ / { next }
+      /^-/ { line = substr($0, 2); if (line !~ /^(#nullable enable)?[[:space:]]*$/) print file " " line }'
+    git diff "$1" "$2" -- '*PublicAPI.Unshipped.txt' | awk '
+      /^\+\+\+ / { file = substr($0, 7); sub(/PublicAPI\.Unshipped\.txt$/, "PublicAPI.Shipped.txt", file); next }
+      /^\+\*REMOVED\*/ { print file " " substr($0, 11) }'
+  } | LC_ALL=C sort -u
 }
 
 # The contract's lists at a commit, one entry a line and each named for its list: the
@@ -175,6 +201,32 @@ released() {
   done
 }
 
+# Whether the first version comes before the second by SemVer 2.0.0 precedence: by
+# their major, minor and patch numbers, and for one version, its release candidates in
+# their order before the final release.
+precedes() {
+  local first second place
+
+  IFS=. read -r -a first <<< "${1%%-rc.*}"
+  IFS=. read -r -a second <<< "${2%%-rc.*}"
+
+  for place in 0 1 2; do
+    if [ "${first[$place]}" -lt "${second[$place]}" ]; then
+      return 0
+    elif [ "${first[$place]}" -gt "${second[$place]}" ]; then
+      return 1
+    fi
+  done
+
+  if [ "${1%%-rc.*}" = "$1" ]; then
+    return 1
+  elif [ "${2%%-rc.*}" = "$2" ]; then
+    return 0
+  fi
+
+  [ "${1##*-rc.}" -lt "${2##*-rc.}" ]
+}
+
 # Whether a commit's message carries the breaking marker: the bang after the type or
 # scope, or the footer.
 marked() {
@@ -208,31 +260,36 @@ for commit in $commits; do
   after=$(versions "$commit")
   from=${parent:-$nothing}
   latest=$(printf '%s\n' "$before" | head -n 1)
+  final=$(printf '%s\n' "$before" | grep -vF -- '-rc.' | head -n 1 || true)
   lost=$(shipped "$from" "$commit" -)
   gained=$(shipped "$from" "$commit" +)
 
   breaking=""
 
-  if [ "$lost" -gt 0 ]; then
-    breaking="it removes or changes a shipped line"
-  elif [ "$(removed "$from" "$commit")" -gt 0 ]; then
-    breaking="it marks a shipped line removed"
-  elif [ -n "$latest" ] && ! git diff --quiet "$parent" "$commit" -- "${listed[@]}"; then
-    holder=$(released "$parent" "$latest")
+  if [ -n "$final" ]; then
+    holder=$(released "$parent" "$final")
 
     if [ -z "$holder" ]; then
-      echo "${commit}: the commit that released ${latest} is not in the history, so what the commit takes away cannot be judged."
+      echo "${commit}: the commit that released ${final} is not in the history, so what the commit takes away cannot be judged."
       status=1
-    elif legible "$holder" && legible "$parent" && legible "$commit"; then
-      taken=$(LC_ALL=C comm -12 \
-        <(LC_ALL=C comm -23 <(contract "$parent") <(contract "$commit")) \
-        <(contract "$holder"))
-
-      if [ -n "$taken" ]; then
-        breaking="it takes away what ${latest} released: $(printf '%s\n' "$taken" | paste -sd ';' - | sed 's/;/; /g')"
-      fi
     else
-      status=1
+      gone=$(LC_ALL=C comm -12 <(withdrawn "$from" "$commit") <(published "$holder"))
+
+      if [ -n "$gone" ]; then
+        breaking="it removes, changes or marks removed what ${final} shipped: $(printf '%s\n' "$gone" | paste -sd ';' - | sed 's/;/; /g')"
+      elif ! git diff --quiet "$parent" "$commit" -- "${listed[@]}"; then
+        if legible "$holder" && legible "$parent" && legible "$commit"; then
+          taken=$(LC_ALL=C comm -12 \
+            <(LC_ALL=C comm -23 <(contract "$parent") <(contract "$commit")) \
+            <(contract "$holder"))
+
+          if [ -n "$taken" ]; then
+            breaking="it takes away what ${final} released: $(printf '%s\n' "$taken" | paste -sd ';' - | sed 's/;/; /g')"
+          fi
+        else
+          status=1
+        fi
+      fi
     fi
   fi
 
@@ -244,7 +301,7 @@ for commit in $commits; do
   added=$(comm -13 <(printf '%s\n' "$before" | sed '/^$/d' | sort) <(printf '%s\n' "$after" | sed '/^$/d' | sort))
   count=$(printf '%s' "$added" | grep -c . || true)
 
-  for tag in $(git tag --points-at "$commit" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true); do
+  for tag in $(git tag --points-at "$commit" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' || true); do
     if [ "${tag#v}" != "$added" ]; then
       echo "${commit}: the tag ${tag} names no version this commit added to the changelog."
       status=1
@@ -287,50 +344,83 @@ for commit in $commits; do
     fi
   done
 
+  # LIB-VER-001 and D-232: a release follows the newest release by SemVer precedence,
+  # a release candidate numbered from 1 for its version. Before the first final
+  # release nothing binds the version to the contract; from it on, the version is
+  # judged against the newest final release, never a release candidate, and
+  # X.Y.Z-rc.N is held to what X.Y.Z needs.
   previous=$latest
+  baseline=$final
+  target=${added%%-rc.*}
   part=major
 
-  if [ -n "$previous" ]; then
-    part=$(raised "$previous" "$added")
-    prior=$(released "$parent" "$previous")
+  if [ -n "$previous" ] && ! precedes "$previous" "$added"; then
+    echo "${commit}: ${added} does not follow ${previous}."
+    status=1
+  fi
+
+  if [ "$target" != "$added" ]; then
+    expected=1
+
+    if [ -n "$previous" ] && [ "${previous%%-rc.*}" = "$target" ] && [ "${previous%%-rc.*}" != "$previous" ]; then
+      expected=$(( ${previous##*-rc.} + 1 ))
+    fi
+
+    if [ "${added##*-rc.}" != "$expected" ]; then
+      echo "${commit}: ${added} is not the next release candidate of ${target}, which is rc.${expected}."
+      status=1
+    fi
+  fi
+
+  if [ -n "$baseline" ]; then
+    part=$(raised "$baseline" "$target")
+    prior=$(released "$parent" "$baseline")
     dropped=""
     grown=""
+    shed=0
+    grew=0
 
     if [ -z "$prior" ]; then
-      echo "${commit}: the commit that released ${previous} is not in the history, so what the contract lost since cannot be judged."
+      echo "${commit}: the commit that released ${baseline} is not in the history, so what the contract lost since cannot be judged."
       status=1
-    elif legible "$prior" && legible "$commit"; then
-      dropped=$(LC_ALL=C comm -23 <(contract "$prior") <(contract "$commit"))
-      grown=$(LC_ALL=C comm -13 <(contract "$prior") <(contract "$commit"))
     else
-      status=1
+      shed=$(shipped "$prior" "$commit" -)
+      grew=$(shipped "$prior" "$commit" +)
+
+      if legible "$prior" && legible "$commit"; then
+        dropped=$(LC_ALL=C comm -23 <(contract "$prior") <(contract "$commit"))
+        grown=$(LC_ALL=C comm -13 <(contract "$prior") <(contract "$commit"))
+      else
+        status=1
+      fi
     fi
 
     if [ -z "$part" ]; then
-      echo "${commit}: ${added} does not follow ${previous}."
+      echo "${commit}: ${target} does not follow ${baseline}, the newest final release."
       status=1
     else
-      if [ "$lost" -gt 0 ] && [ "$part" != major ]; then
-        echo "${commit}: the shipped surface lost ${lost} lines and ${added} raises the ${part} version over ${previous}."
+      if [ "$shed" -gt 0 ] && [ "$part" != major ]; then
+        echo "${commit}: since ${baseline} the shipped surface lost ${shed} lines and ${added} raises the ${part} version."
         status=1
-      elif [ "$gained" -gt 0 ] && [ "$part" = patch ]; then
-        echo "${commit}: the shipped surface gained ${gained} lines and ${added} raises the patch version over ${previous}."
+      elif [ "$grew" -gt 0 ] && [ "$part" = patch ]; then
+        echo "${commit}: since ${baseline} the shipped surface gained ${grew} lines and ${added} raises the patch version."
         status=1
       fi
 
       if [ -n "$dropped" ] && [ "$part" != major ]; then
-        echo "${commit}: since ${previous} the contract's lists lost $(printf '%s\n' "$dropped" | grep -c .) entries and ${added} raises the ${part} version."
+        echo "${commit}: since ${baseline} the contract's lists lost $(printf '%s\n' "$dropped" | grep -c .) entries and ${added} raises the ${part} version."
         printf '%s\n' "$dropped" | sed 's/^/  lost: /'
         status=1
       elif [ -n "$grown" ] && [ "$part" = patch ]; then
-        echo "${commit}: since ${previous} the contract's lists gained $(printf '%s\n' "$grown" | grep -c .) entries and ${added} raises the patch version."
+        echo "${commit}: since ${baseline} the contract's lists gained $(printf '%s\n' "$grown" | grep -c .) entries and ${added} raises the patch version."
         printf '%s\n' "$grown" | sed 's/^/  gained: /'
         status=1
       fi
     fi
   fi
 
-  if [ "$part" = major ]; then
+  # CONV-VCS-005 AC3 (D-232): a release candidate's section opens no major version.
+  if [ "$part" = major ] && [ "$target" = "$added" ]; then
     linked=0
 
     for target in $(section "$commit" "$added" | grep -oE '\]\([^)#:]+\)' | sed -E 's/^\]\((.*)\)$/\1/' || true); do

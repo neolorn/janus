@@ -330,9 +330,20 @@ of use, as AUTH-FACT-002 states; an undo restores the number, never the credenti
 (D-197). **Only where no other channel exists at all** SHALL the old address confirm
 before the swap, except within an admin-assisted enrolment session (AUTH-RECOV-002),
 where the approver's recorded confirmation stands in for the old address and the new
-address confirms alone. The confirmation is the message `identifier-change-confirm`
-under the sending purpose `verification`, as the new address's code is: the person
-making the change asked for it, and it is not a notice (AUTH-ABUSE-004). Whether the new
+address confirms alone. Within an admin-assisted enrolment session opened for a lost
+mailbox (`mailboxLost`), a replace of an email the enrolment lists SHALL be taken
+whatever `identifiers.email.max` is, with no step-up, the session being itself the proof
+(`10` section 5a), the new address taking the replaced one's place, primary included;
+outside that session a replace is taken in single-address mode alone. The session adds
+and removes no identifier and takes one replace, counted once its swap applies: a
+replace after that SHALL be refused 403 `authz.denied`; until then the session holds at
+most one pending replace, staging another while one is pending SHALL be refused 409
+`identity.change.pending` whichever identifier it names (a repeat of the staged value
+stays the resend below), and a replace abandoned or swept leaves the session free to
+stage another (AUTH-RECOV-002, D-234). The confirmation is the
+message `identifier-change-confirm` under the sending purpose `verification`, as the new
+address's code is: the person making the change asked for it, and it is not a notice
+(AUTH-ABUSE-004). Whether the new
 value is held or reserved SHALL be judged again inside the transaction that would apply
 the swap, under the lock of REG-SESS-005 on each value the swap writes, as at an add
 (REG-IDENT-004): where an identifier has come to hold it or an undo to reserve it since
@@ -364,8 +375,8 @@ replace does (REG-SESS-003, D-190).
 record as a contact verified at a collection, the account's session carries the offer of
 `21` REC-ATT-001.
 
-*Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, D-190, D-191, D-197, amends
-D-035 and restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
+*Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, D-190, D-191, D-197, D-234,
+amends D-035 and restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
 
 The degenerate case is one email, phone optional and never added: nothing else could
 undo a hostile change. If that address is lost or compromised, administrative recovery
@@ -404,6 +415,13 @@ undo a hostile change. If that address is lost or compromised, administrative re
 11. A press that read the replace's row before it was restaged and locked it after is
     judged again under the lock: its link no longer matches, and it is answered 422
     `auth.code.expired`, counted, and proves nothing.
+12. With `identifiers.email.max` = 10, within an enrolment session opened for a lost
+    mailbox, a replace of an email the enrolment lists is taken, and once the new
+    address verifies it holds the replaced one's place, primary included; the same
+    replace on an ordinary session is refused 422 `identity.identifier.invalid`; a
+    replace in the enrolment session once its replace's swap has applied is refused 403
+    `authz.denied`, one naming another identifier while a replace is pending is refused
+    409 `identity.change.pending`, and one staged after an abandoned replace is taken.
 
 ---
 

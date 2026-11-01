@@ -88,8 +88,9 @@ host's (D-220, D-225).
 
 ## 2. The public contract
 
-**LIB-API-001** — The following constitute the public contract. Changes to any are
-breaking.
+**LIB-API-001** — The following constitute the public contract. From the first final
+release on, changes to any are breaking; before it nothing binds, and a release
+candidate may change or remove any of them (LIB-VER-001, D-232).
 
 | Surface | Includes |
 |---|---|
@@ -110,10 +111,10 @@ breaking.
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
 *Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176, D-183, D-186,
-D-187, D-188, D-202, D-203, D-204, D-206, D-207*
+D-187, D-188, D-202, D-203, D-204, D-206, D-207, D-232*
 
-The ancestry closure is public because hand-written SQL will query it. It cannot be
-restructured without a major version.
+The ancestry closure is public because hand-written SQL will query it. From the first
+final release on, it cannot be restructured without a major version.
 
 **Acceptance criteria**
 1. Each surface is documented with its stability guarantee.
@@ -517,14 +518,29 @@ adapters live.
 ## 5. Versioning
 
 **LIB-VER-001** — The library SHALL use **Semantic Versioning 2.0.0** against the
-contract in LIB-API-001. The version SHALL be derived from the release tag (`vMAJOR.MINOR.PATCH`)
-by the build (CONV-VCS-005) and SHALL appear in no project file.
+contract in LIB-API-001, and SHALL ship release candidates of 1.0.0 (`v1.0.0-rc.N`)
+until the owner calls a release final. The version SHALL be derived from the release tag
+(`vMAJOR.MINOR.PATCH`, or `vMAJOR.MINOR.PATCH-rc.N` for a release candidate) by the build
+(CONV-VCS-005) and SHALL appear in no project file.
 
-*Source: D-026.4, D-149*
+**Release candidates (D-232).** A release candidate is `X.Y.Z-rc.N`, a SemVer 2.0.0
+pre-release numbered from 1 for each version, its release marked as a pre-release
+(CONV-VCS-005). Before the first final release nothing in this rule binds: a release
+candidate of 1.0.0 may change or remove anything in LIB-API-001's contract, and its
+changelog section and migration note name every change and removal since the release
+before it. From the first final release on, the rule binds against the newest final
+release; a release candidate is never that baseline, and `X.Y.Z-rc.N` is held to what
+`X.Y.Z` needs.
+
+*Source: D-026.4, D-149, D-232*
 
 **Acceptance criteria**
-1. A breaking change to any listed surface increments the major version.
-2. Additive changes increment the minor version.
+1. From the first final release on, a breaking change to any listed surface increments
+   the major version.
+2. From the first final release on, additive changes increment the minor version.
+3. Before the first final release, a release candidate that removes a member of
+   LIB-API-001's contract passes the release checks; after it, the same removal in a
+   minor release fails.
 
 ---
 
@@ -612,13 +628,15 @@ the host (D-172).
 **LIB-TEST-002** — Contract tests SHALL guard every surface in LIB-API-001, failing
 the build on an unintended change.
 
-*Source: D-026.4, D-166, D-204, D-206, D-207*
+*Source: D-026.4, D-166, D-204, D-206, D-207, D-232*
 
 **Acceptance criteria**
 1. A release commit, one that changes a `PublicAPI.Shipped.txt`, fails the release gate
    unless its version section raises the major part where the shipped surface or a
-   contract list lost or changed an entry since the previous release, and at least the
-   minor part where one gained an entry. The contract lists are the configuration keys
+   contract list lost or changed an entry since the newest final release, never a
+   release candidate, and at least the minor part where one gained an entry; before the
+   first final release nothing binds, and the gate passes whatever changed (LIB-VER-001,
+   D-232). The contract lists are the configuration keys
    with type, scope and constraints, and the key families; the library-owned schema; the
    error codes with their status; the audit actions; the permissions; the endpoints with
    method, route, body members and statuses; the browser profile's stage order; and the

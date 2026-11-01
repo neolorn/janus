@@ -1223,6 +1223,8 @@ compliance records all derive from a single description of the host's domain.
 
 ## D-026 — Audit retention, timestamps, secrets, versioning, policy changes
 
+> **Amended.** Versioning: releases are release candidates `X.Y.Z-rc.N` until the owner calls one final; LIB-VER-001 binds from the first final release (D-232).
+
 **Date:** 2026-08-25 · **Status:** accepted
 
 Five small items from the review pass, decided together.
@@ -7933,6 +7935,8 @@ dashes) · `10` (sections 1, 3, 4.1a, 4.3, 5.15, 5a) · `11` (sections 3, 4, 7) 
 ---
 
 ## D-149 — Every design and code choice is fixed; the implementer decides nothing
+
+> **Amended.** A release candidate is made on the lead's message, a final release on the owner's (D-232).
 
 > **Amended.** Item 9: the permitted packages gain `Microsoft.EntityFrameworkCore.Relational`, which `Janus.Storage` references at the version of `Microsoft.EntityFrameworkCore` (D-184).
 
@@ -18418,6 +18422,8 @@ AUTHZ-GATE-007 (values, criterion 5); `10` section 5b (`RoleChanged`), section 5
 
 ## D-220 — A standalone library: Milestone 2 is the release, and the deployment is a host's
 
+> **Amended.** Milestone 2's first release is `1.0.0-rc.1`; the final 1.0.0 comes on the owner's word (D-232).
+
 **Date:** 2026-10-28 · **Status:** accepted · **Amends:** D-218
 
 The owner's rule: this library, the messaging library and every host are standalone, and
@@ -18673,6 +18679,8 @@ section 5.24 (`privacy.consent.granted`, `privacy.consent.withdrawn`,
 ---
 
 ## D-224 — Round H3: what a host's own frontends meet
+
+> **Amended.** A pressed link's `factorRequired` or `deviceVerificationRequired` answer names its `challengeId` (D-233).
 
 **Date:** 2026-10-29 · **Status:** accepted · **Follows from:** D-202, D-220
 
@@ -19424,6 +19432,137 @@ limiting for them in error (2).
 
 **Propagated to:** D-230 (item 1, amended); `implementation-plan.md` (the H3 row).
 
+
+## D-232 — Release candidates until the final 1.0.0
+
+**Date:** 2026-10-31 · **Status:** accepted · **Amends:** D-026, D-149, D-220
+
+The owner, 2026-10-31: none of his libraries is final or stable enough yet for the
+compatibility rule to bind, so each ships release candidates until he calls a release
+final.
+
+- **A release candidate is `X.Y.Z-rc.N`,** a SemVer 2.0.0 pre-release numbered from 1
+  for each version, tagged `vX.Y.Z-rc.N`, its release marked as a pre-release; MinVer
+  reads such a tag as it is. Milestone 2's first release is `1.0.0-rc.1`, not `1.0.0`. A
+  release candidate is made on the lead's message; a final release on the owner's.
+- **Before the first final release, nothing binds.** A release candidate of 1.0.0 may
+  change or remove anything in LIB-API-001's contract; its changelog and migration note
+  name every change and removal since the release before it. From the first final
+  release on, LIB-VER-001 binds against the newest final release; a release candidate is
+  never that baseline, and `X.Y.Z-rc.N` is held to what `X.Y.Z` needs.
+- **Why the rule itself stays.** A host takes a final release's minor and patch versions
+  without reading the library's code; the rule is what makes that safe. A break is not
+  forbidden: it is a new major version, with its migration note (LIB-VER-002).
+
+*Rejected:* versions `0.y.z` (the owner asked for release candidates of 1.0.0).
+
+**Propagated to:** `07` LIB-VER-001, LIB-API-001, LIB-TEST-002 (criterion 1); `08`
+CONV-VCS-003 (criterion 2), CONV-VCS-005 (the tag and changelog forms; criterion 3),
+section 10 (the pruning of pre-release versions); `06` OPS-MIG-005 (criterion 3);
+`implementation-plan.md` section 4 (step 2 becomes release `1.0.0-rc.1`, on the lead's
+message; the final 1.0.0 is the owner's).
+
+## D-233 — A pressed link's open answer names its challenge
+
+**Date:** 2026-10-31 · **Status:** accepted · **Amends:** D-224
+
+Cura's integration found that a sign-in link pressed in the landing tab can leave its
+challenge open with no tab able to go on: the landing tab's call carries no
+`challengeId`, the answer names none, and `GET /auth/session` has no session to show.
+
+- **The answer names it.** A `POST /auth/factor` carrying a pressed `linkToken` whose
+  answer is `factorRequired` or `deviceVerificationRequired` carries `challengeId`, the
+  challenge the link completed its factor on, so the landing tab presents the second step
+  or the new-browser code itself. A `complete` answer and every refusal carry none.
+- **It reveals nothing new.** The press completes only in the browser whose
+  pre-authentication cookie the challenge is bound to (REG-SESS-003, D-226), the browser
+  that already holds the identifier; an unpressed open or another browser's call is
+  answered as now and names no challenge.
+- The call still needs no `challengeId`, and one sent beside the token is still not read.
+
+*Rejected:* the asking tab learning the open challenge from `GET /auth/session` (no
+session exists before the sign-in completes, and a session-less read of a challenge would
+answer for a browser state the route does not hold); leaving the hand-over to each
+frontend (every frontend would need a cross-tab channel, and a closed asking tab strands
+the sign-in).
+
+**Propagated to:** `09` `POST /auth/factor` (the 200 and the link-token paragraph), the
+`POST /auth/link` paragraph on the landing route; `02` AUTH-FACT-003 if it describes the
+answer; `18` where the landing page's flow is described; `implementation-plan.md`, the
+next round's row.
+
+## D-234 — An enrolment session replaces a lost mailbox in any mode
+
+**Date:** 2026-10-31 · **Status:** accepted · **Amends:** AUTH-RECOV-002's route list in
+`09`, REG-IDENT-007
+
+Found by Cura's step 3 (item 14, 10-31). A recovery whose approver recorded the mailbox
+as lost opens an enrolment session whose only way to a new address is
+`PUT /account/identifiers/{id}/replace`, and the replace is taken in single-address mode
+alone, so at the default `identifiers.email.max` (10) it answers **422**
+`identity.identifier.invalid` and the person is left with the lost address as primary:
+the new-device code and every later recovery go to a mailbox they no longer hold.
+
+- **The replace is taken in any mode under that session.** Within an admin-assisted
+  enrolment session opened with `mailboxLost`, `PUT /account/identifiers/{id}/replace`
+  naming an email `GET /enrol`'s `identifiers` lists is taken whatever
+  `identifiers.email.max` is, verified by the new address alone as now; the new address
+  takes the replaced one's place, primary included. Outside that session the replace stays
+  a single-address-mode operation.
+- **Nothing else opens.** The session still cannot add (`POST /account/identifiers`) or
+  remove an identifier, and it takes one replace, of an email `GET /enrol`'s
+  `identifiers` lists, named by its identifier in the route; a person who lost more than
+  one address replaces one of them there and tidies the rest after an ordinary sign-in.
+  The replace counts once its swap applies: a replace after that in the same session is
+  refused **403** `authz.denied`; until then the session holds at most one pending
+  replace, staging another while one is pending answering **409**
+  `identity.change.pending` whichever identifier it names, and a replace abandoned or
+  swept leaves the session free to stage another.
+
+*Rejected:* opening add and remove to the enrolment session (two operations where one
+swap does, and a window with both addresses live); asking hosts in multi-address mode to
+recover lost mailboxes by hand (the library already holds the recorded confirmation that
+stands in for the old address).
+
+**Propagated to:** `09` `PUT /account/identifiers/{id}/replace` (its opening paragraph,
+its 403, its 409 and its 422), the enrolment session's route list, and the step-up
+sentences of `POST /account/password`, `/auth/webauthn/register/*` and
+`/account/factors/totp/*`; `02` AUTH-RECOV-002 and AUTH-STEP-007; `20` REG-IDENT-007;
+`01` IDN-LIFE-008; `10` section 1.1 (`identity.identifier.invalid`,
+`identity.change.pending`), section 1.3 (`authz.denied`), section 4
+(`identifiers.email.max`) and section 5a (the `password:set`, `identifier:add` and
+`factor:enrol` rows); `11` section 4 (step 6); `implementation-plan.md`, the next
+round's row. Cura shows the replace wherever `mailboxLost` once it pins the round that
+ships this; until then its fallback text stands where `maxima.email` is not 1, marked
+"until Janus".
+
+## D-235 — A stored policy reads past a retired step-up action
+
+**Date:** 2026-10-31 · **Status:** accepted · **Amends:** chapter 10 section 5a (policy gates)
+
+- **Retired names are kept.** The library keeps the names of the step-up actions it once had and
+  removed (today `alerting:destinations`), beside the current ones.
+- **A stored policy reads past them.** Reading a stored policy or override drops a gate that
+  names a retired action, writes nothing at read, and logs it once per policy at Information. A
+  name neither current nor retired is refused as now: no write ever stored one, so it means a
+  damaged row.
+- **A migration removes them.** The next round's migration deletes gates naming a retired action
+  from stored policies and overrides, so a later release need not keep reading past them.
+- **Writes are unchanged.** A policy written through the API or the setup tool may name current
+  actions only; a retired one is refused with the error a misspelled one gets.
+- **Names, never numbers.** A step-up action is stored, exported and audited by its name only.
+  The round confirms that no table, export or audit field holds an action's number (the enum was
+  renumbered by `fe79971c`); any that does is a defect the round fixes.
+
+*Rejected:* refusing to start until an operator edits the policy by hand (every deployment
+bootstrapped before the removal stops at upgrade, with no tool to repair it); ignoring every
+unknown name (a damaged row would pass unseen).
+
+**Propagated to:** `10` section 5a (gates name current actions; stored retired ones are dropped
+at read and by the migration); `06` OPS-MIG-001; `implementation-plan.md`, the next
+round's row; a test that a policy stored with `alerting:destinations` starts the host and gates
+every current action as before.
+
 ---
 
 # Index — all items closed
@@ -19667,6 +19806,10 @@ limiting for them in error (2).
 | Round H3 question 14: the sign-on at the authentication application's origin | D-229 |
 | Round H3 question 15 and review: the provider inside its branch, a link's own sign-in, and public values | D-230 |
 | Round H3 questions 17 and 18: the sample host's part of the row, and the provider's machine routes | D-231 |
+| Release candidates until the final 1.0.0 | D-232 |
+| A pressed link's open answer names its challenge | D-233 |
+| An enrolment session replaces a lost mailbox in any mode | D-234 |
+| A stored policy reads past a retired step-up action | D-235 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

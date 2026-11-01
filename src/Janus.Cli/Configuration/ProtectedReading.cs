@@ -14,7 +14,7 @@ internal sealed class ProtectedReading(string entered) : ISettingOperation<Resul
 {
     /// <inheritdoc/>
     public Result<ProtectedValue> On<TValue>(Setting<TValue> setting) =>
-        setting.Read(entered).Match(
+        setting.Entered(entered).Match(
             value => Result.Success<ProtectedValue>(new ProtectedSettingValue<TValue>(setting, value)),
             Result.Failure<ProtectedValue>);
 }

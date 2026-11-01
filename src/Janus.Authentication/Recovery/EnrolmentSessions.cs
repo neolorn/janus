@@ -57,6 +57,57 @@ internal sealed class EnrolmentSessions(
             && !link.HasExpired(time.GetUtcNow());
 
     /// <summary>
+    /// Whether the replace a session staged has applied its swap, which is the one
+    /// replace the session takes (AUTH-RECOV-002, REG-IDENT-007, D-234).
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether its replace has applied.</returns>
+    public async ValueTask<bool> ReplacedAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken) =>
+        await links.FindAsync(session, cancellationToken).ConfigureAwait(false)
+            is RecoveryLink { ReplacedAt: not null };
+
+    /// <summary>
+    /// The same, read under a lock on the link the session stands on and held until the
+    /// caller's transaction ends, so a replace staged while another's swap applies waits
+    /// for that swap and finds it applied (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether its replace has applied.</returns>
+    public async ValueTask<bool> ReplacedHeldAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken) =>
+        await links.FindForUpdateAsync(session, cancellationToken).ConfigureAwait(false)
+            is RecoveryLink { ReplacedAt: not null };
+
+    /// <summary>
+    /// Keeps that the replace a session staged has applied its swap, in the caller's
+    /// transaction, the one that applies it. The session stays open, so the person goes
+    /// on to set the credential (IDN-LIFE-008, D-234).
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="at">When the swap applied.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of keeping it.</returns>
+    public async ValueTask ReplaceAppliedAsync(
+        EnrolmentSessionId session,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (await links.FindForUpdateAsync(session, cancellationToken).ConfigureAwait(false)
+            is not RecoveryLink link)
+        {
+            return;
+        }
+
+        link.Replace(at);
+        await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Whether a second step enrolled in a session showed recovery codes, so that the
     /// report of their export is what completes the enrolment (AUTH-RECOV-006, D-189).
     /// </summary>

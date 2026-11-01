@@ -81,6 +81,15 @@ internal sealed class PendingVerificationStoreInMemory : IPendingVerificationSto
             .Select(Copied)]);
 
     /// <inheritdoc/>
+    public ValueTask<PendingVerification?> StagedInAsync(
+        EnrolmentSessionId enrolment,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_pending.Values
+            .Where(pending => pending.Enrolment == enrolment)
+            .Select(Copied)
+            .FirstOrDefault());
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(PendingVerification pending, CancellationToken cancellationToken)
     {
         Enlist();

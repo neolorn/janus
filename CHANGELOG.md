@@ -10,6 +10,21 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A stored system policy or organization override whose gates still name the retired
+  step-up action `alerting:destinations` reads past that gate, so a deployment
+  bootstrapped before its removal starts and gates every current action as before; a
+  migration deletes those gates. A policy or override written through the API or the
+  command-line tool names current actions only, and a retired name is refused as a
+  misspelled one is.
+- An enrolment session opened for a lost mailbox replaces an email with
+  `PUT /account/identifiers/{id}/replace` whatever `identifiers.email.max` is, the new
+  address taking the replaced one's place, primary included. Outside that session the
+  replace stays a single-address-mode operation. The session replaces no phone, and a
+  replace of one is refused `identity.identifier.invalid`. It takes one replace, counted
+  once its swap applies (a later one is refused `authz.denied`), and holds one pending
+  replace at a time (another is refused `identity.change.pending`); a replace abandoned
+  or swept leaves it free to stage another. The replace, the password and the factor an
+  enrolment session sets are not step-up gated, the session being itself the proof.
 - The provider acts only on a request its profile has passed, inside the branch the host
   mounted the library in. The authentication middleware ASP.NET Core's `WebApplication`
   adds ahead of a host's pipeline, where the host calls no `UseAuthentication` of its own,

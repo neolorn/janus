@@ -1048,6 +1048,35 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-007 and AUTH-RECOV-002 (D-234): the factor an enrolment session enrols is
+    /// not gated, the enrolment session being itself the proof, where the account's own
+    /// session past the gate's maximum age is asked to step up for the same enrolment.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_TheFactorAnEnrolmentSessionEnrolsIsNotGatedAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        _clock.Advance(
+            Janus.Core.Policies.SystemDefault.Gates[StepUpAction.FactorEnrol].MaximumAge + TimeSpan.FromMinutes(1));
+
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refused(await Service.BeginGeneratorAsync(
+                Authority(subject, session),
+                "Phone",
+                TestContext.Current.CancellationToken)));
+
+        EnrolmentSession opened = await OpenedAsync(subject);
+
+        _ = Value(await Service.BeginGeneratorAsync(
+            CredentialAuthority.Of(opened.Id),
+            "Phone",
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 AC2 (D-166): the enrolment session an approved recovery opened is how
     /// a restricted account gets back in, so it sets the password it enrols, while the
     /// account's own session is still refused the same change.

@@ -79,6 +79,19 @@ public abstract class Setting<TValue> : Setting
         Parse(stored).Match(Accept, Result.Failure<TValue>);
 
     /// <summary>
+    /// Reads a value the administration interface or the command-line tool received,
+    /// which names only what the library has now.
+    /// </summary>
+    /// <param name="entered">The value as it was received.</param>
+    /// <returns>The value, or the failure naming what the text misses.</returns>
+    /// <remarks>
+    /// Implements OPS-CFG-008 and chapter 10 section 5a (D-235): a stored value can name
+    /// what a later version retired, and an entered one never can.
+    /// </remarks>
+    internal Result<TValue> Entered(string entered) =>
+        ParseEntered(entered).Match(Accept, Result.Failure<TValue>);
+
+    /// <summary>
     /// Writes the value as the settings table holds it.
     /// </summary>
     /// <param name="value">The value.</param>
@@ -133,9 +146,9 @@ public abstract class Setting<TValue> : Setting
     /// </remarks>
     internal Result<TValue> Received(JsonElement value) => (Textual, value.ValueKind) switch
     {
-        (true, JsonValueKind.String) => Read(value.GetString()!),
+        (true, JsonValueKind.String) => Entered(value.GetString()!),
         (false, not (JsonValueKind.String or JsonValueKind.Null or JsonValueKind.Undefined)) =>
-            Read(value.GetRawText()),
+            Entered(value.GetRawText()),
         _ => Result.Failure<TValue>(
             Error.From(
                 ErrorCodes.ConfigurationValueNotAllowed,
@@ -155,6 +168,15 @@ public abstract class Setting<TValue> : Setting
     /// <param name="stored">The stored text.</param>
     /// <returns>The value, or the failure where the text is not of the key's type.</returns>
     private protected abstract Result<TValue> Parse(string stored);
+
+    /// <summary>
+    /// Reads the key's own written form as it was received, before the constraints are
+    /// applied to it. Only a key whose stored value can outlive a name the library
+    /// retired reads the two apart.
+    /// </summary>
+    /// <param name="entered">The text as it was received.</param>
+    /// <returns>The value, or the failure where the text is not of the key's type.</returns>
+    private protected virtual Result<TValue> ParseEntered(string entered) => Parse(entered);
 
     /// <summary>
     /// The value as the management application, the audit record and the settings

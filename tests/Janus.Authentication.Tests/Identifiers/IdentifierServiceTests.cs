@@ -3212,6 +3212,153 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC12 and AUTH-RECOV-002 (D-234): within the enrolment session an
+    /// approver opened for a lost mailbox, the replace of an email is taken whatever
+    /// <c>identifiers.email.max</c> is, and the new address takes the replaced one's
+    /// place, primary included; under an account session the same replace stays a
+    /// single-address-mode operation.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC12_AnEnrolmentSessionReplacesALostAddressInAnyModeAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 10);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Third);
+
+        ErrorCode refused = Refused(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+
+        Accepted(await Service.ReplaceAsync(
+            opened,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+        Accepted(await Service.VerifyAsync(
+            opened,
+            email,
+            Code(email),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        IReadOnlyList<HeldIdentifier> held = await HeldAsync();
+        HeldIdentifier replaced = Named(held, Second);
+
+        Assert.Equal(ErrorCodes.IdentifierInvalid, refused);
+        Assert.Equal(email, replaced.Id);
+        Assert.True(replaced.IsPrimary);
+        Assert.DoesNotContain(held, identifier => identifier.Canonical == Primary);
+        Assert.False(Named(held, Third).IsPrimary);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC12 and AUTH-RECOV-002 (D-234): the enrolment session takes one
+    /// replace, counted once its swap applies, after which a replace of any identifier
+    /// in the same session is refused <c>authz.denied</c>; the session itself stays open.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC12_AnEnrolmentSessionTakesOneReplaceAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 10);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId other = _directory.Verified(_person, IdentifierKind.Email, Third);
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+
+        Accepted(await Service.ReplaceAsync(opened, email, Second, Source, TestContext.Current.CancellationToken));
+        Accepted(await Service.VerifyAsync(opened, email, Code(email), Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await Service.ReplaceAsync(opened, other, "fourth@example.test", Source, TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await Service.ReplaceAsync(opened, email, "fourth@example.test", Source, TestContext.Current.CancellationToken)));
+        Assert.NotNull(await _links.FindAsync(opened, TestContext.Current.CancellationToken));
+        Assert.Equal(Third, Named(await HeldAsync(), Third).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC12 and AUTH-RECOV-002 (D-234): until its replace's swap applies,
+    /// the enrolment session holds one pending replace, so staging one of another
+    /// identifier while it is pending is refused <c>identity.change.pending</c>; the
+    /// repeat of the staged value stays a resend.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC12_AnEnrolmentSessionHoldsOnePendingReplaceAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 10);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId other = _directory.Verified(_person, IdentifierKind.Email, Third);
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+
+        Accepted(await Service.ReplaceAsync(opened, email, Second, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ErrorCodes.ChangePending,
+            Refused(await Service.ReplaceAsync(opened, other, "fourth@example.test", Source, TestContext.Current.CancellationToken)));
+        Accepted(await Service.ReplaceAsync(opened, email, Second, Source, TestContext.Current.CancellationToken));
+        Assert.Null(await _pending.FindAsync(other, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC12 and AUTH-RECOV-002 (D-234): a replace the enrolment session
+    /// staged and that was abandoned before its swap leaves the session free to stage
+    /// another, which is taken.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC12_AnAbandonedReplaceFreesTheEnrolmentSessionAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 10);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId other = _directory.Verified(_person, IdentifierKind.Email, Third);
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+
+        Accepted(await Service.ReplaceAsync(opened, email, Second, Source, TestContext.Current.CancellationToken));
+
+        string link = _notifications.Mail.Last(message => message.Message is MessageKind.VerificationLink).Token();
+
+        Accepted(await Service.AbandonAsync(link, TestContext.Current.CancellationToken));
+        Accepted(await Service.ReplaceAsync(opened, other, "fourth@example.test", Source, TestContext.Current.CancellationToken));
+        Accepted(await Service.VerifyAsync(opened, other, Code(other), Source, TestContext.Current.CancellationToken));
+
+        IReadOnlyList<HeldIdentifier> held = await HeldAsync();
+
+        Assert.Equal(other, Named(held, "fourth@example.test").Id);
+        Assert.Equal(email, Named(held, Primary).Id);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC12 and AUTH-RECOV-002 (D-234): the enrolment session replaces an
+    /// email its enrolment lists and nothing else, so a replace of a phone is refused
+    /// <c>identity.identifier.invalid</c> in single-address mode too, and stages nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC12_AnEnrolmentSessionReplacesNoPhoneAsync()
+    {
+        _configuration.Set(Settings.IdentifiersPhoneMax, 1);
+
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId phone = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierInvalid,
+            Refused(await Service.ReplaceAsync(opened, phone, "+15550100999", Source, TestContext.Current.CancellationToken)));
+        Assert.Null(await _pending.FindAsync(phone, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a code, whose wrong try keeps its count
     /// on the code's record and the delay's counts, presented inside a unit of work
     /// another opened is a fault of the calling code: nothing is counted and no try of

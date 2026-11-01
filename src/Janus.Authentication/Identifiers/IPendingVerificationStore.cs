@@ -61,6 +61,17 @@ internal interface IPendingVerificationStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The replace an enrolment session has pending, which is one at most
+    /// (AUTH-RECOV-002, REG-IDENT-007, D-234).
+    /// </summary>
+    /// <param name="enrolment">The session that staged it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The pending replace, or nothing where the session has none.</returns>
+    ValueTask<PendingVerification?> StagedInAsync(
+        EnrolmentSessionId enrolment,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Stages a verification.
     /// </summary>
     /// <param name="pending">The verification.</param>
