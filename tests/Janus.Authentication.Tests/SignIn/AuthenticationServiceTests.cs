@@ -1340,6 +1340,36 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-002 AC11, AUTH-STEP-005 (D-243): a social credential presented at a
+    /// step-up is refused before anything is verified, the answer that sends the person
+    /// through a new sign-in with the provider being no way past the gate here.
+    /// </summary>
+    /// <param name="provider">The social factor presented.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(Factor.Google)]
+    [InlineData(Factor.Apple)]
+    public async Task AUTH_STEP_002_AC11_ASocialCredentialPresentedAtAStepUpIsStillRefusedAsync(Factor provider)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, provider);
+
+        SessionId held = Opened(subject, AssuranceLevel.Delegated);
+        SignInChallenge began = await BeganAsync(Address);
+
+        Result<SignInProgress> stepped = await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            held,
+            began.Challenge,
+            new FactorPresentation(provider) { Value = "a-provider-assertion" },
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorNotPermitted, Refused(stepped));
+    }
+
+    /// <summary>
     /// AUTH-STEP-002 step 3, `09` `POST /auth/step-up`: a refusal the step-up itself
     /// answers is judged against the weakest of the policy's gates, field by field, and
     /// carries that gate's values: an account that reaches it and cannot present it is

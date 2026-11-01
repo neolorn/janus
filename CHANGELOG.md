@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A step-up answered for a session of an account whose only usable factors are social,
+  downgraded since it reached `delegated`, at a `delegated` gate carries `outcome`
+  `signIn` in `auth.stepup.required`: the person signs in again with the provider. A
+  social factor is never among the step-up `options`, at any gate.
 - `GET /.well-known/openid-configuration` and `GET /oidc/jwks` are served on the machine
   profile and ignore any cookie: a fetch issues, writes and sets no pre-authentication
   session. Each holds a source to its own limit, `oidc.discovery.ratelimit` and
