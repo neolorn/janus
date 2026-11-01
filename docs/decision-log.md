@@ -20099,7 +20099,9 @@ release.
 - `01` IDN-ORG-002;
 - `09` (the routes the command matches, by reference);
 - `10` (the system principal `organization`, and section 5.28's `configuration`, the
-  operation it runs; section 5.24's `identity.organization.created`);
+  operation it runs; section 5.24's `identity.organization.created`; section 1.5's
+  `config.change.reasonrequired`; section 5b's `OrganizationCreated`);
+- `08` CONV-LAYOUT-001 (the `Janus.Cli` row);
 - `implementation-plan.md` (round H9).
 
 ---
