@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /oidc/token`, the discovery document and `GET /oidc/jwks` answer CORS for the
+  origin of each registered `public-application` return address: that origin
+  exactly, no credentials, and the token endpoint's preflight answered with `POST`
+  and `Content-Type`. Any other origin, and every other route, gets no CORS headers.
 - A third client kind, `public-application`, for a browser application that holds
   no secret: `register-client --kind public-application` takes `--redirect` once for
   each exact return address and an optional `--audience`, and draws no secret. It may

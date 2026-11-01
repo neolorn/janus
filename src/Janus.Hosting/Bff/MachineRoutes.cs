@@ -104,6 +104,13 @@ internal static class MachineRoutes
     /// <returns>Whether it is.</returns>
     public static bool IsKeySet(PathString path) => path.Equals(Fetched[1], System.StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Whether the path is the provider's token endpoint.
+    /// </summary>
+    /// <param name="path">The path the request arrived at.</param>
+    /// <returns>Whether it is.</returns>
+    public static bool IsToken(PathString path) => path.Equals(Protocol[1], System.StringComparison.OrdinalIgnoreCase);
+
     private static bool Among(PathString[] routes, PathString path)
     {
         foreach (PathString route in routes)

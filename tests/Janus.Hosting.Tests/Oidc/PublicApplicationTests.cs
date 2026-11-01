@@ -13,8 +13,8 @@ namespace Janus.Hosting.Tests.Oidc;
 /// <summary>
 /// A browser application that holds no secret, as the provider meets it: a direct
 /// request or an unauthenticated push, the code with PKCE <c>S256</c> alone, an access
-/// token for its audience and no refresh token (AUTH-OIDC-001, AUTH-OIDC-004,
-/// AUTH-OIDC-006, D-252).
+/// token for its audience and no refresh token, and the cross-origin answers its
+/// browser needs (AUTH-OIDC-001, AUTH-OIDC-004, AUTH-OIDC-006, D-252).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class PublicApplicationTests
@@ -23,6 +23,7 @@ public sealed class PublicApplicationTests
     private const string Pages = "account-pages";
     private const string Callback = "https://webmail.example.test/login/callback";
     private const string Loopback = "http://127.0.0.1:8080/callback";
+    private const string Registered = "https://webmail.example.test";
     private const string MailScope = "urn:ietf:params:oauth:scope:mail";
 
     /// <summary>
@@ -234,6 +235,105 @@ public sealed class PublicApplicationTests
             access.GetProperty("exp").GetInt64() - access.GetProperty("iat").GetInt64());
     }
 
+    /// <summary>
+    /// AUTH-OIDC-006 AC6 (D-252): from the origin of a public application's registered
+    /// return address, the token endpoint's preflight and its token request, discovery and
+    /// the key set each answer for that origin exactly, allowing no credentials.
+    /// </summary>
+    /// <param name="origin">The origin the browser names.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(Registered)]
+    [InlineData("http://127.0.0.1:8080")]
+    public async Task AUTH_OIDC_006_AC6_ARegisteredOriginIsAnsweredForItselfAsync(string origin)
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await PreparedAsync(deployment);
+        Answer authorized = await browser.SendAsync("GET", Direct(Webmail, Callback, "openid email"));
+        var machine = new Machine(deployment) { Origin = origin };
+
+        Answer preflight = await machine.PreflightAsync("/oidc/token", "POST", "content-type");
+        Answer exchanged = await machine.PostAsync(
+            "/oidc/token",
+            Exchange(RelyingParty.Returned(authorized, "code"), Webmail, Callback));
+        Answer discovery = await machine.GetAsync("/.well-known/openid-configuration", bearer: string.Empty);
+        Answer keys = await machine.GetAsync("/oidc/jwks", bearer: string.Empty);
+
+        Assert.Equal(StatusCodes.Status204NoContent, preflight.Status);
+        Assert.Equal(("POST", "Content-Type"), (preflight.Header("Access-Control-Allow-Methods"), preflight.Header("Access-Control-Allow-Headers")));
+        Assert.Equal(
+            (StatusCodes.Status200OK, StatusCodes.Status200OK, StatusCodes.Status200OK),
+            (exchanged.Status, discovery.Status, keys.Status));
+
+        foreach (Answer answered in new[] { preflight, exchanged, discovery, keys })
+        {
+            Assert.Equal(origin, answered.Header("Access-Control-Allow-Origin"));
+            Assert.Null(answered.Header("Access-Control-Allow-Credentials"));
+        }
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-006 AC6 (D-252): from any other origin, and from a client of another kind's
+    /// origin, the same requests carry no cross-origin header, and the preflight is not
+    /// answered for them.
+    /// </summary>
+    /// <param name="origin">The origin the browser names.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("https://elsewhere.example.test")]
+    [InlineData("https://app.example.test")]
+    [InlineData("https://webmail.example.test:8443")]
+    [InlineData("http://webmail.example.test")]
+    [InlineData("null")]
+    public async Task AUTH_OIDC_006_AC6_AnyOtherOriginGetsNoCrossOriginHeaderAsync(string origin)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        var machine = new Machine(deployment) { Origin = origin };
+
+        Answer[] answers =
+        [
+            await machine.PreflightAsync("/oidc/token", "POST", "content-type"),
+            await machine.PostAsync("/oidc/token", Exchange("a-code-never-issued", Webmail, Callback)),
+            await machine.GetAsync("/.well-known/openid-configuration", bearer: string.Empty),
+            await machine.GetAsync("/oidc/jwks", bearer: string.Empty),
+        ];
+
+        Assert.NotEqual(StatusCodes.Status204NoContent, answers[0].Status);
+        Assert.All(answers, answered => Assert.Empty(CrossOrigin(answered)));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-006 AC6 (D-252): no route but the three answers a public application's
+    /// origin across origins: not the push, the user info, nor a browser route.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_006_AC6_NoOtherRouteAnswersCrossOriginAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        var machine = new Machine(deployment) { Origin = Registered };
+
+        Answer[] answers =
+        [
+            await machine.PreflightAsync("/oidc/par", "POST", "content-type"),
+            await RelyingParty.PushAsync(deployment, Request(Webmail, Callback, "openid email")),
+            await machine.PostAsync("/oidc/par", Request(Webmail, Callback, "openid email")),
+            await machine.PreflightAsync("/oidc/userinfo", "GET", "authorization"),
+            await machine.GetAsync("/oidc/userinfo", bearer: "not-a-token"),
+            await machine.PreflightAsync("/auth/session", "GET"),
+            await machine.CallAsync("/auth/session"),
+        ];
+
+        Assert.All(answers, answered => Assert.Empty(CrossOrigin(answered)));
+    }
+
     // The webmail, registered with two return addresses and the mail server as its
     // audience; the account pages, with one and none; and the two clients every flow
     // test registers.
@@ -302,4 +402,7 @@ public sealed class PublicApplicationTests
 
         return answered.Json().GetProperty("details").GetProperty("error").GetString() ?? string.Empty;
     }
+
+    private static string[] CrossOrigin(Answer answered) =>
+        [.. answered.Headers.Keys.Where(name => name.StartsWith("Access-Control-", StringComparison.OrdinalIgnoreCase))];
 }

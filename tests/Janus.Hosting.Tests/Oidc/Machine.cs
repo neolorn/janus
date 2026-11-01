@@ -30,6 +30,23 @@ internal sealed class Machine(Deployment deployment)
     public string Host { get; init; } = "identity.example.test";
 
     /// <summary>
+    /// Gets the origin the request names, as a browser running a public application's
+    /// code names its own, or nothing where it names none.
+    /// </summary>
+    public string? Origin { get; init; }
+
+    /// <summary>
+    /// Asks a browser's preflight of one of the library's machine routes: the method the
+    /// request would use and the headers it would send, and no body.
+    /// </summary>
+    /// <param name="path">The path.</param>
+    /// <param name="method">The method the request would use.</param>
+    /// <param name="headers">The headers it would send, or nothing.</param>
+    /// <returns>What came back.</returns>
+    public Task<Answer> PreflightAsync(string path, string method, string? headers = null) =>
+        SendAsync(path, body: null, cookie: null, bearer: null, ("OPTIONS", method, headers));
+
+    /// <summary>
     /// Posts a form to one of the library's machine routes.
     /// </summary>
     /// <param name="path">The path.</param>
@@ -123,11 +140,28 @@ internal sealed class Machine(Deployment deployment)
         string path,
         (string ContentType, string Text)? body,
         string? cookie,
-        string? bearer)
+        string? bearer,
+        (string Method, string Asked, string? Headers)? preflight = null)
     {
         var context = new DefaultHttpContext();
 
-        context.Request.Method = body is null ? "GET" : "POST";
+        context.Request.Method = preflight?.Method ?? (body is null ? "GET" : "POST");
+
+        if (Origin is not null)
+        {
+            context.Request.Headers.Origin = Origin;
+        }
+
+        if (preflight is (_, string asked, var headers))
+        {
+            context.Request.Headers.AccessControlRequestMethod = asked;
+
+            if (headers is not null)
+            {
+                context.Request.Headers.AccessControlRequestHeaders = headers;
+            }
+        }
+
         context.Request.Scheme = "https";
         context.Request.Host = new HostString(Host);
         context.Request.Path = Path(path, out QueryString query);

@@ -109,6 +109,16 @@ public static class PipelineProfiles
                 branch =>
                 {
                     Marked(branch);
+
+                    // AUTH-OIDC-006 (D-252): a public application's browser reaches the
+                    // token endpoint across origins, and no other protocol endpoint.
+                    _ = branch.UseWhen(
+                        context => MachineRoutes.IsToken(context.Request.Path),
+                        token => token.Use((context, next) => PublicApplicationCors.InvokeAsync(
+                            context,
+                            next,
+                            token: true,
+                            context.RequestAborted)));
                     PassedMarked(branch);
                     _ = branch.UseAuthentication();
                     PassedUnmarked(branch);
@@ -125,6 +135,14 @@ public static class PipelineProfiles
                         context,
                         next,
                         keySet: MachineRoutes.IsKeySet(context.Request.Path),
+                        context.RequestAborted));
+
+                    // AUTH-OIDC-006 (D-252): and a public application's browser fetches
+                    // both across origins.
+                    _ = branch.Use((context, next) => PublicApplicationCors.InvokeAsync(
+                        context,
+                        next,
+                        token: false,
                         context.RequestAborted));
                     PassedMarked(branch);
                     _ = branch.UseAuthentication();
