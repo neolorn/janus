@@ -254,6 +254,23 @@ public static class AuditActions
         AuditAction.Parse("identity.invitation.revoked");
 
     /// <summary>
+    /// A current member of the administrative organization was given a mailbox without
+    /// an invitation; never the address.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-001 (D-253) and IDN-AUD-001.</remarks>
+    public static AuditAction MailboxGiven { get; } =
+        AuditAction.Parse("identity.mailbox.given");
+
+    /// <summary>
+    /// An invitation, or a mailbox given to a current member, named <c>formerMailbox</c>
+    /// <c>adopt</c>, so the push takes over an account the mail server holds; never the
+    /// address.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-003 (D-255) and IDN-AUD-001.</remarks>
+    public static AuditAction MailboxAdopted { get; } =
+        AuditAction.Parse("identity.mailbox.adopted");
+
+    /// <summary>
     /// An invitation was acknowledged and the membership it offered attached.
     /// </summary>
     /// <remarks>Implements REG-INV-001, IDN-LIFE-009a and IDN-AUD-001.</remarks>

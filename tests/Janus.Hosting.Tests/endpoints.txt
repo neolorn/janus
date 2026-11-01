@@ -1311,6 +1311,22 @@ GET /admin/organizations/{id}/members
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
   404 identity.organization.notfound
+POST /admin/organizations/{id}/members/{account}/mailbox
+  request application/json
+    address: string
+    formerMailbox: FormerMailbox?
+    reason: string
+  201
+    application/json
+      id: Guid
+      address: string
+      state: MailboxState
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.membership.notfound
+  409 identity.account.stateconflict identity.identifier.maximum identity.invitation.mailboxheld identity.mailbox.held identity.mailbox.taken
+  422 api.request.invalid identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript integration.mailserver.unavailable
 GET /admin/organizations/{id}/members/{subject}
   200
     application/json

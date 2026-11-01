@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Mailboxes;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Xunit;
 
 namespace Janus.Authentication.Tests.Mailboxes;
@@ -24,6 +25,7 @@ public sealed class MailboxReconciliationTests : IDisposable
     private static readonly DateTimeOffset Noon = new(2026, 9, 23, 12, 0, 0, TimeSpan.Zero);
 
     private readonly MailboxStoreInMemory _mailboxes = new();
+    private readonly ConfigurationInMemory _configuration = new();
     private readonly MailServerInMemory _server = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -146,6 +148,31 @@ public sealed class MailboxReconciliationTests : IDisposable
 
         Assert.Empty(drift.Mailboxes);
         Assert.Equal(1, drift.Unknown);
+    }
+
+    /// <summary>
+    /// INT-MAIL-007 AC10 (D-254): a group account and an account
+    /// <c>integration.mailserver.ownaccounts</c> names raise nothing and are not counted,
+    /// while any other account carrying no mailbox identifier is counted as before.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC10_TheMailServersOwnAccountsAreNotCountedAsync()
+    {
+        _configuration.Set(Settings.IntegrationMailServerOwnAccounts, ["sender", "operator"]);
+        _server.SetGroup("shared@example.test");
+        _server.Set("sender@example.test", enabled: true);
+        _server.Set("operator@example.test", enabled: false);
+
+        MailboxDrift quiet = await ReconciledAsync();
+
+        _server.Set("stranger@example.test", enabled: true);
+
+        MailboxDrift counted = await ReconciledAsync();
+
+        Assert.True(quiet.IsEmpty);
+        Assert.Equal((0, 1), (quiet.Unknown, counted.Unknown));
+        Assert.Single(_events.Of<AlertRaised>());
     }
 
     /// <summary>
@@ -299,7 +326,8 @@ public sealed class MailboxReconciliationTests : IDisposable
         Assert.False(raised.Details["listed"].GetBoolean());
     }
 
-    private MailboxReconciliation Reconciliation => new(_mailboxes, new MailServerInUseInMemory(_server), _events, _clock);
+    private MailboxReconciliation Reconciliation =>
+        new(_mailboxes, new MailServerInUseInMemory(_server), _configuration, _events, _clock);
 
     private async Task<MailboxDrift> ReconciledAsync() =>
         (await Reconciliation.ReconcileAsync(Reconciler, TestContext.Current.CancellationToken))

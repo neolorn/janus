@@ -1089,6 +1089,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("holder");
 
+                b.Property<bool>("MayAdopt")
+                    .HasColumnType("boolean")
+                    .HasColumnName("may_adopt");
+
                 b.Property<DateTimeOffset?>("NextAttemptAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("next_attempt_at");

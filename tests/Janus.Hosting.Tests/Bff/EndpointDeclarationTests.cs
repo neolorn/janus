@@ -90,7 +90,11 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
                 Assert.True(declared.Contains(ErrorCodes.Denied), $"{route} does not declare {ErrorCodes.Denied}.");
             }
 
-            if (route.StartsWith("/admin/organizations/{id}", StringComparison.Ordinal))
+            // D-253: the route giving a mailbox exists in the administrative organization
+            // alone and answers any other {id} as a member it does not hold, so it gives
+            // identity.membership.notfound in place of its section's code.
+            if (route.StartsWith("/admin/organizations/{id}", StringComparison.Ordinal)
+                && route != "/admin/organizations/{id}/members/{account}/mailbox")
             {
                 Assert.True(
                     declared.Contains(ErrorCodes.OrganizationNotFound),

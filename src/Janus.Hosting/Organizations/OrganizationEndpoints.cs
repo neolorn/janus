@@ -178,6 +178,21 @@ internal static class OrganizationEndpoints
                 .Binding<OrganizationId>("id")
                 .Binding<InvitationId>("invitationId"))
             .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapPost(
+            "/admin/organizations/{id}/members/{account}/mailbox",
+            GiveMailboxAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.MembershipNotFound, ErrorCodes.MailboxHeld,
+                    ErrorCodes.IdentifierMaximum, ErrorCodes.AccountStateConflict, ErrorCodes.MailboxTaken,
+                    ErrorCodes.InvitationMailboxHeld, ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.IdentifierMixedScript, ErrorCodes.IdentifierInvalid,
+                    ErrorCodes.RequestInvalid, ErrorCodes.MailServerUnavailable)
+                .Binding<OrganizationId>("id")
+                .Binding<SubjectId>("account"))
+            .Accepts<MailboxGiftBody>(MediaTypeNames.Application.Json)
+            .Produces<GivenMailboxView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapDelete(
             "/admin/organizations/{id}/memberships/{subject}",
             EndMembershipAsync))
@@ -706,6 +721,50 @@ internal static class OrganizationEndpoints
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
+    }
+
+    private static async Task<IResult> GiveMailboxAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        HttpContext context,
+        OrganizationId id,
+        SubjectId account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        MailboxGiftBody body = await JsonBody
+            .ReadAsync<MailboxGiftBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(body.Address))
+        {
+            return Answers.Malformed("address");
+        }
+
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await invitations
+                .GiveMailboxAsync(
+                    browser.Asking,
+                    browser.Required.Id,
+                    id,
+                    account,
+                    new MailboxGift(body.Address, reason) { FormerMailbox = body.FormerMailbox },
+                    RequestOrigin.Source(context.Request),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            given => TypedResults.Json(
+                GivenMailboxView.Of(given),
+                OrganizationJson.Default.GivenMailboxView,
+                contentType: null,
+                StatusCodes.Status201Created));
     }
 
     private static async Task<IResult> EndMembershipAsync(

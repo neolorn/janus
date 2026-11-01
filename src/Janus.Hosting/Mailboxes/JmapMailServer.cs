@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Mime;
@@ -27,8 +28,12 @@ namespace Janus.Hosting.Mailboxes;
 /// or not destroyed is a failure; nothing is read as success by default. A mailbox is an
 /// account named by its address's local part in the domain of its address, and carries
 /// the library's identifier of the mailbox as its description; an account under that
-/// name that does not carry it is never adopted, changed or destroyed. A push changes the
-/// <c>authenticate</c> permission alone. The app-password calls present the management key
+/// name that does not carry it is never adopted, changed or destroyed, save that a push
+/// that may adopt takes over an individual account carrying no mailbox identifier,
+/// writing the identifier into its description (D-255). A push at a name
+/// <c>integration.mailserver.ownaccounts</c> lists is refused whatever the account there
+/// carries, and the listing answers each account's type and name (D-254). A push changes
+/// the <c>authenticate</c> permission alone, and the description of an account it adopts. The app-password calls present the management key
 /// on the account that carries the mailbox's identifier, found as a push finds it and
 /// named by each call's <c>accountId</c>, and fail where the server holds no such account
 /// (D-226). Registered as its own type, never as <see cref="IMailServer"/>: the start
@@ -44,7 +49,11 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
 
     private const string Authenticate = "authenticate";
 
+    private const string User = "User";
+
     private Uri? _endpoint;
+
+    private IReadOnlyList<string> _own = [];
 
     /// <inheritdoc/>
     public async ValueTask<Result> ProvisionAsync(MailboxPush push, CancellationToken cancellationToken)
@@ -56,6 +65,13 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
         string local = address[..at];
         string domain = address[(at + 1)..];
         Error? failure = null;
+
+        // INT-MAIL-001, INT-MAIL-007 (D-254): a name the deployment keeps for itself is
+        // never a mailbox's, so nothing is done there.
+        if (Volatile.Read(ref _own).Contains(local, StringComparer.Ordinal))
+        {
+            return Result.Failure(Error.From(ErrorCodes.MailServerConflict));
+        }
 
         string token = Managed().Match(value => value, error => Withheld<string>(error, ref failure));
 
@@ -131,7 +147,7 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
                     token,
                     "x:Account",
                     new JsonObject(),
-                    ["emailAddress", "description", "permissions"],
+                    ["@type", "name", "emailAddress", "description", "permissions"],
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<IReadOnlyList<JsonElement>>(error, ref failure));
@@ -145,15 +161,17 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
 
         foreach (JsonElement account in accounts)
         {
-            // D-166 215 point 5: users only; an account the server says is of another
-            // kind is no mailbox.
-            if (account.TryGetProperty("@type", out JsonElement kind)
-                && !string.Equals(kind.GetString(), "User", StringComparison.Ordinal))
+            // INT-MAIL-001 (D-254): every account is listed with its type and its name,
+            // and one whose type does not read does not read at all.
+            if (Text(account, "@type") is not string type)
             {
-                continue;
+                return Result.Failure<IReadOnlyList<HostedMailbox>>(Fault());
             }
 
-            if (Permitted(account) is not bool enabled)
+            bool individual = string.Equals(type, User, StringComparison.Ordinal);
+            bool? enabled = individual ? Permitted(account) : false;
+
+            if (enabled is null)
             {
                 return Result.Failure<IReadOnlyList<HostedMailbox>>(Fault());
             }
@@ -166,7 +184,11 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
                 && EmailAddress.TryParse(address, out EmailAddress listed)
                     ? listed
                     : null,
-                enabled));
+                enabled.Value)
+            {
+                Individual = individual,
+                Name = Text(account, "name"),
+            });
         }
 
         return Result.Success<IReadOnlyList<HostedMailbox>>(hosted);
@@ -331,13 +353,16 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
     }
 
     /// <summary>
-    /// Sets where the mail server is reached, once, as the start chooses the adapter.
+    /// Sets where the mail server is reached and the accounts the deployment keeps for
+    /// itself, once, as the start chooses the adapter.
     /// </summary>
     /// <param name="endpoint">The value of <c>integration.mailserver.endpoint</c>, an absolute https address.</param>
+    /// <param name="own">The value of <c>integration.mailserver.ownaccounts</c> (D-254).</param>
     /// <exception cref="InvalidOperationException">The endpoint is set already.</exception>
-    internal void Reach(Uri endpoint)
+    internal void Reach(Uri endpoint, IReadOnlyList<string> own)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
+        ArgumentNullException.ThrowIfNull(own);
 
         var reached = new Uri(endpoint.AbsoluteUri.TrimEnd('/') + "/jmap");
 
@@ -345,9 +370,19 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
         {
             throw new InvalidOperationException("The mail server's endpoint is set once, at the start.");
         }
+
+        Volatile.Write(ref _own, [.. own]);
     }
 
     private static Error Fault() => Error.From(ErrorCodes.SystemFault);
+
+    // D-255: what a push that may adopt takes over: an individual account carrying no
+    // mailbox identifier, and never for a removal, which destroys nothing it did not make.
+    private static bool Adoptable(MailboxPush push, JsonElement account) =>
+        push.MayAdopt
+        && push.State is not MailboxState.Removed
+        && Carried(account) is null
+        && string.Equals(Text(account, "@type"), User, StringComparison.Ordinal);
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {
@@ -586,8 +621,12 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
         CancellationToken cancellationToken)
     {
         // INT-MAIL-001 AC4, D-177: an account under the mailbox's name that does not
-        // carry its identifier is not the library's, and nothing is done to it.
-        if (Carried(account.Element) != push.Mailbox)
+        // carry its identifier is not the library's, and nothing is done to it, save one
+        // a push that may adopt takes over: an individual account carrying no mailbox
+        // identifier, which keeps its mail and is given the identifier (D-255).
+        bool adopts = Carried(account.Element) != push.Mailbox;
+
+        if (adopts && !Adoptable(push, account.Element))
         {
             return Result.Failure(Error.From(ErrorCodes.MailServerConflict));
         }
@@ -601,6 +640,11 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
         else if (Patch(account.Element, push.State) is not JsonObject patch)
         {
             return Result.Failure(Fault());
+        }
+        else if (adopts)
+        {
+            patch["description"] = push.Mailbox.ToString();
+            arguments = new JsonObject { ["update"] = new JsonObject { [account.Id] = patch } };
         }
         else if (patch.Count is 0)
         {
@@ -734,7 +778,7 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
                     token,
                     "x:Account",
                     new JsonObject { ["name"] = local, ["domainId"] = domainId },
-                    ["name", "domainId", "description", "permissions"],
+                    ["@type", "name", "domainId", "description", "permissions"],
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<IReadOnlyList<JsonElement>>(error, ref failure));

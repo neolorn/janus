@@ -20320,6 +20320,157 @@ refresh token. Every other client is unchanged. The owner approved the trade-off
 
 ---
 
+## D-253 — A current member of the administrative organization gains a mailbox
+
+> **Amended.** 2026-11-01. Decisions on the questions its carrying raised:
+> 1. `integration.mailserver.unavailable`: 422, with `details.requires`
+>    `integration.mailserver.endpoint`, as `config.value.notallowed` does.
+> 2. Success: 201 with `{ "id", "address", "state" }` of the mailbox.
+> 3. An `{id}` that is not the administrative organization: 404
+>    `identity.membership.notfound`. The route exists only there, and the answer is the
+>    same as for a non-member, so nothing is disclosed.
+> 4. Audit action: `identity.mailbox.given`, in `10` section 5.24, with the reason.
+> 5. Address rules: (a) no lock on the member's existing emails; (b) the given address
+>    counts against `identifiers.email.max`, refused `identity.identifier.maximum` at the
+>    limit; (c) an address another account holds as an ordinary email is refused with
+>    the code an identifier add already answers for an address another account holds,
+>    `auth.code.expired` (`10` section 1.2).
+
+> **Amended.** 2026-11-01. 5(c) revised: not `auth.code.expired`. An address another
+> account holds as an email is refused 409 `identity.mailbox.taken`, extended to that
+> case.
+
+> **Amended.** 2026-11-01. Decisions on round H12's questions:
+> 1. An address the account itself holds as an email (an administrator bootstrapped with
+>    the company address as the personal one, found by Cura) is not refused: that email
+>    becomes the mailbox's address and stays the account's one identifier for it, marked
+>    verified, primary by the same rule, counted once against `identifiers.email.max`.
+>    `identity.mailbox.taken` stays for an address another account holds.
+> 2. "None from the organization's domain" is the given address's domain.
+> 3. A push at a name `integration.mailserver.ownaccounts` names is refused whether or not
+>    the server holds an account at it.
+> 4. The library call is `IInvitations.GiveMailboxAsync`, beside the invitation's.
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** REG-MAIL-001, INT-MAIL-006
+
+**TL;DR.** A person already a member of the administrative organization, the bootstrap
+administrator first among them, can be given a mailbox without an invitation. Until now a
+mailbox came only with an invitation (REG-MAIL-001) or `bootstrap --mailbox`, so an
+administrator bootstrapped without one could never have it. Found by Cura's first
+production release.
+
+- **The route.** `POST /admin/organizations/{id}/members/{account}/mailbox` with
+  `{ "address", "formerMailbox"?, "reason" }`, `{id}` the administrative organization,
+  admitted under `membership:manage` there, with the step-up the invitation route asks.
+  The library call is `IMemberships.GiveMailboxAsync`.
+- **What it does.** It reserves the mailbox at `address` as REG-MAIL-001 reserves an
+  invitation's, under the same address rules (the organization's domain, uniqueness,
+  `formerMailbox` for a mailbox held before, `identity.invitation.mailboxheld` without
+  it), and since the membership is current, owes it `enabled` at once (INT-MAIL-006,
+  INT-MAIL-007). The address becomes a verified identifier of the account, and the
+  primary email where the account holds none from the organization's domain; the
+  account's other emails stay. It is notified once to the security-notice set and
+  recorded with its reason.
+- **What it refuses.** An account that already holds a mailbox
+  (`identity.mailbox.held`, 409), a member of another organization, an account not
+  `active` or `restricted`, the emergency account (OPS-BOOT-002), and a deployment with
+  no mail server registered (`integration.mailserver.unavailable`).
+- **Oneself.** It hands out no role, so AUTHZ-GRANT-005 does not bear on it; a system
+  administrator may give themselves a mailbox.
+
+**Propagated to:** `20` REG-MAIL-001 (the route beside the invitation); `05`
+INT-MAIL-006; `07` LIB-API (`IMemberships.GiveMailboxAsync`); `09` (the route); `10`
+section 1 (`identity.mailbox.held`, `integration.mailserver.unavailable`,
+`identity.mailbox.taken`, `identity.membership.notfound`, `identity.identifier.maximum`),
+section 5a (`invitation:issue`), section 5.24
+(`identity.mailbox.given`), section 5.25 (`identifier-added`) and section 5b
+(`IdentifierAdded`, `IdentifierPrimaryChanged`); `implementation-plan.md` (round H12).
+
+---
+
+## D-254 — Reconciliation leaves the mail server's own accounts alone
+
+> **Amended.** 2026-11-01. Decisions on the questions its carrying raised:
+> 6. D-254 changes what `IMailServer` asks of a host: a host's own adapter lists each
+>    account's type and name, and refuses a push that meets an own account as a
+>    conflict (`07` LIB-EXT-001, LIB-HOST-001).
+> 7. An "account name" is the name the mail server gives the account (Stalwart's
+>    `name`), not an email address.
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** INT-MAIL-007
+
+**TL;DR.** The daily reconciliation counts as `unknown` only an individual account the
+library could have made. A group account, and an account the deployment names as its
+own, is never the library's and no longer raises `degradation`. Found by Cura's mail
+server, which holds shared mailboxes (groups) and its own service accounts (the sender,
+the library's management account, the operator's), each raising the alert daily.
+
+- **Groups.** An account whose type is not an individual one (in Stalwart 1.0,
+  `@type` other than `User`) is outside reconciliation: neither counted nor acted on. The
+  library never creates one.
+- **The deployment's own accounts.** `integration.mailserver.ownaccounts` (none by
+  default; a list of account names, redeploy-scoped) names individual accounts the
+  library leaves alone. Each is neither counted nor acted on, and a push that meets one is
+  refused as today's conflict is (`integration.mailserver.conflict`), so a mailbox can
+  never be given an address the deployment keeps for itself.
+- **What stays.** Every other account without a mailbox identifier is counted in
+  `unknown` as before.
+
+**Propagated to:** `05` INT-MAIL-007 (and the listing of INT-MAIL-001 where it names
+the accounts read); `10` section 4 (`integration.mailserver.ownaccounts`, and section
+4.8 as a protected key) and section 1 (`integration.mailserver.conflict`); `06`
+OPS-CFG-004 (the protected list); `07` LIB-EXT-001 and LIB-HOST-001 (what a host's own
+`IMailServer` lists and refuses); `implementation-plan.md` (round H12).
+
+---
+
+## D-255 — Adopting a mail account the server already holds
+
+> **Amended.** 2026-11-01. Answers to the questions its carrying raised:
+> 1. No server question at the route. `adopt` permits the push to take over an unmarked
+>    individual account whose name is the address's local part. Where the server holds
+>    none, the push creates the mailbox as it does without `adopt`. Drop
+>    `identity.mailbox.notfound` for adopt.
+> 2. The conflicts are the push's, `integration.mailserver.conflict` with `degradation`,
+>    as always. No route-time check.
+> 3. The notice is the one `identifier-added` the acknowledgement or D-253's route
+>    already sends. No separate notice.
+> 4. `adopt` where the library already holds a mailbox at the address: `api.request.invalid`
+>    naming `formerMailbox`, mirroring the opposite case.
+> 5. `07` LIB-HOST-001 and LIB-EXT-001: a push carries whether it may adopt, and a host's
+>    adapter writes the mailbox identifier into the description when it adopts.
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** REG-MAIL-001, REG-MAIL-003,
+INT-MAIL-001, INT-MAIL-006, D-253
+
+**TL;DR.** An invitation, or D-253's route, MAY name `formerMailbox: adopt` for an
+address where the mail server already holds an individual account that carries no
+mailbox identifier: the library then takes that account as the mailbox, writing its
+mailbox identifier into the account's description, instead of answering
+`integration.mailserver.conflict`. The owner wants the deployment's mail accounts
+created before the people join. Taking over an account that holds mail is a deliberate
+act, so it is never implicit.
+
+- **Who and how:** as `transfer` and `replace` are: the route's step-up, a reason,
+  recorded (`identity.mailbox.adopted`), notified once.
+- **What it refuses:** an account that carries another mailbox's identifier
+  (`integration.mailserver.conflict`), a group account or an account
+  `integration.mailserver.ownaccounts` names (`integration.mailserver.conflict`), and
+  `adopt` where the server holds no account at the address (`identity.mailbox.notfound`,
+  404, or the nearest existing code you find).
+- **The adopted account** keeps its mail, aliases and group memberships; its
+  `authenticate` permission then follows the mailbox's state like any other
+  (INT-MAIL-006).
+- **Without `adopt`,** everything is unchanged: an unmarked account at the address is
+  still a conflict.
+
+**Propagated to:** `20` REG-MAIL-001 and REG-MAIL-003 (`formerMailbox` gains `adopt`);
+`05` INT-MAIL-001 (the push that adopts), INT-MAIL-006; `09` (the invitation and D-253
+routes' bodies); `10` (codes and `identity.mailbox.adopted`); `07` LIB-HOST-001 and
+LIB-EXT-001 (a push carries whether it may adopt); `implementation-plan.md` (round H12).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -20580,6 +20731,11 @@ refresh token. Every other client is unchanged. The owner approved the trade-off
 | A deployment creates a business organization from the command line | D-248 |
 | An organization turns photos on where the system policy has them off | D-249 |
 | A member sees a colleague's photo | D-250 |
+| A recovery's approver reaches every role the account holds | D-251 |
+| A browser application without a secret, for the mail server | D-252 |
+| A current member of the administrative organization gains a mailbox | D-253 |
+| Reconciliation leaves the mail server's own accounts alone | D-254 |
+| Adopting a mail account the server already holds | D-255 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -739,7 +739,8 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
             attempts: 0,
             nextAttemptAt: null,
             failedAt: null,
-            attempted: true);
+            attempted: true,
+            mayAdopt: false);
         var released = Mailbox.Existing(
             MailboxId.Of(Noon.AddDays(-2)),
             Parsed(Address),
@@ -753,7 +754,8 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
             attempts: 0,
             nextAttemptAt: null,
             failedAt: null,
-            attempted: true);
+            attempted: true,
+            mayAdopt: false);
 
         _mailboxes.Held.Add(replaced);
         _mailboxes.Held.Add(released);

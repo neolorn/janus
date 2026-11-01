@@ -121,6 +121,50 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
     }
 
     /// <inheritdoc/>
+    public ValueTask MailboxGivenAsync(
+        OrganizationId organization,
+        MailboxId mailbox,
+        SubjectId member,
+        string reason,
+        FormerMailbox? formerMailbox,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _changes.Add(new OrganizationChange(AuditActions.MailboxGiven, organization, reason, actor, at)
+        {
+            Mailbox = mailbox,
+            Member = member,
+            FormerMailbox = formerMailbox,
+            BreakGlassReason = breakGlassReason,
+        });
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask MailboxAdoptedAsync(
+        OrganizationId organization,
+        MailboxId mailbox,
+        SubjectId subject,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _changes.Add(new OrganizationChange(AuditActions.MailboxAdopted, organization, reason, actor, at)
+        {
+            Mailbox = mailbox,
+            Member = subject,
+            BreakGlassReason = breakGlassReason,
+        });
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask MembershipEndedAsync(
         OrganizationId organization,
         MembershipId membership,
@@ -236,6 +280,16 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         /// What an invitation chose for a former mailbox, where it named one.
         /// </summary>
         public MailboxTakeover? Takeover { get; init; }
+
+        /// <summary>
+        /// Gets the mailbox given or adopted, where the change was one.
+        /// </summary>
+        public MailboxId? Mailbox { get; init; }
+
+        /// <summary>
+        /// Gets what a mailbox given chose for a mailbox the address had, where it named one.
+        /// </summary>
+        public FormerMailbox? FormerMailbox { get; init; }
 
         /// <summary>
         /// Which membership ended, where one did.

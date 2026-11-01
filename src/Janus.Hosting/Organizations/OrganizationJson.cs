@@ -25,6 +25,8 @@ namespace Janus.Hosting.Organizations;
 [JsonSerializable(typeof(IReadOnlyList<OrganizationDomainView>))]
 [JsonSerializable(typeof(InvitationBody))]
 [JsonSerializable(typeof(IssuedInvitationView))]
+[JsonSerializable(typeof(MailboxGiftBody))]
+[JsonSerializable(typeof(GivenMailboxView))]
 [JsonSerializable(typeof(OrganizationSummaryView))]
 [JsonSerializable(typeof(OrganizationPageView))]
 [JsonSerializable(typeof(MemberView))]

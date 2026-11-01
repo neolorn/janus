@@ -1446,6 +1446,8 @@ internal sealed class Deployment : IAsyncDisposable
                 provider.GetRequiredService<Janus.Authentication.Invitations.IRoleHandOut>(),
                 Memberships));
         _ = services.AddScoped<Janus.Authentication.Invitations.MembershipEnd>();
+        _ = services.AddScoped<Janus.Authentication.Invitations.MailboxReservations>();
+        _ = services.AddScoped<Janus.Authentication.Invitations.MailboxGiving>();
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationOpening>();
         _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
         _ = services.AddScoped<SigningKeys>();

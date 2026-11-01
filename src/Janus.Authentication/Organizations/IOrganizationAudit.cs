@@ -130,6 +130,56 @@ internal interface IOrganizationAudit
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Records a mailbox given to a current member of the administrative organization,
+    /// filed under it with the member as whom it was done to, and never the address
+    /// (REG-MAIL-001, D-253).
+    /// </summary>
+    /// <param name="organization">The administrative organization.</param>
+    /// <param name="mailbox">Which mailbox.</param>
+    /// <param name="member">Whose it became.</param>
+    /// <param name="reason">Why, as given.</param>
+    /// <param name="formerMailbox">What the request chose for a mailbox the address had, or nothing.</param>
+    /// <param name="actor">Who gave it.</param>
+    /// <param name="breakGlassReason">The break-glass reason the change was made under, or nothing.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask MailboxGivenAsync(
+        OrganizationId organization,
+        MailboxId mailbox,
+        SubjectId member,
+        string reason,
+        FormerMailbox? formerMailbox,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records a mailbox reserved under <c>formerMailbox</c> <c>adopt</c>, whose push takes
+    /// over the account the mail server holds, filed under the administrative
+    /// organization and never with the address (REG-MAIL-003, D-255).
+    /// </summary>
+    /// <param name="organization">The administrative organization.</param>
+    /// <param name="mailbox">Which mailbox.</param>
+    /// <param name="subject">Whom it was done to: the member given it, or the administrator inviting.</param>
+    /// <param name="reason">Why, as given.</param>
+    /// <param name="actor">Who named it.</param>
+    /// <param name="breakGlassReason">The break-glass reason the change was made under, or nothing.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask MailboxAdoptedAsync(
+        OrganizationId organization,
+        MailboxId mailbox,
+        SubjectId subject,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a membership an administrator ended, filed under the organization with the
     /// member as whom it was done to.
     /// </summary>

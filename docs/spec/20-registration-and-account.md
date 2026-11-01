@@ -1272,7 +1272,36 @@ whose invitation expired SHALL revoke that invitation in the same transaction an
 the mailbox. In every other case no corporate address is asserted, and every email of
 the member SHALL be verified by the person like any other.
 
-*Source: D-148; D-146, D-166, D-178, amends D-144 (provisioning moves from acceptance to invitation)*
+**A mailbox for a current member (D-253).** Beside the invitation, a person already a
+current member of the administrative organization, the bootstrap administrator first
+among them, MAY be given a mailbox: `POST /admin/organizations/{id}/members/{account}/mailbox`
+(`09`), `{id}` the administrative organization, admitted under `membership:manage`
+there with the step-up the invitation's issue asks (`invitation:issue`), and its library
+call `IInvitations.GiveMailboxAsync`. The mailbox SHALL be reserved at the address given
+as an invitation's is, under the same address rules (the organization's domain lock,
+uniqueness, and `formerMailbox` for a mailbox held before, `identity.invitation.mailboxheld`
+without it, or `adopt` for an account the mail server already holds, REG-MAIL-003,
+D-255), and, the membership being current, owed `enabled` at once (`05` INT-MAIL-006,
+INT-MAIL-007). The address SHALL become a verified email of the account, and its primary
+email where the account holds none from the organization's domain; the account's other
+emails stay, and no lock falls on them. Where the account itself already holds the
+address as an email, that email SHALL become the mailbox's address and stay its one
+identifier for it, verified, primary by the same rule (D-253). The address counts against
+`identifiers.email.max`, once. Taking it on SHALL be notified once to the security-notice set
+as it stood before, and recorded as `identity.mailbox.given` with its reason. It SHALL be
+refused for an account that already holds a mailbox (`identity.mailbox.held`, 409), an
+account whose emails already fill the kind (`identity.identifier.maximum`, 409), an
+address another account holds as an email (`identity.mailbox.taken`, 409), an account
+that holds no current membership of the administrative organization and an `{id}` that
+is not that organization alike (`identity.membership.notfound`, 404, so nothing is
+disclosed), an
+account neither `active` nor `restricted`, the `emergency` account (OPS-BOOT-002), and a
+deployment with no mail server registered (`integration.mailserver.unavailable`, 422).
+It answers 201 with the mailbox's `id`, `address` and `state`. It hands out no role, so
+AUTHZ-GRANT-005 does not bear on it, and a system administrator may give themselves a
+mailbox.
+
+*Source: D-148; D-146, D-166, D-178, D-253, D-255, amends D-144 (provisioning moves from acceptance to invitation)*
 
 A temporary mailbox password for reading a code is rejected: staff reach mail through
 the library's OIDC provider and app passwords created after sign-in (INT-MAIL-005), the
@@ -1300,6 +1329,27 @@ security notices reach the personal address as well.
 8. An invitation for a corporate address a member holds, or that a standing invitation
    not yet expired reserves, is refused with `identity.mailbox.taken`; re-inviting an
    address whose invitation expired revokes that invitation and keeps the mailbox.
+9. A current member of the administrative organization with no mailbox, the bootstrap
+   administrator bootstrapped without `--mailbox` included, is given one: the mailbox is
+   reserved and owed `enabled` at once, the address becomes a verified email and the
+   primary where the account held none from the organization's domain, its other emails
+   stay unlocked, the security-notice set as it stood before is notified once, the
+   giving is recorded as `identity.mailbox.given`, and the answer is 201 with the
+   mailbox's `id`, `address` and `state` (D-253).
+10. Giving a mailbox is refused, and nothing written, for an account that already holds
+    one (`identity.mailbox.held`), one whose emails fill `identifiers.email.max`
+    (`identity.identifier.maximum`), an address another account holds as an email
+    (`identity.mailbox.taken`), one with no current membership of the administrative
+    organization and an `{id}` that is not that organization, alike
+    (`identity.membership.notfound`), one neither `active` nor `restricted`, the
+    `emergency` account, and a deployment with no mail server registered
+    (`integration.mailserver.unavailable`, `details.requires`
+    `integration.mailserver.endpoint`); a system administrator gives themselves one
+    (D-253).
+11. Giving a mailbox at an address the account itself holds as an email writes no second
+    email: that email is the mailbox's address, verified, primary where the account held
+    none from the address's domain, and counted once against `identifiers.email.max`
+    (D-253).
 
 ---
 
@@ -1366,12 +1416,14 @@ included, SHALL be refused with `identity.invitation.mailboxheld` unless it name
 in it, or `replace`, under which the old mailbox is removed and a new one reserved.
 Either SHALL pass the invitation's step-up, carry a reason and be recorded. An address
 whose last holder was erased is treated as never held (below). An invitation naming
-`formerMailbox` where no held mailbox stands for the address SHALL be refused with
-`api.request.invalid`, `details.member` `formerMailbox`. No check of who the invitee is
+`formerMailbox` `transfer` or `replace` where no held mailbox stands for the address
+SHALL be refused with `api.request.invalid`, `details.member` `formerMailbox`, and one
+naming `adopt` where one does is refused the same way (D-255). No check of who the invitee is
 SHALL be made at issue, since issuing an invitation tells nothing about accounts. The
 library SHALL remove a mailbox anyone has held only under `replace`, and SHALL NOT adopt
 for a new reservation a mail-server account that does not carry the new mailbox's
-identifier; the mail server answers that refusal `integration.mailserver.conflict`, and
+identifier, save under `adopt` (below); the mail server answers that refusal
+`integration.mailserver.conflict`, and
 the push that met the account is marked failed at once and raises `degradation` scoped
 `mailbox.conflict:<mailbox id>`, naming the mailbox by its identifier (INT-MAIL-001,
 INT-MAIL-007). Under `replace` the old mailbox's row SHALL record the instant it was
@@ -1382,18 +1434,40 @@ waits, spending no attempt, until the server has confirmed the old one's removal
 (INT-MAIL-006, INT-MAIL-007). A mailbox is held before, for this rule, only where it
 stands for the address: a mailbox replaced or released no longer does.
 
+**Adopting an account the mail server holds (D-255).** An invitation, or a mailbox given
+to a current member (REG-MAIL-001), MAY name `formerMailbox` `adopt`, which permits the
+push to take over an unmarked individual account whose name is the address's local
+part: the push takes that account as the mailbox, writing the mailbox's identifier into
+the account's description (`05` INT-MAIL-001), instead of answering
+`integration.mailserver.conflict`. Where the server holds no such account, the push
+creates the mailbox as it does without `adopt`; the route asks the server nothing.
+Taking over an account that holds mail is a deliberate act, so it is never implicit:
+`adopt`, as `transfer` and `replace` do, SHALL pass the route's step-up, carry a reason
+and be recorded (`identity.mailbox.adopted`); its notice is the one `identifier-added`
+the acknowledgement or the given mailbox already sends, and no other. The adopted
+account keeps its mail, aliases and group memberships, and its `authenticate`
+permission then follows the mailbox's state like any other (INT-MAIL-006). An account
+that carries another mailbox's identifier, a group account and an account
+`integration.mailserver.ownaccounts` names are still answered
+`integration.mailserver.conflict` at the push, with its `degradation`, as always.
+`adopt` where the library already holds a mailbox at the address SHALL be refused with
+`api.request.invalid`, `details.member` `formerMailbox`, as naming `transfer` or
+`replace` where none stands is. Without `adopt` everything is unchanged: an unmarked
+account at the address is still a conflict.
+
 An erasure leaves nothing that recognises a mailbox's address: the address is under the
 erased key and its fingerprint is neutralised (PRIV-RIGHT-005). A later invitation of
 the address whose last holder was erased SHALL therefore be treated as one of an address
 never held, and SHALL name no `formerMailbox`; keeping anything that would still match
 the address would undo the erasure. The erased person's mail still never passes: the
-mail-server account they left is never adopted, so the new mailbox's push is answered
+mail-server account they left is never adopted, `adopt` included, since it carries the
+erased mailbox's identifier, so the new mailbox's push is answered
 `integration.mailserver.conflict` while that account stands, and the new mailbox is
 created by the daily attempt that follows the operator's erasure of that account at the
 mail server (D-101, INT-MAIL-007); reconciliation has counted the account as unknown
 since the person was erased.
 
-*Source: D-148; D-146, D-166, D-177, D-178, `16-offboarding-procedure`*
+*Source: D-148; D-146, D-166, D-177, D-178, D-255, `16-offboarding-procedure`*
 
 Every account into an integrated-mail organization is created with a verified personal
 email (REG-MAIL-001), so the account never holds zero verified emails (REG-IDENT-001) and
@@ -1422,12 +1496,24 @@ address behaves as unknown at every path, including recovery.
    finds; erasing the old mailbox's last holder before its removal is confirmed
    neutralises that fingerprint and leaves the new mailbox's push answered
    `integration.mailserver.conflict` while the old account stands; an invitation naming
-   `formerMailbox` where no held mailbox stands for the address is refused with
-   `api.request.invalid`, `details.member` `formerMailbox`.
+   `formerMailbox` `transfer` or `replace` where no held mailbox stands for the address
+   is refused with `api.request.invalid`, `details.member` `formerMailbox`.
 8. An invitation of an address whose last holder was erased is issued without
    `formerMailbox`; while the erased holder's account stands at the mail server the new
    mailbox's push is answered `integration.mailserver.conflict` and adopts nothing, and
    once that account is gone the next attempt creates the new mailbox.
+9. Under `formerMailbox` `adopt`, an individual account carrying no mailbox identifier
+   and named by the address's local part is taken as the mailbox by the push, its
+   description given the mailbox's identifier, its mail, aliases and group memberships
+   kept and its `authenticate` permission following the mailbox's state; the adoption is
+   recorded as `identity.mailbox.adopted` with its reason, and no notice beyond the one
+   `identifier-added` is sent. Where the server holds no such account, the push creates
+   the mailbox. An account carrying another mailbox's identifier, a group account and an
+   account `integration.mailserver.ownaccounts` names are answered
+   `integration.mailserver.conflict` at the push; `adopt` where the library already
+   holds a mailbox at the address is refused `api.request.invalid` naming
+   `formerMailbox`; without `adopt`, an unmarked account at the address is still a
+   conflict (D-255).
 
 ---
 

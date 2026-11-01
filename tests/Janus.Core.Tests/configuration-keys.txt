@@ -55,6 +55,7 @@ identifiers.username.enabled flag R
 integration.callback.claimtimeout duration R floor=PT1M
 integration.callback.ratelimit integer R
 integration.mailserver.endpoint text P
+integration.mailserver.ownaccounts text-list P
 legal.governinglanguage text P
 link.invitation.lifetime duration R ceiling=P30D
 link.magic.lifetime duration R ceiling=PT1H

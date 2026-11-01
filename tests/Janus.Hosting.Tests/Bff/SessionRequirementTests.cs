@@ -139,6 +139,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /admin/organizations/{id}/domains",
         "POST /admin/organizations/{id}/domains/{domain}/verify",
         "POST /admin/organizations/{id}/invitations",
+        "POST /admin/organizations/{id}/members/{account}/mailbox",
         "POST /admin/privacy/requests/",
         "POST /admin/privacy/requests/{request}/fulfil",
         "POST /admin/privacy/requests/{request}/refuse",

@@ -251,6 +251,7 @@ internal static class AuthenticationRegistration
         services.AddScoped(provider => new MailboxReconciliation(
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IMailServerInUse>(),
+            provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IAlertRaising>(),
             provider.GetRequiredService<TimeProvider>()));
 
@@ -272,6 +273,8 @@ internal static class AuthenticationRegistration
 
         services.AddScoped<InvitationAcknowledgement>();
         services.AddScoped<MembershipEnd>();
+        services.AddScoped<MailboxReservations>();
+        services.AddScoped<MailboxGiving>();
         services.AddScoped<InvitationOpening>();
 
         // REG-MAIL-001: an invitation reserves a mailbox only where there is a mail
@@ -291,6 +294,8 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<InvitationAcknowledgement>(),
             provider.GetRequiredService<MembershipEnd>(),
             provider.GetRequiredService<IMailboxStore>(),
+            provider.GetRequiredService<MailboxReservations>(),
+            provider.GetRequiredService<MailboxGiving>(),
             provider.GetRequiredService<IMailServerInUse>(),
             provider.GetRequiredService<IGovernedSend>(),
             provider.GetRequiredService<LandingLinks>(),

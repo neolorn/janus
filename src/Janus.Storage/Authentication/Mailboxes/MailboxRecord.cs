@@ -103,6 +103,13 @@ internal sealed class MailboxRecord
     public bool Attempted { get; set; }
 
     /// <summary>
+    /// The <c>may_adopt</c> column: whether the mailbox was reserved under
+    /// <c>formerMailbox</c> <c>adopt</c>, so its push may take over an account the mail
+    /// server already holds (D-255).
+    /// </summary>
+    public bool MayAdopt { get; set; }
+
+    /// <summary>
     /// The <c>claimed_until</c> column: when the claim of the pass that holds the row's
     /// push times out, or nothing where no pass holds it (CONV-DESIGN-003).
     /// </summary>

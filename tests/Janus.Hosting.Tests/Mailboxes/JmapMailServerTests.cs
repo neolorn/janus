@@ -116,7 +116,7 @@ public sealed class JmapMailServerTests : IDisposable
         Assert.Equal(["authenticate"], Members(account, "disabledPermissions"));
         Assert.Empty(Members(account, "enabledPermissions"));
         Assert.Equal(
-            [new HostedMailbox(Mailbox, Email(Address), Enabled: false)],
+            [new HostedMailbox(Mailbox, Email(Address), Enabled: false) { Name = "ada" }],
             Value(await started.Server.MailboxesAsync(cancellationToken)));
     }
 
@@ -314,10 +314,11 @@ public sealed class JmapMailServerTests : IDisposable
     }
 
     /// <summary>
-    /// INT-MAIL-006a AC3, INT-MAIL-007: the listing answers every user account the
-    /// server holds, across its pages, with the identifier its description carries and
-    /// whether it is enabled: <c>authenticate</c> not disabled and, under
-    /// <c>Replace</c>, enabled. An account of another kind is no mailbox.
+    /// INT-MAIL-006a AC3, INT-MAIL-007, INT-MAIL-001 AC8 (D-254): the listing answers every
+    /// account the server holds, across its pages, with its name, the identifier its
+    /// description carries and whether it is enabled: <c>authenticate</c> not disabled
+    /// and, under <c>Replace</c>, enabled. An account of another kind is listed as not
+    /// individual.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -352,10 +353,11 @@ public sealed class JmapMailServerTests : IDisposable
 
         Assert.Equal(
             [
-                new HostedMailbox(Mailbox, Email("inherits@example.test"), Enabled: true),
-                new HostedMailbox(Another, Email("merges@example.test"), Enabled: false),
-                new HostedMailbox(null, Email("replaces@example.test"), Enabled: false),
-                new HostedMailbox(null, Email("granted@example.test"), Enabled: true),
+                new HostedMailbox(Mailbox, Email("inherits@example.test"), Enabled: true) { Name = "inherits" },
+                new HostedMailbox(Another, Email("merges@example.test"), Enabled: false) { Name = "merges" },
+                new HostedMailbox(null, Email("replaces@example.test"), Enabled: false) { Name = "replaces" },
+                new HostedMailbox(null, Email("granted@example.test"), Enabled: true) { Name = "granted" },
+                new HostedMailbox(null, Email("team@example.test"), Enabled: false) { Individual = false, Name = "team" },
             ],
             listed);
         Assert.True(_server.Requests.Count > 1);
@@ -383,9 +385,9 @@ public sealed class JmapMailServerTests : IDisposable
 
         Assert.Equal(
             [
-                new HostedMailbox(Mailbox, Email("reads@example.test"), Enabled: true),
-                new HostedMailbox(Another, null, Enabled: true),
-                new HostedMailbox(null, null, Enabled: true),
+                new HostedMailbox(Mailbox, Email("reads@example.test"), Enabled: true) { Name = "reads" },
+                new HostedMailbox(Another, null, Enabled: true) { Name = "two words" },
+                new HostedMailbox(null, null, Enabled: true) { Name = "unaddressed" },
             ],
             listed);
     }
@@ -715,6 +717,107 @@ public sealed class JmapMailServerTests : IDisposable
 
     /// <inheritdoc/>
     public void Dispose() => _server.Dispose();
+
+    /// <summary>
+    /// INT-MAIL-001 AC8 (D-254): a push at a name <c>integration.mailserver.ownaccounts</c>
+    /// lists, read at the start, changes nothing there and is answered
+    /// <c>integration.mailserver.conflict</c>, whatever the account carries and whether or
+    /// not the push may adopt.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_001_AC8_APushAtAnOwnAccountIsAConflictAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        _configuration.Set(Settings.IntegrationMailServerOwnAccounts, ["ada"]);
+
+        await using Started started = await StartedAsync();
+
+        _ = _server.Account(Address, Mailbox.ToString(), new JsonObject { ["@type"] = "Inherit" });
+
+        Result carried = await started.Server.ProvisionAsync(Push(MailboxState.Disabled), cancellationToken);
+        Result adopting = await started.Server.ProvisionAsync(Push(MailboxState.Disabled) with { MayAdopt = true }, cancellationToken);
+
+        JsonObject account = Assert.Single(_server.At(Address));
+
+        Assert.Equal((ErrorCodes.MailServerConflict, ErrorCodes.MailServerConflict), (Refusal(carried), Refusal(adopting)));
+        Assert.Equal("Inherit", (string?)account["permissions"]!["@type"]);
+    }
+
+    /// <summary>
+    /// INT-MAIL-001 AC9 (D-255): a push that may adopt takes over an individual account
+    /// carrying no mailbox identifier, writing the identifier into its description and
+    /// giving it the state owed, and changes nothing else; without <c>adopt</c> the same
+    /// account is a conflict.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_001_AC9_APushThatMayAdoptTakesOverAnUnmarkedAccountAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using Started started = await StartedAsync();
+
+        _ = _server.Account(Address, "made by hand", new JsonObject
+        {
+            ["@type"] = "Merge",
+            ["enabledPermissions"] = new JsonObject(),
+            ["disabledPermissions"] = new JsonObject { ["authenticate"] = true },
+        });
+
+        Result unadopted = await started.Server.ProvisionAsync(Push(MailboxState.Enabled), cancellationToken);
+
+        Assert.Equal(ErrorCodes.MailServerConflict, Refusal(unadopted));
+        Assert.Equal("made by hand", (string?)Assert.Single(_server.At(Address))["description"]);
+
+        Assert.True(Succeeded(await started.Server.ProvisionAsync(
+            Push(MailboxState.Enabled) with { MayAdopt = true },
+            cancellationToken)));
+
+        JsonObject account = Assert.Single(_server.At(Address));
+
+        Assert.Equal(Mailbox.ToString(), (string?)account["description"]);
+        Assert.Equal("ada", (string?)account["name"]);
+        Assert.Empty(Members(account, "disabledPermissions"));
+        Assert.Equal(
+            [new HostedMailbox(Mailbox, Email(Address), Enabled: true) { Name = "ada" }],
+            Value(await started.Server.MailboxesAsync(cancellationToken)));
+    }
+
+    /// <summary>
+    /// INT-MAIL-001 AC9 (D-255): a push that may adopt still meets as a conflict, and
+    /// changes nothing at, an account carrying another mailbox's identifier and a group
+    /// account; and a removal adopts nothing.
+    /// </summary>
+    /// <param name="met">What the push meets.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("another")]
+    [InlineData("group")]
+    [InlineData("removal")]
+    public async Task INT_MAIL_001_AC9_APushThatMayAdoptTakesNothingElseAsync(string met)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using Started started = await StartedAsync();
+
+        _ = _server.Account(
+            Address,
+            met is "another" ? Another.ToString() : null,
+            new JsonObject { ["@type"] = "Inherit" },
+            met is "group" ? "Group" : "User");
+
+        Result pushed = await started.Server.ProvisionAsync(
+            Push(met is "removal" ? MailboxState.Removed : MailboxState.Disabled) with { MayAdopt = true },
+            cancellationToken);
+
+        JsonObject account = Assert.Single(_server.At(Address));
+
+        Assert.Equal(ErrorCodes.MailServerConflict, Refusal(pushed));
+        Assert.Equal(met is "another" ? Another.ToString() : null, (string?)account["description"]);
+        Assert.Equal("Inherit", (string?)account["permissions"]!["@type"]);
+    }
 
     private static MailboxPush Push(MailboxState state) =>
         new(Mailbox, Guid.CreateVersion7(), Email(Address), state);

@@ -234,6 +234,30 @@ public sealed class StalwartServer : IAsyncLifetime
     }
 
     /// <summary>
+    /// Creates a group account in the domain at the server, a shared mailbox as an
+    /// operator makes one (D-254).
+    /// </summary>
+    /// <param name="name">The local part.</param>
+    /// <returns>The account's identifier.</returns>
+    public async Task<string> CreateGroupAsync(string name)
+    {
+        IReadOnlyList<JsonElement> answered = await CallAsync(Call("x:Account/set", new JsonObject
+        {
+            ["create"] = new JsonObject
+            {
+                ["account"] = new JsonObject
+                {
+                    ["@type"] = "Group",
+                    ["name"] = name,
+                    ["domainId"] = DomainId,
+                },
+            },
+        }));
+
+        return Created(answered[0], "account");
+    }
+
+    /// <summary>
     /// What the server answers a mail client that signs in with a credential, as one
     /// opening its session does.
     /// </summary>

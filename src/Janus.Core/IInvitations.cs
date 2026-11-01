@@ -115,6 +115,46 @@ public interface IInvitations
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Gives a current member of the administrative organization a mailbox, with no
+    /// invitation: it is reserved as an invitation's corporate address is and owed
+    /// <c>enabled</c> at once, and its address becomes a verified email of the account,
+    /// and the primary where the account holds none from the address's domain
+    /// (REG-MAIL-001, D-253, D-255).
+    /// </summary>
+    /// <param name="context">Who is giving it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="organization">The administrative organization.</param>
+    /// <param name="member">Whose it becomes.</param>
+    /// <param name="request">The address, what becomes of a mailbox it had, and why.</param>
+    /// <param name="source">The address the request came from, which the notice counts against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The mailbox, or the refusal: <c>identity.membership.notfound</c> where the
+    /// organization is not the administrative one or the account holds no current
+    /// membership of it, <c>authz.denied</c> where no person asks, the person may not
+    /// manage its memberships or the account is the reserved emergency account,
+    /// <c>api.request.malformed</c> naming <c>reason</c>,
+    /// <c>integration.mailserver.unavailable</c> where no mail server is registered,
+    /// <c>identity.account.stateconflict</c> where the account is neither active nor
+    /// restricted, <c>identity.mailbox.held</c> where it holds a mailbox,
+    /// <c>identity.identifier.invalid</c> or <c>identity.identifier.mixedscript</c> naming
+    /// <c>address</c>, <c>identity.identifier.domainnotallowed</c>,
+    /// <c>identity.mailbox.taken</c> naming <c>address</c>,
+    /// <c>identity.invitation.mailboxheld</c>, <c>api.request.invalid</c> naming
+    /// <c>formerMailbox</c>, <c>identity.identifier.maximum</c>, or
+    /// <c>auth.stepup.required</c> where the session does not meet the
+    /// <c>invitation:issue</c> gate.
+    /// </returns>
+    ValueTask<Result<GivenMailbox>> GiveMailboxAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        MailboxGift request,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Ends an account's membership of the organization; the account and its state
     /// persist. In the same operation the allow grants a person gave the account in the
     /// organization are revoked, its deny grants standing, and the account leaves the

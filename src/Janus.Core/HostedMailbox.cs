@@ -15,6 +15,21 @@ namespace Janus.Core;
 /// <remarks>
 /// Implements INT-MAIL-001, INT-MAIL-006a AC3 and INT-MAIL-007: reconciliation compares
 /// each mailbox with the account listed under its identifier, enabled state as well as
-/// existence, so two mailboxes a replacement leaves at one address stay apart.
+/// existence, so two mailboxes a replacement leaves at one address stay apart. An account
+/// that is not an individual one, and an account the deployment keeps for itself, is
+/// neither counted nor acted on (D-254).
 /// </remarks>
-public sealed record HostedMailbox(MailboxId? Mailbox, EmailAddress? Address, bool Enabled);
+public sealed record HostedMailbox(MailboxId? Mailbox, EmailAddress? Address, bool Enabled)
+{
+    /// <summary>
+    /// Gets whether the account is an individual one, which is the only kind the library
+    /// creates; a group is not (D-254).
+    /// </summary>
+    public bool Individual { get; init; } = true;
+
+    /// <summary>
+    /// Gets the name the server gives the account, which is not an email address, or
+    /// nothing where the server lists none (D-254).
+    /// </summary>
+    public string? Name { get; init; }
+}

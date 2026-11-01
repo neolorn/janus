@@ -263,6 +263,17 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Marks verified an identifier the account holds unverified, which takes the
+    /// primary of its kind where none stands (REG-MAIL-001, D-253).
+    /// </summary>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="id">Which identifier.</param>
+    /// <param name="at">When it was confirmed.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of verifying it.</returns>
+    ValueTask VerifyAsync(SubjectId subject, IdentifierId id, DateTimeOffset at, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Makes a verified identifier the primary of its kind.
     /// </summary>
     /// <param name="subject">Whose it is.</param>

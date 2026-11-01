@@ -39,6 +39,8 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
         "INT_MAIL_001_AC4_",
         "INT_MAIL_001_AC5_",
         "INT_MAIL_001_AC6_",
+        "INT_MAIL_001_AC8_",
+        "INT_MAIL_001_AC9_",
         "INT_MAIL_010_AC1_",
     ];
 
@@ -63,7 +65,7 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
         Assert.True(Succeeded(await started.Server.ProvisionAsync(mailbox.Push(MailboxState.Enabled), cancellationToken)));
         Assert.True(Succeeded(await started.Server.ProvisionAsync(mailbox.Push(MailboxState.Disabled), cancellationToken)));
         Assert.Contains(
-            new HostedMailbox(mailbox.Id, mailbox.Address, Enabled: false),
+            new HostedMailbox(mailbox.Id, mailbox.Address, Enabled: false) { Name = mailbox.Name },
             Value(await started.Server.MailboxesAsync(cancellationToken)));
         Assert.True(Succeeded(await started.Server.ProvisionAsync(mailbox.Push(MailboxState.Removed), cancellationToken)));
         Assert.Null(await server.AccountAsync(mailbox.Name));
@@ -178,7 +180,7 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
         Assert.Equal(["authenticate", "emailSend"], Members(account, "enabledPermissions"));
         Assert.Equal(["emailReceive"], Members(account, "disabledPermissions"));
         Assert.Contains(
-            new HostedMailbox(mailbox.Id, mailbox.Address, Enabled: true),
+            new HostedMailbox(mailbox.Id, mailbox.Address, Enabled: true) { Name = mailbox.Name },
             Value(await started.Server.MailboxesAsync(cancellationToken)));
     }
 
@@ -229,7 +231,7 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
         }
 
         Assert.Contains(
-            new HostedMailbox(mailbox.Id, mailbox.Address, Enabled: false),
+            new HostedMailbox(mailbox.Id, mailbox.Address, Enabled: false) { Name = mailbox.Name },
             Value(await started.Server.MailboxesAsync(cancellationToken)));
     }
 
@@ -279,9 +281,134 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
 
         IReadOnlyList<HostedMailbox> listed = Value(await started.Server.MailboxesAsync(cancellationToken));
 
-        Assert.Contains(new HostedMailbox(enabled.Id, enabled.Address, Enabled: true), listed);
-        Assert.Contains(new HostedMailbox(disabled.Id, disabled.Address, Enabled: false), listed);
-        Assert.Contains(new HostedMailbox(null, byHand.Address, Enabled: true), listed);
+        Assert.Contains(new HostedMailbox(enabled.Id, enabled.Address, Enabled: true) { Name = enabled.Name }, listed);
+        Assert.Contains(new HostedMailbox(disabled.Id, disabled.Address, Enabled: false) { Name = disabled.Name }, listed);
+        Assert.Contains(new HostedMailbox(null, byHand.Address, Enabled: true) { Name = byHand.Name }, listed);
+    }
+
+    /// <summary>
+    /// INT-MAIL-001 AC8 (D-254): against the server, the listing answers a group account
+    /// as not individual and each account's name, the name the server gives it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_001_AC8_TheListingAnswersAGroupAsNotIndividualAndEachNameAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var group = Mailbox.Drawn();
+        var byHand = Mailbox.Drawn();
+
+        _ = await server.CreateGroupAsync(group.Name);
+        _ = await server.CreateAsync(byHand.Name, description: null, new JsonObject { ["@type"] = "Inherit" });
+
+        await using Started started = await StartedAsync();
+
+        IReadOnlyList<HostedMailbox> listed = Value(await started.Server.MailboxesAsync(cancellationToken));
+
+        Assert.False(Assert.Single(listed, hosted => hosted.Name == group.Name).Individual);
+        Assert.True(Assert.Single(listed, hosted => hosted.Name == byHand.Name).Individual);
+    }
+
+    /// <summary>
+    /// INT-MAIL-001 AC8 (D-254): against the server, a push that meets an account
+    /// <c>integration.mailserver.ownaccounts</c> names changes nothing there and is
+    /// answered <c>integration.mailserver.conflict</c>, whether or not it may adopt.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_001_AC8_APushAtAnOwnAccountChangesNothingAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = Mailbox.Drawn();
+
+        _ = await server.CreateAsync(mailbox.Name, description: null, new JsonObject { ["@type"] = "Inherit" });
+
+        string before = (await server.AccountAsync(mailbox.Name))!.Value.GetRawText();
+
+        await using Started started = await StartedAsync(own: [mailbox.Name]);
+
+        Result pushed = await started.Server.ProvisionAsync(mailbox.Push(MailboxState.Disabled), cancellationToken);
+        Result adopting = await started.Server.ProvisionAsync(
+            mailbox.Push(MailboxState.Disabled) with { MayAdopt = true },
+            cancellationToken);
+
+        Assert.Equal((ErrorCodes.MailServerConflict, ErrorCodes.MailServerConflict), (Refusal(pushed), Refusal(adopting)));
+        Assert.Equal(before, (await server.AccountAsync(mailbox.Name))!.Value.GetRawText());
+        Assert.DoesNotContain(
+            _sent.SelectMany(sent => (JsonArray)sent.Body["methodCalls"]!),
+            call => (string)call![0]! == "x:Account/set");
+    }
+
+    /// <summary>
+    /// INT-MAIL-001 AC9 (D-255): against the server, a push of a mailbox reserved under
+    /// <c>adopt</c> that meets an individual account carrying no mailbox identifier
+    /// writes the identifier into its description and sets <c>authenticate</c> as the
+    /// state owed, on the same account, which keeps everything else it held.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_001_AC9_APushThatMayAdoptTakesOverAnUnmarkedAccountAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = Mailbox.Drawn();
+
+        string made = await server.CreateAsync(mailbox.Name, "made by hand", new JsonObject
+        {
+            ["@type"] = "Replace",
+            ["enabledPermissions"] = new JsonObject { ["emailSend"] = true },
+            ["disabledPermissions"] = new JsonObject { ["emailReceive"] = true },
+        });
+
+        await using Started started = await StartedAsync();
+
+        Assert.True(Succeeded(await started.Server.ProvisionAsync(
+            mailbox.Push(MailboxState.Enabled) with { MayAdopt = true },
+            cancellationToken)));
+
+        JsonElement account = (await server.AccountAsync(mailbox.Name))!.Value;
+
+        Assert.Equal(made, account.GetProperty("id").GetString());
+        Assert.Equal(mailbox.Id.ToString(), account.GetProperty("description").GetString());
+        Assert.Equal(["authenticate", "emailSend"], Members(account, "enabledPermissions"));
+        Assert.Equal(["emailReceive"], Members(account, "disabledPermissions"));
+        Assert.Contains(
+            new HostedMailbox(mailbox.Id, mailbox.Address, Enabled: true) { Name = mailbox.Name },
+            Value(await started.Server.MailboxesAsync(cancellationToken)));
+    }
+
+    /// <summary>
+    /// INT-MAIL-001 AC9 (D-255): against the server, a push of a mailbox reserved under
+    /// <c>adopt</c> that meets an account carrying another mailbox's identifier, or a
+    /// group account, changes nothing and is answered
+    /// <c>integration.mailserver.conflict</c>.
+    /// </summary>
+    /// <param name="met">What the push meets.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("another")]
+    [InlineData("group")]
+    public async Task INT_MAIL_001_AC9_APushThatMayAdoptTakesNoOtherAccountAsync(string met)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = Mailbox.Drawn();
+
+        _ = met is "group"
+            ? await server.CreateGroupAsync(mailbox.Name)
+            : await server.CreateAsync(mailbox.Name, Mailbox.Drawn().Id.ToString(), new JsonObject { ["@type"] = "Inherit" });
+
+        string before = (await server.AccountAsync(mailbox.Name))!.Value.GetRawText();
+
+        await using Started started = await StartedAsync();
+
+        Result pushed = await started.Server.ProvisionAsync(
+            mailbox.Push(MailboxState.Disabled) with { MayAdopt = true },
+            cancellationToken);
+
+        Assert.Equal(ErrorCodes.MailServerConflict, Refusal(pushed));
+        Assert.Equal(before, (await server.AccountAsync(mailbox.Name))!.Value.GetRawText());
+        Assert.DoesNotContain(
+            _sent.SelectMany(sent => (JsonArray)sent.Body["methodCalls"]!),
+            call => (string)call![0]! == "x:Account/set");
     }
 
     /// <summary>
@@ -460,13 +587,14 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
     // configuration holds, the management key the secret source holds, and the adapter's
     // client given the connection that trusts the server's certificate, or the
     // framework's own connection where it is not.
-    private async Task<Started> StartedAsync(bool trusted = true)
+    private async Task<Started> StartedAsync(bool trusted = true, IReadOnlyList<string>? own = null)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var configuration = new ConfigurationInMemory();
         var services = new ServiceCollection();
 
         configuration.Set(Settings.IntegrationMailServerEndpoint, server.Endpoint.AbsoluteUri);
+        configuration.Set(Settings.IntegrationMailServerOwnAccounts, own ?? []);
         services.AddSingleton<IConfigurationStore>(configuration);
         services.AddSingleton<ISecretSource>(new SecretSourceInMemory(NoCredentials)
         {

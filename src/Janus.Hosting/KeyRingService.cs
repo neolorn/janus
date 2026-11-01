@@ -132,12 +132,20 @@ internal sealed class KeyRingService(
         }
 
         string endpoint;
+        IReadOnlyList<string> own;
 
         await using (AsyncServiceScope scope = scopes.CreateAsyncScope())
         {
-            endpoint = (await scope.ServiceProvider
-                    .GetRequiredService<IConfigurationStore>()
+            IConfigurationStore configuration = scope.ServiceProvider.GetRequiredService<IConfigurationStore>();
+
+            endpoint = (await configuration
                     .ReadAsync(Settings.IntegrationMailServerEndpoint, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            // INT-MAIL-001 (D-254): read at the start, beside the endpoint.
+            own = (await configuration
+                    .ReadAsync(Settings.IntegrationMailServerOwnAccounts, cancellationToken)
                     .ConfigureAwait(false))
                 .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
         }
@@ -175,7 +183,7 @@ internal sealed class KeyRingService(
             _ => Unread(unavailable)));
         filling.Completed();
 
-        adapter.Reach(reached);
+        adapter.Reach(reached, own);
         filling.Choose(adapter);
     }
 
