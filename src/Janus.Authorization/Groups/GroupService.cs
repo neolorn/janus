@@ -632,7 +632,7 @@ internal sealed class GroupService(
             {
                 Role read = await roles.FindAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
 
-                handed.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut]));
+                handed.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut], read.GrantsMustEnd));
             }
 
             changes.Add(new HandOut(Permissions.GroupManage, group.Organization, scoped.Key, handed, widened));

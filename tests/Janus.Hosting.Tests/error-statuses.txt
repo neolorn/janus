@@ -45,6 +45,7 @@ auth.webauthn.userverificationrequired 422
 authz.denied 403
 authz.derivation.sourcesmissing 500
 authz.grant.duplicate 409
+authz.grant.endrequired 422
 authz.grant.expired 409
 authz.grant.notfound 404
 authz.grant.reasonrequired 422

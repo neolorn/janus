@@ -100,8 +100,9 @@ public sealed class FrontendSettingsTests : IAsyncDisposable
             ["identifiers", "password", "policy", "profile", "providers", "purposes", "registration"],
             settings.EnumerateObject().Select(member => member.Name).Order(StringComparer.Ordinal));
         Assert.Equal(
-            ["loginFactors", "photos", "requiredAssurance"],
+            ["grammaticalGender", "loginFactors", "photos", "requiredAssurance"],
             settings.GetProperty("policy").EnumerateObject().Select(member => member.Name).Order(StringComparer.Ordinal));
+        Assert.False(settings.GetProperty("policy").GetProperty("grammaticalGender").GetBoolean());
     }
 
     /// <summary>

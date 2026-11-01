@@ -763,9 +763,11 @@ public sealed class ModelTests
             "profile_photos.subject",
             "profile_photos.updated_at",
 
-            // Profile: the three declared fields of REG-PROF-001, all under the key.
+            // Profile: the four declared fields of REG-PROF-001, all under the key, the
+            // grammatical gender among them (D-236).
             "profiles.enc_date_of_birth",
             "profiles.enc_display_name",
+            "profiles.enc_grammatical_gender",
             "profiles.enc_legal_name",
             "profiles.subject",
 
@@ -892,11 +894,12 @@ public sealed class ModelTests
             "resources.resource_type",
             "resources.subject",
 
-            // Authorization: what a role allows (AUTHZ-GRANT-004) and the roles its
-            // holders hand out (AUTHZ-GRANT-005), read live so that editing it takes
-            // effect at once.
+            // Authorization: what a role allows (AUTHZ-GRANT-004), the roles its holders
+            // hand out (AUTHZ-GRANT-005) and whether its grants must end (D-237), read
+            // live so that editing it takes effect at once.
             "role_permissions.permission",
             "role_permissions.role",
+            "roles.grants_must_end",
             "roles.hands_out",
             "roles.name",
 
@@ -992,7 +995,8 @@ public sealed class ModelTests
             // and the keyed hash of the identifier it was opened with, with its version,
             // which a refused factor is counted against (AUTH-ABUSE-001); what the
             // pre-authentication session it is bound to hashes to, and when the
-            // new-device check held it (D-226).
+            // new-device check held it (D-226), and what the second handle a pressed link
+            // answered hashes to (D-238).
             "signin_challenges.browser",
             "signin_challenges.created_at",
             "signin_challenges.email",
@@ -1001,6 +1005,7 @@ public sealed class ModelTests
             "signin_challenges.handle",
             "signin_challenges.held_at",
             "signin_challenges.identifier",
+            "signin_challenges.landing_handle",
             "signin_challenges.presented",
             "signin_challenges.subject",
             "signin_challenges.webauthn",
@@ -1093,16 +1098,18 @@ public sealed class ModelTests
 
     /// <summary>
     /// IDN-ATTR-007 AC1: the profile is the display name, the legal name, the date of
-    /// birth and the photo. A fifth field would be one nothing states a rule for.
+    /// birth, the photo and the grammatical gender (D-236). A sixth field would be one
+    /// nothing states a rule for.
     /// </summary>
     [Fact]
-    public void IDN_ATTR_007_AC1_TheProfileIsTheFourFieldsAndNothingElse()
+    public void IDN_ATTR_007_AC1_TheProfileIsTheFiveFieldsAndNothingElse()
     {
         string[] expected =
         [
             "profile_photos.enc_image",
             "profiles.enc_date_of_birth",
             "profiles.enc_display_name",
+            "profiles.enc_grammatical_gender",
             "profiles.enc_legal_name",
         ];
 

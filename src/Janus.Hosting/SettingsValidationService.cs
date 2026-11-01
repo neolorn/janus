@@ -4,8 +4,10 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Configuration;
+using Janus.Storage.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Janus.Hosting;
 
@@ -61,6 +63,22 @@ internal sealed class SettingsValidationService(IServiceScopeFactory scopes) : I
             await configuration.ReadAsync(Settings.PasswordBlocklistSources, cancellationToken).ConfigureAwait(false));
 
         Settings.ThrowIfIncomplete(named, location, source, sources, recordsOfProcessing: true);
+
+        // Chapter 10 section 5a (D-235, D-238): the start reads every stored policy and
+        // override, and tells once of each that still names a retired action, whose gate
+        // every read then passes over in silence.
+        ILogger log = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<SettingsValidationService>();
+
+        foreach ((string key, string stored) in await scope.ServiceProvider
+            .GetRequiredService<StoredPolicies>()
+            .AllAsync(cancellationToken)
+            .ConfigureAwait(false))
+        {
+            if (RetiredStepUpActions.NamedIn(stored) is { Count: > 0 } retired)
+            {
+                SettingsLog.RetiredGatesPassedOver(log, key, retired);
+            }
+        }
     }
 
     /// <inheritdoc/>

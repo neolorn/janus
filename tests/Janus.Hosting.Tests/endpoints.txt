@@ -48,6 +48,7 @@ GET /account
       profile.legalName: string
       profile.dateOfBirth: DateOnly?
       profile.photo: DateTimeOffset?
+      profile.grammaticalGender: GrammaticalGender?
       preferences.language: string
       preferences.timeZone: string
       preferences.declared{}: string
@@ -404,6 +405,7 @@ PUT /account/profile
     legalName: string
     username: string
     dateOfBirth: string
+    grammaticalGender: string
   204
   400 api.request.malformed
   401 auth.session.expired
@@ -689,6 +691,7 @@ GET /admin/accounts/{subject}
       createdAt: DateTimeOffset
       profile.displayName: string
       profile.legalName: string
+      profile.grammaticalGender: GrammaticalGender?
       identifiers.emails[].value: string
       identifiers.emails[].verified: boolean
       identifiers.emails[].primary: boolean
@@ -1043,7 +1046,7 @@ POST /admin/grants
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.grant.self authz.restricted authz.role.notassignable
   409 authz.grant.duplicate authz.grant.expired
-  422 api.request.invalid authz.grant.reasonrequired authz.grant.unresolved
+  422 api.request.invalid authz.grant.endrequired authz.grant.reasonrequired authz.grant.unresolved
 DELETE /admin/grants/{id}
   request application/json
     reason: string
@@ -1342,6 +1345,8 @@ GET /admin/organizations/{id}/policy
       selfServiceRecovery.overridden: boolean
       photos.value: JsonElement
       photos.overridden: boolean
+      grammaticalGender.value: JsonElement
+      grammaticalGender.overridden: boolean
       emailDomains.value: JsonElement
       emailDomains.overridden: boolean
   400 api.request.malformed
@@ -1684,6 +1689,7 @@ GET /admin/roles
       [].name: string
       [].permissions[]: string
       [].handsOut[]: string
+      [].grantsMustEnd: boolean
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
 POST /admin/roles
@@ -1691,6 +1697,7 @@ POST /admin/roles
     name: string
     permissions[]: string
     handsOut[]: string
+    grantsMustEnd: boolean?
     reason: string
   201
   204
@@ -1798,6 +1805,7 @@ POST /auth/device/verify
       policyRequirement.deadline: DateTimeOffset
       passwordChangeRequired: boolean
       continueTo: string
+      challengeId: string
   400 api.request.malformed
   403 auth.session.csrfinvalid
   422 auth.code.expired auth.code.invalid
@@ -1834,6 +1842,7 @@ POST /auth/factor
       policyRequirement.deadline: DateTimeOffset
       passwordChangeRequired: boolean
       continueTo: string
+      challengeId: string
     application/json
       sameBrowser: boolean
       code: string
@@ -1902,6 +1911,7 @@ POST /auth/restore
       policyRequirement.deadline: DateTimeOffset
       passwordChangeRequired: boolean
       continueTo: string
+      challengeId: string
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid
@@ -1965,6 +1975,7 @@ POST /auth/step-up
       policyRequirement.deadline: DateTimeOffset
       passwordChangeRequired: boolean
       continueTo: string
+      challengeId: string
   202
   400 api.request.malformed
   401 auth.session.expired
@@ -2745,6 +2756,7 @@ GET /settings
       policy.requiredAssurance: AssuranceLevel
       policy.loginFactors[]: Factor
       policy.photos: boolean
+      policy.grammaticalGender: boolean
   403 auth.session.csrfinvalid
 pipeline
   Concealment

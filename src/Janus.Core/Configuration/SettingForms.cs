@@ -122,7 +122,8 @@ internal static class SettingForms
                 redundancy,
                 written.SelfServiceRecovery,
                 written.EmailDomains,
-                written.Photos));
+                written.Photos,
+                written.GrammaticalGender));
     }
 
     private static string WriteOverride(PolicyOverride value) =>
@@ -142,7 +143,8 @@ internal static class SettingForms
                 value.CredentialRedundancy is { } redundancy ? SettingText.Of(redundancy) : null,
                 value.SelfServiceRecovery,
                 value.EmailDomains is { } domains ? [.. domains] : null,
-                value.Photos));
+                value.Photos,
+                value.GrammaticalGender));
 
     private sealed record Written(
         string? RequiredAssurance,
@@ -151,7 +153,8 @@ internal static class SettingForms
         string? CredentialRedundancy,
         bool? SelfServiceRecovery,
         string[]? EmailDomains,
-        bool? Photos);
+        bool? Photos,
+        bool? GrammaticalGender);
 
     private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaxAge);
 }

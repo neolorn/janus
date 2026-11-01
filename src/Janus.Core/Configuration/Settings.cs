@@ -890,7 +890,7 @@ public static class Settings
     /// created with no override when the organization is.
     /// </summary>
     public static SettingFamily<PolicyOverride> OrganizationPolicy { get; } =
-        new("policy", SettingScope.Runtime, SettingForms.Override, PolicyOverride.None);
+        new("policy", SettingScope.Runtime, SettingForms.Override, PolicyOverride.None with { GrammaticalGender = true });
 
     /// <summary>
     /// How long a host-declared category of data is kept: one key per declared

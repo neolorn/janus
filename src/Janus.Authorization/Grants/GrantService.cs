@@ -148,6 +148,16 @@ internal sealed class GrantService(
             return Result.Failure<GrantId>(unstated);
         }
 
+        // AUTHZ-GRANT-003 (D-237): a role whose grants must end is granted with an end, or
+        // not at all.
+        if (role.GrantsMustEnd && request.ExpiresAt is null)
+        {
+            return Result.Failure<GrantId>(Error.From(
+                ErrorCodes.GrantEndRequired,
+                "role",
+                JsonSerializer.SerializeToElement(role.Name.ToString())));
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         if (request.ExpiresAt <= now)

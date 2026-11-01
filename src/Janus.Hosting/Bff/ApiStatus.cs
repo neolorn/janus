@@ -186,6 +186,7 @@ internal static class ApiStatus
         [ErrorCodes.WebAuthnUserVerificationRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationChangeReasonRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.GrantReasonRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.GrantEndRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.GrantUnresolved] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationValueBelowFloor] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationValueAboveCeiling] = StatusCodes.Status422UnprocessableEntity,

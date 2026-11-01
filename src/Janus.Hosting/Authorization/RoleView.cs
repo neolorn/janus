@@ -11,8 +11,13 @@ namespace Janus.Hosting.Authorization;
 /// <param name="Name">The role's name.</param>
 /// <param name="Permissions">What holding it permits.</param>
 /// <param name="HandsOut">The roles its holders may hand out.</param>
-/// <remarks>Implements chapter 09 section 8, AUTHZ-GRANT-004 and AUTHZ-GRANT-005.</remarks>
-internal sealed record RoleView(string Name, IReadOnlyList<string> Permissions, IReadOnlyList<string> HandsOut)
+/// <param name="GrantsMustEnd">Whether every grant of it made from now on carries an end.</param>
+/// <remarks>Implements chapter 09 section 8, AUTHZ-GRANT-004 and AUTHZ-GRANT-005 (D-237).</remarks>
+internal sealed record RoleView(
+    string Name,
+    IReadOnlyList<string> Permissions,
+    IReadOnlyList<string> HandsOut,
+    bool GrantsMustEnd)
 {
     /// <summary>
     /// The view of one role.
@@ -27,6 +32,7 @@ internal sealed record RoleView(string Name, IReadOnlyList<string> Permissions, 
         return new RoleView(
             role.Name.ToString(),
             [.. role.Permissions.Select(permission => permission.ToString())],
-            [.. role.HandsOut.Select(handed => handed.ToString())]);
+            [.. role.HandsOut.Select(handed => handed.ToString())],
+            role.GrantsMustEnd);
     }
 }

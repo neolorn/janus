@@ -106,6 +106,44 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-003 AC7 (D-237): a derivation's grant comes from the host's data and ends
+    /// with it, so a role whose grants must end is materialised with no end, and confers
+    /// what it allows.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC7_ARoleWhoseGrantsMustEndIsMaterialisedWithNoEndAsync()
+    {
+        Reviewed reviewed = await ReviewedAsync();
+
+        await EndingAsync(true);
+
+        try
+        {
+            await using ServiceProvider deployment = Materialised();
+
+            Assert.Equal(new DerivationRefresh(1, 0), await RefreshAsync(deployment, reviewed));
+            Assert.True(await AdmitsAsync(deployment, reviewed));
+
+            await using NpgsqlConnection connection = await host.OpenAsync();
+
+            Assert.Equal(
+                [true],
+                await connection.QueryAsync<bool>(new CommandDefinition(
+                    """
+                    SELECT expires_at IS NULL FROM identity.grants
+                    WHERE role = 'reviewer' AND subject_id = @account AND kind = 'materialised'
+                    """,
+                    new { account = reviewed.Account.Value },
+                    cancellationToken: TestContext.Current.CancellationToken)));
+        }
+        finally
+        {
+            await EndingAsync(false);
+        }
+    }
+
+    /// <summary>
     /// AUTHZ-DERIVE-005 AC2: the row a derivation was precomputed into says so where
     /// an explanation names it, so it is never taken for one someone wrote. The type
     /// asked about is the disclosing one, because a concealing type is explained to
@@ -801,6 +839,18 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
         }
 
         return HostFixture.Started(services.BuildServiceProvider());
+    }
+
+    // Whether the derivation's role binds its grants to end (D-237), set as an
+    // administrator's change of the role leaves it.
+    private async Task EndingAsync(bool ending)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE identity.roles SET grants_must_end = @ending WHERE name = 'reviewer';",
+            new { ending },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 
     // The host's own call, from the operation that changed the relationship, inside the

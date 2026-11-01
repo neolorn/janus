@@ -89,6 +89,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a deny to a group over an allow to the account", Decided.Denied),
         ("a grant that has expired", Decided.Denied),
         ("a grant that expires later", Decided.Allowed),
+        ("a grant of a role whose grants must end, that has expired", Decided.Denied),
+        ("a grant of a role whose grants must end, that expires later", Decided.Allowed),
         ("a grant that was revoked", Decided.Denied),
         ("a grant in another organization", Decided.Denied),
         ("a grant whose role does not allow the permission", Decided.Denied),
@@ -4409,6 +4411,21 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     holder, role, record, false, Deployment.Noon.AddHours(1), null, cancellationToken);
                 break;
 
+            // D-237: whether a role's grants must end binds how a grant of it is written,
+            // and the grant written with its end decides as any grant with an end does.
+            case "a grant of a role whose grants must end, that has expired":
+            case "a grant of a role whose grants must end, that expires later":
+                await EndingAsync(role);
+                await deployment.GrantAsync(
+                    holder,
+                    role,
+                    record,
+                    false,
+                    Deployment.Noon.AddHours(scenario.EndsWith("later", StringComparison.Ordinal) ? 1 : -1),
+                    null,
+                    cancellationToken);
+                break;
+
             case "a grant that was revoked":
                 await RevokedAsync(deployment, role, account, record);
                 break;
@@ -4856,6 +4873,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
         await deployment.GrantAsync(
             GrantSubject.Of(granted), role, record, false, null, null, cancellationToken);
+    }
+
+    // The role made one whose grants must end, as an administrator's change leaves it
+    // (D-237).
+    private async Task EndingAsync(RoleName role)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE identity.roles SET grants_must_end = true WHERE name = @role;",
+            new { role = role.ToString() },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private static async Task DeniedThroughGroupAsync(

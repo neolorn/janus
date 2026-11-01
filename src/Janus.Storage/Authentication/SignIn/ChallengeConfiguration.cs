@@ -30,6 +30,10 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
                 $"octet_length(handle) = {Fingerprint.Length}");
 
             table.HasCheckConstraint(
+                "ck_signin_challenges_landing_handle",
+                $"landing_handle IS NULL OR octet_length(landing_handle) = {Fingerprint.Length}");
+
+            table.HasCheckConstraint(
                 "ck_signin_challenges_identifier",
                 $"identifier IS NULL OR octet_length(identifier) = {Fingerprint.Length}");
 
@@ -47,6 +51,15 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
         builder.Property(challenge => challenge.Handle)
             .HasColumnName("handle")
             .HasMaxLength(Fingerprint.Length);
+
+        // D-238: the second handle is found as the first is, and no two challenges share one.
+        builder.Property(challenge => challenge.LandingHandle)
+            .HasColumnName("landing_handle")
+            .HasMaxLength(Fingerprint.Length);
+
+        builder.HasIndex(challenge => challenge.LandingHandle)
+            .IsUnique()
+            .HasDatabaseName("ux_signin_challenges_landing_handle");
 
         builder.Property(challenge => challenge.Subject)
             .HasColumnName("subject")

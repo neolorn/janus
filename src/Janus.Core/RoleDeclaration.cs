@@ -20,5 +20,12 @@ namespace Janus.Core;
 /// section 3 seeds, kept as written so a name outside them is refused at startup naming
 /// the declaration; none where empty.
 /// </param>
-/// <remarks>Implements AUTHZ-GRANT-004, AUTHZ-GRANT-005 and LIB-HOST-001 (D-204, D-212).</remarks>
-public sealed record RoleDeclaration(string Name, IReadOnlyList<Permission> Permissions, IReadOnlyList<string> HandsOut);
+/// <param name="GrantsMustEnd">
+/// Whether every grant of it carries an end (AUTHZ-GRANT-003, D-237).
+/// </param>
+/// <remarks>Implements AUTHZ-GRANT-004, AUTHZ-GRANT-005 and LIB-HOST-001 (D-204, D-212, D-237).</remarks>
+public sealed record RoleDeclaration(
+    string Name,
+    IReadOnlyList<Permission> Permissions,
+    IReadOnlyList<string> HandsOut,
+    bool GrantsMustEnd = false);

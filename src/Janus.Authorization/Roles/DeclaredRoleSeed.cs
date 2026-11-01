@@ -72,14 +72,17 @@ internal sealed class DeclaredRoleSeed(
                     DateTimeOffset now = time.GetUtcNow();
 
                     await roles
-                        .CreateAsync(Role.Of(declared.Name, declared.Permissions, declared.HandsOut), cancellationToken)
+                        .CreateAsync(
+                            Role.Of(declared.Name, declared.Permissions, declared.HandsOut, declared.GrantsMustEnd),
+                            cancellationToken)
                         .ConfigureAwait(false);
                     await audit
                         .DefinedAsync(
                             new DefinedRole(
                                 declared.Name,
                                 [.. declared.Permissions.OrderBy(permission => permission.ToString(), StringComparer.Ordinal)],
-                                [.. declared.HandsOut.OrderBy(handed => handed.ToString(), StringComparer.Ordinal)]),
+                                [.. declared.HandsOut.OrderBy(handed => handed.ToString(), StringComparer.Ordinal)],
+                                declared.GrantsMustEnd),
                             Principal,
                             now,
                             cancellationToken)

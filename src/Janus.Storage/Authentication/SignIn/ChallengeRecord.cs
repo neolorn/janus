@@ -21,6 +21,12 @@ internal sealed class ChallengeRecord
     /// <summary>The <c>handle</c> column: what the caller's handle hashes to.</summary>
     public byte[] Handle { get; set; } = [];
 
+    /// <summary>
+    /// The <c>landing_handle</c> column: what the second handle a pressed sign-in link
+    /// answered hashes to, where a press left the sign-in open (D-238).
+    /// </summary>
+    public byte[]? LandingHandle { get; set; }
+
     /// <summary>The <c>subject</c> column, absent where the identifier resolved to none.</summary>
     public SubjectId? Subject { get; set; }
 

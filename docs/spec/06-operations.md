@@ -929,7 +929,7 @@ address, then the administrative organization's identifier, which a host keeps i
 own configuration and the library reads from none (D-204); 1 on refusal, with one JSON line `{"code": ..., "details": {...}}` on standard
 error and nothing on standard output.
 
-*Source: D-028, D-133, D-166, D-188, D-204*
+*Source: D-028, D-133, D-166, D-188, D-204, D-236*
 
 Whoever runs the deployment already holds server access, which is strictly more
 privileged than anything the first account can do. No new secret is created, nothing
@@ -948,7 +948,8 @@ handed to the host's alert handler by `alert-dispatch` (OPS-ALERT-003); the comm
 sends nothing. Bootstrap never writes on a value whose feature needs a host declaration
 (OPS-CFG-003): the administrative organization's policy is written with `photos` false
 (`10` section 4.1a), and enabling photos is an administrator's policy change once an
-image codec is declared.
+image codec is declared. The same policy is written with `grammaticalGender` true, as
+every organization's starts (`10` section 4.1a, D-236).
 
 Bootstrap is audited under the deployment-scoped system principal `bootstrap` (reason
 `OPS-BOOT-001`, operation `bootstrap`): `identity.organization.created` for the
@@ -983,6 +984,8 @@ name the deployment (`10` section 4), and it is protected from then on (OPS-CFG-
    and `OPS-BOOT-001` as reason; no grant names its holder as granter.
 8. On success standard output holds two lines: the enrolment link, then the
    administrative organization's identifier.
+9. After bootstrap the administrative organization's `grammaticalGender` is `true`
+   (D-236).
 
 ---
 

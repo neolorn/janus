@@ -9,12 +9,16 @@ namespace Janus.Hosting.Authorization;
 /// <param name="Name">The role's name.</param>
 /// <param name="Permissions">What holding it is to permit.</param>
 /// <param name="HandsOut">The roles its holders may hand out, or nothing for none.</param>
+/// <param name="GrantsMustEnd">
+/// Whether every grant of it made from now on carries an end, or nothing for not.
+/// </param>
 /// <param name="Reason">Why, which every change to a role records.</param>
-/// <remarks>Implements chapter 09 section 8, AUTHZ-GRANT-004 and AUTHZ-GRANT-005.</remarks>
+/// <remarks>Implements chapter 09 section 8, AUTHZ-GRANT-004 and AUTHZ-GRANT-005 (D-237).</remarks>
 internal sealed record RoleBody(
     string? Name,
     IReadOnlyList<string?>? Permissions,
     IReadOnlyList<string?>? HandsOut,
+    bool? GrantsMustEnd,
     string? Reason)
 {
     /// <summary>
@@ -58,6 +62,7 @@ internal sealed record RoleBody(
             handsOut.Add(handed);
         }
 
-        return (new DefinedRole(name, permissions, handsOut), string.Empty);
+        // D-237: the member is optional, and a role whose body names none binds no grant.
+        return (new DefinedRole(name, permissions, handsOut, GrantsMustEnd ?? false), string.Empty);
     }
 }

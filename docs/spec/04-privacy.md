@@ -980,7 +980,7 @@ totals for a condition that is meant to be reversible.
 remains, and every personal field is rendered unrecoverable by **destroying the
 subject's key** (PRIV-RIGHT-005a). It SHALL NOT merely pseudonymise.
 
-*Source: D-148; D-026.1, D-037, D-068, D-117, D-147, D-166, D-177, D-178, D-187*
+*Source: D-148; D-026.1, D-037, D-068, D-117, D-147, D-166, D-177, D-178, D-187, D-236*
 
 **The distinction is decisive.** Pseudonymised data is still personal data, and
 controls preventing further processing combined with pseudonymisation are not
@@ -990,8 +990,9 @@ found many techniques used as a substitute for deletion amounted to mere
 pseudonymisation.
 
 **Preferences and declared values go with the key.** Declared preferences (REG-PREF-001)
-and the declared profile values (legal name, date of birth, REG-PROF-001) are personal
-fields under the subject key and become unreadable with the rest. A username freed by
+and the declared profile values (legal name, date of birth, grammatical gender,
+REG-PROF-001, D-236) are personal fields under the subject key and become unreadable with
+the rest. A username freed by
 erasure is **held** for `retention.consent` and released afterwards, the hold written
 under the username's lock (REG-IDENT-009, CONV-DESIGN-003): it is public by nature and
 is not personal data under the key, and the hold stops an erased person being

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Invitations;
 using Janus.Core;
+using Janus.Storage.Authorization.Roles;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Invitations;
@@ -22,14 +23,12 @@ internal sealed class RoleCatalogue(StoreContext context) : IRoleCatalogue
     /// <inheritdoc/>
     public async ValueTask<DefinedRole?> FindAsync(RoleName name, CancellationToken cancellationToken)
     {
-        string[]? handsOut = await context.Roles
+        RoleRecord? role = await context.Roles
             .AsNoTracking()
-            .Where(row => row.Name == name)
-            .Select(row => row.HandsOut)
-            .SingleOrDefaultAsync(cancellationToken)
+            .SingleOrDefaultAsync(row => row.Name == name, cancellationToken)
             .ConfigureAwait(false);
 
-        if (handsOut is null)
+        if (role is null)
         {
             return null;
         }
@@ -40,7 +39,7 @@ internal sealed class RoleCatalogue(StoreContext context) : IRoleCatalogue
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return new DefinedRole(name, permissions, [.. handsOut.Select(RoleName.Parse)]);
+        return new DefinedRole(name, permissions, [.. role.HandsOut.Select(RoleName.Parse)], role.GrantsMustEnd);
     }
 
     /// <inheritdoc/>

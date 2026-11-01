@@ -151,18 +151,21 @@ internal interface IAccountDirectory
     ValueTask<HeldProfile> ProfileAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Carries the two names the person edits onto the profile, clearing either where
-    /// the edit gave it up. The date of birth is not here: the person never sets it.
+    /// Carries the two names and the grammatical gender the person edits onto the
+    /// profile, clearing each where the edit gave it up. The date of birth is not here:
+    /// the person never sets it.
     /// </summary>
     /// <param name="subject">Whose profile.</param>
     /// <param name="displayName">The display name, or nothing to clear it.</param>
     /// <param name="legalName">The legal name, or nothing to clear it.</param>
+    /// <param name="grammaticalGender">The grammatical gender, or nothing to clear it.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
     ValueTask RecordProfileAsync(
         SubjectId subject,
         DisplayName? displayName,
         LegalName? legalName,
+        GrammaticalGender? grammaticalGender,
         CancellationToken cancellationToken);
 
     /// <summary>

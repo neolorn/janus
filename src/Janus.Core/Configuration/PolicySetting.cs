@@ -70,7 +70,8 @@ public sealed class PolicySetting : Setting<Policy>
                 SettingText.Of(value.CredentialRedundancy),
                 value.SelfServiceRecovery,
                 [.. value.EmailDomains],
-                value.Photos));
+                value.Photos,
+                value.GrammaticalGender));
 
     private Result<Policy> Read(Written written, bool readsPastRetired)
     {
@@ -128,7 +129,8 @@ public sealed class PolicySetting : Setting<Policy>
                 redundancy,
                 written.SelfServiceRecovery,
                 written.EmailDomains,
-                written.Photos));
+                written.Photos,
+                written.GrammaticalGender));
     }
 
     private Error Malformed() =>
@@ -143,7 +145,8 @@ public sealed class PolicySetting : Setting<Policy>
         string? CredentialRedundancy,
         bool SelfServiceRecovery,
         string[]? EmailDomains,
-        bool Photos);
+        bool Photos,
+        bool GrammaticalGender);
 
     private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaxAge);
 }

@@ -14,6 +14,9 @@ namespace Janus.Core;
 /// <param name="SelfServiceRecovery">The recovery rule, where the organization withdraws it.</param>
 /// <param name="EmailDomains">The domain lock, written only through the domain operations.</param>
 /// <param name="Photos">Whether the accounts show a profile photo, where the organization states it.</param>
+/// <param name="GrammaticalGender">
+/// Whether the accounts carry the grammatical gender, where the organization states it (D-236).
+/// </param>
 /// <remarks>
 /// Implements chapter 10 sections 4.1 and 4.1a, AUTH-PRIN-002, AUTH-STEP-002a, IDN-ATTR-002.
 /// </remarks>
@@ -24,7 +27,8 @@ public sealed record PolicyOverride(
     CredentialRedundancy? CredentialRedundancy,
     bool? SelfServiceRecovery,
     IReadOnlyList<string>? EmailDomains,
-    bool? Photos)
+    bool? Photos,
+    bool? GrammaticalGender = null)
 {
     /// <summary>
     /// The override an organization is created with: none, so every field inherits

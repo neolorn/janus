@@ -19,7 +19,8 @@ internal static class PolicyStrictness
     /// the organization left absent inherits, and one that would loosen is ignored, so
     /// a value written before the system default rose cannot take effect. The gates are
     /// overridden action by action: an action the organization does not name keeps the
-    /// system's gate.
+    /// system's gate. The grammatical gender is no loosening either way, so the
+    /// organization's own value stands over the system's (D-236).
     /// </summary>
     /// <param name="system">The system policy.</param>
     /// <param name="overrides">What the organization overrides.</param>
@@ -30,7 +31,7 @@ internal static class PolicyStrictness
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(overrides);
 
-        return Strictest(
+        Policy tightened = Strictest(
             system,
             new Policy(
                 overrides.RequiredAssurance ?? system.RequiredAssurance,
@@ -40,10 +41,14 @@ internal static class PolicyStrictness
                 overrides.SelfServiceRecovery ?? system.SelfServiceRecovery,
                 overrides.EmailDomains ?? system.EmailDomains,
                 overrides.Photos ?? system.Photos));
+
+        return tightened with { GrammaticalGender = overrides.GrammaticalGender ?? system.GrammaticalGender };
     }
 
     /// <summary>
-    /// The stricter of two policies, field by field.
+    /// The stricter of two policies, field by field; the grammatical gender is carried
+    /// only where both carry it, as an account of several organizations has it only
+    /// where every one enables it (D-236).
     /// </summary>
     /// <param name="first">One policy.</param>
     /// <param name="second">The other.</param>
@@ -66,7 +71,8 @@ internal static class PolicyStrictness
                 : CredentialRedundancy.Advisory,
             first.SelfServiceRecovery && second.SelfServiceRecovery,
             Locked(first.EmailDomains, second.EmailDomains),
-            first.Photos && second.Photos);
+            first.Photos && second.Photos,
+            first.GrammaticalGender && second.GrammaticalGender);
     }
 
     /// <summary>
@@ -116,7 +122,8 @@ internal static class PolicyStrictness
     /// Whether one policy grants anything another did not: a lower floor, another
     /// factor, a gate that asks less, redundancy advised where it was enforced,
     /// recovery offered where it was withdrawn, a domain lock that admits more, or a
-    /// photo shown where it was not.
+    /// photo shown where it was not. The grammatical gender is a loosening in neither
+    /// direction (D-236).
     /// </summary>
     /// <param name="before">What was in force.</param>
     /// <param name="after">What would be.</param>
@@ -206,7 +213,8 @@ internal static class PolicyStrictness
             stated.Photos is { } photos
                 && (photos == resolved.Photos || resolved.Photos != system.Photos)
                 ? resolved.Photos
-                : null);
+                : null,
+            stated.GrammaticalGender is not null ? resolved.GrammaticalGender : null);
     }
 
     /// <summary>

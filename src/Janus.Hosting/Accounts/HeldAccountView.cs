@@ -39,7 +39,10 @@ internal sealed record HeldAccountView(
             account.Subject.Value,
             account.State,
             account.CreatedAt,
-            new HeldProfileView(account.Profile.DisplayName, account.Profile.LegalName),
+            new HeldProfileView(
+                account.Profile.DisplayName,
+                account.Profile.LegalName,
+                account.Profile.GrammaticalGender),
             new HeldIdentifiersView(
                 [.. account.Identifiers.Emails.Select(HeldIdentifierView.Of)],
                 [.. account.Identifiers.Phones.Select(HeldIdentifierView.Of)],

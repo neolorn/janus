@@ -988,6 +988,13 @@ public static class ErrorCodes
     public static ErrorCode GrantDuplicate { get; } = ErrorCode.Parse("authz.grant.duplicate");
 
     /// <summary>
+    /// The role is one whose grants must end, and the grant carries no expiry. Grant it
+    /// again with an expiry.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-003, chapter 10 section 1.3 (D-237).</remarks>
+    public static ErrorCode GrantEndRequired { get; } = ErrorCode.Parse("authz.grant.endrequired");
+
+    /// <summary>
     /// The grant is past its expiry and confers nothing. Grant it again, with an
     /// expiry that has not passed.
     /// </summary>

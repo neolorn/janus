@@ -11,11 +11,13 @@ namespace Janus.Hosting.Configuration;
 /// <param name="RequiredAssurance">The assurance the policy requires.</param>
 /// <param name="LoginFactors">The factors it admits.</param>
 /// <param name="Photos">Whether it admits a profile photo.</param>
-/// <remarks>Implements AUTH-PRIN-002 and D-224.</remarks>
+/// <param name="GrammaticalGender">Whether it admits the grammatical gender (D-236).</param>
+/// <remarks>Implements AUTH-PRIN-002, D-224 and D-236.</remarks>
 internal sealed record PolicySettingsView(
     AssuranceLevel RequiredAssurance,
     IReadOnlyList<Factor> LoginFactors,
-    bool Photos)
+    bool Photos,
+    bool GrammaticalGender)
 {
     /// <summary>
     /// Reads a policy.
@@ -30,6 +32,7 @@ internal sealed record PolicySettingsView(
         return new PolicySettingsView(
             policy.RequiredAssurance,
             [.. policy.LoginFactors.Order()],
-            policy.Photos);
+            policy.Photos,
+            policy.GrammaticalGender);
     }
 }

@@ -51,6 +51,12 @@ internal sealed class Challenge
     public byte[] Fingerprint { get; }
 
     /// <summary>
+    /// What the second handle a pressed sign-in link answered hashes to, where a press
+    /// left the sign-in open (D-238). It carries the challenge on as the first does.
+    /// </summary>
+    public byte[]? LandingFingerprint { get; private set; }
+
+    /// <summary>
     /// Whose sign-in, or nothing where the identifier resolved to no account.
     /// </summary>
     public SubjectId? Subject { get; }
@@ -133,6 +139,9 @@ internal sealed class Challenge
     /// <param name="expiresAt">When it stops answering.</param>
     /// <param name="heldAt">When the new-device check held it, or nothing.</param>
     /// <param name="presented">What has been accepted against it.</param>
+    /// <param name="landingFingerprint">
+    /// What the second handle a pressed link answered hashes to, where one was drawn (D-238).
+    /// </param>
     /// <returns>The challenge.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static Challenge Existing(
@@ -145,7 +154,8 @@ internal sealed class Challenge
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt,
         DateTimeOffset? heldAt,
-        IReadOnlyCollection<Factor> presented)
+        IReadOnlyCollection<Factor> presented,
+        byte[]? landingFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(presented);
@@ -162,7 +172,29 @@ internal sealed class Challenge
             [.. presented])
         {
             HeldAt = heldAt,
+            LandingFingerprint = landingFingerprint,
         };
+    }
+
+    /// <summary>
+    /// Draws the second handle a pressed sign-in link answers, of the same form and
+    /// length as the first, keeping only what it hashes to; a later press draws another
+    /// in its place.
+    /// </summary>
+    /// <param name="randomness">Where the handle is drawn from.</param>
+    /// <returns>The handle, answered once and kept nowhere.</returns>
+    /// <remarks>
+    /// Implements AUTH-FACT-003 (D-233, D-238). The challenge is held by its first
+    /// handle's fingerprint alone, so the press cannot name the handle the sign-in began
+    /// with; the second opens only what the link's token already opened.
+    /// </remarks>
+    public OpaqueToken Land(RandomNumberGenerator randomness)
+    {
+        var handle = OpaqueToken.Draw(randomness);
+
+        LandingFingerprint = handle.Fingerprint();
+
+        return handle;
     }
 
     /// <summary>

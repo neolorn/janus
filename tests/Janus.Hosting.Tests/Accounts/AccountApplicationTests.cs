@@ -990,6 +990,40 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.ProfileNotAccepted.ToString(), immutable.Text("code"));
     }
 
+    /// <summary>
+    /// REG-PROF-001 AC4 and IDN-ATTR-007 AC2 (D-236): over the endpoint, a grammatical
+    /// gender the policy does not enable is refused 422 <c>identity.profile.notaccepted</c>
+    /// and read as nothing, a value outside the two is 400 <c>api.request.malformed</c>
+    /// naming the member, and once the policy enables it the value set is read back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_PROF_001_AC4_TheGrammaticalGenderOverTheEndpointAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer withheld = await browser.SendAsync("PUT", "/account/profile", ("grammaticalGender", "masculine"));
+        Answer malformed = await browser.SendAsync("PUT", "/account/profile", ("grammaticalGender", "neuter"));
+        JsonElement off = Profile(await browser.SendAsync("GET", "/account"));
+
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with { GrammaticalGender = true });
+
+        Answer taken = await browser.SendAsync("PUT", "/account/profile", ("grammaticalGender", "masculine"));
+        JsonElement on = Profile(await browser.SendAsync("GET", "/account"));
+
+        Assert.Equal(
+            (StatusCodes.Status422UnprocessableEntity, ErrorCodes.ProfileNotAccepted.ToString()),
+            (withheld.Status, withheld.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status400BadRequest, "grammaticalGender"),
+            (malformed.Status, malformed.Json().GetProperty("details").GetProperty("member").GetString()));
+        Assert.Equal(JsonValueKind.Null, off.GetProperty("grammaticalGender").ValueKind);
+        Assert.Equal(StatusCodes.Status204NoContent, taken.Status);
+        Assert.Equal("masculine", on.GetProperty("grammaticalGender").GetString());
+    }
+
     // The token the removal notice carried, which reaches the remaining set and not
     // the address that went (REG-IDENT-006).
     private string Undo()

@@ -19,11 +19,12 @@ internal sealed class Role
     private readonly HashSet<Permission> _permissions;
     private readonly HashSet<RoleName> _handsOut;
 
-    private Role(RoleName name, HashSet<Permission> permissions, HashSet<RoleName> handsOut)
+    private Role(RoleName name, HashSet<Permission> permissions, HashSet<RoleName> handsOut, bool grantsMustEnd)
     {
         Name = name;
         _permissions = permissions;
         _handsOut = handsOut;
+        GrantsMustEnd = grantsMustEnd;
     }
 
     /// <summary>
@@ -42,21 +43,28 @@ internal sealed class Role
     public IReadOnlySet<RoleName> HandsOut => _handsOut;
 
     /// <summary>
+    /// Whether every grant of it made from now on carries an end (AUTHZ-GRANT-003, D-237).
+    /// </summary>
+    public bool GrantsMustEnd { get; }
+
+    /// <summary>
     /// A role allowing the permissions given.
     /// </summary>
     /// <param name="name">What it is called.</param>
     /// <param name="permissions">What it allows.</param>
     /// <param name="handsOut">The roles its holders may hand out, none where absent.</param>
+    /// <param name="grantsMustEnd">Whether every grant of it carries an end.</param>
     /// <returns>The role.</returns>
     /// <exception cref="ArgumentNullException">The permissions are absent.</exception>
     public static Role Of(
         RoleName name,
         IEnumerable<Permission> permissions,
-        IEnumerable<RoleName>? handsOut = null)
+        IEnumerable<RoleName>? handsOut = null,
+        bool grantsMustEnd = false)
     {
         ArgumentNullException.ThrowIfNull(permissions);
 
-        return new Role(name, [.. permissions], [.. handsOut ?? []]);
+        return new Role(name, [.. permissions], [.. handsOut ?? []], grantsMustEnd);
     }
 
     /// <summary>

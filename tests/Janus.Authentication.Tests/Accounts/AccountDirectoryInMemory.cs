@@ -240,11 +240,17 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
         SubjectId subject,
         DisplayName? displayName,
         LegalName? legalName,
+        GrammaticalGender? grammaticalGender,
         CancellationToken cancellationToken)
     {
         HeldProfile held = Profile(subject);
 
-        _profiles[subject] = held with { DisplayName = displayName, LegalName = legalName };
+        _profiles[subject] = held with
+        {
+            DisplayName = displayName,
+            LegalName = legalName,
+            GrammaticalGender = grammaticalGender,
+        };
 
         return ValueTask.CompletedTask;
     }

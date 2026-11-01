@@ -21,4 +21,10 @@ internal sealed class RoleRecord
     /// declaration or an administrator wrote them (D-212).
     /// </summary>
     public string[] HandsOut { get; set; } = [];
+
+    /// <summary>
+    /// The <c>grants_must_end</c> column: whether every grant of the role made from now on
+    /// carries an end (D-237).
+    /// </summary>
+    public bool GrantsMustEnd { get; set; }
 }

@@ -103,6 +103,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
                 _work,
                 codec: null,
                 _clock),
+            new PolicyResolution(_memberships, _configuration, _raises),
             new AccountReach(
                 _gate,
                 _administrative,

@@ -409,6 +409,57 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-004 AC8 and AUTHZ-GRANT-003 (D-237): a role is defined with whether its
+    /// grants must end, which reads back with it, a body naming nothing giving it
+    /// <c>false</c>, and one that is not a boolean is malformed naming it; turning it on is
+    /// recorded before and after, and leaves an open-ended grant of the role standing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC8_ARoleCarriesWhetherItsGrantsMustEndAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        Answer created = await DefinedAsync(administrator, Editing);
+        Answer ending = await DefinedAsync(administrator, Reading, name: "reader", grantsMustEnd: true);
+        Answer unreadable = await administrator.SendAsync(
+            "POST",
+            "/admin/roles",
+            ("name", "writer"),
+            ("permissions", Reading),
+            ("grantsMustEnd", "yes"),
+            ("reason", "Needs it."));
+
+        await GrantOfAsync(Editor, actor, expiresAt: null);
+
+        Answer changed = await DefinedAsync(administrator, Editing, grantsMustEnd: true);
+        RoleAuditInMemory.RoleChange change = _deployment.RoleChanges.Changes[^1];
+        Answer read = await administrator.SendAsync("GET", "/admin/roles");
+
+        Assert.Equal(StatusCodes.Status201Created, created.Status);
+        Assert.Equal(StatusCodes.Status201Created, ending.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
+        Assert.Equal(StatusCodes.Status400BadRequest, unreadable.Status);
+        Assert.Equal("grantsMustEnd", unreadable.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(
+            [("editor", true), ("reader", true)],
+            read.Json()
+                .EnumerateArray()
+                .Where(role => role.GetProperty("name").GetString() is "editor" or "reader")
+                .Select(role => (role.GetProperty("name").GetString(), role.GetProperty("grantsMustEnd").GetBoolean()))
+                .OrderBy(role => role.Item1, StringComparer.Ordinal));
+        Assert.False(change.Before!.GrantsMustEnd);
+        Assert.True(change.After!.GrantsMustEnd);
+        Assert.Single(
+            await _deployment.AccessGrants.HeldByAsync(
+                [GrantSubject.Of(actor)],
+                Branch,
+                _deployment.Clock.GetUtcNow(),
+                CancellationToken.None),
+            grant => grant.Role == Editor && grant.ExpiresAt is null);
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-005 (D-212): a <c>handsOut</c> naming what is not a role name is
     /// refused as malformed naming it, and one naming a role the deployment does not hold
     /// is refused <c>authz.grant.unresolved</c> naming it; neither defines the role or
@@ -839,26 +890,24 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
     }
 
+    // A definition whose body names the optional members only where they are given.
     private static Task<Answer> DefinedAsync(
         Browser administrator,
         string[] permissions,
         string name = "editor",
         string reason = "Needs it.",
-        string[]? handsOut = null) =>
-        handsOut is null
-            ? administrator.SendAsync(
-                "POST",
-                "/admin/roles",
+        string[]? handsOut = null,
+        bool? grantsMustEnd = null) =>
+        administrator.SendAsync(
+            "POST",
+            "/admin/roles",
+            [
                 ("name", name),
                 ("permissions", permissions),
-                ("reason", reason))
-            : administrator.SendAsync(
-                "POST",
-                "/admin/roles",
-                ("name", name),
-                ("permissions", permissions),
-                ("handsOut", handsOut),
-                ("reason", reason));
+                .. handsOut is null ? [] : new (string, object?)[] { ("handsOut", handsOut) },
+                .. grantsMustEnd is null ? [] : new (string, object?)[] { ("grantsMustEnd", grantsMustEnd) },
+                ("reason", reason),
+            ]);
 
     private static Task<Answer> RemovedAsync(Browser administrator, string name) =>
         administrator.SendAsync("DELETE", "/admin/roles/" + name, ("reason", "No longer used."));

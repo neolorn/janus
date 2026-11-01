@@ -33,5 +33,10 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<RoleRecord>
         builder.Property(role => role.HandsOut)
             .HasColumnName("hands_out")
             .HasDefaultValueSql("'{}'");
+
+        // AUTHZ-GRANT-003 (D-237): a role stored before the column existed binds no grant.
+        builder.Property(role => role.GrantsMustEnd)
+            .HasColumnName("grants_must_end")
+            .HasDefaultValue(false);
     }
 }

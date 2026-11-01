@@ -212,7 +212,8 @@ internal sealed class AccountDirectory(
             profile.DisplayName,
             profile.LegalName,
             profile.DateOfBirth,
-            photo?.UpdatedAt);
+            photo?.UpdatedAt,
+            profile.GrammaticalGender);
     }
 
     /// <inheritdoc/>
@@ -220,6 +221,7 @@ internal sealed class AccountDirectory(
         SubjectId subject,
         DisplayName? displayName,
         LegalName? legalName,
+        GrammaticalGender? grammaticalGender,
         CancellationToken cancellationToken)
     {
         Profile profile = await profiles.FindBySubjectAsync(subject, cancellationToken)
@@ -227,6 +229,7 @@ internal sealed class AccountDirectory(
 
         profile.SetDisplayName(displayName);
         profile.SetLegalName(legalName);
+        profile.SetGrammaticalGender(grammaticalGender);
 
         await profiles.RecordAsync(profile, cancellationToken).ConfigureAwait(false);
     }

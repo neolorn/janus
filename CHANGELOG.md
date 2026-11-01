@@ -10,12 +10,41 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A pressed sign-in link that leaves a second step or the new-browser code answers
+  `challengeId`, a second handle of the challenge drawn at the press and kept only as
+  its fingerprint, so the page the link landed on completes the sign-in itself; the
+  library call answers it as `SignInLanding.ChallengeId`. A second press of the link
+  answers none. `POST /auth/factor`, `POST /auth/device/verify` and
+  `POST /auth/device/resend` take either handle, and completing through one ends the
+  challenge for both.
+- The profile carries an optional `grammaticalGender`, `masculine` or `feminine`, so a
+  host can address a person or name their job in the right grammatical form. The policy
+  field `grammaticalGender` enables it: `false` in the system policy, and `true` in every
+  organization's policy as it is created, the administrative organization's included,
+  so an account of no organization has none and an account of several has it only where
+  every one enables it. The person sets, changes and clears it with
+  `PUT /account/profile`; any other value is refused 400 `api.request.malformed`, and
+  one the policy does not enable 422 `identity.profile.notaccepted`. It is read in
+  `GET /account`, `GET /admin/accounts/{subject}` and `IAccounts.ReadAsync` only where
+  the policy enables it, answered in `GET /settings`'s `policy`, taken by
+  `PUT /admin/organizations/{id}/policy`, exported and erased with the profile, and its
+  change is audited without its value. Neither direction of the policy field is a
+  loosening.
+- A role can require that every grant of it carries an end: `grantsMustEnd` on
+  `/admin/roles` (default `false`), and `GrantsMustEnd()` after a role declared with
+  `AuthorizationDeclarationBuilder.Role`. A grant of such a role without `expiresAt`,
+  through `POST /admin/grants` or `IGrants.GrantAsync`, is refused 422
+  `authz.grant.endrequired` naming the role in `details.role`. Turning it on leaves the
+  open-ended grants already made as they are, and a derived or materialised grant is
+  not bound by it. The role's audit records carry it before and after.
 - A stored system policy or organization override whose gates still name the retired
   step-up action `alerting:destinations` reads past that gate, so a deployment
   bootstrapped before its removal starts and gates every current action as before; a
   migration deletes those gates. A policy or override written through the API or the
   command-line tool names current actions only, and a retired name is refused as a
-  misspelled one is.
+  misspelled one is. The start logs one line at Information for each stored policy or
+  override that still names a retired action, naming the policy and the action; no other
+  read logs it.
 - An enrolment session opened for a lost mailbox replaces an email with
   `PUT /account/identifiers/{id}/replace` whatever `identifiers.email.max` is, the new
   address taking the replaced one's place, primary included. Outside that session the

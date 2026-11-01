@@ -27,7 +27,9 @@ public interface IGrants
     /// <returns>
     /// The grant's identifier, or the refusal: <c>authz.grant.duplicate</c> where an
     /// identical live grant exists, <c>authz.grant.expired</c> where the expiry has
-    /// passed already, <c>authz.grant.reasonrequired</c> where the reason is blank.
+    /// passed already, <c>authz.grant.reasonrequired</c> where the reason is blank,
+    /// <c>authz.grant.endrequired</c> naming the role where the role's grants must end
+    /// and the grant carries no expiry.
     /// </returns>
     ValueTask<Result<GrantId>> GrantAsync(
         AccessContext context,

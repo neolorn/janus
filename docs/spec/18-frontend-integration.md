@@ -631,7 +631,7 @@ hands the token to on a press:
 | `loss-report` | Account | `POST /recovery/report-loss/{id}/cancel` (AUTH-RECOV-007) |
 
 *Source: D-148; D-146; REG-SESS-003, AUTH-FACT-003, API-LAND-001, BFF-CSRF-005b,
-LIB-HOST-001, D-166, D-187, D-190, D-224, D-233*
+LIB-HOST-001, D-166, D-187, D-190, D-224, D-233, D-238*
 
 **What a link does not carry (D-224).** A link names no record: where the flow's route
 takes `{id}`, the landing sends the nil UUID, `00000000-0000-0000-0000-000000000000`,
@@ -641,10 +641,13 @@ another tab of the originating browser reaches the tab that asked through
 `GET /auth/session`, which it polls while it waits, or through a message from the
 landing tab; where the press's answer carries `continueTo`, the landing sends the
 browser there (FE-API-006). Where the press leaves the sign-in open, its answer
-(`factorRequired`, or `deviceVerificationRequired`) names the challenge in
-`challengeId`, and the landing tab presents the second step, or the new-browser code
-(`POST /auth/device/verify`), on that challenge and completes the sign-in itself, so it
-needs no other tab and no channel between tabs (D-233).
+(`factorRequired`, or `deviceVerificationRequired`) carries in `challengeId` a second
+handle of the challenge, answered once and never again for that link, and the landing
+tab presents the second step, or the new-browser code (`POST /auth/device/verify`), on
+that handle and completes the sign-in itself, so it needs no other tab and no channel
+between tabs (D-233). Either handle carries the challenge on, and completing it in one
+tab ends it for the other, which then reads the completed sign-in from
+`GET /auth/session` (`09` `POST /auth/factor`, D-238).
 
 The server decides which case applies: the landing call without `press` returns
 `sameBrowser` and, where false, the code (`09` `POST /register/verify/{id}`). The
@@ -678,8 +681,9 @@ control to end the attempt.
    the landing sends the nil UUID wherever a route takes `{id}`.
 9. A press of a sign-in link whose answer is `factorRequired` or
    `deviceVerificationRequired` presents, in the landing tab, the second step or the
-   new-browser code on the challenge the answer names, and the sign-in completes there
-   with the tab that asked for the link closed.
+   new-browser code on the handle the answer names, and the sign-in completes there
+   with the tab that asked for the link closed; with that tab open, completing in either
+   tab ends the challenge for the other (D-238).
 
 ---
 
@@ -871,7 +875,7 @@ declaration (REG-PREF-001); and the **profile** fields the policy enables
 (REG-PROF-001).
 
 *Source: D-146; AUTH-FACT-001, AUTH-SESS-013, REG-IDENT-002, REG-IDENT-004 to
-REG-IDENT-006, REG-PREF-001, REG-PROF-001, AUTH-FACT-002a, D-166, D-193*
+REG-IDENT-006, REG-PREF-001, REG-PROF-001, AUTH-FACT-002a, D-166, D-193, D-236*
 
 Nothing about a credential beyond these fields is shown (AUTH-FACT-001). The undo is
 link-borne (`POST /account/identifiers/{id}/undo`) because after a hostile removal the
@@ -892,7 +896,9 @@ the person.
 4. A preference key absent from the declaration is never rendered; an undeclared key is
    never sent.
 5. Legal name and date of birth appear only where their policies are on; date of birth
-   is read-only.
+   is read-only. The grammatical gender appears only where the policy in force for the
+   account enables it, offering `masculine`, `feminine` and no value, and is never asked
+   at registration (D-236).
 6. Before a provider is linked (`POST /account/link/{provider}`), where the credential
    list holds a second-step credential, the R-A16 disclosure is shown in one sentence
    before the round trip starts (AUTH-FACT-002a).

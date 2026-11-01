@@ -10,12 +10,16 @@ namespace Janus.Hosting.Accounts;
 /// <param name="LegalName">The legal name, where the host collects one.</param>
 /// <param name="DateOfBirth">The date of birth, where the host collects one.</param>
 /// <param name="Photo">When the photo last changed, which is what the image is fetched by.</param>
+/// <param name="GrammaticalGender">
+/// How the person is addressed, where the policy enables it and the person has said (D-236).
+/// </param>
 /// <remarks>Implements REG-PROF-001 and IDN-ATTR-007.</remarks>
 internal sealed record ProfileView(
     string? DisplayName,
     string? LegalName,
     DateOnly? DateOfBirth,
-    DateTimeOffset? Photo)
+    DateTimeOffset? Photo,
+    GrammaticalGender? GrammaticalGender)
 {
     /// <summary>
     /// Reads the profile.
@@ -31,6 +35,7 @@ internal sealed record ProfileView(
             profile.DisplayName,
             profile.LegalName,
             profile.DateOfBirth,
-            profile.PhotoUpdatedAt);
+            profile.PhotoUpdatedAt,
+            profile.GrammaticalGender);
     }
 }

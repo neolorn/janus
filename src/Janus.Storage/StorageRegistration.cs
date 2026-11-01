@@ -155,6 +155,7 @@ internal static class StorageRegistration
 
         services.AddScoped<IConfigurationStore, ConfigurationStore>();
         services.AddScoped<IConfigurationWrites, ConfigurationStore>();
+        services.AddScoped<StoredPolicies>();
         services.AddScoped<IProtectedSettings, ProtectedSettings>();
 
         services.AddScoped<IAccountStore, AccountStore>();

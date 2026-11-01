@@ -480,7 +480,7 @@ issued on, `{}` where the link is issued on one the browser holds (D-230) · **4
 unregistered identifier (AUTH-ABUSE-002, AUTH-ABUSE-004)
 
 *Source: D-146; AUTH-FACT-002, AUTH-FACT-003, AUTH-ABUSE-003, AUTH-ABUSE-004, D-162, D-166,
-D-183, D-224, D-226, D-230, D-233*
+D-183, D-224, D-226, D-230, D-233, D-238*
 
 The link completes **only in the browser that requested it and only on a press**
 (REG-SESS-003). It is issued on a challenge (D-226): the browser's latest live challenge
@@ -497,8 +497,10 @@ the server completes the link's challenge only where the request carries the
 pre-authentication cookie that challenge is bound to. The call carries no `challengeId`:
 the token names its pending link and the challenge it belongs to, and a `challengeId`
 sent beside it is not read (D-224). Where the press leaves a second step or the
-new-browser code, its answer names the challenge in `challengeId`, and the landing page
-presents that step on it and completes the sign-in itself (`POST /auth/factor`, D-233).
+new-browser code, its answer carries in `challengeId` a second handle of the challenge,
+answered once, and the landing page presents that step on it and completes the sign-in
+itself; either handle carries the challenge on, and completing through one ends it for
+both (`POST /auth/factor`, D-233, D-238).
 Opened anywhere else, or where the challenge is bound to none, the same call returns the
 code to type where the sign-in began, presented at `/auth/factor` on that challenge, and
 signs nothing in. That code is an authentication code, not a verification code: it
@@ -621,7 +623,7 @@ assurance.
   "webauthn": { },                   // where required names securityKey (AUTH-FACT-002b)
   "trustDeviceOffered": true,        // AUTH-FACT-015: the completing call may trust it
   "continueTo": "...",               // AUTH-SESS-012: where an authorization waits
-  "challengeId": "..."               // D-233: a pressed sign-in link's open answer
+  "challengeId": "..."               // D-233, D-238: a pressed link's second handle
 }
 ```
 
@@ -700,14 +702,25 @@ link is recorded as a failed authentication behind the source delay of AUTH-ABUS
 and answered `auth.code.expired` (**429** `auth.throttled` while the delay stands); an
 unpressed one changes and records nothing (CONV-LOG-005, D-166). Where a pressed token
 completes its factor and the sign-in is not complete, the **200** (`factorRequired`, or
-`deviceVerificationRequired`) carries `challengeId`, the challenge the link completed its
-factor on, so the landing page presents the second step, or the new-browser code of
-`POST /auth/device/verify`, on that challenge and completes the sign-in itself; a
-`complete` answer and every refusal carry none. This reveals nothing new: the press
-completes only in the browser whose pre-authentication cookie the challenge is bound to
-(REG-SESS-003, D-226), the browser that already holds the identifier, and an unpressed
-open, or a call from another browser, is answered as this section states and names no
-challenge (D-233).
+`deviceVerificationRequired`) carries `challengeId`, a second handle of the challenge the
+link completed its factor on, so the landing page presents the second step, or the
+new-browser code of `POST /auth/device/verify`, on it and completes the sign-in itself;
+a `complete` answer and every refusal carry none (D-233).
+
+**The second handle (D-238).** A challenge is held by its handle's fingerprint alone, so
+the press cannot answer the handle the sign-in began with. It draws a new handle of the
+same form and length as a challenge's, stores only its fingerprint, beside the
+challenge's own and unique, and answers it once; a second press of the same link
+answers no handle, the link being spent (AUTH-FACT-003). This route and the new-browser
+code's (`POST /auth/device/verify`, `POST /auth/device/resend`) take either handle, the
+challenge's attempts, lifetime and binding being the same whichever is used. Completing
+the challenge through one ends it for both, the other then answered as for an ended
+challenge, and abandoning or sweeping the challenge removes both fingerprints. Nothing
+new is revealed: the second handle opens only what the link's token already opens, and
+is never logged or stored in clear (`08` CONV-LOG-005); the press completes only in the
+browser whose pre-authentication cookie the challenge is bound to (REG-SESS-003, D-226),
+the browser that already holds the identifier, and an unpressed open, or a call from
+another browser, is answered as this section states and names no handle (D-233).
 
 **Sign-in codes.** A code presented as `emailCode`, as the `phoneCode` second step, or
 where a sign-in link was opened in another browser is an authentication code
@@ -771,7 +784,7 @@ requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
 AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195, D-197,
-D-198, D-199, D-200, D-233*
+D-198, D-199, D-200, D-233, D-238*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -796,6 +809,11 @@ Completes a sign-in held by the new-device check (AUTH-FACT-016).
 { "challengeId": "...", "code": "..." }
 ```
 
+`challengeId` is either handle of the challenge: the one the sign-in began with, or the
+second handle a pressed sign-in link answered (`POST /auth/factor`, D-238). Completing
+through one ends the challenge for both, the other then answered as for an ended
+challenge.
+
 **200**: the sign-in completes with the response shape of `/auth/factor`; the session
 records AAL1 (AUTH-FACT-003) and the browser is remembered for
 `device.verification.lifetime`. Emits `DeviceVerified`.
@@ -804,7 +822,7 @@ codes invalidate the code (AUTH-FACT-004)
 **429**: a replacement code refused by `email.destination`
 (`auth.restriction.exceeded` with `retryAt`)
 
-*Source: D-146; AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-004*
+*Source: D-146; AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-004, D-238*
 
 The code is a verification code (AUTH-FACT-004), not a credential: it proves the
 browser, not the person, and raises no assurance property. The remembered browser is a
@@ -821,6 +839,10 @@ Sends a new code for a sign-in held by the new-device check (AUTH-FACT-016, D-22
 { "challengeId": "..." }
 ```
 
+`challengeId` is either handle of the challenge, the one the sign-in began with or the
+second handle a pressed sign-in link answered, with the same effect (`POST /auth/factor`,
+D-238).
+
 **202**: a new code sent to the primary email under `email.destination`; the code before
 it no longer verifies.
 **422**: `auth.code.expired` where the challenge holds no sign-in held at the check
@@ -828,7 +850,7 @@ it no longer verifies.
 **429**: `auth.restriction.exceeded` with `retryAt` where `email.destination` refuses
 the send; `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands
 
-*Source: AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-001, AUTH-ABUSE-004, D-224*
+*Source: AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-001, AUTH-ABUSE-004, D-224, D-238*
 
 The challenge is answered only with the pre-authentication cookie it is bound to
 (BFF-CSRF-005a), the one it was opened with (`POST /auth/begin`, D-226). A resend is a
@@ -1108,7 +1130,7 @@ unauthenticated, answered with `Cache-Control: no-store`.
   "purposes": [ { "purpose": "...", "takes": "consent", "consentKind": "ordinary",
                   "document": "privacy-notice" } ],
   "policy": { "requiredAssurance": "aal1", "loginFactors": [ "password", "passkey" ],
-              "photos": false }
+              "photos": false, "grammaticalGender": false }
 }
 ```
 
@@ -1120,16 +1142,16 @@ the deployment declares (IDN-LIFE-012). `purposes` lists each purpose resting on
 or on an objectable basis: `takes` is `consent` or `objection`, `consentKind` the
 consent kind of `10` section 5.10 (null for an objection), and `document` the legal
 document that governs it (`privacy-notice` where it names none). `policy` holds the
-`requiredAssurance`, `loginFactors` and `photos` of the policy in force (AUTH-PRIN-002)
-for the account whose session the request carries, or of the organization whose
-invitation a registration session carries (REG-INV-001), and the system policy's where
-it carries neither. Nothing else is answered: no restriction, rate, secret or other
-field of a policy.
+`requiredAssurance`, `loginFactors`, `photos` and `grammaticalGender` (D-236) of the
+policy in force (AUTH-PRIN-002) for the account whose session the request carries, or of
+the organization whose invitation a registration session carries (REG-INV-001), and the
+system policy's where it carries neither. Nothing else is answered: no restriction,
+rate, secret or other field of a policy.
 
 **200**, always
 
 *Source: REG-IDENT-001, REG-IDENT-002, REG-PROF-001, AUTH-PASS-001, AUTH-PRIN-002,
-PRIV-BASIS-003, REG-INV-001, D-224*
+PRIV-BASIS-003, REG-INV-001, D-224, D-236*
 
 ---
 
@@ -1388,14 +1410,17 @@ and nothing else:
   "password": { "set": true, "changedAt": "..." },
   "secondStep": { "preferred": "..." },
   "recoveryCodes": { "remaining": 8, "generatedAt": "...", "viewedAt": "...", "exportedAt": null, "remindedAt": null },
-  "profile": { "displayName": "...", "legalName": "...", "dateOfBirth": "...", "photo": "..." },
+  "profile": { "displayName": "...", "legalName": "...", "dateOfBirth": "...", "photo": "...",
+               "grammaticalGender": "feminine" },
   "preferences": { "language": "...", "timeZone": "...", "declared": { } }
 }
 ```
 
 Credentials are reported by property and label, never by secret material; `legalName`
 and `dateOfBirth` are present only where `profile.legalname` and `profile.dateofbirth`
-are on (REG-PROF-001). The credential list renders `backupState` as synced or this
+are on (REG-PROF-001), and `grammaticalGender` only where the policy in force for the
+account enables it, absent where the person has given none (IDN-ATTR-007, D-236). The
+credential list renders `backupState` as synced or this
 device only (`18` FE-ACCT-001). `recoveryCodes.remindedAt` is the instant the set's one
 reminder was admitted to a channel or the pass found no channel it could reach, and null
 before either (AUTH-FACT-008). An identifier being added is listed with `verified` false
@@ -1408,7 +1433,7 @@ password exists read it here (FE-SEC-001). The credential list holds the authent
 never the password, and `GET /account/credentials` lists the same.
 
 *Source: D-146; REG-ACCT-001, AUTH-FACT-001, AUTH-FACT-008, AUTH-FACT-009, D-166, D-186,
-D-187, D-224*
+D-187, D-224, D-236*
 
 ---
 
@@ -1418,10 +1443,16 @@ Edits the profile fields of REG-PROF-001 and, where enabled, the username
 (REG-IDENT-009).
 
 ```json
-{ "displayName": "...", "legalName": "...", "username": "..." }
+{ "displayName": "...", "legalName": "...", "username": "...", "grammaticalGender": "masculine" }
 ```
 
+`grammaticalGender` is `masculine` or `feminine`; the person sets, changes and clears it
+at any time where the policy in force for the account enables it (IDN-ATTR-007,
+REG-PROF-001, D-236).
+
 **204**
+**400**: `api.request.malformed` naming `grammaticalGender` for a value other than
+`masculine` or `feminine` (D-236)
 **403**: `auth.stepup.required`, for a username change only (`username:change`): a body
 naming the username the account held when the edit's step-up was judged is no username
 change (REG-IDENT-009, D-208)
@@ -1432,11 +1463,13 @@ change falls inside `identifiers.username.changecooloff`, with the cooling-off e
 **422**: `identity.identifier.mixedscript`; `identity.profile.invalid` (a display name
 over 64 bytes, or a legal name outside its bound); `identity.profile.notaccepted` (a
 `dateOfBirth` field, immutable to the person and corrected through support; a
-`legalName` or `username` while its key or `identifiers.username.enabled` is off)
+`legalName` or `username` while its key or `identifiers.username.enabled` is off; a
+`grammaticalGender` while the policy in force for the account does not enable it)
 
-*Source: D-146; REG-PROF-001, REG-IDENT-009, D-162, D-166, D-208*
+*Source: D-146; REG-PROF-001, REG-IDENT-009, D-162, D-166, D-208, D-236*
 
-Display name and legal name need no gate and are audited. A username change is a
+Display name, legal name and grammatical gender need no gate and are audited, the
+grammatical gender without its value (D-236). A username change is a
 step-up action and re-verifies nothing: a username is never verified.
 
 ---
@@ -2616,9 +2649,12 @@ organization for a grant outside it), for a grant already revoked, or one a deri
 wrote or materialised **409**: `authz.grant.duplicate`; `authz.grant.expired` where
 `expiresAt` is not after the present **422**: `authz.grant.reasonrequired`;
 `authz.grant.unresolved` where `role` names no role the deployment holds, or `subjectId`
-names a group that does not exist or belongs to another organization (`details.member`)
+names a group that does not exist or belongs to another organization (`details.member`);
+`authz.grant.endrequired` where the role's grants must end (`grantsMustEnd`) and no
+`expiresAt` is given, `details.role` naming the role, nothing written (AUTHZ-GRANT-003,
+D-237)
 
-*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-GRANT-005, AUTHZ-SCOPE-001, D-166, D-207, D-208, D-209, D-212*
+*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-GRANT-005, AUTHZ-SCOPE-001, D-166, D-207, D-208, D-209, D-212, D-237*
 
 ---
 
@@ -2650,19 +2686,27 @@ account holds is refused (OPS-BOOT-002). A change stays within the actor's reach
 permissions the role carries before and after, and every role its `handsOut` names
 after, are ones the actor may give or hand out (AUTHZ-GRANT-005).
 
-`GET /admin/roles`: **200** `[ { name, permissions, handsOut } ]`.
+`GET /admin/roles`: **200** `[ { name, permissions, handsOut, grantsMustEnd } ]`.
 `POST /admin/roles`
-`{ "name": "...", "permissions": [ "..." ], "handsOut": [ "..." ], "reason": "..." }`,
-`handsOut` optional and none where absent: **201** creates the role; **204** gives the
-role of that name the permissions and the `handsOut` stated.
+`{ "name": "...", "permissions": [ "..." ], "handsOut": [ "..." ], "grantsMustEnd": false, "reason": "..." }`,
+`handsOut` optional and none where absent, `grantsMustEnd` optional and `false` where
+absent: **201** creates the role; **204** gives the role of that name the permissions,
+the `handsOut` and the `grantsMustEnd` stated.
 `DELETE /admin/roles/{name}` `{ "reason": "..." }`: **204**.
+
+`grantsMustEnd` true makes every grant of the role carry an end date: a grant without
+`expiresAt` is refused `authz.grant.endrequired` (`POST /admin/grants`). Turning it on
+leaves the role's existing open-ended grants as they are and binds the grants made after
+it; the change is recorded as any role change is (AUTHZ-GRANT-003, AUTHZ-GRANT-004,
+D-237).
 
 **400**: `api.request.malformed` naming `name` where it is not a role name (a lower-case
 letter, then lower-case letters and digits, in parts joined by single hyphens:
 `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`),
 `permissions` where one is declared neither by the library nor by the host
-(AUTHZ-MODEL-004), `handsOut` where one is not a role name, `reason` where it is absent,
-blank or longer than 1024 characters after trimming
+(AUTHZ-MODEL-004), `handsOut` where one is not a role name, `grantsMustEnd` where it is
+not a boolean, `reason` where it is absent, blank or longer than 1024 characters after
+trimming
 **403**: `authz.role.notassignable` where the change reaches beyond the actor
 (AUTHZ-GRANT-005); `authz.denied` without `role:manage`, without `system:administer` for
 a role that carries it, or for a change taking a library-owned permission out of the role the
@@ -2673,7 +2717,7 @@ a declared derivation, a standing invitation or another role's `handsOut` names
 **422**: `authz.grant.unresolved` (`details.member` `handsOut`) where `handsOut` names a
 role the deployment does not hold
 
-*Source: AUTHZ-GRANT-004, AUTHZ-GRANT-005, OPS-CFG-007, OPS-BOOT-002, D-166, D-212*
+*Source: AUTHZ-GRANT-004, AUTHZ-GRANT-005, OPS-CFG-007, OPS-BOOT-002, D-166, D-212, D-237*
 
 ---
 
@@ -2959,7 +3003,7 @@ configuration change's missing reason excepted, below). **404**
 | Endpoint | Does |
 |---|---|
 | `POST /admin/organizations` | `{ name, reason }`: creates an organization and writes its policy key `policy.<organization>` as `{}` in the same transaction, recorded as a configuration change (OPS-CFG-005) and as `identity.organization.created`. Not gated. **201** `{ id }` (IDN-ORG-002). The organization holds no grant: its first grants, `membership:manage` and `grant:manage` among them, are written through `POST /admin/grants` under `system:administer` held in the administrative organization (AUTHZ-SCOPE-001, D-207). **422** `identity.identifier.mixedscript` for a name that mixes scripts within a word, judged on its comparison key (IDN-ACCT-005) |
-| `PUT /admin/organizations/{id}/policy` | Replaces the organization's policy overrides: the policy object of `10` §4.1a without `emailDomains` (`requiredAssurance`, `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery`, `photos`), and `reason`. Omitted fields inherit `policy.default`; the domain lock in force is kept. Every replacement, a tightening included, is the `policy:change` step-up action and carries `reason` (**422** `config.change.reasonrequired`, `details.key` `policy.<organization>`, where it is absent or blank). A replacement under which the organization's members resolve to a policy granting more on any field, by the direction column of `10` §4.1a, is a loosening (OPS-CFG-002) and also requires `system:administer` (**403** `authz.denied`, before the step-up). **422** `config.policy.belowsystem` where a stated field is looser than the system default, `details.field` naming the first in the order of `10` §4.1a (AUTH-STEP-002a); **422** `config.value.belowfloor`, `details.field` `requiredAssurance`, where the administrative organization's members would resolve below `aal2` (AUTH-SESS-005b); **422** `config.value.notallowed` for a value a field does not take, and for `photos` `true` while the host declares no image codec (`details.field` `photos`, `details.requires` `imageCodec`); **400** `api.request.malformed` for a body that is no object (the code alone) or a member the object does not have, `emailDomains` included (naming it), refused at the endpoint before the service. **204**. `GET` returns the resolved policy: **200** `{ requiredAssurance, loginFactors, gates, credentialRedundancy, selfServiceRecovery, photos, emailDomains }`, each field `{ value, overridden }`, `gates` an object keyed by the `10` §5a action name whose members are `{ value: { level, phishingResistant, maxAge }, overridden }`; `overridden` is true where the organization states the field or the action and the value in force is its own, and false where the system policy's value is in force; `emailDomains` is a list of domains in their ASCII form, and `off` is the empty list (D-143) |
+| `PUT /admin/organizations/{id}/policy` | Replaces the organization's policy overrides: the policy object of `10` §4.1a without `emailDomains` (`requiredAssurance`, `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery`, `photos`, `grammaticalGender`, D-236), and `reason`. Omitted fields inherit `policy.default`; the domain lock in force is kept. Every replacement, a tightening included, is the `policy:change` step-up action and carries `reason` (**422** `config.change.reasonrequired`, `details.key` `policy.<organization>`, where it is absent or blank). A replacement under which the organization's members resolve to a policy granting more on any field, by the direction column of `10` §4.1a, is a loosening (OPS-CFG-002) and also requires `system:administer` (**403** `authz.denied`, before the step-up). **422** `config.policy.belowsystem` where a stated field is looser than the system default, `details.field` naming the first in the order of `10` §4.1a (AUTH-STEP-002a); **422** `config.value.belowfloor`, `details.field` `requiredAssurance`, where the administrative organization's members would resolve below `aal2` (AUTH-SESS-005b); **422** `config.value.notallowed` for a value a field does not take, and for `photos` `true` while the host declares no image codec (`details.field` `photos`, `details.requires` `imageCodec`); **400** `api.request.malformed` for a body that is no object (the code alone) or a member the object does not have, `emailDomains` included (naming it), refused at the endpoint before the service. **204**. `GET` returns the resolved policy: **200** `{ requiredAssurance, loginFactors, gates, credentialRedundancy, selfServiceRecovery, photos, grammaticalGender, emailDomains }`, each field `{ value, overridden }`, `gates` an object keyed by the `10` §5a action name whose members are `{ value: { level, phishingResistant, maxAge }, overridden }`; `overridden` is true where the organization states the field or the action and the value in force is its own, and false where the system policy's value is in force; `emailDomains` is a list of domains in their ASCII form, and `off` is the empty list (D-143) |
 | `POST /admin/organizations/{id}/delete` · `/delete/cancel` | `{ reason }`: request, suspend, grace, erasure, cancellable (IDN-ORG-003). The request ends every session of every current member in the same transaction, and the organization's grants confer nothing until it is cancelled. Each requires step-up (`organization:delete`) and is recorded (`identity.organization.deletionrequested`, `identity.organization.deletioncancelled`). **204**, also for a request on an organization already being deleted and a cancellation where none is pending, which change and record nothing. **409** `identity.organization.protected` for the administrative organization. **422** `identity.deletion.windowelapsed` for a cancellation at or after `organization.deletion.grace` from the request, or after the erasure, whether or not the erasure has run. The erasure erases no account |
 | `POST /admin/organizations/{id}/domains` · `POST /admin/organizations/{id}/domains/{domain}/verify` · `DELETE /admin/organizations/{id}/domains/{domain}` | Domain lock (REG-DOM-001, IDN-ORG-006): adds a domain to the policy field `emailDomains`, verifies it by the DNS TXT record the add response names (one TXT value equal to the record value, compared exactly; a lookup that cannot be made proves nothing; **422** `identity.domain.unverified`, nothing written; **404** `identity.domain.notfound` for a domain not listed, never listed or removed; verifying a verified domain or adding a listed one answers it as it stands and changes nothing; removing an unlisted one is **204** and changes nothing), removes it. A domain that does not read as a domain is **400** `api.request.malformed` naming `domain`. Every change is the `domain:manage` step-up action and carries `reason` (**422** `config.change.reasonrequired` where it is absent or blank), and is recorded. Adding and verifying a domain are loosenings, and so is a removal that leaves the list empty (OPS-CFG-002): each also requires `system:administer` (**403** `authz.denied`). Adding a domain while the host registers no DNS resolver is refused **422** `config.value.notallowed`, `details.requires` `dnsResolver`. The lock is on from the first domain listed, verified or not, and while no listed domain is verified it admits no address. Removal stops new sign-ins with addresses in the domain until it is listed anew, whether or not the list holds another domain, and raises an alert (OPS-ALERT-001). Re-verification runs every `domain.reverify.interval` on the sweep; a failure alerts and revokes nothing. The record is `_identity-verify.<domain>` TXT with value `identity-domain-verification=<32 random bytes, base64url>`, one token per organization and domain, never reused (D-153). `GET` answers an array of `{ domain, recordName, recordValue, addedAt, verifiedAt, checkedAt, lastCheckPassed }`, the domain in its ASCII form (REG-DOM-001). `POST .../domains` takes `{ domain, reason }` and answers **201** with one such object; `POST .../{domain}/verify` takes `{ reason }` and answers **200** with it; `DELETE .../{domain}` takes `{ reason }` and answers **204**. Each change writes `identity.organization.domainadded`, `.domainverified` or `.domainremoved` with details `{ domain, reason }`; each change to the list is also a configuration change of `policy.<organization>` (OPS-CFG-005) |
 
@@ -3103,7 +3147,7 @@ the reach, a `deleted` one, and a subject no account bears are answered **404**
 | `GET /admin/organizations/{id}/members?after={subject}&limit={n}` | `membership:read`: **200** `{ members: [ { subject, membership, beganAt, endsAt, invitation } ], next }`, the current members ordered by subject, paged as the organizations are (IDN-READ-002) |
 | `GET /admin/organizations/{id}/members/{subject}` | `membership:read`: **200** one member, as listed · **404** `identity.membership.notfound` where the account holds no current membership of the organization |
 | `GET /admin/organizations/{id}/invitations` | `membership:read`: **200** `[ { id, roles, issuedAt, expiresAt, issuer, email, phone, corporateAddress } ]`, the standing invitations, an identifier the invitation does not bind null |
-| `GET /admin/accounts/{subject}?organization={id}` | `account:read`: **200** `{ subject, state, createdAt, profile: { displayName, legalName }, identifiers: { emails: [ { value, verified, primary } ], phones: [ { value, verified, primary } ], username }, preferences: { language, timeZone, declared }, memberships: [ organization ] }`, `legalName` absent while `profile.legalname` is off (IDN-READ-003) · **404** as above |
+| `GET /admin/accounts/{subject}?organization={id}` | `account:read`: **200** `{ subject, state, createdAt, profile: { displayName, legalName, grammaticalGender }, identifiers: { emails: [ { value, verified, primary } ], phones: [ { value, verified, primary } ], username }, preferences: { language, timeZone, declared }, memberships: [ organization ] }`, `legalName` absent while `profile.legalname` is off, and `grammaticalGender` absent while the policy does not enable it for the account or the person has given none (IDN-READ-003, IDN-ATTR-007, D-236) · **404** as above |
 | `POST /admin/accounts/find` | `account:read`: `{ identifier, organization }`, `organization` optional: the account bearing the email, phone or username, read in its canonical form (IDN-ACCT-004). **200** `{ subject }` · **404** as above |
 | `GET /admin/accounts/{subject}/contact?organization={id}` | `contact:read`: **200** `{ kind, displayName, email, phone, language, timeZone, state }`, `email` and `phone` the primary verified ones, or null; `{subject}` names an account or a person record, `kind` (`account` · `record`) saying which, and for a record `displayName` is its name, `email` and `phone` its contacts as held, verified or not, and `timeZone` null (REC-ADM-001, D-221) · **404** as above, a record outside the reach included |
 | `GET /admin/accounts/{subject}/standing?organization={id}` | `consent:read`: **200** `{ kind, state, consents, objections }`, each consent as `GET /privacy/consents` and each objection as `GET /privacy/objections` answer them; `{subject}` names an account or a person record, as for the contact read (D-221) · **404** as above |

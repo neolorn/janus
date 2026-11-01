@@ -14,10 +14,18 @@ namespace Janus.Core;
 /// The code to type where the sign-in began, present only where the browser is not
 /// the one that asked.
 /// </param>
+/// <param name="ChallengeId">
+/// The second handle of the challenge, answered once where the press left a second step
+/// or the new-browser code, so the sign-in completes where the link landed (D-238).
+/// </param>
 /// <remarks>
 /// Implements AUTH-FACT-003, REG-SESS-003 and API-LAND-001. A plain open changes
 /// nothing: the link completes on a press and in one browser, and the landing
 /// elsewhere signs nothing in. The server decides which case applies; the frontend
 /// never guesses it.
 /// </remarks>
-public sealed record SignInLanding(SignInProgress? SignedIn, bool SameBrowser, [property: NeverLogged] string? Code);
+public sealed record SignInLanding(
+    SignInProgress? SignedIn,
+    bool SameBrowser,
+    [property: NeverLogged] string? Code,
+    [property: NeverLogged] string? ChallengeId = null);

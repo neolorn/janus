@@ -50,6 +50,15 @@ internal sealed record SignInProgressView(
     public string? ContinueTo { get; init; }
 
     /// <summary>
+    /// The second handle of the challenge, where a pressed sign-in link leaves a second
+    /// step or the new-browser code, answered once and left out everywhere else
+    /// (D-233, D-238).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [NeverLogged]
+    public string? ChallengeId { get; init; }
+
+    /// <summary>
     /// Reads what a step reached.
     /// </summary>
     /// <param name="progress">What the step reached.</param>
