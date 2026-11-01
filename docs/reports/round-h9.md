@@ -2,11 +2,14 @@
 
 ## 1. Items implemented
 
-Items are D-248's, as the chapters read on this branch (`06` OPS-BOOT-001, `01`
-IDN-ORG-002, `09` the two routes, `10` section 5.29, the plan's H9 row), written in this
-round by the lead's word since no documents run preceded it.
+Items are D-248's, built from the decision as committed at 10c44a32. The chapters and
+the plan's H9 row come from the round's docs branch, not yet merged here: the tests
+name the criteria D-248 states as OPS-BOOT-001 AC10 to AC13 (the command, its rerun,
+the shared name, the refusals) and IDN-ORG-002 AC4 (the policy route's checks), and are
+renamed to the docs branch's numbering where it differs once it is merged. Chapter
+changes this branch first carried (318dc612) were taken back in 6cd89c2c.
 
-- The command `organization` of `Janus.Cli` (OPS-BOOT-001 AC10 to AC13, IDN-ORG-002 AC4):
+- The command `organization` of `Janus.Cli` (D-248):
   - `identity organization --name <name> --policy <file> --reason <text>`, with
     `--multiplememberships true|false` optional; the arguments are judged as
     `bootstrap` judges its own, and the file is read before the database is reached as
@@ -85,12 +88,13 @@ None.
 - `OrganizationFromServer`, `OrganizationCreated`: announced in the creating
   transaction, since the events tell a host of changes after its deployment exists and
   only bootstrap's organization raises none (D-219 item 2, D-218 item 10).
-- `10` section 5.29, the principal `organization`: D-248 names it and not its operation
-  or reason. Rule applied: `configuration` is the operation of changing the deployment's
-  configuration from the server (section 5.28), and OPS-BOOT-001 is the item the command
-  belongs to (D-248, "Propagated to").
-- `AuthorizationModel` reserved names: `organization` added, since no host job takes a
-  name of `10` section 5.29 (IDN-PRIN-001 AC7, D-206).
+- `OrganizationFromServer.Principal`: D-248 names the principal `organization` and not
+  its operation or reason. Rule applied: `configuration` is the operation of changing the
+  deployment's configuration from the server (`10` section 5.28), and OPS-BOOT-001 is the
+  item the command belongs to (D-248, "Propagated to"); the docs branch's `10` row
+  governs where it says otherwise.
+- `AuthorizationModel` reserved names: `organization` added, since no host job takes the
+  name of a principal of `10` section 5.29 (IDN-PRIN-001 AC7, D-206).
 - `ConfigurationAdministration`'s neighbours: the command writes runtime keys through the
   writer of protected keys, as a command on the server does (OPS-CFG-008, "From the
   server"), and holds their rows through `IConfigurationWrites.HoldAsync`; the gate test
@@ -102,7 +106,7 @@ None.
 
 ## 4. Open questions
 
-None. Defects for the lead, outside D-248's "Propagated to" and so not written here:
+None. Defects for the lead, outside D-248's "Propagated to":
 
 - `08` CONV-LAYOUT-001, the `Janus.Cli` row lists the commands the tool carries and does
   not name `organization`.
@@ -114,6 +118,9 @@ None. Defects for the lead, outside D-248's "Propagated to" and so not written h
 
 - Fast checks on every commit: the build with warnings as errors, the analysers and
   `dotnet format --verify-no-changes` are green.
-- Unit and contract tests before the push: green.
+- Unit and contract tests before the push: green; the round's integration tests, run
+  here against PostgreSQL, green.
+- The acceptance-criterion test-name gate fails until the docs branch is merged, since
+  the criteria the tests name are not yet in the chapters.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
