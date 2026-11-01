@@ -1289,10 +1289,10 @@ emails stay, and no lock falls on them. The address counts against
 as it stood before, and recorded as `identity.mailbox.given` with its reason. It SHALL be
 refused for an account that already holds a mailbox (`identity.mailbox.held`, 409), an
 account whose emails already fill the kind (`identity.identifier.maximum`, 409), an
-address another account holds as an ordinary email (`auth.code.expired`, 422, the code an
-identifier add answers for it, REG-IDENT-004), an account that holds no current
-membership of the administrative organization and an `{id}` that is not that
-organization alike (`identity.membership.notfound`, 404, so nothing is disclosed), an
+address another account holds as an email (`identity.mailbox.taken`, 409), an account
+that holds no current membership of the administrative organization and an `{id}` that
+is not that organization alike (`identity.membership.notfound`, 404, so nothing is
+disclosed), an
 account neither `active` nor `restricted`, the `emergency` account (OPS-BOOT-002), and a
 deployment with no mail server registered (`integration.mailserver.unavailable`, 422).
 It answers 201 with the mailbox's `id`, `address` and `state`. It hands out no role, so
@@ -1336,8 +1336,8 @@ security notices reach the personal address as well.
    mailbox's `id`, `address` and `state` (D-253).
 10. Giving a mailbox is refused, and nothing written, for an account that already holds
     one (`identity.mailbox.held`), one whose emails fill `identifiers.email.max`
-    (`identity.identifier.maximum`), an address another account holds as an ordinary
-    email (`auth.code.expired`), one with no current membership of the administrative
+    (`identity.identifier.maximum`), an address another account holds as an email
+    (`identity.mailbox.taken`), one with no current membership of the administrative
     organization and an `{id}` that is not that organization, alike
     (`identity.membership.notfound`), one neither `active` nor `restricted`, the
     `emergency` account, and a deployment with no mail server registered
@@ -1410,8 +1410,9 @@ included, SHALL be refused with `identity.invitation.mailboxheld` unless it name
 in it, or `replace`, under which the old mailbox is removed and a new one reserved.
 Either SHALL pass the invitation's step-up, carry a reason and be recorded. An address
 whose last holder was erased is treated as never held (below). An invitation naming
-`formerMailbox` where no held mailbox stands for the address SHALL be refused with
-`api.request.invalid`, `details.member` `formerMailbox`. No check of who the invitee is
+`formerMailbox` `transfer` or `replace` where no held mailbox stands for the address
+SHALL be refused with `api.request.invalid`, `details.member` `formerMailbox`, and one
+naming `adopt` where one does is refused the same way (D-255). No check of who the invitee is
 SHALL be made at issue, since issuing an invitation tells nothing about accounts. The
 library SHALL remove a mailbox anyone has held only under `replace`, and SHALL NOT adopt
 for a new reservation a mail-server account that does not carry the new mailbox's
@@ -1428,20 +1429,25 @@ waits, spending no attempt, until the server has confirmed the old one's removal
 stands for the address: a mailbox replaced or released no longer does.
 
 **Adopting an account the mail server holds (D-255).** An invitation, or a mailbox given
-to a current member (REG-MAIL-001), MAY name `formerMailbox` `adopt` for an address at
-which the mail server already holds an individual account that carries no mailbox
-identifier: the push then takes that account as the mailbox, writing the mailbox's
-identifier into the account's description (`05` INT-MAIL-001), instead of answering
-`integration.mailserver.conflict`. Taking over an account that holds mail is a deliberate
-act, so it is never implicit: `adopt`, as `transfer` and `replace` do, SHALL pass the
-route's step-up, carry a reason, be recorded (`identity.mailbox.adopted`) and be
-notified once. The adopted account keeps its mail, aliases and group memberships, and
-its `authenticate` permission then follows the mailbox's state like any other
-(INT-MAIL-006). An account that carries another mailbox's identifier, a group account
-and an account `integration.mailserver.ownaccounts` names are still answered
-`integration.mailserver.conflict`, and `adopt` where the server holds no account at the
-address SHALL be refused with `identity.mailbox.notfound` (404). Without `adopt`
-everything is unchanged: an unmarked account at the address is still a conflict.
+to a current member (REG-MAIL-001), MAY name `formerMailbox` `adopt`, which permits the
+push to take over an unmarked individual account whose name is the address's local
+part: the push takes that account as the mailbox, writing the mailbox's identifier into
+the account's description (`05` INT-MAIL-001), instead of answering
+`integration.mailserver.conflict`. Where the server holds no such account, the push
+creates the mailbox as it does without `adopt`; the route asks the server nothing.
+Taking over an account that holds mail is a deliberate act, so it is never implicit:
+`adopt`, as `transfer` and `replace` do, SHALL pass the route's step-up, carry a reason
+and be recorded (`identity.mailbox.adopted`); its notice is the one `identifier-added`
+the acknowledgement or the given mailbox already sends, and no other. The adopted
+account keeps its mail, aliases and group memberships, and its `authenticate`
+permission then follows the mailbox's state like any other (INT-MAIL-006). An account
+that carries another mailbox's identifier, a group account and an account
+`integration.mailserver.ownaccounts` names are still answered
+`integration.mailserver.conflict` at the push, with its `degradation`, as always.
+`adopt` where the library already holds a mailbox at the address SHALL be refused with
+`api.request.invalid`, `details.member` `formerMailbox`, as naming `transfer` or
+`replace` where none stands is. Without `adopt` everything is unchanged: an unmarked
+account at the address is still a conflict.
 
 An erasure leaves nothing that recognises a mailbox's address: the address is under the
 erased key and its fingerprint is neutralised (PRIV-RIGHT-005). A later invitation of
@@ -1484,21 +1490,24 @@ address behaves as unknown at every path, including recovery.
    finds; erasing the old mailbox's last holder before its removal is confirmed
    neutralises that fingerprint and leaves the new mailbox's push answered
    `integration.mailserver.conflict` while the old account stands; an invitation naming
-   `formerMailbox` where no held mailbox stands for the address is refused with
-   `api.request.invalid`, `details.member` `formerMailbox`.
+   `formerMailbox` `transfer` or `replace` where no held mailbox stands for the address
+   is refused with `api.request.invalid`, `details.member` `formerMailbox`.
 8. An invitation of an address whose last holder was erased is issued without
    `formerMailbox`; while the erased holder's account stands at the mail server the new
    mailbox's push is answered `integration.mailserver.conflict` and adopts nothing, and
    once that account is gone the next attempt creates the new mailbox.
-9. Under `formerMailbox` `adopt`, an individual account at the address carrying no
-   mailbox identifier is taken as the mailbox, its description given the mailbox's
-   identifier, its mail, aliases and group memberships kept and its `authenticate`
-   permission following the mailbox's state; the adoption is recorded as
-   `identity.mailbox.adopted` with its reason. An account carrying another mailbox's
-   identifier, a group account and an account `integration.mailserver.ownaccounts`
-   names are answered `integration.mailserver.conflict`; `adopt` where the server holds
-   no account at the address is refused `identity.mailbox.notfound`; without `adopt`, an
-   unmarked account at the address is still a conflict (D-255).
+9. Under `formerMailbox` `adopt`, an individual account carrying no mailbox identifier
+   and named by the address's local part is taken as the mailbox by the push, its
+   description given the mailbox's identifier, its mail, aliases and group memberships
+   kept and its `authenticate` permission following the mailbox's state; the adoption is
+   recorded as `identity.mailbox.adopted` with its reason, and no notice beyond the one
+   `identifier-added` is sent. Where the server holds no such account, the push creates
+   the mailbox. An account carrying another mailbox's identifier, a group account and an
+   account `integration.mailserver.ownaccounts` names are answered
+   `integration.mailserver.conflict` at the push; `adopt` where the library already
+   holds a mailbox at the address is refused `api.request.invalid` naming
+   `formerMailbox`; without `adopt`, an unmarked account at the address is still a
+   conflict (D-255).
 
 ---
 

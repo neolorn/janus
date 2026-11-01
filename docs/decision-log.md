@@ -20321,6 +20321,10 @@ refresh token. Every other client is unchanged. The owner approved the trade-off
 >    the code an identifier add already answers for an address another account holds,
 >    `auth.code.expired` (`10` section 1.2).
 
+> **Amended.** 2026-11-01. 5(c) revised: not `auth.code.expired`. An address another
+> account holds as an email is refused 409 `identity.mailbox.taken`, extended to that
+> case.
+
 **Date:** 2026-11-01 · **Status:** accepted · **Amends:** REG-MAIL-001, INT-MAIL-006
 
 **TL;DR.** A person already a member of the administrative organization, the bootstrap
@@ -20351,8 +20355,8 @@ production release.
 **Propagated to:** `20` REG-MAIL-001 (the route beside the invitation); `05`
 INT-MAIL-006; `07` LIB-API (`IMemberships.GiveMailboxAsync`); `09` (the route); `10`
 section 1 (`identity.mailbox.held`, `integration.mailserver.unavailable`,
-`identity.mailbox.taken`, `identity.membership.notfound`, `identity.identifier.maximum`,
-`auth.code.expired`), section 5a (`invitation:issue`), section 5.24
+`identity.mailbox.taken`, `identity.membership.notfound`, `identity.identifier.maximum`),
+section 5a (`invitation:issue`), section 5.24
 (`identity.mailbox.given`), section 5.25 (`identifier-added`) and section 5b
 (`IdentifierAdded`, `IdentifierPrimaryChanged`); `implementation-plan.md` (round H12).
 
@@ -20396,6 +20400,20 @@ OPS-CFG-004 (the protected list); `07` LIB-EXT-001 and LIB-HOST-001 (what a host
 
 ## D-255 — Adopting a mail account the server already holds
 
+> **Amended.** 2026-11-01. Answers to the questions its carrying raised:
+> 1. No server question at the route. `adopt` permits the push to take over an unmarked
+>    individual account whose name is the address's local part. Where the server holds
+>    none, the push creates the mailbox as it does without `adopt`. Drop
+>    `identity.mailbox.notfound` for adopt.
+> 2. The conflicts are the push's, `integration.mailserver.conflict` with `degradation`,
+>    as always. No route-time check.
+> 3. The notice is the one `identifier-added` the acknowledgement or D-253's route
+>    already sends. No separate notice.
+> 4. `adopt` where the library already holds a mailbox at the address: `api.request.invalid`
+>    naming `formerMailbox`, mirroring the opposite case.
+> 5. `07` LIB-HOST-001 and LIB-EXT-001: a push carries whether it may adopt, and a host's
+>    adapter writes the mailbox identifier into the description when it adopts.
+
 **Date:** 2026-11-01 · **Status:** accepted · **Amends:** REG-MAIL-001, REG-MAIL-003,
 INT-MAIL-001, INT-MAIL-006, D-253
 
@@ -20422,8 +20440,8 @@ act, so it is never implicit.
 
 **Propagated to:** `20` REG-MAIL-001 and REG-MAIL-003 (`formerMailbox` gains `adopt`);
 `05` INT-MAIL-001 (the push that adopts), INT-MAIL-006; `09` (the invitation and D-253
-routes' bodies); `10` (codes and `identity.mailbox.adopted`); `implementation-plan.md`
-(round H12).
+routes' bodies); `10` (codes and `identity.mailbox.adopted`); `07` LIB-HOST-001 and
+LIB-EXT-001 (a push carries whether it may adopt); `implementation-plan.md` (round H12).
 
 ---
 

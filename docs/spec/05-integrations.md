@@ -257,9 +257,10 @@ destroys it), or, for a mailbox reserved under `formerMailbox` `adopt`, where it
 individual account that carries no mailbox identifier and that
 `integration.mailserver.ownaccounts` does not name: the push then writes the mailbox's
 identifier into its `description` and acts on it as on one that carried it, the account
-keeping its mail, aliases and group memberships (`20` REG-MAIL-003, D-255); otherwise
-the adapter changes nothing and answers `integration.mailserver.conflict`, and the push is marked failed at that attempt and
-raises `degradation` scoped `mailbox.conflict:<mailbox id>`, naming the mailbox by its
+keeping its mail, aliases and group memberships, and where the server holds no account
+under the name it creates the mailbox as without `adopt` (`20` REG-MAIL-003, D-255);
+otherwise the adapter changes nothing and answers `integration.mailserver.conflict`, and
+the push is marked failed at that attempt and raises `degradation` scoped `mailbox.conflict:<mailbox id>`, naming the mailbox by its
 identifier and never by its address, without waiting for `outbox.retry.maxattempts`,
 since retrying within the run of `outbox.retry.*` cannot resolve a conflict that someone
 must resolve at the mail server (INT-MAIL-007). A push that meets an account the server
@@ -436,12 +437,15 @@ last holder was erased is not recognised, REG-MAIL-003), SHALL be refused unless
 administrator names what becomes of it (`formerMailbox`: `transfer` gives the invitee
 the mailbox and its mail, `replace` removes it and reserves a new one; REG-MAIL-003); no
 mailbox passes to a holder without that choice, and the issue checks nothing about who
-the invitee is. `formerMailbox` `adopt` takes as the mailbox an individual account the
-mail server already holds at the address and that carries no mailbox identifier, the
-account keeping its mail, aliases and group memberships and its `authenticate`
-permission then following the mailbox's state as any mailbox's does (REG-MAIL-003,
-INT-MAIL-001, D-255); it is never implicit. An invitation that names `formerMailbox` where no such mailbox stands
-SHALL be refused with `api.request.invalid`, `details.member` `formerMailbox`.
+the invitee is. `formerMailbox` `adopt` permits the push to take over an unmarked
+individual account named by the address's local part, the account keeping its mail,
+aliases and group memberships and its `authenticate` permission then following the
+mailbox's state as any mailbox's does; where the server holds none, the push creates the
+mailbox as without it (REG-MAIL-003, INT-MAIL-001, D-255); it is never implicit, and it
+is refused where the library already holds a mailbox at the address. An invitation that
+names `formerMailbox` `transfer` or `replace` where no such mailbox stands, or `adopt`
+where one does, SHALL be refused with `api.request.invalid`, `details.member`
+`formerMailbox`.
 
 *Source: D-148, D-166; D-006, D-074, D-144, D-146, D-177, D-178, D-253, D-255*
 
@@ -506,9 +510,9 @@ pre-creation for those who receive mail *at* the company.
    by anyone else, and whose last holder was not erased, without `formerMailbox` is
    refused with `identity.invitation.mailboxheld` and changes no mailbox. An invitation
    of an address whose last holder was erased is issued without `formerMailbox`, and one
-   that names `formerMailbox` where no held mailbox stands for the address, the address
-   of an erased holder included, is refused with `api.request.invalid`, `details.member`
-   `formerMailbox`, and changes no mailbox.
+   that names `formerMailbox` `transfer` or `replace` where no held mailbox stands for
+   the address, the address of an erased holder included, is refused with
+   `api.request.invalid`, `details.member` `formerMailbox`, and changes no mailbox.
 7. A mailbox replaced under `replace`, or a mailbox nobody has held released when its
    invitation is revoked, is owed `removed` from the instant its row records, is skipped
    by the uniqueness of its address and by the lookup by address, and keeps its
