@@ -126,11 +126,12 @@ public sealed class ContinuationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-SESS-012 AC11 (D-242): a browser sent to register by an authorization that found
-    /// no session is sent back as a signed-in one is: registration's completion carries
-    /// the authorization to the session it establishes and answers <c>continueTo</c>,
-    /// every session bound to the record answers it beside <c>landing</c> until the
-    /// continuation spends it, and following it issues the code once.
+    /// AUTH-SESS-012 AC11, REG-SESS-008 AC4 (D-242): a browser sent to register by an
+    /// authorization that found no session is sent back as a signed-in one is:
+    /// registration's completion carries the authorization to the session it establishes
+    /// and answers <c>continueTo</c>, every session bound to the record answers it beside
+    /// <c>landing</c> until the continuation spends it, and following it issues the code
+    /// once.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -167,9 +168,9 @@ public sealed class ContinuationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-SESS-012 AC11 (D-242): a registration that completes once the authorization's
-    /// lifetime has run out carries nothing: its answer has no <c>continueTo</c> and the
-    /// session answers <c>landing</c>.
+    /// AUTH-SESS-012 AC11, REG-SESS-008 AC4, FE-REG-005 (D-242): a registration that
+    /// completes once the authorization's lifetime has run out carries nothing: its
+    /// answer is an empty 201 and the session answers <c>landing</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
