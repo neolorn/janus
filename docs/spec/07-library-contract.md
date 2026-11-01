@@ -253,7 +253,7 @@ IDN-ATTR-002 admits the read, and refuses a system principal with `authz.denied`
 endpoint is
 `GET /organizations/{id}/members/{account}/photo` (`09`).
 
-**A current member's mailbox (D-253).** `IMemberships.GiveMailboxAsync`, taking the
+**A current member's mailbox (D-253).** `IInvitations.GiveMailboxAsync`, taking the
 caller's access context, the administrative organization, the member and the request's
 address, `formerMailbox` and reason, gives that member a mailbox as `20` REG-MAIL-001
 states, and answers the mailbox's identifier, address and state. Its endpoint is

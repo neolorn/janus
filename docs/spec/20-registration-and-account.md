@@ -1277,15 +1277,17 @@ current member of the administrative organization, the bootstrap administrator f
 among them, MAY be given a mailbox: `POST /admin/organizations/{id}/members/{account}/mailbox`
 (`09`), `{id}` the administrative organization, admitted under `membership:manage`
 there with the step-up the invitation's issue asks (`invitation:issue`), and its library
-call `IMemberships.GiveMailboxAsync`. The mailbox SHALL be reserved at the address given
+call `IInvitations.GiveMailboxAsync`. The mailbox SHALL be reserved at the address given
 as an invitation's is, under the same address rules (the organization's domain lock,
 uniqueness, and `formerMailbox` for a mailbox held before, `identity.invitation.mailboxheld`
 without it, or `adopt` for an account the mail server already holds, REG-MAIL-003,
 D-255), and, the membership being current, owed `enabled` at once (`05` INT-MAIL-006,
 INT-MAIL-007). The address SHALL become a verified email of the account, and its primary
 email where the account holds none from the organization's domain; the account's other
-emails stay, and no lock falls on them. The address counts against
-`identifiers.email.max`. Taking it on SHALL be notified once to the security-notice set
+emails stay, and no lock falls on them. Where the account itself already holds the
+address as an email, that email SHALL become the mailbox's address and stay its one
+identifier for it, verified, primary by the same rule (D-253). The address counts against
+`identifiers.email.max`, once. Taking it on SHALL be notified once to the security-notice set
 as it stood before, and recorded as `identity.mailbox.given` with its reason. It SHALL be
 refused for an account that already holds a mailbox (`identity.mailbox.held`, 409), an
 account whose emails already fill the kind (`identity.identifier.maximum`, 409), an
@@ -1343,6 +1345,10 @@ security notices reach the personal address as well.
     `emergency` account, and a deployment with no mail server registered
     (`integration.mailserver.unavailable`, `details.requires`
     `integration.mailserver.endpoint`); a system administrator gives themselves one
+    (D-253).
+11. Giving a mailbox at an address the account itself holds as an email writes no second
+    email: that email is the mailbox's address, verified, primary where the account held
+    none from the address's domain, and counted once against `identifiers.email.max`
     (D-253).
 
 ---
