@@ -19580,7 +19580,7 @@ then take their default form. Requested by the owner for Cura's gendered positio
 
 - **The field.** `grammaticalGender`, optional, `masculine` or `feminine` (CLDR
   `grammaticalFeatures` spellings). A message selects on it as MessageFormat 2 selects on
-  any string, with `*` for an absent value. No other value is accepted: **422**
+  any string, with `*` for an absent value. No other value is accepted: **400**
   `api.request.malformed` naming the member. The field records how the person is
   addressed, not a legal sex, and nothing derives it from another field.
 - **Availability.** The policy field `grammaticalGender` (`10` section 4.1a), a boolean
@@ -19588,13 +19588,14 @@ then take their default form. Requested by the owner for Cura's gendered positio
   and every organization's policy starts `true`, bootstrap writing the administrative
   organization's `true`. An account of several organizations has it only where every one
   of them enables it. While it is off for an account, no request accepts the field and
-  no response carries it (IDN-ATTR-007 criterion 2's rule).
+  no response carries it (IDN-ATTR-007 criterion 2's rule). Neither direction of the
+  field is a loosening: it addresses a person and controls no access.
 - **Who sets it.** The person, through the profile's editing path (REG-PROF-001,
   `PUT /account/profile`). It is never asked at registration, and is changeable and
   clearable at any time.
 - **Who reads it.**
   - The person, in `GET /account/profile`.
-  - An administrator, in `GET /admin/accounts/{subject}` under `account:manage`.
+  - An administrator, in `GET /admin/accounts/{subject}` under `account:read`.
   - A host, in the account read of IDN-READ (`IAccounts`), under the reach that read
     already has.
 - **Privacy.** It is profile data: exported with the account, and erased with it.
@@ -19609,9 +19610,14 @@ then take their default form. Requested by the owner for Cura's gendered positio
 
 **Propagated to:**
 - `01` IDN-ATTR-007, and IDN-READ's account read;
+- `02` AUTH-PRIN-002 (the policy's eight fields);
+- `04` PRIV-RIGHT-005 (the profile values erased with the key);
 - `09` `GET /account` (its `profile`), `PUT /account/profile`,
-  `GET /admin/accounts/{subject}`;
-- `10` sections 4.1a (the policy field) and 1 (the refusal);
+  `GET /admin/accounts/{subject}`, `GET /settings` (its `policy`),
+  `PUT /admin/organizations/{id}/policy`;
+- `10` sections 4.1a (the policy field), 4.1 (`policy.<organization>`, created as
+  `{"grammaticalGender": true}`), 1 (the refusal) and 5.24
+  (`identity.organization.created`);
 - `20` REG-PROF-001;
 - `06` OPS-BOOT-001 (bootstrap writes `true`);
 - `18` (the profile screen shows it where enabled);
@@ -19648,7 +19654,8 @@ such a role without `expiresAt` is refused. Found by Cura's step 4: the owner gi
 - `03` AUTHZ-GRANT-003, AUTHZ-GRANT-004;
 - `07` LIB-HOST-001 (the role declaration);
 - `09` `/admin/roles`, `POST /admin/grants`;
-- `10` section 1 (the code);
+- `10` section 1 (the code) and section 5.24 (`authz.role.defined` carries
+  `grantsMustEnd` before and after);
 - `implementation-plan.md` (round H5).
 
 ---
@@ -19672,7 +19679,8 @@ for both. D-235's log line is also given its place (Q20).
   - It answers the handle in the press's `challengeId`, once. A second press of the
     same link answers no handle: the link is spent (AUTH-FACT-003).
 - **Either handle.**
-  - `POST /auth/factor` and the new-browser code take either handle.
+  - `POST /auth/factor` and the new-browser code's routes (`POST /auth/device/verify`,
+    `POST /auth/device/resend`) take either handle.
   - The challenge's attempts, lifetime and binding are the same whichever handle is used.
   - Completing through one ends the challenge for both. The other then answers as for an
     ended challenge.
@@ -19694,8 +19702,9 @@ for both. D-235's log line is also given its place (Q20).
 - **Logging at every read:** a policy read in every request would log without end.
 
 **Propagated to:**
-- `02` AUTH-FACT-003, AUTH-SESS (the challenge);
-- `09` `POST /auth/factor`, `POST /auth/link`;
+- `02` AUTH-FACT-003;
+- `09` `POST /auth/factor`, `POST /auth/link`, `POST /auth/device/verify`,
+  `POST /auth/device/resend`;
 - `10` section 5a (D-235's log line);
 - `18` FE-VER-001;
 - `implementation-plan.md` (round H5).

@@ -564,8 +564,9 @@ key off the age step records only the derived outcome.
 4. Where the policy enables it, the person sets `grammaticalGender` to `masculine` or
    `feminine`, changes it and clears it, and the change is audited without its value;
    where it does not, a request carrying the field is refused with
-   `identity.profile.notaccepted` and no response carries it; the registration session
-   never asks for it (D-236).
+   `identity.profile.notaccepted` and no response carries it; any other value is refused
+   400 `api.request.malformed` naming the member; the registration session never asks
+   for it (D-236).
 
 ---
 

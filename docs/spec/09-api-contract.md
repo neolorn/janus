@@ -809,6 +809,11 @@ Completes a sign-in held by the new-device check (AUTH-FACT-016).
 { "challengeId": "...", "code": "..." }
 ```
 
+`challengeId` is either handle of the challenge: the one the sign-in began with, or the
+second handle a pressed sign-in link answered (`POST /auth/factor`, D-238). Completing
+through one ends the challenge for both, the other then answered as for an ended
+challenge.
+
 **200**: the sign-in completes with the response shape of `/auth/factor`; the session
 records AAL1 (AUTH-FACT-003) and the browser is remembered for
 `device.verification.lifetime`. Emits `DeviceVerified`.
@@ -817,7 +822,7 @@ codes invalidate the code (AUTH-FACT-004)
 **429**: a replacement code refused by `email.destination`
 (`auth.restriction.exceeded` with `retryAt`)
 
-*Source: D-146; AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-004*
+*Source: D-146; AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-004, D-238*
 
 The code is a verification code (AUTH-FACT-004), not a credential: it proves the
 browser, not the person, and raises no assurance property. The remembered browser is a
@@ -834,6 +839,10 @@ Sends a new code for a sign-in held by the new-device check (AUTH-FACT-016, D-22
 { "challengeId": "..." }
 ```
 
+`challengeId` is either handle of the challenge, the one the sign-in began with or the
+second handle a pressed sign-in link answered, with the same effect (`POST /auth/factor`,
+D-238).
+
 **202**: a new code sent to the primary email under `email.destination`; the code before
 it no longer verifies.
 **422**: `auth.code.expired` where the challenge holds no sign-in held at the check
@@ -841,7 +850,7 @@ it no longer verifies.
 **429**: `auth.restriction.exceeded` with `retryAt` where `email.destination` refuses
 the send; `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands
 
-*Source: AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-001, AUTH-ABUSE-004, D-224*
+*Source: AUTH-FACT-016, AUTH-FACT-004, AUTH-ABUSE-001, AUTH-ABUSE-004, D-224, D-238*
 
 The challenge is answered only with the pre-authentication cookie it is bound to
 (BFF-CSRF-005a), the one it was opened with (`POST /auth/begin`, D-226). A resend is a
@@ -1121,7 +1130,7 @@ unauthenticated, answered with `Cache-Control: no-store`.
   "purposes": [ { "purpose": "...", "takes": "consent", "consentKind": "ordinary",
                   "document": "privacy-notice" } ],
   "policy": { "requiredAssurance": "aal1", "loginFactors": [ "password", "passkey" ],
-              "photos": false }
+              "photos": false, "grammaticalGender": false }
 }
 ```
 
@@ -1133,16 +1142,16 @@ the deployment declares (IDN-LIFE-012). `purposes` lists each purpose resting on
 or on an objectable basis: `takes` is `consent` or `objection`, `consentKind` the
 consent kind of `10` section 5.10 (null for an objection), and `document` the legal
 document that governs it (`privacy-notice` where it names none). `policy` holds the
-`requiredAssurance`, `loginFactors` and `photos` of the policy in force (AUTH-PRIN-002)
-for the account whose session the request carries, or of the organization whose
-invitation a registration session carries (REG-INV-001), and the system policy's where
-it carries neither. Nothing else is answered: no restriction, rate, secret or other
-field of a policy.
+`requiredAssurance`, `loginFactors`, `photos` and `grammaticalGender` (D-236) of the
+policy in force (AUTH-PRIN-002) for the account whose session the request carries, or of
+the organization whose invitation a registration session carries (REG-INV-001), and the
+system policy's where it carries neither. Nothing else is answered: no restriction,
+rate, secret or other field of a policy.
 
 **200**, always
 
 *Source: REG-IDENT-001, REG-IDENT-002, REG-PROF-001, AUTH-PASS-001, AUTH-PRIN-002,
-PRIV-BASIS-003, REG-INV-001, D-224*
+PRIV-BASIS-003, REG-INV-001, D-224, D-236*
 
 ---
 
@@ -1442,6 +1451,8 @@ at any time where the policy in force for the account enables it (IDN-ATTR-007,
 REG-PROF-001, D-236).
 
 **204**
+**400**: `api.request.malformed` naming `grammaticalGender` for a value other than
+`masculine` or `feminine` (D-236)
 **403**: `auth.stepup.required`, for a username change only (`username:change`): a body
 naming the username the account held when the edit's step-up was judged is no username
 change (REG-IDENT-009, D-208)
@@ -2992,7 +3003,7 @@ configuration change's missing reason excepted, below). **404**
 | Endpoint | Does |
 |---|---|
 | `POST /admin/organizations` | `{ name, reason }`: creates an organization and writes its policy key `policy.<organization>` as `{}` in the same transaction, recorded as a configuration change (OPS-CFG-005) and as `identity.organization.created`. Not gated. **201** `{ id }` (IDN-ORG-002). The organization holds no grant: its first grants, `membership:manage` and `grant:manage` among them, are written through `POST /admin/grants` under `system:administer` held in the administrative organization (AUTHZ-SCOPE-001, D-207). **422** `identity.identifier.mixedscript` for a name that mixes scripts within a word, judged on its comparison key (IDN-ACCT-005) |
-| `PUT /admin/organizations/{id}/policy` | Replaces the organization's policy overrides: the policy object of `10` §4.1a without `emailDomains` (`requiredAssurance`, `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery`, `photos`), and `reason`. Omitted fields inherit `policy.default`; the domain lock in force is kept. Every replacement, a tightening included, is the `policy:change` step-up action and carries `reason` (**422** `config.change.reasonrequired`, `details.key` `policy.<organization>`, where it is absent or blank). A replacement under which the organization's members resolve to a policy granting more on any field, by the direction column of `10` §4.1a, is a loosening (OPS-CFG-002) and also requires `system:administer` (**403** `authz.denied`, before the step-up). **422** `config.policy.belowsystem` where a stated field is looser than the system default, `details.field` naming the first in the order of `10` §4.1a (AUTH-STEP-002a); **422** `config.value.belowfloor`, `details.field` `requiredAssurance`, where the administrative organization's members would resolve below `aal2` (AUTH-SESS-005b); **422** `config.value.notallowed` for a value a field does not take, and for `photos` `true` while the host declares no image codec (`details.field` `photos`, `details.requires` `imageCodec`); **400** `api.request.malformed` for a body that is no object (the code alone) or a member the object does not have, `emailDomains` included (naming it), refused at the endpoint before the service. **204**. `GET` returns the resolved policy: **200** `{ requiredAssurance, loginFactors, gates, credentialRedundancy, selfServiceRecovery, photos, emailDomains }`, each field `{ value, overridden }`, `gates` an object keyed by the `10` §5a action name whose members are `{ value: { level, phishingResistant, maxAge }, overridden }`; `overridden` is true where the organization states the field or the action and the value in force is its own, and false where the system policy's value is in force; `emailDomains` is a list of domains in their ASCII form, and `off` is the empty list (D-143) |
+| `PUT /admin/organizations/{id}/policy` | Replaces the organization's policy overrides: the policy object of `10` §4.1a without `emailDomains` (`requiredAssurance`, `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery`, `photos`, `grammaticalGender`, D-236), and `reason`. Omitted fields inherit `policy.default`; the domain lock in force is kept. Every replacement, a tightening included, is the `policy:change` step-up action and carries `reason` (**422** `config.change.reasonrequired`, `details.key` `policy.<organization>`, where it is absent or blank). A replacement under which the organization's members resolve to a policy granting more on any field, by the direction column of `10` §4.1a, is a loosening (OPS-CFG-002) and also requires `system:administer` (**403** `authz.denied`, before the step-up). **422** `config.policy.belowsystem` where a stated field is looser than the system default, `details.field` naming the first in the order of `10` §4.1a (AUTH-STEP-002a); **422** `config.value.belowfloor`, `details.field` `requiredAssurance`, where the administrative organization's members would resolve below `aal2` (AUTH-SESS-005b); **422** `config.value.notallowed` for a value a field does not take, and for `photos` `true` while the host declares no image codec (`details.field` `photos`, `details.requires` `imageCodec`); **400** `api.request.malformed` for a body that is no object (the code alone) or a member the object does not have, `emailDomains` included (naming it), refused at the endpoint before the service. **204**. `GET` returns the resolved policy: **200** `{ requiredAssurance, loginFactors, gates, credentialRedundancy, selfServiceRecovery, photos, grammaticalGender, emailDomains }`, each field `{ value, overridden }`, `gates` an object keyed by the `10` §5a action name whose members are `{ value: { level, phishingResistant, maxAge }, overridden }`; `overridden` is true where the organization states the field or the action and the value in force is its own, and false where the system policy's value is in force; `emailDomains` is a list of domains in their ASCII form, and `off` is the empty list (D-143) |
 | `POST /admin/organizations/{id}/delete` · `/delete/cancel` | `{ reason }`: request, suspend, grace, erasure, cancellable (IDN-ORG-003). The request ends every session of every current member in the same transaction, and the organization's grants confer nothing until it is cancelled. Each requires step-up (`organization:delete`) and is recorded (`identity.organization.deletionrequested`, `identity.organization.deletioncancelled`). **204**, also for a request on an organization already being deleted and a cancellation where none is pending, which change and record nothing. **409** `identity.organization.protected` for the administrative organization. **422** `identity.deletion.windowelapsed` for a cancellation at or after `organization.deletion.grace` from the request, or after the erasure, whether or not the erasure has run. The erasure erases no account |
 | `POST /admin/organizations/{id}/domains` · `POST /admin/organizations/{id}/domains/{domain}/verify` · `DELETE /admin/organizations/{id}/domains/{domain}` | Domain lock (REG-DOM-001, IDN-ORG-006): adds a domain to the policy field `emailDomains`, verifies it by the DNS TXT record the add response names (one TXT value equal to the record value, compared exactly; a lookup that cannot be made proves nothing; **422** `identity.domain.unverified`, nothing written; **404** `identity.domain.notfound` for a domain not listed, never listed or removed; verifying a verified domain or adding a listed one answers it as it stands and changes nothing; removing an unlisted one is **204** and changes nothing), removes it. A domain that does not read as a domain is **400** `api.request.malformed` naming `domain`. Every change is the `domain:manage` step-up action and carries `reason` (**422** `config.change.reasonrequired` where it is absent or blank), and is recorded. Adding and verifying a domain are loosenings, and so is a removal that leaves the list empty (OPS-CFG-002): each also requires `system:administer` (**403** `authz.denied`). Adding a domain while the host registers no DNS resolver is refused **422** `config.value.notallowed`, `details.requires` `dnsResolver`. The lock is on from the first domain listed, verified or not, and while no listed domain is verified it admits no address. Removal stops new sign-ins with addresses in the domain until it is listed anew, whether or not the list holds another domain, and raises an alert (OPS-ALERT-001). Re-verification runs every `domain.reverify.interval` on the sweep; a failure alerts and revokes nothing. The record is `_identity-verify.<domain>` TXT with value `identity-domain-verification=<32 random bytes, base64url>`, one token per organization and domain, never reused (D-153). `GET` answers an array of `{ domain, recordName, recordValue, addedAt, verifiedAt, checkedAt, lastCheckPassed }`, the domain in its ASCII form (REG-DOM-001). `POST .../domains` takes `{ domain, reason }` and answers **201** with one such object; `POST .../{domain}/verify` takes `{ reason }` and answers **200** with it; `DELETE .../{domain}` takes `{ reason }` and answers **204**. Each change writes `identity.organization.domainadded`, `.domainverified` or `.domainremoved` with details `{ domain, reason }`; each change to the list is also a configuration change of `policy.<organization>` (OPS-CFG-005) |
 

@@ -39,14 +39,15 @@ an application identity, or the resource acted on:
 
 Today the only organization is the administrative organization (D-001).
 
-**"Policy" is one object with seven fields** (`requiredAssurance`, `loginFactors`,
-`gates`, `credentialRedundancy`, `selfServiceRecovery`, `emailDomains`, `photos`)
-defined in `10` §4.1a and carried by `PUT /admin/organizations/{id}/policy`. The system policy is
-`policy.default`; an organization's policy stores only the fields it overrides.
+**"Policy" is one object with eight fields** (`requiredAssurance`, `loginFactors`,
+`gates`, `credentialRedundancy`, `selfServiceRecovery`, `emailDomains`, `photos`,
+`grammaticalGender`, D-236) defined in `10` §4.1a and carried by
+`PUT /admin/organizations/{id}/policy`. The system policy is `policy.default`; an
+organization's policy stores only the fields it overrides.
 Every rule in this document that says "where the policy requires AAL2" reads
 `requiredAssurance`; nothing is inferred from which factors happen to be enabled.
 
-*Source: D-148; D-002, D-020.1, D-086, D-116, D-143, D-166*
+*Source: D-148; D-002, D-020.1, D-086, D-116, D-143, D-166, D-236*
 
 **Acceptance criteria**
 1. No enum, flag or claim distinguishes staff from customers as a property of a
