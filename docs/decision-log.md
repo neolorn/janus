@@ -19609,7 +19609,8 @@ then take their default form. Requested by the owner for Cura's gendered positio
 
 **Propagated to:**
 - `01` IDN-ATTR-007, and IDN-READ's account read;
-- `09` `GET` and `PUT /account/profile`, `GET /admin/accounts/{subject}`;
+- `09` `GET /account` (its `profile`), `PUT /account/profile`,
+  `GET /admin/accounts/{subject}`;
 - `10` sections 4.1a (the policy field) and 1 (the refusal);
 - `20` REG-PROF-001;
 - `06` OPS-BOOT-001 (bootstrap writes `true`);

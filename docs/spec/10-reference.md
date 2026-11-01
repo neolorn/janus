@@ -51,7 +51,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.collection.incomplete` | A collection request out of its order: a contact before the age the session asks, an age the session does not ask or already holds; or, at `IRecordCollection.CollectAsync`, a staged contact unverified, an age the session asks unanswered, or no contact at all; 409 | REC-COL-001, REC-COL-002, D-221 |
 | `identity.collection.expired` | `IRecordCollection.CollectAsync` called where the browser of the request being served holds no collection session: none begun, or one expired, ended or spent; nothing is written; 422 | REC-COL-002, D-221 |
 | `identity.profile.invalid` | A profile value the library does not admit: a display name that is not a PRECIS Nickname of 1 to 64 bytes, or a legal name outside 1 to 200 Unicode scalar values; 422 | REG-PROF-001, D-162, D-166 |
-| `identity.profile.notaccepted` | A profile field the deployment does not take from the person: a `legalName` while `profile.legalname` is `off`, a `username` while `identifiers.username.enabled` is off, or any `dateOfBirth`, which is corrected through support; 422 | REG-PROF-001, REG-IDENT-009, D-162, D-166 |
+| `identity.profile.notaccepted` | A profile field the deployment does not take from the person: a `legalName` while `profile.legalname` is `off`, a `username` while `identifiers.username.enabled` is off, a `grammaticalGender` while the policy in force for the account does not enable it (D-236), or any `dateOfBirth`, which is corrected through support; 422 | REG-PROF-001, REG-IDENT-009, D-162, D-166, D-236 |
 | `identity.preference.undeclared` **(new)** | A preference key the host did not declare at startup; 422 | REG-PREF-001, D-146, D-166 |
 | ~~`identity.identifier.duplicate`~~ | **Withdrawn (D-076)** — returning it would disclose account existence. Duplicate registration returns the ordinary accepted response |
 | `identity.identifier.mixedscript` | Scripts mixed within a single word; on an invitation's issue `details.member` names the member; 422 | IDN-ACCT-005, D-166 |
@@ -143,6 +143,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `authz.denied` **(new)** | Permission absent; used where existence is not concealed. Under `/admin`, an identifier naming no row whose organization the permission is asked in (a group, a grant, a registered record) is refused with it exactly as a missing permission is (`09` section 8); so are the refusals OPS-BOOT-002 gives on the reserved account, bootstrap or a key rotation run where it may not, and, in process, an enrolment session's authority given to an operation that can take it and that the session does not reach (over HTTP it is no session there, `auth.session.expired`); and the export's report in an enrolment session whose second step has shown no codes (`09`, D-188, D-189, D-190); and a replace in an enrolment session once that session's replace has applied its swap (`09` `PUT /account/identifiers/{id}/replace`, D-234); and a host job's context where IDN-PRIN-001 refuses it: the capability page, the explanation, a library operation that meets a gate, and any permission while a request is served (D-206, D-207); and a grant on `resourceType` `organization` whose `resourceId` names no organization the deployment holds, recorded against no organization (AUTHZ-SCOPE-001, D-209). A refusal the gate records (AUTHZ-CONCEAL-004) carries `details.correlation`, its audit record's identifier, which the explanation routes take (D-208); 403 | AUTHZ-CONCEAL-005, OPS-BOOT-001 AC1, OPS-BOOT-002, OPS-SEC-003 AC1, CONV-DESIGN-002, IDN-PRIN-001, D-166, D-188, D-189, D-190, D-202, D-206, D-207, D-208, D-209, D-234 |
 | `authz.grant.duplicate` | An identical live grant exists; 409 | AUTHZ-GRANT-003, D-166 |
 | `authz.grant.expired` **(new)** | A grant written with an expiry that is not after the present; 409 | AUTHZ-GRANT-003, D-166 |
+| `authz.grant.endrequired` **(new)** | A grant of a role whose grants must end (`grantsMustEnd`) written without `expiresAt`, through `POST /admin/grants` or the library call; `details.role` names the role, and nothing is written. A derived or materialised grant is never refused with it; 422 | AUTHZ-GRANT-003, AUTHZ-GRANT-004, D-237 |
 | `authz.grant.notfound` | A revocation names a grant already revoked, or one a derivation wrote, and the caller holds `grant:manage` where it is scoped, or, for a grant in an organization other than the administrative organization, `system:administer` in the administrative organization (AUTHZ-SCOPE-001, D-207); an identifier naming no grant is `authz.denied` (`09` section 8); 404 | AUTHZ-GRANT-001, AUTHZ-SCOPE-001, D-166, D-207 |
 | `authz.grant.unresolved` | A grant names a role the deployment does not hold, or a group that does not exist or belongs to another organization; `details.member` names `role` or `subjectId`. Also an invitation whose `roles` names a role the deployment does not hold, `details.member` `roles`, and a role whose `handsOut` names one, `details.member` `handsOut`; 422 | AUTHZ-GRANT-001, AUTHZ-GRANT-005, REG-INV-001, D-166, D-212 |
 | `authz.grant.reasonrequired` | A grant created or revoked without a non-empty `reason`; 422 | AUTHZ-GRANT-003, D-153 |
@@ -379,7 +380,7 @@ is a loosening, which OPS-CFG-002 audits (D-107).
 
 ### 4.1a The policy object
 
-The one thing AUTH-PRIN-002 resolves per principal. Seven fields; an organization
+The one thing AUTH-PRIN-002 resolves per principal. Eight fields; an organization
 stores only what it overrides. Every rule that says "where the policy requires AAL2"
 reads `requiredAssurance` — nothing is inferred from which factors are enabled.
 
@@ -392,6 +393,7 @@ reads `requiredAssurance` — nothing is inferred from which factors are enabled
 | `selfServiceRecovery` | Whether email recovery and self-service loss reports are available (AUTH-RECOV-004, AUTH-RECOV-008) | `true` | `false` | to `true` is loosening |
 | `emailDomains` | Domain lock (REG-DOM-001, IDN-ORG-006): `off`, or the list of domains the organization has listed; an address is admitted only in a listed domain **verified by DNS**, so a list holding only unverified domains admits no address, and a removed domain's addresses stay refused until it is listed anew. Written only through `/admin/organizations/{id}/domains`, never through `PUT .../policy` or `PUT /admin/config/policy.default`: the system policy's value is always `off`, and a system policy naming a domain is refused with `config.value.notallowed`, `details.field` `emailDomains`. Adding a domain where no DNS resolver is declared is refused with `config.value.notallowed`, `details.requires` `dnsResolver`, and startup refuses a listed domain without one (`model.startup.declarationmissing`). A listed domain is re-verified on a schedule | `off` | `off` | adding or verifying a domain, and removing the last one, is loosening (OPS-CFG-002); removing one alerts (OPS-ALERT-001) |
 | `photos` | Whether the principal's account shows a profile photo (IDN-ATTR-002, IDN-ATTR-004). Set to `true` where no image codec is declared, it is refused with `config.value.notallowed`, `details.field` `photos`, `details.requires` `imageCodec`; startup refuses a stored `true` without one (`model.startup.declarationmissing`, LIB-HOST-001) | `false` | `false`: enabling it is an administrator's policy change once a codec is declared | to `true` is loosening |
+| `grammaticalGender` | Whether the principal's account carries the profile's `grammaticalGender` (IDN-ATTR-007, REG-PROF-001, D-236), resolved as `photos` is: an account of several organizations has it only where every one of them enables it. Every organization's policy starts `true`; while it is off for an account, no request accepts the field and no response carries it | `false` | `true`, written by bootstrap (OPS-BOOT-001) | neither direction is loosening: the field says how a person is addressed and guards nothing |
 
 An organization MAY tighten any field and SHALL NOT loosen below the system default
 (AUTH-STEP-002a).
@@ -1603,13 +1605,18 @@ keeps the names of the actions it once had and removed, the rows marked retired 
 `alerting:destinations`), beside the current ones. A policy or override written through
 the API or the command-line tool names current actions only: a retired name is refused
 with the error a misspelled one gets. Reading a stored policy or override drops a gate
-that names a retired action, writes nothing at the read, and logs it once per policy at
-Information; a name neither current nor retired is still refused, since no write ever
-stored one and it means a damaged row. A migration deletes the gates naming a retired
-action from the stored policies and overrides, so that a later release need not keep
-reading past them.
+that names a retired action and writes nothing at the read; a name neither current nor
+retired is still refused, since no write ever stored one and it means a damaged row. A
+migration deletes the gates naming a retired action from the stored policies and
+overrides, so that a later release need not keep reading past them.
 
-*Source: AUTH-STEP-001, D-132, D-146, D-147, D-151, D-166, D-234, D-235*
+**Where it is logged (D-238).** The startup check, which reads every stored policy and
+override, logs one line at Information for each policy that names a retired action,
+naming the policy and the retired names. Every other read drops the retired gate
+silently, and the command-line tool writes nothing about it, since its migration removes
+such gates (`06` OPS-MIG-001).
+
+*Source: AUTH-STEP-001, D-132, D-146, D-147, D-151, D-166, D-234, D-235, D-238*
 
 Every gate is three values — level, phishing-resistance, maximum age
 (AUTH-STEP-002). Under the system policy the level is **the account's reachable
