@@ -136,5 +136,11 @@ None.
   truth-table gates and `release.sh` pass over the round's commits; the full-history
   secret scan finds nothing.
 - Every integration test the round added runs first in the pipeline.
+- Pipeline on 820673f0: the push run (41267925164) green; the pull-request run
+  (41267928788) red in the integration job alone, on
+  `ConfigurationStoreTests.ReadAsync_AMemberOfAFamily_ReadsBackAsItWasWrittenAsync`,
+  which read an override the deployment never wrote as no override; the family's default
+  now holds the grammatical gender on (D-236), and the test reads it as the default.
+  Fixed in the commit before this report's update.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
