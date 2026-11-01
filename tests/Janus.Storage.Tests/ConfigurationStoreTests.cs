@@ -358,6 +358,84 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
         Assert.Equal("PT1H", await ValueAsync(values.grace));
     }
 
+    /// <summary>
+    /// OPS-MIG-001 (D-239): the migration sets the grammatical gender on in an
+    /// organization's override written before the field existed, and leaves an override
+    /// that states it, on or off, the system policy and the other keys under the prefix
+    /// as they were.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_MIG_001_TheMigrationTurnsOnTheGrammaticalGenderOfOlderOrganizationsAsync()
+    {
+        string moved = await database.CreateDatabaseAsync("older_genders");
+        string turning;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            turning = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(TurnOnTheGrammaticalGenderOfOlderOrganizations), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, turning) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        JsonObject older = JsonNode.Parse(Catalogue.OrganizationPolicy.Write(PolicyOverride.None))!.AsObject();
+
+        _ = older.Remove("grammaticalGender");
+
+        string off = Catalogue.OrganizationPolicy.Write(PolicyOverride.None with { GrammaticalGender = false });
+        string inherited = Catalogue.OrganizationPolicy.Write(PolicyOverride.None);
+        string system = Catalogue.PolicyDefault.Write(Catalogue.PolicyDefault.Default);
+
+        var values = new
+        {
+            older = Catalogue.OrganizationPolicy.For(Guid.CreateVersion7().ToString()).ToString(),
+            olderValue = older.ToJsonString(),
+            off = Catalogue.OrganizationPolicy.For(Guid.CreateVersion7().ToString()).ToString(),
+            offValue = off,
+            inherited = Catalogue.OrganizationPolicy.For(Guid.CreateVersion7().ToString()).ToString(),
+            inheritedValue = inherited,
+            system = Catalogue.PolicyDefault.Key.ToString(),
+            systemValue = system,
+            grace = Catalogue.PolicyEnforcementGrace.Key.ToString(),
+        };
+
+        await using var connection = new NpgsqlConnection(moved);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.settings (key, value)
+            VALUES (@older, @olderValue), (@off, @offValue), (@inherited, @inheritedValue),
+                (@system, @systemValue), (@grace, 'PT1H');
+            """,
+            values);
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(turning, TestContext.Current.CancellationToken);
+        }
+
+        async Task<string> ValueAsync(string key) =>
+            await connection.QuerySingleAsync<string>(
+                "SELECT value FROM identity.settings WHERE key = @key",
+                new { key });
+
+        PolicyOverride turned = Catalogue.OrganizationPolicy
+            .Read("a", await ValueAsync(values.older))
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.True(turned.GrammaticalGender);
+        Assert.Equal(off, await ValueAsync(values.off));
+        Assert.Equal(inherited, await ValueAsync(values.inherited));
+        Assert.Equal(system, await ValueAsync(values.system));
+        Assert.Equal("PT1H", await ValueAsync(values.grace));
+    }
+
     // A written policy with the gate of the retired alerting:destinations added, as a
     // deployment written before the action was retired holds it.
     private static string Retiring(string written)

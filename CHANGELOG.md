@@ -29,7 +29,8 @@ against the public contract of LIB-API-001.
   the policy enables it, answered in `GET /settings`'s `policy`, taken by
   `PUT /admin/organizations/{id}/policy`, exported and erased with the profile, and its
   change is audited without its value. Neither direction of the policy field is a
-  loosening.
+  loosening. A migration turns the field on in every stored organization override that
+  was written before it existed, leaving one that states it as it is.
 - A role can require that every grant of it carries an end: `grantsMustEnd` on
   `/admin/roles` (default `false`), and `GrantsMustEnd()` after a role declared with
   `AuthorizationDeclarationBuilder.Role`. A grant of such a role without `expiresAt`,
