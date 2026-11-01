@@ -140,7 +140,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
             organization.ToString(),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(PolicyOverride.None, Value(absent));
+        Assert.Equal(Catalogue.OrganizationPolicy.Default, Value(absent));
 
         context.Settings.Add(new SettingRecord
         {
