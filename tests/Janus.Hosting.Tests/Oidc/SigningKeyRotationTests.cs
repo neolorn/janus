@@ -312,6 +312,33 @@ public sealed class SigningKeyRotationTests
         Assert.Equal(next, after);
     }
 
+    /// <summary>
+    /// CONV-CODE-007 AC4, AUTH-KEY-001: a host started in the process after another on the
+    /// same stored keys has stopped, as a test run or a host restarted in place does, signs
+    /// with the private key object it made itself and never with the one the stopped host
+    /// disposed: the key the first host signed with signs the second's access token, and
+    /// the second host accepts it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_007_AC4_AHostStartedAfterAnotherStoppedSignsWithItsOwnKeyObjectAsync()
+    {
+        var keys = new Janus.Authentication.Tests.Oidc.SigningKeyStoreInMemory();
+        string first;
+
+        await using (var stopped = new Deployment(services: services => services.AddSingleton<ISigningKeyStore>(keys)))
+        {
+            first = Header(await AccessTokenAsync(stopped, await RelyingParty.PreparedAsync(stopped)), "kid");
+        }
+
+        await using var started = new Deployment(services: services => services.AddSingleton<ISigningKeyStore>(keys));
+
+        string issued = await AccessTokenAsync(started, await RelyingParty.PreparedAsync(started));
+
+        Assert.Equal(first, Header(issued, "kid"));
+        Assert.Equal(StatusCodes.Status200OK, (await new Machine(started).GetAsync("/oidc/userinfo", issued)).Status);
+    }
+
     private static Deployment Rotating()
     {
         var deployment = new Deployment();
