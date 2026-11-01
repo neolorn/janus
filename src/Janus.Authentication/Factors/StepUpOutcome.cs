@@ -43,4 +43,13 @@ internal enum StepUpOutcome
     /// </summary>
     [JsonStringEnumMemberName("pending")]
     LossPending = 4,
+
+    /// <summary>
+    /// The gate asks <c>delegated</c>, the session has not reached it since its last
+    /// downgrade, and every factor the account can present is social, which a step-up
+    /// refuses: the answer is a new sign-in with the provider, whose session the gate
+    /// is judged on.
+    /// </summary>
+    [JsonStringEnumMemberName("signIn")]
+    SignIn = 5,
 }

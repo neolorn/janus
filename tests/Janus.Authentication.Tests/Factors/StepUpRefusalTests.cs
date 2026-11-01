@@ -54,6 +54,31 @@ public sealed class StepUpRefusalTests : IDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-002 AC11, AUTH-FACT-002 criterion 7 (D-243): the refusal that sends a
+    /// social-only account through a new sign-in says so as <c>signIn</c>, with no
+    /// combination and no completion time.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC11_TheRefusalThatSendsThePersonToSignInAgainSaysSignIn()
+    {
+        Session downgraded = Signed(AssuranceLevel.Delegated);
+
+        downgraded.Downgrade(Noon);
+
+        Error refusal = StepUpRefusal.Of(StepUp.ToEnrol(
+            downgraded,
+            new Gate(GateLevel.Reachable, PhishingResistant: false, Recency),
+            Held(Factor.Apple),
+            Factor.Passkey,
+            Noon + TimeSpan.FromMinutes(1)));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refusal.Code);
+        Assert.Equal("signIn", refusal.Details["outcome"].GetString());
+        Assert.Equal(0, refusal.Details["options"].GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, refusal.Details["pendingUntil"].ValueKind);
+    }
+
+    /// <summary>
     /// BFF-STEP-001 AC1: the refusal of a gate at any level above <c>delegated</c>
     /// carries the gate's maximum age in whole seconds.
     /// </summary>

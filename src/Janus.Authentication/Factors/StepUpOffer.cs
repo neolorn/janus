@@ -10,8 +10,8 @@ namespace Janus.Authentication.Factors;
 /// usable factors that reaches the gate, or, where none does, what would change that.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-STEP-002 steps 2 and 3, AUTH-STEP-005 and AUTH-STEP-008. Whether the
-/// session meets the gate is judged before the offer is made, and not here
+/// Implements AUTH-STEP-002 steps 2 and 3, AUTH-STEP-005 and AUTH-STEP-008 (D-243).
+/// Whether the session meets the gate is judged before the offer is made, and not here
 /// (<see cref="StepUp"/>): the offer admits and refuses nothing. It reads which of the
 /// account's factors can be presented, and never asks what a factor is called.
 /// </remarks>
@@ -26,7 +26,7 @@ internal static class StepUpOffer
     /// <param name="maximumAge">How long ago the proof may have been given.</param>
     /// <param name="reachable">The most the account can reach with what it holds.</param>
     /// <returns>
-    /// The combinations to choose among, or the one of three answers an account that
+    /// The combinations to choose among, or the one of four answers an account that
     /// can present none is given.
     /// </returns>
     /// <exception cref="ArgumentNullException">The factors are absent.</exception>
@@ -39,8 +39,12 @@ internal static class StepUpOffer
     {
         ArgumentNullException.ThrowIfNull(held);
 
+        // AUTH-STEP-005: what a provider asserts is never offered at a step-up, though
+        // at a delegated gate it would reach the level.
         IReadOnlyList<IReadOnlyList<Factor>> offered =
-            [.. StepUp.Combinations(held.Usable).Where(combination => Meets(combination, required, phishingResistant))];
+            [.. StepUp.Combinations(held.Usable)
+                .Where(combination => !combination.Any(Asserted)
+                    && Meets(combination, required, phishingResistant))];
 
         if (offered.Count > 0)
         {
@@ -53,14 +57,18 @@ internal static class StepUpOffer
                 null);
         }
 
-        // Three answers and never a bare refusal: the account has never held what the
-        // gate asks; it holds it and cannot present it; or it is already waiting for
-        // the report it made to complete (AUTH-STEP-002).
+        // Four answers and never a bare refusal: the account has never held what the
+        // gate asks; it holds only what a provider asserts, which a step-up refuses, so
+        // it signs in again with the provider (D-243); it holds it and cannot present
+        // it; or it is already waiting for the report it made to complete
+        // (AUTH-STEP-002).
         StepUpOutcome outcome = !Reaches(reachable, required, phishingResistant)
             ? StepUpOutcome.Enrol
-            : held.LossCompletes is null
-                ? StepUpOutcome.ReportLoss
-                : StepUpOutcome.LossPending;
+            : held.LossCompletes is not null
+                ? StepUpOutcome.LossPending
+                : SignsInAgain(held, required)
+                    ? StepUpOutcome.SignIn
+                    : StepUpOutcome.ReportLoss;
 
         return new StepUpChallenge(
             outcome,
@@ -86,6 +94,16 @@ internal static class StepUpOffer
 
         return Meets([.. accepted], challenge.Required, challenge.PhishingResistant);
     }
+
+    // AUTH-STEP-002 step 3 (D-243): a delegated gate unmet, and every factor the account
+    // can present is one only a provider asserts.
+    private static bool SignsInAgain(HeldFactors held, AssuranceLevel required) =>
+        required is AssuranceLevel.Delegated
+        && held.Usable.Count > 0
+        && held.Usable.All(Asserted);
+
+    private static bool Asserted(Factor factor) =>
+        FactorCatalogue.Of(factor).AssuranceLevel is AssuranceLevel.Delegated;
 
     private static bool Meets(
         IReadOnlyList<Factor> combination,

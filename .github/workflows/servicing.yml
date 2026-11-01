@@ -1,0 +1,85 @@
+name: servicing
+
+# CONV-DEP-004 and R-M20 (D-246): the shared framework's servicing releases reach no
+# lockfile, so no alert brings them. Every day, and when dispatched, the channel's
+# release metadata Microsoft publishes is read, and where an SDK newer than the pin of
+# global.json is out in the pin's feature band, one issue names it and says whether it
+# carries security fixes, the open one updated where there is one. It writes no commit
+# and opens no pull request: the bump is an ordinary commit of the owner's.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sdk:
+    name: A newer SDK in the pin's feature band
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: global.json
+          sparse-checkout-cone-mode: false
+      - name: The issue names the newest SDK of the band
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pin=$(jq -r '.sdk.version' global.json)
+          channel=${pin%.*}
+
+          # The SDKs newer than the pin in its feature band (its hundreds), each with
+          # whether the release that brought it carries security fixes and which.
+          newer=$(curl -fsSL --retry 3 \
+            "https://builds.dotnet.microsoft.com/dotnet/release-metadata/${channel}/releases.json" \
+            | jq -c --arg pin "$pin" '
+              def parts: split(".") | map(tonumber);
+              ($pin | parts) as $p
+              | [ .releases[] as $r
+                  | ($r.sdks // [$r.sdk]) | .[]
+                  | select(.version | test("^[0-9]+[.][0-9]+[.][0-9]+$"))
+                  | (.version | parts) as $v
+                  | select($v[0] == $p[0] and $v[1] == $p[1]
+                      and (($v[2] / 100) | floor) == (($p[2] / 100) | floor)
+                      and $v[2] > $p[2])
+                  | { version, patch: $v[2], security: ($r.security == true),
+                      cves: [($r."cve-list" // [])[]."cve-id"] } ]
+              | if length == 0 then empty
+                else { version: (max_by(.patch).version), security: any(.[]; .security),
+                       cves: ([.[].cves[]] | unique) }
+                end')
+
+          if [ -z "$newer" ]; then
+            echo "${pin} is the newest SDK of its feature band."
+            exit 0
+          fi
+
+          version=$(jq -r '.version' <<<"$newer")
+
+          if [ "$(jq -r '.security' <<<"$newer")" = true ]; then
+            fixes="Yes: the releases since the pin fix $(jq -r '.cves | join(", ")' <<<"$newer")."
+          else
+            fixes="No: no release since the pin carries a security fix."
+          fi
+
+          title="Servicing the SDK: ${version} is out"
+          body=$(printf '%s\n' \
+            "The .NET SDK ${version} is out in the feature band of the pin in global.json, ${pin}." \
+            "" \
+            "Security fixes: ${fixes}" \
+            "" \
+            "The pin moves in an ordinary commit, merged when the checks pass; a security release is applied promptly (CONV-DEP-004).")
+
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search 'in:title "Servicing the SDK"' --json number,title \
+            --jq '[.[] | select(.title | startswith("Servicing the SDK: "))] | first | .number // empty')
+
+          if [ -n "$open" ]; then
+            gh issue edit "$open" --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

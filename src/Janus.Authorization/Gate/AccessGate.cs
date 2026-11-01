@@ -576,6 +576,66 @@ internal sealed class AccessGate(
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-005 (D-212, D-247). The judgement of a grant across the
+    /// organization, read now: a holder of <c>system:administer</c> in the administrative
+    /// organization may hand out every role; otherwise no role carrying it, and each other
+    /// role where a role the actor holds hands it out there, or, with
+    /// <c>authz.handout.byholding</c> on, where the actor's stored grants admit every
+    /// permission it carries there.
+    /// </remarks>
+    public async ValueTask<IReadOnlyList<DefinedRole>> AssignableAsync(
+        AccessContext context,
+        OrganizationId organization,
+        IReadOnlyList<DefinedRole> roles,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(roles);
+
+        if (context.Acting is null || IsJob(context))
+        {
+            return [];
+        }
+
+        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false) is OrganizationId administering
+            && (await DecidedOnAsync(context, Permissions.SystemAdminister, administering, cancellationToken)
+                .ConfigureAwait(false)).Conferred)
+        {
+            return roles;
+        }
+
+        SubjectSet held = await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlySet<RoleName> listed = await evaluator
+            .HandedOutAsync(
+                PermissionRule.ToHandedOut(organization, null, held, time.GetUtcNow()),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var change = new HandOut(Permissions.GrantManage, organization, Resource: null, roles, Widened: []);
+        bool? byHolding = null;
+        List<DefinedRole> assignable = [];
+
+        foreach (DefinedRole role in roles.Where(role => !role.Permissions.Contains(Permissions.SystemAdminister)))
+        {
+            if (!listed.Contains(role.Name))
+            {
+                byHolding ??= await HandsOutByHoldingAsync(cancellationToken).ConfigureAwait(false);
+
+                if (!byHolding.Value || !await HoldsEveryAsync(context, role, change, cancellationToken).ConfigureAwait(false))
+                {
+                    continue;
+                }
+            }
+
+            assignable.Add(role);
+        }
+
+        return assignable;
+    }
+
     // AUTHZ-GRANT-005: the holder is the actor's account or a group holding it at any
     // depth.
     private static bool Holds(SubjectSet held, GrantSubject holder) =>

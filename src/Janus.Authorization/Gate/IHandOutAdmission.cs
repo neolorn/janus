@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -42,4 +43,20 @@ internal interface IHandOutAdmission
     /// Success; otherwise <c>authz.role.notassignable</c>, recorded as a refusal.
     /// </returns>
     ValueTask<Result> AdmitAsync(AccessContext context, RoleChange change, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Which of the roles a person may hand out across an organization, judged as
+    /// <see cref="AdmitAsync(AccessContext, HandOut, CancellationToken)"/> judges a change
+    /// that widens nobody's access, and recording nothing (D-247).
+    /// </summary>
+    /// <param name="context">Who is asking, a person.</param>
+    /// <param name="organization">Where.</param>
+    /// <param name="roles">The roles to judge.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The roles among them the person may hand out there.</returns>
+    ValueTask<IReadOnlyList<DefinedRole>> AssignableAsync(
+        AccessContext context,
+        OrganizationId organization,
+        IReadOnlyList<DefinedRole> roles,
+        CancellationToken cancellationToken);
 }

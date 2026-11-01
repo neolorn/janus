@@ -24,6 +24,8 @@ internal static class MachineRoutes
         new("/callbacks/providers/apple"),
         new("/callbacks/providers/google/return"),
         new("/callbacks/providers/apple/return"),
+        new("/.well-known/openid-configuration"),
+        new("/oidc/jwks"),
     ];
 
     // Chapter 09 section 8: the emergency credential is presented from a browser that
@@ -36,6 +38,17 @@ internal static class MachineRoutes
         new("/auth/break-glass"),
         new("/callbacks/providers/google/return"),
         new("/callbacks/providers/apple/return"),
+        new("/.well-known/openid-configuration"),
+        new("/oidc/jwks"),
+    ];
+
+    // BFF-MACH-001, BFF-CSRF-005a (D-241): the provider's public documents, fetched by
+    // servers, which the provider answers under a limit of their own and which issue and
+    // write no session.
+    private static readonly PathString[] Fetched =
+    [
+        new("/.well-known/openid-configuration"),
+        new("/oidc/jwks"),
     ];
 
     // BFF-MACH-001: the provider's protocol endpoints refuse a session cookie as their
@@ -75,6 +88,21 @@ internal static class MachineRoutes
     /// <param name="path">The path the request arrived at.</param>
     /// <returns>Whether the provider answers there.</returns>
     public static bool AnswersByProtocol(PathString path) => Among(Protocol, path);
+
+    /// <summary>
+    /// Whether a route on the machine profile is one of the provider's public documents,
+    /// discovery or the key set, which servers fetch (D-241).
+    /// </summary>
+    /// <param name="path">The path the request arrived at.</param>
+    /// <returns>Whether it is fetched.</returns>
+    public static bool IsFetched(PathString path) => Among(Fetched, path);
+
+    /// <summary>
+    /// Whether the path is the provider's key set.
+    /// </summary>
+    /// <param name="path">The path the request arrived at.</param>
+    /// <returns>Whether it is.</returns>
+    public static bool IsKeySet(PathString path) => path.Equals(Fetched[1], System.StringComparison.OrdinalIgnoreCase);
 
     private static bool Among(PathString[] routes, PathString path)
     {

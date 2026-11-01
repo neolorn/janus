@@ -1055,6 +1055,15 @@ POST /admin/grants
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.grant.self authz.restricted authz.role.notassignable
   409 authz.grant.duplicate authz.grant.expired
   422 api.request.invalid authz.grant.endrequired authz.grant.reasonrequired authz.grant.unresolved
+GET /admin/grants/assignable
+  200
+    application/json
+      [].name: string
+      [].grantsMustEnd: boolean
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.organization.notfound
 DELETE /admin/grants/{id}
   request application/json
     reason: string
@@ -2726,6 +2735,8 @@ POST /register/terms
     noticeVersion: string
     consents{}: boolean
   201
+    application/json
+      continueTo: string
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid

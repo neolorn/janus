@@ -358,6 +358,45 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-005 (D-247): one who manages grants in an organization reads the roles
+    /// they may give there, sorted by name, each with whether its grants must end: those a
+    /// role of theirs lists, and never one carrying <c>system:administer</c> nor one no
+    /// role of theirs lists. Without <c>grant:manage</c> there it is
+    /// 403 <c>authz.denied</c>, and an organization the deployment does not hold is 404.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_TheRolesAGiverMayHandOutAreReadAsync()
+    {
+        var ending = RoleName.Parse("contractor");
+        var unlisted = RoleName.Parse("auditor");
+
+        await _deployment.Roles.CreateAsync(
+            Role.Of(ending, [Permission.Parse("document:read")], grantsMustEnd: true),
+            CancellationToken.None);
+        await _deployment.Roles.CreateAsync(Role.Of(unlisted, [Permission.Parse("document:read")]), CancellationToken.None);
+
+        (Browser giver, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        _deployment.HandOuts.HandsOut(actor, Branch, ending);
+
+        Answer read = await giver.SendAsync("GET", "/admin/grants/assignable?organization=" + Branch);
+        Answer elsewhere = await giver.SendAsync("GET", "/admin/grants/assignable?organization=" + Administration);
+        Answer unknown = await giver.SendAsync("GET", "/admin/grants/assignable?organization=" + Guid.NewGuid());
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal(
+            [("contractor", true), ("reader", false)],
+            read.Json().EnumerateArray().Select(role => (
+                role.GetProperty("name").GetString(),
+                role.GetProperty("grantsMustEnd").GetBoolean())));
+        Assert.Equal(StatusCodes.Status403Forbidden, elsewhere.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), elsewhere.Text("code"));
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), unknown.Text("code"));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-004 AC8 (D-237): once a role's grants must end, its open-ended grant
     /// made before stands, and the next grant of it without an expiry is refused.
     /// </summary>

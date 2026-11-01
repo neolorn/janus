@@ -99,6 +99,64 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
+    /// BFF-CSRF-005a AC5, BFF-MACH-001 AC2 (D-241): a fetch of discovery or of the key
+    /// set, with no cookie or with a browser's session cookie, is answered by the provider
+    /// and issues, writes and sets nothing: it is no first contact, and the cookie is
+    /// never read.
+    /// </summary>
+    /// <param name="path">The route fetched.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/.well-known/openid-configuration")]
+    [InlineData("/oidc/jwks")]
+    public async Task BFF_CSRF_005a_AC5_AFetchOfTheProvidersDocumentsIsNoFirstContactAsync(string path)
+    {
+        await using var deployment = new Deployment();
+        var machine = new Machine(deployment);
+
+        Answer bare = await machine.CallAsync(path);
+        Answer carrying = await machine.CallCarryingAsync(path, BrowserCookies.Session + "=a-stale-session");
+
+        Assert.Equal(StatusCodes.Status200OK, bare.Status);
+        Assert.Equal(StatusCodes.Status200OK, carrying.Status);
+        Assert.Empty(bare.SetCookie);
+        Assert.Empty(carrying.SetCookie);
+        Assert.Empty(deployment.Contacts.All);
+    }
+
+    /// <summary>
+    /// BFF-MACH-001 AC4 (D-241): discovery and the key set each admit
+    /// <c>oidc.discovery.ratelimit</c> and <c>oidc.jwks.ratelimit</c> fetches from one
+    /// source a minute, 60 by default; the next is answered 429 with <c>Retry-After</c>
+    /// and no body, the other route is still answered, and the next window admits again.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_MACH_001_AC4_PastItsLimitAFetchIsAnsweredTooManyAsync()
+    {
+        await using var deployment = new Deployment();
+        var machine = new Machine(deployment);
+
+        for (int fetched = 0; fetched < 60; fetched++)
+        {
+            Assert.Equal(StatusCodes.Status200OK, (await machine.CallAsync("/.well-known/openid-configuration")).Status);
+        }
+
+        Answer over = await machine.CallAsync("/.well-known/openid-configuration");
+        Answer keys = await machine.CallAsync("/oidc/jwks");
+
+        deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
+        Answer again = await machine.CallAsync("/.well-known/openid-configuration");
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, over.Status);
+        Assert.Equal("60", over.Header(HeaderNames.RetryAfter));
+        Assert.Empty(over.Body);
+        Assert.Equal(StatusCodes.Status200OK, keys.Status);
+        Assert.Equal(StatusCodes.Status200OK, again.Status);
+    }
+
+    /// <summary>
     /// 09 section 9 (D-224 item 11): a request for one of the provider's routes at any
     /// other address is not the provider's: it is answered as a route the host never
     /// mapped is answered there, and not by the provider.

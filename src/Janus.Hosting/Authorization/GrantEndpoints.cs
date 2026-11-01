@@ -46,6 +46,13 @@ internal static class GrantEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied)
                 .Binding<OrganizationId>("organization"))
             .Produces<IReadOnlyList<HeldGrantView>>();
+
+        // AUTHZ-GRANT-005 (D-247): the roles the caller may give there, read now.
+        _ = SessionRequired.On(endpoints.MapGet("/admin/grants/assignable", AssignableAsync))
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.Denied, ErrorCodes.OrganizationNotFound)
+                .Binding<OrganizationId>("organization"))
+            .Produces<IReadOnlyList<AssignableRoleView>>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/grants", GrantAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -66,6 +73,24 @@ internal static class GrantEndpoints
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> AssignableAsync(
+        IGrants grants,
+        RequestSession browser,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(grants);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await grants.AssignableAsync(browser.Asking, organization, cancellationToken).ConfigureAwait(false),
+            assignable => TypedResults.Json<IReadOnlyList<AssignableRoleView>>(
+                [.. assignable.Select(AssignableRoleView.Of)],
+                AuthorizationJson.Default.IReadOnlyListAssignableRoleView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> HeldAsync(

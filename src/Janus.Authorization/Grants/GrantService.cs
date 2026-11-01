@@ -332,6 +332,51 @@ internal sealed class GrantService(
             [.. held.OrderBy(grant => grant.GrantedAt).Select(Held)]);
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<AssignableRole>>> AssignableAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // AUTHZ-GRANT-004 (D-247): roles are a person's to give, so no principal reads
+        // which.
+        if (context.Acting is null)
+        {
+            return Result.Failure<IReadOnlyList<AssignableRole>>(Error.From(ErrorCodes.Denied));
+        }
+
+        // AUTHZ-SCOPE-001: the organization is read as a grant on it reads it, before the
+        // gate.
+        if (await ScopeOfAsync(
+                new ResourceReference(OrganizationWide, ResourceId.Parse(organization.ToString())),
+                cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure<IReadOnlyList<AssignableRole>>(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
+        // The permission a grant there needs, admitted as the grant admits it.
+        if (await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
+            is Error denied)
+        {
+            return Result.Failure<IReadOnlyList<AssignableRole>>(denied);
+        }
+
+        IReadOnlyList<Role> defined = await roles.AllAsync(cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<DefinedRole> assignable = await handOut
+            .AssignableAsync(context, organization, [.. defined.Select(Defined)], cancellationToken)
+            .ConfigureAwait(false);
+        var mustEnd = defined.Where(role => role.GrantsMustEnd).Select(role => role.Name).ToHashSet();
+
+        return Result.Success<IReadOnlyList<AssignableRole>>(
+            [
+                .. assignable
+                    .Select(role => new AssignableRole(role.Name, mustEnd.Contains(role.Name)))
+                    .OrderBy(role => role.Name.ToString(), StringComparer.Ordinal),
+            ]);
+    }
+
     // AUTHZ-GRANT-001 AC2: the whole organization is named as a grant on it is written.
     private static HeldGrant Held(Grant grant) => new(
         grant.Id,

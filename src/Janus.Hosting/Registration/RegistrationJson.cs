@@ -20,4 +20,5 @@ namespace Janus.Hosting.Registration;
 [JsonSerializable(typeof(AbandonRequest))]
 [JsonSerializable(typeof(RegistrationStateView))]
 [JsonSerializable(typeof(LinkLandingView))]
+[JsonSerializable(typeof(RegistrationCompletedView))]
 internal sealed partial class RegistrationJson : JsonSerializerContext;

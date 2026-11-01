@@ -1469,6 +1469,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<OriginValidation>();
         _ = services.AddSingleton<SourceAdmissions>();
         _ = services.AddScoped<SourceRateLimiting>();
+        _ = services.AddSingleton<FetchAdmissions>();
         _ = services.AddScoped<RequestSession>();
         _ = services.AddScoped<IRequestAccess>(provider => provider.GetRequiredService<RequestSession>());
         _ = services.AddHttpContextAccessor();

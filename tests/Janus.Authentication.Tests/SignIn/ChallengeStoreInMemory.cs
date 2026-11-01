@@ -69,6 +69,18 @@ internal sealed class ChallengeStoreInMemory : IChallengeStore
             .FirstOrDefault());
 
     /// <inheritdoc/>
+    public ValueTask RemoveUnnamedAsync(byte[] browser, CancellationToken cancellationToken)
+    {
+        foreach (Challenge unnamed in _challenges.Values
+            .Where(challenge => challenge.Unnamed && challenge.BoundTo(browser))
+            .ToList())
+        {
+            _challenges.Remove(Key(unnamed.Fingerprint));
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask AddAsync(Challenge challenge, CancellationToken cancellationToken)
     {
         _challenges[Key(challenge.Fingerprint)] = challenge;

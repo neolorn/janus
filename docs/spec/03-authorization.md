@@ -306,7 +306,22 @@ admission is (AUTHZ-SCOPE-001, AUTHZ-GATE-006); a refusal writes nothing and is 
 as a refusal (AUTHZ-CONCEAL-004), counting toward `alerting.denials.threshold`; an
 admitted change is recorded as before, with its reason and its step-up.
 
-*Source: D-212, D-213, D-216, D-217, D-240*
+**The roles a giver may hand out (D-247).** A person who gives roles MAY read which roles
+they may give in an organization (`09` `GET /admin/grants/assignable`, and its library
+call `IGrants.AssignableAsync`, `07` LIB-API-005). The answer SHALL be exactly the
+roles a grant by them there would not be refused as `authz.role.notassignable`: the
+same judgement this rule makes at the grant, read now, the roles the caller's held roles
+hand out, with `system:administer`'s reach as the grant itself allows it. Each role is
+answered with its name and whether its grants must end (`grantsMustEnd`), sorted by
+name, and not with its permissions, which stay `role:manage`'s to read. It is asked
+under the caller's `grant:manage` in that organization, the permission a grant there
+needs, and refused `authz.denied` without it. It asks no step-up: step-up guards
+changes. A system principal's context is refused with `authz.denied`, as AUTHZ-GRANT-004
+keeps roles a person's. The read records nothing: it is a read of the deployment's
+roles, not of a person. A refused read is recorded as any refused request is
+(AUTHZ-CONCEAL-004), and nothing more.
+
+*Source: D-212, D-213, D-216, D-217, D-240, D-247*
 
 Without it, anyone who may manage grants holds every role one step removed, which is
 OPS-CFG-007's reasoning applied to every role. The lists are Kubernetes' `bind` on named
@@ -342,6 +357,10 @@ the record of who gave what, when and why is the control.
 9. A member holding a role no role of theirs lists brings their own set end forward,
    and its revocation of that role's grant is not refused `authz.role.notassignable`
    (D-240).
+10. The roles a caller may hand out in an organization, as read, are exactly those a
+    grant by the caller there admits, each with its `grantsMustEnd`, and the read asks
+    no step-up; a caller without `grant:manage` there is refused `authz.denied`,
+    recorded as a refusal; an admitted read records nothing (D-247).
 
 ---
 

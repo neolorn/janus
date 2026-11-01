@@ -77,12 +77,23 @@ bolt-on to the other.
 the library's repository (CONV-VCS-005); a package feed a host installs from is the
 host's (D-220, D-225).
 
-*Source: D-005, D-220, D-225*
+**The release workflow (D-245).** One workflow, `release.yml`, runs on a `v*` tag. It
+fails where the changelog has no section for the version; it packs every LIB-PKG-001
+package, the `Janus.Cli` tool package and `Janus.Testing`, at the tag's MinVer version;
+and it creates the tag's release with the `.nupkg` files attached, a pre-release for a
+`-rc.N` version. Its job alone holds `contents: write`, and nothing else. It publishes
+to no registry and holds no registry credential: consumers take the packages from the
+release.
+
+*Source: D-005, D-220, D-225, D-245*
 
 **Acceptance criteria**
 1. A tagged release carries every package of LIB-PKG-001 at its version.
 2. No package of the library is published to a public registry by the library's
    workflows.
+3. A `v*` tag whose version has no section in the changelog creates no release; a
+   `-rc.N` tag's release is a pre-release; the release workflow holds no registry
+   credential, and its job holds `contents: write` and no other permission (D-245).
 
 ---
 
@@ -199,7 +210,8 @@ contract in `Janus.Core`, and SHALL be exposed **twice**: callable in-process by
 host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The four
 operations named below as called in process only have no endpoint.
 
-*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208, D-218, D-221*
+*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208, D-218, D-221,
+D-247*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -214,7 +226,8 @@ consent and objection records; erasure progress and manual completion; audit que
 subject; explanation resolution; compliance-text publishing; the assessment
 records; credential and factor management; profile photo and language
 preference; the registration session; identifier, preference and session management; the
-restriction set and grants; mail app passwords; domain lock (D-146); the generation of
+restriction set and grants, the roles a giver may hand out among them (`03`
+AUTHZ-GRANT-005, D-247); mail app passwords; domain lock (D-146); the generation of
 the break-glass credential and whether one stands (OPS-BOOT-004, OPS-BOOT-001 AC3); the
 reads of organizations, members, invitations, another person's account, contact details,
 standing and sessions, the setting of another person's preferences (`01` IDN-READ-001 to
@@ -226,6 +239,12 @@ operations on a record attached to it, and the offer and the attachment
 (`IPersonRecords`); and the outcome of a message the host reports (`ISendOutcomes`,
 INT-SMS-005, D-225), called in process only. The endpoints are enumerated in
 `09-api-contract`; the permissions in `10-reference` §2.1.
+
+**The roles a giver may hand out (D-247).** `IGrants.AssignableAsync`, taking the
+caller's access context and the organization, answers
+`Result<IReadOnlyList<AssignableRole>>`, sorted by name; `AssignableRole` holds `Name`
+and `GrantsMustEnd`. Its endpoint is `GET /admin/grants/assignable?organization={id}`
+(`09`).
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
