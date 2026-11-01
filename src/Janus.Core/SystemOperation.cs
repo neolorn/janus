@@ -64,8 +64,8 @@ public enum SystemOperation
     KeyRotation = 7,
 
     /// <summary>
-    /// Changing the deployment's configuration from the server: a protected key, or the
-    /// provider's client registry.
+    /// Changing the deployment's configuration from the server: a protected key, the
+    /// provider's client registry, or an organization and its policy.
     /// </summary>
     [JsonStringEnumMemberName("configuration")]
     Configuration = 8,

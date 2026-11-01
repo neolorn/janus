@@ -10,6 +10,20 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The `identity organization` command sets a business organization up from the server,
+  before any person can work: `--name`, `--policy` (a file holding the policy object
+  `PUT /admin/organizations/{id}/policy` takes, without `reason`) and `--reason`, with
+  `--multiplememberships true|false` optional. On a bootstrapped deployment it creates
+  the organization where none holds the name (compared on its comparison key), writes
+  its policy with the policy route's checks and codes, and writes
+  `organization.multiplememberships` where asked, in one transaction, each change
+  recorded under the system principal `organization` with the reason given, and prints
+  the organization's identifier. Run again it writes only what differs. A name two
+  organizations hold is refused `api.request.malformed` naming `name`, a deployment not
+  bootstrapped `authz.denied`, and a missing or empty reason
+  `config.change.reasonrequired`; nothing of a refused run is written. It writes no
+  grant and no membership, and never turns `photos` on, since it reads no host
+  declaration. `organization` is now a reserved principal name no host job may take.
 - A member brings forward the end an administrator set on their membership with
   `POST /account/memberships/{organization}/end` or
   `IInvitations.BringMembershipEndForwardAsync`, under their live session alone: no

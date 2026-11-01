@@ -11,6 +11,7 @@ using Janus.Cli.Clients;
 using Janus.Cli.Configuration;
 using Janus.Cli.Erasures;
 using Janus.Cli.Migration;
+using Janus.Cli.Organizations;
 using Janus.Cli.Rotation;
 using Janus.Core;
 using Janus.Storage;
@@ -51,6 +52,7 @@ internal static class Program
         (ConfigureCommand.Contract, ConfigureCommand.RunAsync),
         (ReplayErasuresCommand.Contract, ReplayErasuresCommand.RunAsync),
         (RegisterClientCommand.Contract, RegisterClientCommand.RunAsync),
+        (OrganizationCommand.Contract, OrganizationCommand.RunAsync),
         (MigrateCommand.Contract, MigrateCommand.RunAsync),
     ];
 
