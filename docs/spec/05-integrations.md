@@ -329,7 +329,14 @@ directory with the provider address as `issuerUrl`, those clients in
 `acceptedAudiences`, `skipAudienceValidation` off, `opaqueTokenValidation` `none`,
 `unscopedTokens` `reject` and `email` as `claimUsername` (D-226).
 
-*Source: D-005, D-041, D-164, D-166, D-224, D-226*
+**The mail server's browser applications (D-252).** The webmail and the mail server's
+own account pages sign a person in as `public-application` clients (`02` AUTH-OIDC-001).
+Each token's `aud` is the client's audience, the mail-server client its `--audience`
+names, or the client's own identifier where it names none, which `acceptedAudiences`
+then names beside the clients registered for the mail server. The token reaches the
+mail server alone: no route of the library accepts a bearer token.
+
+*Source: D-005, D-041, D-164, D-166, D-224, D-226, D-252*
 
 Stalwart validates offline via JWKS and reads userinfo for a claim the token lacks; it
 does not use introspection with client credentials. The `aud` check is the mail server's
@@ -349,6 +356,9 @@ naming one of its own resource identifiers, which the provider never issues
 4. Criteria 1 to 3 are decided against a real server of the release INT-MAIL-001 names,
    configured as this item states against the provider of a test host listening on a
    real port (D-224).
+5. The mail server accepts a `public-application` client's access token whose `aud` is
+   an audience `acceptedAudiences` names, and carrying `urn:ietf:params:oauth:scope:mail`
+   (D-252).
 
 ---
 

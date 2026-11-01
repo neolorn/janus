@@ -20221,6 +20221,7 @@ path from that role to `system:administer`.
   approved by a system administrator alone);
 - `03` AUTHZ-GRANT-005 (the recovery approval among what is judged as a hand-out);
 - `09` (the approval route's 403);
+- `10` section 1.3 (`authz.role.notassignable`, the recovery's approval);
 - `implementation-plan.md` (round H11).
 
 ---
@@ -20279,7 +20280,8 @@ refresh token. Every other client is unchanged. The owner approved the trade-off
   refused; the token's `aud` and scopes; no refresh token);
 - `05` INT-MAIL-004 (the webmail and WebUI clients among the accepted audiences);
 - `06` OPS-BOOT-001 (`register-client`'s new kind and `--audience`);
-- `09` (`/oidc/authorize` direct for this kind);
+- `09` (`/oidc/authorize` direct for this kind; the `/oidc/par` and `/oidc/token` rows
+  and the kinds of client in section 9);
 - `10` section 5.13 (the kind) and section 4 (`oidc.publicapplication.accesstoken.lifetime`);
 - `implementation-plan.md` (round H11).
 

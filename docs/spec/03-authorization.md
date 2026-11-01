@@ -257,9 +257,12 @@ nobody SHALL give themselves access.
 **Values (D-212).** A person hands out a role where they make or revoke a grant of it,
 allow or deny; name it among an invitation's roles; or add a member (an account or a
 group) to a group, or remove one from it, where the group reaches a grant of the role,
-live, allow or deny, its own or that of a group it belongs to; and ending a membership,
+live, allow or deny, its own or that of a group it belongs to; ending a membership,
 now or at an end set in advance, hands out every role its revocations and removals reach
-(`01` IDN-MEM-001, D-213). Each such change SHALL, beside the admission of
+(`01` IDN-MEM-001, D-213); and approving an account's recovery hands out every role the
+account holds through a live allow grant, its own or a group's it belongs to, directly
+or through nesting, each judged in the organization that grant is in (`02`
+AUTH-RECOV-002, D-251). Each such change SHALL, beside the admission of
 AUTHZ-SCOPE-001, be refused with 403 `authz.role.notassignable` unless the actor may
 hand out every role it touches. The actor may hand out a role where:
 - it holds `system:administer` in the administrative organization; or
@@ -321,7 +324,7 @@ keeps roles a person's. The read records nothing: it is a read of the deployment
 roles, not of a person. A refused read is recorded as any refused request is
 (AUTHZ-CONCEAL-004), and nothing more.
 
-*Source: D-212, D-213, D-216, D-217, D-240, D-247*
+*Source: D-212, D-213, D-216, D-217, D-240, D-247, D-251*
 
 Without it, anyone who may manage grants holds every role one step removed, which is
 OPS-CFG-007's reasoning applied to every role. The lists are Kubernetes' `bind` on named
@@ -361,6 +364,10 @@ the record of who gave what, when and why is the control.
     grant by the caller there admits, each with its `grantsMustEnd`, and the read asks
     no step-up; a caller without `grant:manage` there is refused `authz.denied`,
     recorded as a refusal; an admitted read records nothing (D-247).
+11. An approver who may not hand out a role the account holds, in the organization of
+    the grant through which the account holds it, is refused the recovery's approval
+    with `authz.role.notassignable`, counting toward `alerting.denials.threshold`
+    (D-251).
 
 ---
 

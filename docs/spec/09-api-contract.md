@@ -1371,17 +1371,19 @@ step-up (`recovery:approve`).
 ```
 
 **200** `{ enrolmentLinkExpiresAt }`; the link itself goes to the channel
-**403**: `authz.denied` without `recovery:approve`; `auth.stepup.required`
-(`recovery:approve`); `authz.restricted` where the approver's account is restricted, at
-the gate step or at the second ask inside the unit of work, nothing approved and nothing
-sent (AUTHZ-GATE-006)
+**403**: `authz.denied` without `recovery:approve`; `authz.role.notassignable` where the
+approver may not hand out every role the account holds, judged before the step-up,
+nothing written and the refusal recorded (AUTH-RECOV-002, AUTHZ-GRANT-005, D-251);
+`auth.stepup.required` (`recovery:approve`); `authz.restricted` where the approver's
+account is restricted, at the gate step or at the second ask inside the unit of work,
+nothing approved and nothing sent (AUTHZ-GATE-006)
 **422** — `auth.recovery.reasonrequired`, `auth.recovery.channelnotonaccount`,
 `auth.recovery.selfapproval` (AUTH-RECOV-002a)
 **429**: `auth.throttled` with `retryAt` past a rate limit of AUTH-RECOV-002;
 `auth.restriction.exceeded` with `retryAt` where a restriction refuses the link's send,
 and nothing is approved (AUTH-ABUSE-004)
 
-*Source: AUTH-RECOV-002, AUTH-RECOV-002a, AUTH-RECOV-003, D-186*
+*Source: AUTH-RECOV-002, AUTH-RECOV-002a, AUTH-RECOV-003, D-186, D-251*
 
 `channelUsed` SHALL be one of the account's **recorded** channels. A
 requester-supplied channel is rejected. Available for **every account**, not only
@@ -3280,9 +3282,9 @@ Standard endpoints for first-party, manually registered clients.
 |---|---|
 | `GET /.well-known/openid-configuration` | Discovery. Machine profile, in the set that ignores cookies: a cookie sent is never read, and no session is issued or written (BFF-MACH-001, D-241); past `oidc.discovery.ratelimit` per source, **429** with `Retry-After` |
 | `GET /oidc/jwks` | The public keys of the next signing key, the current one and each replaced one within its overlap (AUTH-KEY-001); a retired key's kept public key is never published. Machine profile, in the set that ignores cookies: a cookie sent is never read, and no session is issued or written (BFF-MACH-001, D-241); past `oidc.jwks.ratelimit` per source, **429** with `Retry-After` |
-| `POST /oidc/par` | Pushed Authorization Request (RFC 9126): the client posts the authorization parameters over the back channel and receives a single-use `request_uri` valid for 60 seconds; required for every client (AUTH-OIDC-006, D-164); a `redirect_uri` that is not exactly the client's registered destination is refused with `invalid_request` and no `request_uri` is issued (RFC 9126 section 2.1), and an absent one takes the registered destination; a browser application's request asking for `offline_access` is refused with `invalid_request` (AUTH-OIDC-002) |
-| `GET /oidc/authorize` | Authorization code with PKCE, by `request_uri` from `/oidc/par` only; direct parameters are refused with `invalid_request` — **redirects to the authentication application; never renders a page**. Honours `prompt=none` for silent sign-on (AUTH-SESS-012) |
-| `POST /oidc/token` | Token issuance and refresh — machine profile (BFF-MACH-001) |
+| `POST /oidc/par` | Pushed Authorization Request (RFC 9126): the client posts the authorization parameters over the back channel and receives a single-use `request_uri` valid for 60 seconds; required for every client (AUTH-OIDC-006, D-164) save a `public-application` client, which MAY push without client authentication or send its request directly (D-252); a `redirect_uri` that is not exactly the client's registered destination is refused with `invalid_request` and no `request_uri` is issued (RFC 9126 section 2.1), and an absent one takes the registered destination; a browser application's request asking for `offline_access` is refused with `invalid_request` (AUTH-OIDC-002) |
+| `GET /oidc/authorize` | Authorization code with PKCE, by `request_uri` from `/oidc/par` only; direct parameters are refused with `invalid_request` — **redirects to the authentication application; never renders a page**. Honours `prompt=none` for silent sign-on (AUTH-SESS-012). A `public-application` client alone MAY send its parameters directly, with PKCE `S256`, an exact registered `redirect_uri` and no `offline_access`; a direct request from any other kind is still refused with `invalid_request` (AUTH-OIDC-006, D-252) |
+| `POST /oidc/token` | Token issuance and refresh — machine profile (BFF-MACH-001). A `public-application` client authenticates with no secret, one that presents one is refused `invalid_client`, and it receives its access token alone, never a refresh token (AUTH-OIDC-001, D-252) |
 | `GET /oidc/authorize/continue` | The continuation of the browser's pending authorization (AUTH-SESS-012, D-224): with a live session, the code to the client's registered destination, as `/oidc/authorize` answers it; with none pending, a **302** to the origin of the registered address of `redirect.defaultclient`, or to `/` while that key is empty (API-REDIR-001, D-228). Never renders a page |
 | `GET /oidc/userinfo` | Claims, by scope (D-153): `openid` gives `sub`; `email` gives `email` and `email_verified` (the primary email); `profile` gives `name` (display name), `preferred_username` where `identifiers.username.enabled`, and `locale` (language preference). Nothing else is issued: no phone, legal name, date of birth or photo |
 
@@ -3314,16 +3316,22 @@ provider address the host declares (LIB-HOST-001): the issuer is that address ex
 each route is that address followed by the route's path, and a request for one of them
 anywhere else is not the provider's and reaches the host's routing.
 
-*Source: AUTH-OIDC-001, AUTH-KEY-001, D-041, D-166, D-181, D-224, D-241*
+*Source: AUTH-OIDC-001, AUTH-KEY-001, D-041, D-166, D-181, D-224, D-241, D-252*
 
-**Two kinds of client share the registry.** Protocol clients (a client a deployment
+**Three kinds of client share the registry.** Protocol clients (a client a deployment
 registers for the mail server, INT-MAIL-004; future native clients) receive access and
 refresh tokens (AUTH-OIDC-003, AUTH-OIDC-004). **Each browser application's BFF is a
 confidential client** that uses the code flow once to establish its per-app session and
-receives **no refresh token** (AUTH-SESS-012, BFF-SESS-006, D-104). The kind is recorded
-on the client and determines what the token endpoint will issue. Every client carries
-one registered `redirect_uri`, an absolute `https` address (or `http` on a loopback IP
-literal), matched exactly at the push (AUTH-OIDC-006, API-REDIR-001 AC3).
+receives **no refresh token** (AUTH-SESS-012, BFF-SESS-006, D-104). **A
+`public-application` client** is a browser application that holds no secret (the
+webmail, the mail server's own account pages): it may send its authorization request
+directly and receives one access token for the mail server, whose `aud` is its audience
+alone, living `oidc.publicapplication.accesstoken.lifetime`, and no refresh token
+(AUTH-OIDC-001, D-252). The kind is recorded on the client and determines what the token
+endpoint will issue. Every client carries one registered `redirect_uri`, save a
+`public-application` client, which carries one for each `--redirect` it was registered
+with; each is an absolute `https` address (or `http` on a loopback IP literal), matched
+exactly at the push or at a direct request (AUTH-OIDC-006, API-REDIR-001 AC3).
 
 Refresh tokens rotate on use; reuse of a consumed token revokes the session family
 (AUTH-OIDC-003).

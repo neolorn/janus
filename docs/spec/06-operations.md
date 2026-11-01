@@ -1017,6 +1017,15 @@ the one line on standard output; a refusal is reported as `bootstrap` reports on
 
 *Source: D-207, D-248*
 
+**A public application's registration (D-252).** `register-client` (`02` AUTH-OIDC-001)
+takes `--kind public-application` beside `protocol` and `browser-application`, for a
+browser application that holds no secret: `--redirect` repeated for each exact return
+address, `--scopes`, and `--audience <client>`, the mail-server client its tokens are
+for (`05` INT-MAIL-004), the client's own identifier where it is absent. No secret is
+generated for such a client.
+
+*Source: D-252*
+
 **Acceptance criteria**
 1. Running it on a deployment already stood up (the administrative organization
    exists, or an allow grant of a role holding `system:administer` stands unrevoked,
@@ -1053,6 +1062,9 @@ the one line on standard output; a refusal is reported as `bootstrap` reports on
 12. A policy whose write is a loosening (OPS-CFG-002) is written by `organization` with
     no step-up and no `system:administer`, where the policy route's value checks admit
     it (D-248).
+13. `register-client --kind public-application` registers a client with every
+    `--redirect` given and the `--audience` named, or its own identifier as audience
+    where none is, and generates no secret for it (D-252).
 
 ---
 

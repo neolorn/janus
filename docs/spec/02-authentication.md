@@ -2268,7 +2268,21 @@ of asking where a limit is 0; the anomaly alerts fire at
 `alerting.recovery.accountthreshold` and `alerting.recovery.approverthreshold`
 (OPS-ALERT-001).
 
-*Source: D-008, D-041, D-111, D-166, D-186, D-234*
+*Source: D-008, D-041, D-111, D-166, D-186, D-234, D-251*
+
+**The approver's reach (D-251).** Approving a recovery hands the account to whoever
+completes the enrolment, so it is judged as handing out every role the account holds.
+Beside the admission of `recovery:approve` (AUTHZ-SCOPE-001) and AUTH-RECOV-002a, an
+approval SHALL be refused with 403 `authz.role.notassignable` unless the approver may
+hand out every role the account holds through a live allow grant, its own or a group's
+it belongs to, directly or through nesting, in each organization that grant is in,
+judged as `03` AUTHZ-GRANT-005 judges a grant there. A role carrying `system:administer`
+is handed out by a system administrator alone (OPS-CFG-007), so only a system
+administrator approves a system administrator's recovery; an account holding no role (a
+customer) is approved as before. The rule is judged where the admission is, before the
+step-up is asked; a refusal writes nothing, is recorded as a refusal (AUTHZ-CONCEAL-004)
+and counts toward `alerting.denials.threshold`, as AUTHZ-GRANT-005's refusals do. Where
+more than one approver is required, each is judged alone by the rule.
 
 **Where the link goes.** To a channel **already recorded on the account** and chosen by
 the approver — for a customer whose mailbox is gone, the phone. Delivering the link by
@@ -2317,6 +2331,10 @@ one of them there and tidies the rest after an ordinary sign-in.
    as lost replaces it on the enrolment session, and once the new address verifies it
    holds the replaced one's place, primary included; the session can neither add nor
    remove an identifier.
+9. An approver holding `recovery:approve` who may not hand out a role the account holds
+   is refused `authz.role.notassignable` before the step-up is asked, writing nothing
+   and recording the refusal; a system administrator's account is approved by a system
+   administrator alone, and an account holding no role is approved as before (D-251).
 
 ---
 
@@ -3112,10 +3130,12 @@ self-service, developer portal, **token introspection**.
 
 **Values (D-166).** A client is registered or changed from the server with the
 `register-client` command of `Janus.Cli`, taking `--client <id>`, `--name <name>`,
-`--kind protocol|browser-application`, `--redirect <address>` and
-`--scopes "<scope> ..."`, which prints `{"registered":"<id>"}` and is audited as
+`--kind protocol|browser-application|public-application`, `--redirect <address>` and
+`--scopes "<scope> ..."`, and for a `public-application` client `--audience <client>`
+(below), which prints `{"registered":"<id>"}` and is audited as
 `auth.oidc.clientregistered`; it takes no secret. The library generates each client's
-secret when the client is first registered (32 random bytes, base64url), holds it under
+secret, save a `public-application` client's, which has none, when the client is first
+registered (32 random bytes, base64url), holds it under
 the deployment's data key (AUTH-KEY-002) and rotates it with the signing keys
 (AUTH-KEY-001, OPS-SEC-002); a registration that changes a client leaves its secret
 alone. A running host takes a changed destination at its next start (API-REDIR-001 AC3).
@@ -3128,7 +3148,27 @@ client's; `offline_access` a `protocol` client's alone (AUTH-OIDC-002); `email` 
 registered with being refused with `invalid_request`, as the provider's own check of a
 client's permissions refuses it (D-227).
 
-*Source: D-005, D-041, D-146, D-166, D-226, D-227*
+**A public application (D-252).** A third kind, `public-application`, is a browser
+application that can hold no secret and signs a person in to the mail server: the
+webmail and the mail server's own account pages. It is registered from the server alone,
+`register-client --kind public-application`, with `--redirect` repeated for each exact
+return address, `--scopes`, and `--audience <client>` naming the mail-server client the
+token is for (INT-MAIL-004), the client's own identifier where absent. It has no secret,
+the library generates none, and a token request that authenticates with one is refused
+`invalid_client`. It uses the authorization code with PKCE `S256` as a public client,
+and may skip the pushed request (AUTH-OIDC-006). It receives an access token for the
+mail server and nothing else, never a refresh token: an RFC 9068 access token whose
+`aud` is the client's audience alone and whose scopes are `openid` and those the client
+is registered with (the interoperable mail scopes, `email`, `profile`), living
+`oidc.publicapplication.accesstoken.lifetime` (`10` section 4.9). On expiry the
+application starts a new authorization, which a live session answers without a new
+authentication where the session's level and the policy allow it. No route of the
+library accepts a bearer token, so the token opens nothing in the library or in a host.
+The person signs in at the provider's own pages under their organization's policy,
+passkey included, and the sign-in is recorded as any other. Every other client is
+unchanged.
+
+*Source: D-005, D-041, D-146, D-166, D-226, D-227, D-252*
 
 Introspection is excluded because Stalwart validates offline via JWKS and does not
 use it; an endpoint nothing calls is attack surface for no benefit.
@@ -3143,6 +3183,9 @@ use it; an endpoint nothing calls is attack surface for no benefit.
 5. A client registered with a scope beyond the four receives it where its request asks
    for it, and a request for a scope its client is not registered with is refused with
    `invalid_scope` (D-226).
+6. A `public-application` client is registered from the server alone, with no secret
+   generated; its access token's `aud` is its audience alone, its scopes are `openid`
+   and those it is registered with, and no refresh token is issued to it (D-252).
 
 ---
 
@@ -3152,12 +3195,15 @@ authorization code flow **once**, to establish that session (AUTH-SESS-012), and
 store no token afterwards. A pushed authorization request (AUTH-OIDC-006) from a
 `browser-application` client that asks for `offline_access` SHALL be refused at
 `POST /oidc/par` with `invalid_request`; only a `protocol` client holds the refresh
-grant (`09` section 9).
+grant (`09` section 9). The one exception is a `public-application` client (AUTH-OIDC-001,
+D-252): the browser receives its one access token, for the mail server alone, and no
+refresh token; its request for `offline_access` is refused with `invalid_request`.
 
-*Source: D-007, D-104, D-166*
+*Source: D-007, D-104, D-166, D-252*
 
 **Acceptance criteria**
-1. No browser application receives an access token.
+1. No browser application receives an access token, save a `public-application`
+   client, which receives one for the mail server alone (D-252).
 2. No BFF holds an access, ID or refresh token beyond the code exchange.
 3. A browser application's pushed request asking for `offline_access` is refused with
    `invalid_request` and no `request_uri` is issued.
@@ -3244,13 +3290,21 @@ refused with it, as is a request with no challenge. **Every authorization reques
 be a Pushed Authorization Request (RFC 9126):** the client posts the parameters to
 `POST /oidc/par` over the back channel and the browser carries only the returned
 `request_uri`; a direct `/oidc/authorize` with parameters is refused with
-`invalid_request`. **Access tokens SHALL follow RFC 9068**: header `typ: at+jwt`, claims
-`iss`, `exp`, `aud`, `sub`, `client_id`, `iat`, `jti`; `aud` is the identifier of the
+`invalid_request`. The one exception is a `public-application` client (AUTH-OIDC-001,
+D-252): it MAY send a direct `GET /oidc/authorize` with its parameters, and MAY use
+`POST /oidc/par` without client authentication (RFC 9126 section 2); everything else of
+this item holds for it, the code with PKCE `S256` only, every redirect an exact
+registered match and `https` save a loopback literal, and its request for
+`offline_access` is refused with `invalid_request`. **Access tokens SHALL follow RFC
+9068**: header `typ: at+jwt`, claims `iss`, `exp`, `aud`, `sub`, `client_id`, `iat`,
+`jti`; `aud` is the identifier of the
 client the token was issued to (the default resource indicator of RFC 9068 section 3),
 and the mail server verifies `aud` as well as the signature (INT-MAIL-004). No error
-the provider answers carries `error_description` or `error_uri` (LIB-API-003).
+the provider answers carries `error_description` or `error_uri` (LIB-API-003). A
+`public-application` client's token takes its client's audience as `aud` instead
+(AUTH-OIDC-001, D-252).
 
-*Source: D-164, D-166*
+*Source: D-164, D-166, D-252*
 
 Janus owns both ends of every flow, so a pushed request costs no interoperability and
 removes the authorization parameters from the browser entirely rather than protecting
@@ -3276,6 +3330,13 @@ it to its audience, which convention alone does not.
    refuses one issued to any other client (D-226).
 4. Discovery advertises `pushed_authorization_request_endpoint` and
    `require_pushed_authorization_requests: true`.
+5. A direct `/oidc/authorize` with parameters from a `public-application` client and
+   PKCE `S256` is answered, and one from any other kind is still refused with
+   `invalid_request`; a public request without PKCE `S256` or asking for
+   `offline_access`, and a token request from a `public-application` client that
+   authenticates with a secret (`invalid_client`), are refused; its access token's
+   `aud` is its audience alone and its scopes `openid` and those it is registered with,
+   and no refresh token is issued to it (D-252).
 
 ---
 
