@@ -622,11 +622,11 @@ any relying party that validates offline against the JWKS (AUTH-OIDC-004, D-147)
 | Key | Default | Scope | Source |
 |---|---|---|---|
 | `oidc.accesstoken.lifetime` | 10 minutes | R, ceiling 1 h; lengthening is loosening (OPS-CFG-002) | AUTH-OIDC-004, D-147: for an offline validator this is the revocation latency |
-| `oidc.publicapplication.accesstoken.lifetime` | 15 minutes | R, ceiling 1 h; lengthening is loosening (OPS-CFG-002) | AUTH-OIDC-001, D-252: the life of the access token a `public-application` client receives; on expiry the application starts a new authorization, no refresh token being issued |
+| `oidc.publicapplication.accesstoken.lifetime` | 15 minutes | R, ceiling 1 h; lengthening is loosening (OPS-CFG-002) | AUTH-OIDC-001, D-252: the life of the access token a `public-application` client receives; on expiry the application starts a new authorization, no refresh token being issued; a signing key's overlap covers it where it is the greater lifetime (AUTH-KEY-001) |
 | `oidc.code.lifetime` | 60 seconds | R, ceiling 10 min | AUTH-SESS-012, D-147: replaces the hard-coded sixty seconds |
 | `oidc.continuation.lifetime` | 30 minutes | R, ceiling 1 h | AUTH-SESS-012, D-224: how long a browser's pending authorization waits for the sign-in that completes it; past it the continuation issues nothing |
 | `token.signing.algorithm` | `ES256` | **P** (§4.8); `ES256`, the one member in this version | AUTH-KEY-001, D-147, D-148: verified against the mail server's source, file `crates/directory/src/backend/oidc/lookup.rs` of its repository, inspected 2026-09-18, which accepts P-256 keys from a JWKS as ES256 and refuses symmetric keys. The one value admitted in this version; any other is refused with `config.value.notallowed` (D-181). The one place the value is held |
-| `token.signing.rotation` | 90 days | R, duration, floor `P1D`; lengthening is loosening | AUTH-KEY-001, OPS-SEC-002, D-147, D-166, D-181, D-197: the cadence of the signing keys and of every registered client's secret, which the library generates and holds wrapped under the deployment's data key; overlap is `oidc.accesstoken.lifetime` plus 5 minutes, for a signing key the longest lifetime it signed under, not a key of its own |
+| `token.signing.rotation` | 90 days | R, duration, floor `P1D`; lengthening is loosening | AUTH-KEY-001, OPS-SEC-002, D-147, D-166, D-181, D-197: the cadence of the signing keys and of every registered client's secret, which the library generates and holds wrapped under the deployment's data key; overlap is `oidc.accesstoken.lifetime` plus 5 minutes, for a signing key the longest lifetime it signed under, the greater of `oidc.accesstoken.lifetime` and `oidc.publicapplication.accesstoken.lifetime` (D-252), not a key of its own |
 | `redirect.defaultclient` | empty | **P**, string, the identifier of a registered client of kind `browser-application`; startup refuses one the registry does not hold, or one of kind `protocol`, with `model.startup.redirectclient` | API-REDIR-001, API-REDIR-002, D-162, D-166: the client a browser falls back to where the identifier a request carried is not one the registry holds; while empty, no fallback destination is carried and the frontend chooses its own, and `GET /oidc/authorize/continue` with no authorization pending answers `/` (D-228) |
 
 ---
@@ -836,9 +836,9 @@ other.
 
 `protocol` (receives access and refresh tokens) · `browser-application` (code flow
 once, no refresh token) · `public-application` (no secret, registered from the server
-alone; a direct authorization request with PKCE `S256` allowed; one access token for
-the mail server, its `aud` the client's audience, and no refresh token; AUTH-OIDC-001,
-D-252)
+alone; a direct authorization request with PKCE `S256` allowed; the ID token, its `aud`
+the client itself, and one access token for the mail server, its `aud` the client's
+audience, and no refresh token; AUTH-OIDC-001, D-252)
 
 *Source: AUTH-SESS-012, D-104, D-252*
 

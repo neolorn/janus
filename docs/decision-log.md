@@ -20228,6 +20228,21 @@ path from that role to `system:administer`.
 
 ## D-252 — A browser application without a secret, for the mail server
 
+> **Amended.** 2026-11-01. Answers to the questions its carrying raised:
+> 1. Signing-key overlap: a key's overlap follows from the longest access-token lifetime
+>    any client kind receives, so the greater of `oidc.accesstoken.lifetime` and
+>    `oidc.publicapplication.accesstoken.lifetime`; a public-application token never
+>    outlives its key's overlap (AUTH-KEY-001, OPS-SEC-002).
+> 2. Discovery: the provider's metadata advertises
+>    `require_pushed_authorization_requests: false`. Every client of another kind is
+>    still refused a direct request, and its own registration metadata carries
+>    `require_pushed_authorization_requests: true` (RFC 9126 section 6).
+> 3. ID token: a public-application client receives the ID token as any client does (its
+>    `aud` the client itself), beside the access token for the mail server. "Nothing
+>    else" means no refresh token and no token any library route accepts.
+> 4. Scopes: as AUTH-OIDC-001 for every client, a registered scope is issued only where
+>    the request asks for it, and an unregistered one is refused `invalid_scope`.
+
 **Date:** 2026-11-01 · **Status:** accepted · **Amends:** AUTH-OIDC-001, AUTH-OIDC-002,
 AUTH-OIDC-006, INT-MAIL-004, `10` section 5.13
 
@@ -20282,6 +20297,9 @@ refresh token. Every other client is unchanged. The owner approved the trade-off
 - `06` OPS-BOOT-001 (`register-client`'s new kind and `--audience`);
 - `09` (`/oidc/authorize` direct for this kind; the `/oidc/par` and `/oidc/token` rows
   and the kinds of client in section 9);
+- the amendment: `02` AUTH-KEY-001, AUTH-OIDC-004 (the lifetime a public-application
+  token is issued with), AUTH-OIDC-006 criterion 4; `06` OPS-SEC-002; `10` section 4.9
+  (`token.signing.rotation`);
 - `10` section 5.13 (the kind) and section 4 (`oidc.publicapplication.accesstoken.lifetime`);
 - `implementation-plan.md` (round H11).
 

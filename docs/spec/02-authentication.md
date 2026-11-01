@@ -3156,10 +3156,13 @@ return address, `--scopes`, and `--audience <client>` naming the mail-server cli
 token is for (INT-MAIL-004), the client's own identifier where absent. It has no secret,
 the library generates none, and a token request that authenticates with one is refused
 `invalid_client`. It uses the authorization code with PKCE `S256` as a public client,
-and may skip the pushed request (AUTH-OIDC-006). It receives an access token for the
-mail server and nothing else, never a refresh token: an RFC 9068 access token whose
-`aud` is the client's audience alone and whose scopes are `openid` and those the client
-is registered with (the interoperable mail scopes, `email`, `profile`), living
+and may skip the pushed request (AUTH-OIDC-006). It receives the ID token as any client
+does, its `aud` the client itself, and beside it an access token for the mail server,
+and nothing else: no refresh token, and no token any library route accepts. The access
+token is an RFC 9068 token whose `aud` is the client's audience alone and whose scopes
+are `openid` and, as for every client, those of its registered scopes (the
+interoperable mail scopes, `email`, `profile`) its request asks for, a scope it is not
+registered with being refused `invalid_scope`; it lives
 `oidc.publicapplication.accesstoken.lifetime` (`10` section 4.9). On expiry the
 application starts a new authorization, which a live session answers without a new
 authentication where the session's level and the policy allow it. No route of the
@@ -3184,8 +3187,10 @@ use it; an endpoint nothing calls is attack surface for no benefit.
    for it, and a request for a scope its client is not registered with is refused with
    `invalid_scope` (D-226).
 6. A `public-application` client is registered from the server alone, with no secret
-   generated; its access token's `aud` is its audience alone, its scopes are `openid`
-   and those it is registered with, and no refresh token is issued to it (D-252).
+   generated; it receives an ID token whose `aud` is the client itself and an access
+   token whose `aud` is its audience alone, whose scopes are `openid` and those of its
+   registered scopes its request asks for, a scope it is not registered with being
+   refused `invalid_scope`, and no refresh token is issued to it (D-252).
 
 ---
 
@@ -3196,8 +3201,9 @@ store no token afterwards. A pushed authorization request (AUTH-OIDC-006) from a
 `browser-application` client that asks for `offline_access` SHALL be refused at
 `POST /oidc/par` with `invalid_request`; only a `protocol` client holds the refresh
 grant (`09` section 9). The one exception is a `public-application` client (AUTH-OIDC-001,
-D-252): the browser receives its one access token, for the mail server alone, and no
-refresh token; its request for `offline_access` is refused with `invalid_request`.
+D-252): the browser receives its ID token and its one access token, for the mail server
+alone, and no refresh token; its request for `offline_access` is refused with
+`invalid_request`.
 
 *Source: D-007, D-104, D-166, D-252*
 
@@ -3253,9 +3259,10 @@ section 5.24).
 **AUTH-OIDC-004** — Access tokens SHALL be minted from the session record, so
 revoking the session invalidates them. Access tokens SHALL be issued with the
 lifetime `oidc.accesstoken.lifetime` (`10` section 4.9; default 10 minutes, ceiling
-1 hour).
+1 hour), save a `public-application` client's, issued with
+`oidc.publicapplication.accesstoken.lifetime` (AUTH-OIDC-001, D-252).
 
-*Source: D-007, D-147*
+*Source: D-007, D-147, D-252*
 
 **The recorded trade-off (D-147).** A relying party that validates a token offline
 against the published JWKS (the mail server, INT-MAIL-004) does not consult the
@@ -3271,7 +3278,9 @@ towards the ceiling accepts a longer one.
 1. Revoking the session causes subsequent token validation against the record to
    fail, and no new access token is minted from a revoked record.
 2. No access token is issued with a lifetime longer than `oidc.accesstoken.lifetime`,
-   and the key cannot be set above its ceiling.
+   save a `public-application` client's, held to
+   `oidc.publicapplication.accesstoken.lifetime` (D-252), and neither key can be set
+   above its ceiling.
 3. A relying party validating offline rejects the token no later than its expiry; the
    documented revocation latency for that party equals the configured lifetime.
 
@@ -3295,9 +3304,12 @@ D-252): it MAY send a direct `GET /oidc/authorize` with its parameters, and MAY 
 `POST /oidc/par` without client authentication (RFC 9126 section 2); everything else of
 this item holds for it, the code with PKCE `S256` only, every redirect an exact
 registered match and `https` save a loopback literal, and its request for
-`offline_access` is refused with `invalid_request`. **Access tokens SHALL follow RFC
-9068**: header `typ: at+jwt`, claims `iss`, `exp`, `aud`, `sub`, `client_id`, `iat`,
-`jti`; `aud` is the identifier of the
+`offline_access` is refused with `invalid_request`. The provider's metadata therefore
+advertises `require_pushed_authorization_requests: false`; every client of another kind
+is still refused a direct request, and its own registration metadata carries
+`require_pushed_authorization_requests: true` (RFC 9126 section 6, D-252).
+**Access tokens SHALL follow RFC 9068**: header `typ: at+jwt`, claims `iss`, `exp`,
+`aud`, `sub`, `client_id`, `iat`, `jti`; `aud` is the identifier of the
 client the token was issued to (the default resource indicator of RFC 9068 section 3),
 and the mail server verifies `aud` as well as the signature (INT-MAIL-004). No error
 the provider answers carries `error_description` or `error_uri` (LIB-API-003). A
@@ -3329,14 +3341,18 @@ it to its audience, which convention alone does not.
    a client registered for the mail server, lifetime) takes that client's token and
    refuses one issued to any other client (D-226).
 4. Discovery advertises `pushed_authorization_request_endpoint` and
-   `require_pushed_authorization_requests: true`.
+   `require_pushed_authorization_requests: false`; the registration metadata of every
+   client of a kind other than `public-application` carries
+   `require_pushed_authorization_requests: true`, and its direct request is refused
+   with `invalid_request` (RFC 9126 section 6, D-252).
 5. A direct `/oidc/authorize` with parameters from a `public-application` client and
    PKCE `S256` is answered, and one from any other kind is still refused with
    `invalid_request`; a public request without PKCE `S256` or asking for
    `offline_access`, and a token request from a `public-application` client that
-   authenticates with a secret (`invalid_client`), are refused; its access token's
-   `aud` is its audience alone and its scopes `openid` and those it is registered with,
-   and no refresh token is issued to it (D-252).
+   authenticates with a secret (`invalid_client`), are refused; its ID token's `aud` is
+   the client itself, its access token's `aud` is its audience alone and its scopes
+   `openid` and those of its registered scopes its request asks for, and no refresh
+   token is issued to it (D-252).
 
 ---
 
@@ -3346,8 +3362,11 @@ it to its audience, which convention alone does not.
 key is published in JWKS 5 minutes before it begins signing, the previous remains
 published until outstanding access tokens expire, then is retired. No human step SHALL
 be involved. The cadence SHALL be `token.signing.rotation` (`10` section 4.9; default 90
-days); the overlap SHALL be the longest access-token lifetime
-(`oidc.accesstoken.lifetime`) under which the previous key signed, plus 5 minutes. The
+days); the overlap SHALL be the longest access-token lifetime under which the previous
+key signed, plus 5 minutes, that lifetime being the longest any client kind receives:
+the greater of `oidc.accesstoken.lifetime` and
+`oidc.publicapplication.accesstoken.lifetime`, so a `public-application` client's token
+never outlives its key's overlap (D-252). The
 algorithm SHALL be `token.signing.algorithm` (protected), whose one admitted value is
 `ES256`, the one verified against the mail server; any other value is refused with
 `config.value.notallowed`. The secret of every client in the registry rotates on the
@@ -3390,10 +3409,12 @@ starting on an empty database included, one makes the change and the other, find
 made or refused by a constraint, replaces its set with the stored keys (D-166 X3).
 
 **What a replaced key keeps (D-181).** A replaced key signs nothing after the rotation.
-The current key carries the longest `oidc.accesstoken.lifetime` under which it has
-signed an access token: before it signs one under a longer lifetime than its set
-carries, the longer is stored with it by one update in a transaction of its own, never
-joined to a unit of work its caller holds open, which never lowers the stored value and
+The current key carries the longest access-token lifetime under which it has signed an
+access token, each read as the greater of `oidc.accesstoken.lifetime` and
+`oidc.publicapplication.accesstoken.lifetime` in force when it signs (D-252): before it
+signs one under a longer lifetime than its set carries, the longer is stored with it by
+one update in a transaction of its own, never joined to a unit of work its caller holds
+open, which never lowers the stored value and
 is conditional on the key being current in the stored keys; the token is signed only
 once that transaction commits, and where it finds the key replaced, the process replaces
 its set with the stored keys and signs with the current key. When it is replaced, two
@@ -3413,7 +3434,7 @@ and a consumed one presented again still revokes its family, in each case while 
 key-encryption key version the token was encrypted under is held (AUTH-KEY-002). The
 first read after the end of its keeping removes the key from the set and the database.
 
-*Source: D-148; D-007, D-147, D-166, D-181*
+*Source: D-148; D-007, D-147, D-166, D-181, D-252*
 
 ES256 was verified against the mail server's source, which accepts P-256 keys from a
 JWKS as ES256 and refuses symmetric keys: the file
@@ -3430,9 +3451,10 @@ after (the same file, inspected 2026-09-30, D-181).
    signing, and the next key has been published for 5 minutes, makes the next key
    current.
 2. Tokens signed by the previous key validate throughout the overlap, which lasts, from
-   the moment the new key begins signing, the longest `oidc.accesstoken.lifetime` under
-   which the previous key signed an access token, plus 5 minutes; no change of the
-   lifetime, before or after the rotation, shortens it.
+   the moment the new key begins signing, the longest access-token lifetime under which
+   the previous key signed an access token, the greater of `oidc.accesstoken.lifetime`
+   and `oidc.publicapplication.accesstoken.lifetime` (D-252), plus 5 minutes; no change
+   of either lifetime, before or after the rotation, shortens it.
 3. The previous key leaves JWKS after the overlap, the one the provider's options hold
    from the start included, and no request for the key set reads a disposed key object;
    after the overlap the provider's validation refuses an access token that key signed.
@@ -3458,6 +3480,10 @@ after (the same file, inspected 2026-09-30, D-181).
    the current key.
 8. Every key but the first key of an empty database is published in JWKS for at least 5
    minutes before it signs its first token.
+9. With `oidc.publicapplication.accesstoken.lifetime` longer than
+   `oidc.accesstoken.lifetime`, a `public-application` client's access token signed by
+   a key just before that key is replaced still validates at its expiry: the key's
+   overlap lasts the public lifetime plus 5 minutes (D-252).
 
 ---
 

@@ -3284,7 +3284,7 @@ Standard endpoints for first-party, manually registered clients.
 | `GET /oidc/jwks` | The public keys of the next signing key, the current one and each replaced one within its overlap (AUTH-KEY-001); a retired key's kept public key is never published. Machine profile, in the set that ignores cookies: a cookie sent is never read, and no session is issued or written (BFF-MACH-001, D-241); past `oidc.jwks.ratelimit` per source, **429** with `Retry-After` |
 | `POST /oidc/par` | Pushed Authorization Request (RFC 9126): the client posts the authorization parameters over the back channel and receives a single-use `request_uri` valid for 60 seconds; required for every client (AUTH-OIDC-006, D-164) save a `public-application` client, which MAY push without client authentication or send its request directly (D-252); a `redirect_uri` that is not exactly the client's registered destination is refused with `invalid_request` and no `request_uri` is issued (RFC 9126 section 2.1), and an absent one takes the registered destination; a browser application's request asking for `offline_access` is refused with `invalid_request` (AUTH-OIDC-002) |
 | `GET /oidc/authorize` | Authorization code with PKCE, by `request_uri` from `/oidc/par` only; direct parameters are refused with `invalid_request` — **redirects to the authentication application; never renders a page**. Honours `prompt=none` for silent sign-on (AUTH-SESS-012). A `public-application` client alone MAY send its parameters directly, with PKCE `S256`, an exact registered `redirect_uri` and no `offline_access`; a direct request from any other kind is still refused with `invalid_request` (AUTH-OIDC-006, D-252) |
-| `POST /oidc/token` | Token issuance and refresh — machine profile (BFF-MACH-001). A `public-application` client authenticates with no secret, one that presents one is refused `invalid_client`, and it receives its access token alone, never a refresh token (AUTH-OIDC-001, D-252) |
+| `POST /oidc/token` | Token issuance and refresh — machine profile (BFF-MACH-001). A `public-application` client authenticates with no secret, one that presents one is refused `invalid_client`, and it receives its ID token, its `aud` the client itself, and its access token for the mail server, never a refresh token (AUTH-OIDC-001, D-252) |
 | `GET /oidc/authorize/continue` | The continuation of the browser's pending authorization (AUTH-SESS-012, D-224): with a live session, the code to the client's registered destination, as `/oidc/authorize` answers it; with none pending, a **302** to the origin of the registered address of `redirect.defaultclient`, or to `/` while that key is empty (API-REDIR-001, D-228). Never renders a page |
 | `GET /oidc/userinfo` | Claims, by scope (D-153): `openid` gives `sub`; `email` gives `email` and `email_verified` (the primary email); `profile` gives `name` (display name), `preferred_username` where `identifiers.username.enabled`, and `locale` (language preference). Nothing else is issued: no phone, legal name, date of birth or photo |
 
@@ -3325,9 +3325,12 @@ confidential client** that uses the code flow once to establish its per-app sess
 receives **no refresh token** (AUTH-SESS-012, BFF-SESS-006, D-104). **A
 `public-application` client** is a browser application that holds no secret (the
 webmail, the mail server's own account pages): it may send its authorization request
-directly and receives one access token for the mail server, whose `aud` is its audience
-alone, living `oidc.publicapplication.accesstoken.lifetime`, and no refresh token
-(AUTH-OIDC-001, D-252). The kind is recorded on the client and determines what the token
+directly and receives its ID token, whose `aud` is the client itself, and one access
+token for the mail server, whose `aud` is its audience alone, living
+`oidc.publicapplication.accesstoken.lifetime`, and no refresh token (AUTH-OIDC-001,
+D-252). Discovery advertises `require_pushed_authorization_requests: false`; every
+client of another kind carries `true` in its registration metadata and is refused a
+direct request (RFC 9126 section 6). The kind is recorded on the client and determines what the token
 endpoint will issue. Every client carries one registered `redirect_uri`, save a
 `public-application` client, which carries one for each `--redirect` it was registered
 with; each is an absolute `https` address (or `http` on a loopback IP literal), matched

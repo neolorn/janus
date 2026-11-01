@@ -1319,7 +1319,9 @@ the secrets manager, which is why it is the maintenance exception of section 9 r
 than part of this automated lifecycle. Its rotation is the command-line operation
 OPS-SEC-003 (D-147, D-225). Signing-key cadence and algorithm are the keys of `10`
 section 4.9; a signing key's overlap follows from the longest access-token lifetime it
-signed under, and how long its public key is kept after it from the ceiling of
+signed under, the greater of `oidc.accesstoken.lifetime` and
+`oidc.publicapplication.accesstoken.lifetime`, so a `public-application` client's token
+never outlives it (D-252), and how long its public key is kept after it from the ceiling of
 `session.default.absolute` (AUTH-KEY-001).
 
 **Client secrets (D-166).** The library generates the secret of every client in the
@@ -1339,7 +1341,7 @@ under (OPS-SEC-003). A provider credential that expires is renewed by the librar
 the provider lets the client sign it (IDN-LIFE-012); no calendar renewal is a
 maintenance task.
 
-*Source: D-148; D-007, D-026.3, D-103, D-147, D-166, D-172, D-181, D-197*
+*Source: D-148; D-007, D-026.3, D-103, D-147, D-166, D-172, D-181, D-197, D-252*
 
 **Acceptance criteria**
 1. Rotation completes without restart or manual action.
