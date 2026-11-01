@@ -19709,6 +19709,33 @@ for both. D-235's log line is also given its place (Q20).
 - `18` FE-VER-001;
 - `implementation-plan.md` (round H5).
 
+
+---
+
+## D-239 — Round H5's questions: an invitation's must-end role, and older organizations' gender
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** D-236, D-237
+
+**TL;DR.** An invitation naming a role whose grants must end carries the grant's end, or
+is refused at issue (Q21). Organizations created before D-236 get the field turned on by a
+migration, as every organization now starts with it on (Q22).
+
+- **Invitations (Q21).** An invitation that names a role with `grantsMustEnd` must carry
+  that grant's `expiresAt`, a time after the invitation's own expiry; without one it is
+  refused at issue, **422** `authz.grant.endrequired` naming the role, and nothing is
+  written. The grant made when the membership attaches carries that end. An invitation
+  already issued before this decision attaches as issued.
+- **Older organizations (Q22).** A migration sets `grammaticalGender` to `true` in every
+  stored organization override that lacks the field, leaving any override that states it
+  as it is. The system policy is untouched.
+
+*Rejected:* refusing every invitation that names such a role (an end is enough); leaving
+older overrides as written (one deployment would treat organizations differently by age).
+
+**Propagated to:** `03` AUTHZ-GRANT-003 (invitations); `09` the invitation routes;
+`01` the invitation requirement; `10` section 4.1 (`policy.<organization>`);
+`06` OPS-MIG-001; `implementation-plan.md` (round H6).
+
 ---
 
 # Index — all items closed
@@ -19959,6 +19986,7 @@ for both. D-235's log line is also given its place (Q20).
 | The profile's grammatical gender | D-236 |
 | A role whose grants must end | D-237 |
 | The handle a pressed link answers | D-238 |
+| Round H5's questions: an invitation's must-end role, and older organizations' gender | D-239 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
