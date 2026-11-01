@@ -119,6 +119,15 @@ SHALL be refused with `authz.grant.endrequired` (422), naming the role in
 the same code. Derived and materialised grants come from the host's data and end with it
 (AUTHZ-DERIVE-001 to AUTHZ-DERIVE-007), so the rule does not apply to them.
 
+**An invitation's must-end roles (D-239).** An invitation takes one optional member,
+`grantEndsAt`. It SHALL be required where any role the invitation names has
+`grantsMustEnd`, and SHALL be later than the invitation's own expiry; an invitation
+naming such a role without it SHALL be refused at issue with `authz.grant.endrequired`
+(422), naming the role in `details.role`, and nothing written. It applies to the
+must-end roles' grants only: when the membership attaches (`20` REG-INV-001), each grant
+of such a role ends at `grantEndsAt`, and the grants of the invitation's other roles stay
+open-ended. An invitation issued before D-239 attaches as issued.
+
 A grant no person made SHALL record the nil subject as its granter, never its holder:
 the grants bootstrap makes carry the reason `OPS-BOOT-001`, and a materialised grant the
 drift check writes carries the reason `AUTHZ-DERIVE-005`, its audit record,
@@ -139,7 +148,7 @@ the reason `AUTHZ-INHERIT-002`, as `authz.grant.revoked` (D-203). Each of these 
 records names the grant's holder as its subject where the holder is an account, and none
 where it is a group, whoever acted (`10` section 5.24, D-206).
 
-*Source: D-015, D-166, D-187, D-197, D-203, D-206, D-207, D-208, D-237*
+*Source: D-015, D-166, D-187, D-197, D-203, D-206, D-207, D-208, D-237, D-239*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
 migration across every query later.
@@ -165,6 +174,10 @@ migration across every query later.
    `authz.grant.endrequired`, `details.role` naming the role, and nothing is written;
    with `expiresAt` it is written; a derived or materialised grant of that role is not
    refused (D-237).
+8. An invitation naming a role with `grantsMustEnd` and no `grantEndsAt` is refused at
+   issue with `authz.grant.endrequired` and nothing is written; one carrying
+   `grantEndsAt` attaches a grant of that role ending then, and a grant of each other
+   role it names with no end (D-239).
 
 ---
 
@@ -279,14 +292,17 @@ administrative organization, which can already change any role it holds:
   from a group that reaches a deny grant;
 - the acknowledgement of an invitation by the account that issued it (`20` REG-INV-002).
 
-Taking away one's own access stays allowed. OPS-CFG-007 stands over this rule: a role
+Taking away one's own access stays allowed. A member bringing their own set end forward
+hands out nothing: the end was judged against the lists of whoever set it, and its
+revocations and removals are not judged against the member's (`01` IDN-MEM-001, D-240).
+OPS-CFG-007 stands over this rule: a role
 carrying `system:administer` needs that permission whatever list names it. Derived
 grants, which no person hands out, are outside it. The rule is judged where the
 admission is (AUTHZ-SCOPE-001, AUTHZ-GATE-006); a refusal writes nothing and is recorded
 as a refusal (AUTHZ-CONCEAL-004), counting toward `alerting.denials.threshold`; an
 admitted change is recorded as before, with its reason and its step-up.
 
-*Source: D-212, D-213, D-216, D-217*
+*Source: D-212, D-213, D-216, D-217, D-240*
 
 Without it, anyone who may manage grants holds every role one step removed, which is
 OPS-CFG-007's reasoning applied to every role. The lists are Kubernetes' `bind` on named
@@ -319,6 +335,9 @@ the record of who gave what, when and why is the control.
 8. An actor holding a role whose `handsOut` names `accountant`, and a deny of that role
    covering the change, is refused `authz.role.notassignable` for `accountant`, the
    setting off; with the deny revoked, it hands `accountant` out (D-217).
+9. A member holding a role no role of theirs lists brings their own set end forward,
+   and its revocation of that role's grant is not refused `authz.role.notassignable`
+   (D-240).
 
 ---
 
