@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -1029,6 +1030,77 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         finally
         {
             await WriteAsync(Forgotten, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Chapter 10 section 5a (D-235): a deployment bootstrapped before
+    /// <c>alerting:destinations</c> was retired holds a system policy and an override
+    /// whose gates still name it. The deployment starts, every current action is gated
+    /// as it was, and the read writes nothing back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_STEP_001_ADeploymentWhosePoliciesNameARetiredActionStartsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Policy system = Settings.PolicyDefault.Default;
+        var gate = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
+        PolicyOverride stated = PolicyOverride.None with
+        {
+            Gates = new Dictionary<StepUpAction, Gate> { [StepUpAction.FactorRemove] = gate },
+        };
+
+        string storedSystem = Retiring(Settings.PolicyDefault.Write(system));
+        string storedOverride = Retiring(Settings.OrganizationPolicy.Write(stated));
+
+        await WriteAsync(
+            "INSERT INTO identity.settings (key, value) VALUES ('" + Settings.PolicyDefault.Key + "', '"
+                + storedSystem + "'), ('" + Showing + "', '" + storedOverride + "');",
+            cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            await deployment.StartAsync(cancellationToken);
+
+            await using (AsyncServiceScope scope = deployment.Services.CreateAsyncScope())
+            {
+                IConfigurationStore configuration = scope.ServiceProvider.GetRequiredService<IConfigurationStore>();
+
+                Policy read = (await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken))
+                    .Match(value => value, failure => throw new InvalidOperationException(failure.Code.ToString()));
+                PolicyOverride overridden = (await configuration.ReadAsync(
+                        Settings.OrganizationPolicy,
+                        Showing[(Settings.OrganizationPolicy.Prefix.Length + 1)..],
+                        cancellationToken))
+                    .Match(value => value, failure => throw new InvalidOperationException(failure.Code.ToString()));
+
+                Assert.Equal(Enum.GetValues<StepUpAction>().Length, read.Gates.Count);
+                Assert.All(
+                    Enum.GetValues<StepUpAction>(),
+                    action => Assert.Equal(system.Gates[action], read.Gates[action]));
+                Assert.Equal(StepUpAction.FactorRemove, Assert.Single(overridden.Gates!).Key);
+                Assert.Equal(gate, overridden.Gates![StepUpAction.FactorRemove]);
+            }
+
+            await deployment.StopAsync(cancellationToken);
+
+            await using NpgsqlConnection connection = await host.OpenAsync();
+
+            Assert.Equal(
+                [storedSystem, storedOverride],
+                await connection.QueryAsync<string>(new CommandDefinition(
+                    "SELECT value FROM identity.settings WHERE key IN (@system, @organization) ORDER BY key = @organization;",
+                    new { system = Settings.PolicyDefault.Key.ToString(), organization = Showing },
+                    cancellationToken: cancellationToken)));
+        }
+        finally
+        {
+            await WriteAsync(
+                Forgotten + "DELETE FROM identity.settings WHERE key = '" + Settings.PolicyDefault.Key + "';",
+                cancellationToken);
         }
     }
 
@@ -2384,6 +2456,28 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         return await connection.ExecuteScalarAsync<int>(
             "SELECT count(*)::int FROM identity.seeded_roles WHERE name LIKE '%-' || @suffix",
             new { suffix });
+    }
+
+    // A written policy with the gate of the retired alerting:destinations added, as a
+    // deployment bootstrapped before D-235 holds it.
+    private static string Retiring(string written)
+    {
+        JsonObject policy = JsonNode.Parse(written)!.AsObject();
+
+        if (policy["gates"] is not JsonObject gates)
+        {
+            gates = [];
+            policy["gates"] = gates;
+        }
+
+        gates["alerting:destinations"] = new JsonObject
+        {
+            ["level"] = "aal2",
+            ["phishingResistant"] = false,
+            ["maxAge"] = "PT15M",
+        };
+
+        return policy.ToJsonString();
     }
 
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)

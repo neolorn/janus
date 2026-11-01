@@ -85,7 +85,7 @@ internal static class OrganizationPolicyBody
         }
 
         return Settings.OrganizationPolicy
-            .Read(organization.ToString(), Encoding.UTF8.GetString(buffer.ToArray()))
+            .Entered(organization.ToString(), Encoding.UTF8.GetString(buffer.ToArray()))
             .Match(
                 replacement => Result.Success((replacement, reason)),
                 Result.Failure<(PolicyOverride, string)>);

@@ -230,7 +230,7 @@ internal sealed class ConfigurationService(
         // Chapter 09 section 8: a duration is a JSON string, and a value of another
         // JSON type is not allowed.
         TimeSpan period = (value.ValueKind is JsonValueKind.String
-                ? family.Read(category, value.GetString()!)
+                ? family.Entered(category, value.GetString()!)
                 : Result.Failure<TimeSpan>(Named(ErrorCodes.ConfigurationValueNotAllowed, key)))
             .Match(one => one, error => Held<TimeSpan>(error, ref failure));
 

@@ -17,5 +17,5 @@ internal sealed class WrittenForm(string entered) : ISettingOperation<Result<str
 {
     /// <inheritdoc/>
     public Result<string> On<TValue>(Setting<TValue> setting) =>
-        setting.Read(entered).Match(value => Result.Success(setting.Write(value)), Result.Failure<string>);
+        setting.Entered(entered).Match(value => Result.Success(setting.Write(value)), Result.Failure<string>);
 }
