@@ -290,22 +290,11 @@ user type or an application.
 There is no staff flag. "Passkeys for interactive access" is an organization policy
 value. A second organization needing different rules is a configuration row.
 
-An organization and its policy may also be set from the server, before any person can
-work: the command `organization` of `Janus.Cli` creates an organization by name and
-writes its policy from a file with the checks and codes of
-`PUT /admin/organizations/{id}/policy`, each change recorded under the system principal
-`organization` (OPS-BOOT-001, D-248).
-
-*Source: D-248*
-
 **Acceptance criteria**
 1. No column, enum, or claim distinguishes staff from customers.
 2. Changing an organization's factor policy changes behaviour for its members
    without a deploy.
 3. Two organizations with different policies coexist and are enforced independently.
-4. A policy the `organization` command writes is stored as
-   `PUT /admin/organizations/{id}/policy` stores it, and one that route refuses is
-   refused with its code (D-248).
 
 ---
 
