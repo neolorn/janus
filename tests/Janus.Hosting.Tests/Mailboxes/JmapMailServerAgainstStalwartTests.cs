@@ -231,7 +231,7 @@ public sealed class JmapMailServerAgainstStalwartTests(StalwartServer server) : 
         }
 
         Assert.Contains(
-            new HostedMailbox(mailbox.Id, mailbox.Address, Enabled: false),
+            new HostedMailbox(mailbox.Id, mailbox.Address, Enabled: false) { Name = mailbox.Name },
             Value(await started.Server.MailboxesAsync(cancellationToken)));
     }
 
