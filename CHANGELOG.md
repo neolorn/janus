@@ -4724,3 +4724,11 @@ against the public contract of LIB-API-001.
   recorded as a refusal or counted toward the denial spike. A host job's context is
   refused `authz.denied`, as for any capability page. Before, the type `organization`
   was refused as one the model does not declare.
+
+### Fixed
+
+- A host started in a process after another host on the same stored signing keys has
+  stopped, as a test run or a host restarted in place does, signs its tokens. Each
+  signing key's credential now makes its signature providers itself and caches none,
+  so no provider the shared token library kept for the stopped host's disposed key
+  object is used again.

@@ -13,7 +13,10 @@ namespace Janus.Authentication.Oidc;
 /// <remarks>
 /// Implements AUTH-KEY-001 and CONV-CODE-007. The public key is held apart from the
 /// private key object, so disposing the object at the key's retirement breaks no
-/// validation.
+/// validation. The credential's key makes its signature providers with a factory of its
+/// own that caches none: the shared factory caches a provider per key for the life of the
+/// process, by the key's public parameters, so another host started in the process on
+/// the same stored key would otherwise sign through the object this one disposed.
 /// </remarks>
 [NeverLogged]
 internal sealed class HeldSigningKey
@@ -62,7 +65,11 @@ internal sealed class HeldSigningKey
             PublishedKeys.Of(key),
             privateKey,
             new SigningCredentials(
-                new ECDsaSecurityKey(privateKey) { KeyId = key.KeyId },
+                new ECDsaSecurityKey(privateKey)
+                {
+                    KeyId = key.KeyId,
+                    CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false },
+                },
                 SigningKeys.Signs(key.Algorithm)
                     ? SecurityAlgorithms.EcdsaSha256
                     : throw new InvalidOperationException(
