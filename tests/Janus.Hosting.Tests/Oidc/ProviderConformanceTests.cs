@@ -418,12 +418,12 @@ public sealed class ProviderConformanceTests
     }
 
     /// <summary>
-    /// AUTH-OIDC-006 AC4: the discovery document names where a request is pushed and
-    /// that every request must be.
+    /// AUTH-OIDC-006 AC4 (D-252): the discovery document names where a request is pushed
+    /// and leaves whether it must be to each client's registration.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_OIDC_006_AC4_TheDocumentRequiresPushedRequestsAsync()
+    public async Task AUTH_OIDC_006_AC4_TheDocumentNamesThePushAndLeavesItsRequirementToEachClientAsync()
     {
         await using var deployment = new Deployment();
 
@@ -435,7 +435,7 @@ public sealed class ProviderConformanceTests
             "/oidc/par",
             document.GetProperty("pushed_authorization_request_endpoint").GetString(),
             StringComparison.Ordinal);
-        Assert.True(document.GetProperty("require_pushed_authorization_requests").GetBoolean());
+        Assert.False(document.GetProperty("require_pushed_authorization_requests").GetBoolean());
     }
 
     private static (string Name, string? Value)[] Request() =>

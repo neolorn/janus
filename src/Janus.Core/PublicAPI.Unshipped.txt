@@ -2052,6 +2052,8 @@ Janus.Core.OidcClaims.Subject.get -> Janus.Core.SubjectId
 Janus.Core.OidcClaims.Subject.init -> void
 Janus.Core.OidcClient
 Janus.Core.OidcClient.<Clone>$() -> Janus.Core.OidcClient!
+Janus.Core.OidcClient.Audience.get -> string?
+Janus.Core.OidcClient.Audience.init -> void
 Janus.Core.OidcClient.ClientId.get -> string!
 Janus.Core.OidcClient.ClientId.init -> void
 Janus.Core.OidcClient.Deconstruct(out string! ClientId, out string! Name, out Janus.Core.OidcClientKind Kind, out string! Redirect, out System.Collections.Generic.IReadOnlyList<string!>! Scopes) -> void
@@ -2061,6 +2063,8 @@ Janus.Core.OidcClient.Kind.init -> void
 Janus.Core.OidcClient.Name.get -> string!
 Janus.Core.OidcClient.Name.init -> void
 Janus.Core.OidcClient.OidcClient(string! ClientId, string! Name, Janus.Core.OidcClientKind Kind, string! Redirect, System.Collections.Generic.IReadOnlyList<string!>! Scopes) -> void
+Janus.Core.OidcClient.OtherRedirects.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.OidcClient.OtherRedirects.init -> void
 Janus.Core.OidcClient.Redirect.get -> string!
 Janus.Core.OidcClient.Redirect.init -> void
 Janus.Core.OidcClient.Scopes.get -> System.Collections.Generic.IReadOnlyList<string!>!
@@ -2068,6 +2072,7 @@ Janus.Core.OidcClient.Scopes.init -> void
 Janus.Core.OidcClientKind
 Janus.Core.OidcClientKind.BrowserApplication = 0 -> Janus.Core.OidcClientKind
 Janus.Core.OidcClientKind.Protocol = 1 -> Janus.Core.OidcClientKind
+Janus.Core.OidcClientKind.PublicApplication = 2 -> Janus.Core.OidcClientKind
 Janus.Core.OrganizationCreated
 Janus.Core.OrganizationCreated.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.OrganizationId Organization) -> void
 Janus.Core.OrganizationCreated.Equals(Janus.Core.OrganizationCreated? other) -> bool
@@ -4368,6 +4373,7 @@ static Janus.Core.CollectedRecord.operator !=(Janus.Core.CollectedRecord? left, 
 static Janus.Core.CollectedRecord.operator ==(Janus.Core.CollectedRecord? left, Janus.Core.CollectedRecord? right) -> bool
 static Janus.Core.ComplianceRecord.operator !=(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
 static Janus.Core.ComplianceRecord.operator ==(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
+static Janus.Core.Configuration.Settings.OidcPublicApplicationAccessTokenLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordDeletionGrace.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordsAccessLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordsCollectionLifetime.get -> Janus.Core.Configuration.DurationSetting!

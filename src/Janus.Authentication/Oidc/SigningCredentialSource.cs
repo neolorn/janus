@@ -102,9 +102,17 @@ internal sealed class SigningCredentialSource(IServiceScopeFactory scopes, TimeP
             return Result.Success(set.Signing);
         }
 
-        TimeSpan lifetime = (await configuration
+        TimeSpan general = (await configuration
                 .ReadAsync(Settings.OidcAccessTokenLifetime, cancellationToken).ConfigureAwait(false))
             .Match(read => read, error => Withheld<TimeSpan>(error, ref failure));
+
+        TimeSpan publicApplication = (await configuration
+                .ReadAsync(Settings.OidcPublicApplicationAccessTokenLifetime, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<TimeSpan>(error, ref failure));
+
+        // AUTH-KEY-001 (D-252): the lifetime a key carries is the longest any client kind
+        // receives, so a public application's token never outlives its key's overlap.
+        TimeSpan lifetime = general > publicApplication ? general : publicApplication;
 
         // AUTH-KEY-001 AC2, AC7: the longer lifetime is committed before the token is
         // signed; where the key was replaced meanwhile, the stored keys become the set and

@@ -95,7 +95,7 @@ public sealed class ProviderProbesTests
         Assert.Empty(findings.Select(Described));
         Assert.Equal(1, deployment.Clients.Replacements);
         Assert.Equal(
-            Encoding.UTF8.GetString(deployment.Clients.Registered.Single().Secret),
+            Encoding.UTF8.GetString(deployment.Clients.Registered.Single().Secret!),
             Assert.Single(presented));
         Assert.NotEqual(Secret, presented[0]);
     }

@@ -1217,6 +1217,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("client_id");
 
+                b.Property<string>("Audience")
+                    .HasColumnType("text")
+                    .HasColumnName("audience");
+
                 b.Property<string>("Kind")
                     .IsRequired()
                     .HasColumnType("text")
@@ -1226,6 +1230,13 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("name");
+
+                b.PrimitiveCollection<string[]>("OtherRedirects")
+                    .IsRequired()
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("text[]")
+                    .HasColumnName("other_redirects")
+                    .HasDefaultValueSql("'{}'");
 
                 b.Property<byte[]>("PreviousSecret")
                     .HasColumnType("bytea")
@@ -1246,11 +1257,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnName("scopes");
 
                 b.Property<byte[]>("Secret")
-                    .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("secret");
 
-                b.Property<DateTimeOffset>("SecretIssuedAt")
+                b.Property<DateTimeOffset?>("SecretIssuedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("secret_issued_at");
 
@@ -1259,9 +1269,13 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("oidc_clients", "identity", t =>
                     {
-                        t.HasCheckConstraint("ck_oidc_clients_kind", "kind IN ('browser-application', 'protocol')");
+                        t.HasCheckConstraint("ck_oidc_clients_kind", "kind IN ('browser-application', 'protocol', 'public-application')");
 
                         t.HasCheckConstraint("ck_oidc_clients_previous", "(previous_secret IS NULL) = (previous_secret_until IS NULL)");
+
+                        t.HasCheckConstraint("ck_oidc_clients_public", "kind = 'public-application' OR (cardinality(other_redirects) = 0 AND audience IS NULL)");
+
+                        t.HasCheckConstraint("ck_oidc_clients_secret", "((kind = 'public-application') = (secret IS NULL)) AND ((secret IS NULL) = (secret_issued_at IS NULL))");
                     });
             });
 

@@ -479,7 +479,6 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
                 "response_types_supported",
                 "code_challenge_methods_supported",
                 "grant_types_supported",
-                "require_pushed_authorization_requests",
                 "token_endpoint_auth_methods_supported",
             ],
             report.Findings
