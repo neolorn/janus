@@ -19563,6 +19563,142 @@ at read and by the migration); `06` OPS-MIG-001; `implementation-plan.md`, the n
 round's row; a test that a policy stored with `alerting:destinations` starts the host and gates
 every current action as before.
 
+
+---
+
+## D-236 — The profile's grammatical gender
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** IDN-ATTR-007, REG-PROF-001
+
+**TL;DR.** The profile gains an optional `grammaticalGender`, so a host can address a
+person, or name their job, in the right grammatical form. It is enabled by policy, the
+way the photo is: on for every organization, the administrative one included, and off
+for accounts with no membership (customers). Its values are CLDR's grammatical genders
+that address a person, `masculine` and `feminine`. Absence means not given, and messages
+then take their default form. Requested by the owner for Cura's gendered position names
+(2026-10-30, Cura's `auth-account-plan.md`).
+
+- **The field.** `grammaticalGender`, optional, `masculine` or `feminine` (CLDR
+  `grammaticalFeatures` spellings). A message selects on it as MessageFormat 2 selects on
+  any string, with `*` for an absent value. No other value is accepted: **422**
+  `api.request.malformed` naming the member. The field records how the person is
+  addressed, not a legal sex, and nothing derives it from another field.
+- **Availability.** The policy field `grammaticalGender` (`10` section 4.1a), a boolean
+  resolved as `photos` is (IDN-ATTR-002, AUTH-PRIN-002): the system policy's is `false`,
+  and every organization's policy starts `true`, bootstrap writing the administrative
+  organization's `true`. An account of several organizations has it only where every one
+  of them enables it. While it is off for an account, no request accepts the field and
+  no response carries it (IDN-ATTR-007 criterion 2's rule).
+- **Who sets it.** The person, through the profile's editing path (REG-PROF-001,
+  `PUT /account/profile`). It is never asked at registration, and is changeable and
+  clearable at any time.
+- **Who reads it.**
+  - The person, in `GET /account/profile`.
+  - An administrator, in `GET /admin/accounts/{subject}` under `account:manage`.
+  - A host, in the account read of IDN-READ (`IAccounts`), under the reach that read
+    already has.
+- **Privacy.** It is profile data: exported with the account, and erased with it.
+  Changing it is audited as a profile change, without its value.
+
+*Rejected:*
+- **A free-text pronoun or gender field:** a host cannot select a grammatical form
+  on free text.
+- **`neuter`, `common` and the other CLDR genders:** none addresses a person in the
+  declared languages. A later language that needs one adds a value without a break.
+- **On for customers:** the owner wants it off for accounts with no membership.
+
+**Propagated to:**
+- `01` IDN-ATTR-007, and IDN-READ's account read;
+- `09` `GET` and `PUT /account/profile`, `GET /admin/accounts/{subject}`;
+- `10` sections 4.1a (the policy field) and 1 (the refusal);
+- `20` REG-PROF-001;
+- `06` OPS-BOOT-001 (bootstrap writes `true`);
+- `18` (the profile screen shows it where enabled);
+- `implementation-plan.md` (round H5).
+
+---
+
+## D-237 — A role whose grants must end
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** AUTHZ-GRANT-003, AUTHZ-GRANT-004
+
+**TL;DR.** A role can require that every grant of it carries an end date. A grant of
+such a role without `expiresAt` is refused. Found by Cura's step 4: the owner gives
+"Full access" only with an end date, and nothing in Janus could hold a giver to that.
+
+- **Declaring it.** `Role(name, permissions, handsOut)` gains `.GrantsMustEnd()` in the
+  declaration builder. Over HTTP, `/admin/roles` gains a boolean `grantsMustEnd`,
+  default `false`, readable and settable as the role's other members are, under
+  `role:manage` and within the actor's reach. Turning it on leaves existing open-ended
+  grants as they are. It binds the grants made after it, and the change is audited.
+- **Refusing.** `POST /admin/grants` for a role with `grantsMustEnd` and no `expiresAt`
+  is refused **422** `authz.grant.endrequired`, naming the role in `details.role`, and
+  nothing is written. The library call answers the same code.
+- **Derived and materialised grants.** They come from the host's data and end with it
+  (AUTHZ-DERIVE), so the rule does not apply to them.
+
+*Rejected:*
+- **A maximum duration:** the owner asked for an end date, not a cap. A cap can be
+  added later as another member without a break.
+- **Enforcing it in Cura:** grants are made through Janus's routes, which the host does
+  not stand in front of.
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-003, AUTHZ-GRANT-004;
+- `07` LIB-HOST-001 (the role declaration);
+- `09` `/admin/roles`, `POST /admin/grants`;
+- `10` section 1 (the code);
+- `implementation-plan.md` (round H5).
+
+---
+
+## D-238 — The handle a pressed link answers
+
+**Date:** 2026-11-01 · **Status:** accepted · **Amends:** D-233, D-235
+
+**TL;DR.** A sign-in challenge is held only by its handle's fingerprint, so a pressed link
+cannot name the handle the sign-in began with (round H4's Q19). The press therefore mints a
+second handle for the same challenge, answers it once as `challengeId`, and stores only its
+fingerprint. Either handle carries the challenge on, and the first to complete it ends it
+for both. D-235's log line is also given its place (Q20).
+
+- **The second handle.**
+  - The press is made with the link's token, which already proves the mailbox.
+  - Where the press leaves a second step or the new-browser code (D-233), the library
+    draws a new handle of the same form and length as a challenge's.
+  - It stores the fingerprint beside the challenge's own, in a column of its own,
+    `signin_challenges.landing_handle`, unique.
+  - It answers the handle in the press's `challengeId`, once. A second press of the
+    same link answers no handle: the link is spent (AUTH-FACT-003).
+- **Either handle.**
+  - `POST /auth/factor` and the new-browser code take either handle.
+  - The challenge's attempts, lifetime and binding are the same whichever handle is used.
+  - Completing through one ends the challenge for both. The other then answers as for an
+    ended challenge.
+  - Abandoning or sweeping the challenge removes both fingerprints.
+- **Nothing new is revealed.** The second handle opens only what the link's token already
+  opens, and it is never logged or stored in clear (`08` CONV-LOG-005).
+- **D-235's log line (Q20).**
+  - The startup check, which reads every stored policy and override, logs one
+    Information line per policy that names a retired action. It names the policy and
+    the retired names.
+  - Every other read drops the retired gate silently.
+  - The command-line tool writes nothing about it, since its migration removes such
+    gates (OPS-MIG-001).
+
+*Rejected:*
+- **Storing the handle in clear:** it is a bearer secret.
+- **Rotating the challenge's one handle at the press:** it would break the tab where the
+  sign-in began.
+- **Logging at every read:** a policy read in every request would log without end.
+
+**Propagated to:**
+- `02` AUTH-FACT-003, AUTH-SESS (the challenge);
+- `09` `POST /auth/factor`, `POST /auth/link`;
+- `10` section 5a (D-235's log line);
+- `18` FE-VER-001;
+- `implementation-plan.md` (round H5).
+
 ---
 
 # Index — all items closed
@@ -19810,6 +19946,9 @@ every current action as before.
 | A pressed link's open answer names its challenge | D-233 |
 | An enrolment session replaces a lost mailbox in any mode | D-234 |
 | A stored policy reads past a retired step-up action | D-235 |
+| The profile's grammatical gender | D-236 |
+| A role whose grants must end | D-237 |
+| The handle a pressed link answers | D-238 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
