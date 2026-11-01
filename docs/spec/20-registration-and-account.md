@@ -336,9 +336,11 @@ whatever `identifiers.email.max` is, with no step-up, the session being itself t
 (`10` section 5a), the new address taking the replaced one's place, primary included;
 outside that session a replace is taken in single-address mode alone. The session adds
 and removes no identifier and takes one replace, counted once its swap applies: a
-replace after that SHALL be refused 403 `authz.denied`; until then the rules of a staged
-replace below hold (`identity.change.pending`), and a replace abandoned or swept leaves
-the session free to stage another (AUTH-RECOV-002, D-234). The confirmation is the
+replace after that SHALL be refused 403 `authz.denied`; until then the session holds at
+most one pending replace, staging another while one is pending SHALL be refused 409
+`identity.change.pending` whichever identifier it names (a repeat of the staged value
+stays the resend below), and a replace abandoned or swept leaves the session free to
+stage another (AUTH-RECOV-002, D-234). The confirmation is the
 message `identifier-change-confirm` under the sending purpose `verification`, as the new
 address's code is: the person making the change asked for it, and it is not a notice
 (AUTH-ABUSE-004). Whether the new
@@ -418,7 +420,8 @@ undo a hostile change. If that address is lost or compromised, administrative re
     address verifies it holds the replaced one's place, primary included; the same
     replace on an ordinary session is refused 422 `identity.identifier.invalid`; a
     replace in the enrolment session once its replace's swap has applied is refused 403
-    `authz.denied`, and one staged after an abandoned replace is taken.
+    `authz.denied`, one naming another identifier while a replace is pending is refused
+    409 `identity.change.pending`, and one staged after an abandoned replace is taken.
 
 ---
 

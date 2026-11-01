@@ -19514,9 +19514,10 @@ the new-device code and every later recovery go to a mailbox they no longer hold
   `identifiers` lists, named by its identifier in the route; a person who lost more than
   one address replaces one of them there and tidies the rest after an ordinary sign-in.
   The replace counts once its swap applies: a replace after that in the same session is
-  refused **403** `authz.denied`; until then the pending rules hold
-  (`identity.change.pending`), and a replace abandoned or swept leaves the session free
-  to stage another.
+  refused **403** `authz.denied`; until then the session holds at most one pending
+  replace, staging another while one is pending answering **409**
+  `identity.change.pending` whichever identifier it names, and a replace abandoned or
+  swept leaves the session free to stage another.
 
 *Rejected:* opening add and remove to the enrolment session (two operations where one
 swap does, and a window with both addresses live); asking hosts in multi-address mode to
@@ -19524,10 +19525,11 @@ recover lost mailboxes by hand (the library already holds the recorded confirmat
 stands in for the old address).
 
 **Propagated to:** `09` `PUT /account/identifiers/{id}/replace` (its opening paragraph,
-its 403 and its 422), the enrolment session's route list, and the step-up sentences of
-`POST /account/password`, `/auth/webauthn/register/*` and `/account/factors/totp/*`;
-`02` AUTH-RECOV-002; `20` REG-IDENT-007; `01` IDN-LIFE-008; `10` section 1.1
-(`identity.identifier.invalid`), section 1.3 (`authz.denied`), section 4
+its 403, its 409 and its 422), the enrolment session's route list, and the step-up
+sentences of `POST /account/password`, `/auth/webauthn/register/*` and
+`/account/factors/totp/*`; `02` AUTH-RECOV-002 and AUTH-STEP-007; `20` REG-IDENT-007;
+`01` IDN-LIFE-008; `10` section 1.1 (`identity.identifier.invalid`,
+`identity.change.pending`), section 1.3 (`authz.denied`), section 4
 (`identifiers.email.max`) and section 5a (the `password:set`, `identifier:add` and
 `factor:enrol` rows); `11` section 4 (step 6); `implementation-plan.md`, the next
 round's row. Cura shows the replace wherever `mailboxLost` once it pins the round that

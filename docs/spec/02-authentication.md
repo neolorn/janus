@@ -2050,9 +2050,11 @@ read it to know what to ask for; loss reports change it, slowly and with notice.
 contribution, and SHALL be **notified to every recorded channel** independently of
 the enrolling session. Recovery (AUTH-RECOV-002, AUTH-RECOV-005) is the enrolment of
 a password under this rule, with the recovery artefact standing in for the session;
-it SHALL NOT change the state of any other authenticator.
+it SHALL NOT change the state of any other authenticator. The authenticator an
+enrolment session enrols is not gated, the enrolment session being itself the proof
+(`10` section 5a, AUTH-RECOV-002, D-234); it is notified as any other is.
 
-*Source: NIST SP 800-63B-4 §4.1.2.1, D-141, D-166, D-192*
+*Source: NIST SP 800-63B-4 §4.1.2.1, D-141, D-166, D-192, D-234*
 
 A password-only customer adds a passkey after a fresh password. A customer holding
 password + TOTP adds a passkey with password + TOTP. A social-only customer sets a
@@ -2248,9 +2250,11 @@ whatever `identifiers.email.max` is, verified by the new address alone, and the 
 address takes the replaced one's place, primary included, so the new-device code and
 every later recovery reach a mailbox the person holds (REG-IDENT-007). The session takes
 one replace, counted once its swap applies: of an email `GET /enrol`'s `identifiers`
-lists, named by its identifier in the route (`PUT /account/identifiers/{id}/replace`); a
-replace abandoned or swept before its swap leaves the session free to stage another, and
-one after the swap is refused `authz.denied`. Nothing else opens: the session adds
+lists, named by its identifier in the route (`PUT /account/identifiers/{id}/replace`).
+It holds at most one pending replace: staging another while one is pending is refused
+`identity.change.pending`, whichever identifier it names; a replace abandoned or swept
+before its swap leaves the session free to stage another, and one after the swap is
+refused `authz.denied`. Nothing else opens: the session adds
 no identifier and removes none, and a person who lost more than one address replaces
 one of them there and tidies the rest after an ordinary sign-in.
 

@@ -406,8 +406,9 @@ alone**, the new address taking the replaced one's place, primary included
 (AUTH-RECOV-002: the approver's recorded confirmation stands in for the old address; the
 exception is stated in REG-IDENT-007; the session adds and removes no identifier and
 takes one replace, counted once its swap applies: a replace after that is **403**
-`authz.denied`, while until then the pending rules of REG-IDENT-007 hold
-(`identity.change.pending`) and a replace abandoned or swept leaves the session free to
+`authz.denied`, while until then it holds at most one pending replace, staging another
+while one is pending, whichever identifier it names, being **409**
+`identity.change.pending`, and a replace abandoned or swept leaves the session free to
 stage another, D-234), `POST /account/identifiers/{id}/verify` for
 that replace's pending verification alone (a code naming any other is answered as one
 naming no pending verification of the account, **422** `auth.code.invalid`, and a press
@@ -1611,9 +1612,11 @@ operation (REG-IDENT-007). Within an admin-assisted enrolment session opened wit
 address alone, and the new address takes the replaced one's place, primary included;
 outside that session the replace stays a single-address-mode operation. That session
 takes one replace, counted once its swap applies: a replace after that is refused
-**403** `authz.denied`; until then the pending rules below hold
-(`identity.change.pending`), and a replace abandoned or swept leaves the session free to
-stage another (D-234). Step-up, save under that session,
+**403** `authz.denied`; until then it holds at most one pending replace, staging another
+while one is pending being refused **409** `identity.change.pending` whichever
+identifier it names (a repeat of the staged value stays the resend below), and a replace
+abandoned or swept leaves the session free to stage another (D-234). Step-up, save
+under that session,
 which is itself the proof (`10` section 5a); the new value is verified by
 `POST /account/identifiers/{id}/verify`; on verification the swap applies at once and
 the undo goes to the remaining channels of the account. **Only where the account has no
@@ -1642,7 +1645,8 @@ once that session's replace has applied its swap (D-234) **429**:
 identical for a value another account holds or an undo reserves, and nothing is staged
 (AUTH-ABUSE-004) **409**:
 `identity.change.pending` (a replace of another value is already staged for this
-identifier); `identity.identifier.locked` for a locked identifier (D-222) **422**:
+identifier, or, in an enrolment session, a replace is pending for any identifier,
+D-234); `identity.identifier.locked` for a locked identifier (D-222) **422**:
 `identity.identifier.mixedscript`, `identity.identifier.domainnotallowed`;
 `identity.identifier.invalid` for an identifier the account does not hold, or a replace
 outside single-address mode save one an enrolment session opened with `mailboxLost`

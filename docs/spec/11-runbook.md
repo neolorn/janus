@@ -95,7 +95,8 @@ for the old address (REG-IDENT-007).
    re-enrolment session lets them replace that email address with a new one, confirmed
    by the new address alone, whatever `identifiers.email.max` is; the new address takes
    the old one's place, primary included. The session takes one replace, of an email
-   the enrolment lists, counted once its swap applies (a replace abandoned before then
+   the enrolment lists, counted once its swap applies; it holds one pending replace at a
+   time (another is refused while one is pending, and one abandoned before its swap
    leaves the person free to stage another), and adds or removes no identifier; any
    other lost address is tidied after an ordinary sign-in. The old address is notified
    without a link and the remaining channels hold the undo for
