@@ -335,11 +335,13 @@ mailbox (`mailboxLost`), a replace of an email the enrolment lists SHALL be take
 whatever `identifiers.email.max` is, with no step-up, the session being itself the proof
 (`10` section 5a), the new address taking the replaced one's place, primary included;
 outside that session a replace is taken in single-address mode alone. The session adds
-and removes no identifier and takes one replace: a second, naming another identifier or
-made once the first's swap has applied, SHALL be refused 403 `authz.denied`
-(AUTH-RECOV-002, D-234). The confirmation is the message `identifier-change-confirm`
-under the sending purpose `verification`, as the new address's code is: the person
-making the change asked for it, and it is not a notice (AUTH-ABUSE-004). Whether the new
+and removes no identifier and takes one replace, counted once its swap applies: a
+replace after that SHALL be refused 403 `authz.denied`; until then the rules of a staged
+replace below hold (`identity.change.pending`), and a replace abandoned or swept leaves
+the session free to stage another (AUTH-RECOV-002, D-234). The confirmation is the
+message `identifier-change-confirm` under the sending purpose `verification`, as the new
+address's code is: the person making the change asked for it, and it is not a notice
+(AUTH-ABUSE-004). Whether the new
 value is held or reserved SHALL be judged again inside the transaction that would apply
 the swap, under the lock of REG-SESS-005 on each value the swap writes, as at an add
 (REG-IDENT-004): where an identifier has come to hold it or an undo to reserve it since
@@ -414,9 +416,9 @@ undo a hostile change. If that address is lost or compromised, administrative re
 12. With `identifiers.email.max` = 10, within an enrolment session opened for a lost
     mailbox, a replace of an email the enrolment lists is taken, and once the new
     address verifies it holds the replaced one's place, primary included; the same
-    replace on an ordinary session is refused 422 `identity.identifier.invalid`, and a
-    second replace in the enrolment session, naming another identifier or made once the
-    first's swap has applied, is refused 403 `authz.denied`.
+    replace on an ordinary session is refused 422 `identity.identifier.invalid`; a
+    replace in the enrolment session once its replace's swap has applied is refused 403
+    `authz.denied`, and one staged after an abandoned replace is taken.
 
 ---
 

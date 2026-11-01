@@ -95,10 +95,11 @@ for the old address (REG-IDENT-007).
    re-enrolment session lets them replace that email address with a new one, confirmed
    by the new address alone, whatever `identifiers.email.max` is; the new address takes
    the old one's place, primary included. The session takes one replace, of an email
-   the enrolment lists, and adds or removes no identifier; any other lost address is
-   tidied after an ordinary sign-in. The old address is notified without a link and the
-   remaining channels hold the undo for `identifier.change.coolingoff` (REG-IDENT-006,
-   REG-IDENT-007, AUTH-RECOV-002, D-234).
+   the enrolment lists, counted once its swap applies (a replace abandoned before then
+   leaves the person free to stage another), and adds or removes no identifier; any
+   other lost address is tidied after an ordinary sign-in. The old address is notified
+   without a link and the remaining channels hold the undo for
+   `identifier.change.coolingoff` (REG-IDENT-006, REG-IDENT-007, AUTH-RECOV-002, D-234).
 
 **Do not** accept a phone number or address provided during the request. The
 pre-existing channel is the entire control.
