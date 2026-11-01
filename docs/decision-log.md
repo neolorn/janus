@@ -19840,6 +19840,8 @@ Found in round H3's review.
 - **The answer.** It answers `continueTo` where it carried a pending authorization.
   `continueTo` wins over `landing` where both stand, and `landing` (REG-SESS-008) answers
   otherwise.
+- **When.** `GET /auth/session` answers `continueTo` while the pending authorization
+  lives, and the done step goes there. The steps between are unchanged.
 - **Expiry.** The pending authorization keeps its 30 minutes from its creation. One that
   lapsed during the registration is not carried, and `landing` applies. Nothing extends it.
 
@@ -19852,6 +19854,7 @@ Found in round H3's review.
 - `02` AUTH-SESS-012;
 - `20` REG-SESS-008;
 - `09` (the completion's answer, `continueTo`);
+- `18` FE-REG-005;
 - `implementation-plan.md` (round H8).
 
 ---
@@ -19886,8 +19889,10 @@ Milestone 2's first known issue (D-197).
 - **The text alone:** the person is still told to report a loss.
 
 **Propagated to:**
-- `02` AUTH-STEP-002, AUTH-STEP-008 (invariant 3 and the known issue closed);
+- `02` AUTH-STEP-002, AUTH-STEP-008 (invariant 3 and the known issue closed),
+  AUTH-FACT-002 (criterion 7's list of step 3's answers);
 - `09` (step-up's step 3 answer);
+- `10` section 1 (`auth.stepup.required`, its `outcome`);
 - `18` (the frontend's handling of `signIn`);
 - `implementation-plan.md` (round H8; Milestone 2's known issues).
 
@@ -19998,7 +20003,7 @@ now. This closes Milestone 2's third known issue (D-205).
 - `08` CONV-DEP-004;
 - `13` R-M20;
 - `15` (the compromised dependency row);
-- `19` (the deployment's runtime);
+- `19` (the deployment's runtime, INF-DEP-003);
 - `implementation-plan.md` (round H8; Milestone 2's known issues).
 
 ---
@@ -20027,6 +20032,8 @@ Found by Cura's step 4.
   roles the caller's held roles hand out, with `system:administer`'s reach as the grant
   itself allows it. Not a role's permissions, which stay `role:manage`'s to read.
 - **What it records.** Nothing: it is a read of the deployment's roles, not of a person.
+  A refused read is recorded as any refused request is, and nothing more.
+- **No step-up.** The read asks none: step-up guards changes.
 
 *Rejected:*
 - **Opening `GET /admin/roles` to `grant:manage`:** it shows every role's permissions to
@@ -20037,6 +20044,8 @@ Found by Cura's step 4.
 - `03` AUTHZ-GRANT-005;
 - `07` LIB-API-005 (`IGrants.AssignableAsync`, `AssignableRole`);
 - `09` (the route, beside `GET /admin/grants`);
+- `10` section 2.1 (`grant:manage`, the read) and section 5a (`grant:manage`, the
+  changing routes alone);
 - `implementation-plan.md` (round H8).
 
 ---

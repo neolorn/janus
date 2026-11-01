@@ -147,7 +147,7 @@ requests and in credential records; eleven identifiers may appear in `loginFacto
 (D-151).
 
 *Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166, D-183, D-187,
-D-188, D-189, D-190, D-192, D-193, D-195, D-197*
+D-188, D-189, D-190, D-192, D-193, D-195, D-197, D-243*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing
@@ -259,8 +259,8 @@ enrolment names a phone identifier of an existing account (REG-SESS-006).
    left; at a step-up, what it offers judged against the weakest of the policy's gates
    field by field, with no combination left it is answered `complete` where the factors
    accepted on the challenge reach that gate, and otherwise `auth.stepup.required` with
-   the outcome AUTH-STEP-002 gives (`report-loss`, `enrol`, or `pending` with
-   `pendingUntil` where a loss report is in flight), and with the strictest of the
+   the outcome AUTH-STEP-002 gives (`report-loss`, `enrol`, `signIn`, or `pending` with
+   `pendingUntil` where a loss report is in flight, D-243), and with the strictest of the
    policy's gates already met, as AUTH-STEP-002 step 1 judges it, it is answered 200
    with `required` empty.
 8. A `phoneCode` ask at a sign-in, made while no first factor has been accepted on its
@@ -1364,7 +1364,7 @@ same session record.
 the **OIDC authorization code flow with PKCE**, with each browser application's BFF a
 **confidential client** in the client registry. The BFF SHALL retain no token.
 
-*Source: D-104, D-007, D-033.3, D-147, D-166, D-171, D-192, D-196, D-198, D-224*
+*Source: D-104, D-007, D-033.3, D-147, D-166, D-171, D-192, D-196, D-198, D-224, D-242*
 
 **The flow.** A BFF holding no session pushes an authorization request with
 `prompt=none` to `POST /oidc/par` over the back channel and redirects the browser to
@@ -1402,6 +1402,16 @@ API-REDIR-001 replaces any other destination (D-228). No destination crosses in 
 browser's hands (API-REDIR-001), and the pushed request keeps its 60 seconds
 (AUTH-OIDC-006).
 
+**A person who registers instead (D-242).** Registration's completion, the terms step
+(`20` REG-SESS-008), rotates the pre-authentication session with the pending
+authorization's record as a sign-in's completion does, under the same binding to the
+browser, and answers `continueTo` where it carried one. `continueTo` wins over `landing`
+where both stand, and `landing` answers otherwise. `GET /auth/session` answers it while
+the pending authorization lives, and registration's done step goes there, the steps
+between unchanged (`20` REG-SESS-008). The pending authorization keeps its
+`oidc.continuation.lifetime` from its creation: one that lapsed during the registration
+is not carried, and `landing` applies. Nothing extends it.
+
 **What this reuses rather than invents:** the client registry (AUTH-OIDC-001,
 API-REDIR-002), exact-match `redirect_uri` (AUTH-OIDC-006, D-198), single-use
 short-lived codes bound to client and verifier, and client authentication at the token
@@ -1438,6 +1448,11 @@ endpoint. Every one is a standard requirement restated, not a mechanism designed
     completes: the completing answer carries `continueTo`, and following it issues the
     code to the client's registered destination with its `state`; a second follow, or
     one past `oidc.continuation.lifetime`, issues nothing.
+11. A request that is not silent, met with no session, whose person registers instead, is
+    answered at the terms step: its answer carries `continueTo`, and following it issues
+    the code to the client's registered destination with its `state`; where the pending
+    authorization lapsed during the registration, the answer carries no `continueTo`
+    and `landing` applies (D-242).
 
 ---
 
@@ -1833,7 +1848,7 @@ split across two apps or folded into another.
 NOT read the account's list of enrolled factors, and no rule text SHALL name a factor.
 
 *Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183, D-190, D-191,
-D-192, D-197, D-198, D-207, D-210*
+D-192, D-197, D-198, D-207, D-210, D-243*
 
 **Evaluation order:**
 1. **Check what the session already proved.** If a level at or above the gate's, and
@@ -1872,12 +1887,20 @@ D-192, D-197, D-198, D-207, D-210*
    credential, an email factor or a sign-in link contributes nothing (AUTH-STEP-005,
    AUTH-FACT-003). Presenting a combination writes exactly what it reached into the
    session record.
-3. **If no usable combination can reach the gate**, the answer is one of three,
+3. **If no usable combination can reach the gate**, the answer is one of four,
    never a bare refusal:
    - the account's reachable assurance (AUTH-STEP-006) is **below** the gate (the
      account has never held what the gate needs) → **enrol**, at that moment;
    - the reachable assurance meets the gate but a factor that would satisfy it is
      no longer in the subject's hands → **report a loss** (AUTH-RECOV-007);
+   - the gate asks `delegated`, what the session reached since its last downgrade is
+     below it (step 1), and every usable factor of the account is social, so
+     AUTH-STEP-005 refuses each at step-up → **sign in again** (`signIn`): the
+     frontend sends the person through the provider's sign-in, and the new session
+     holds the `delegated` instant that sign-in reached and nothing more
+     (AUTH-SESS-005a), on which the gate is judged. Nothing weakens: the new sign-in
+     reaches exactly what the first did, and a social credential stays refused at
+     step-up (D-243);
    - a loss report is already pending → **say so**, with the completion time and, where
      a cancel can return the authenticator (AUTH-RECOV-007, D-197), the cancel option;
      the gate stays closed until invalidation completes.
@@ -1971,8 +1994,9 @@ this design's own extension, recorded as a choice (D-125).
 5. A customer holding only a password passes every customer gate with the password.
 6. Every combination that reaches the gate (at a step-up, the weakest of the policy's
    gates, field by field) is offered; none that does not is.
-7. A subject with no usable combination is told to enrol or to report a loss; a
-   pending loss report is shown with its completion time; nothing is a bare refusal.
+7. A subject with no usable combination is told to enrol, to report a loss or, as
+   criterion 11 states, to sign in again; a pending loss report is shown with its
+   completion time; nothing is a bare refusal.
 8. Registering a new factor type changes no gate.
 9. A factor the policy's `loginFactors` does not permit is not offered at a gate, and
    presenting it at a gate is refused with `auth.factor.notpermitted`, whether the
@@ -1983,6 +2007,10 @@ this design's own extension, recorded as a choice (D-125).
     from the host's assurance provider; one unmet at its first ask is unmet at the
     second, though between the two a step-up of another request lifted the session to
     the gate, or the provider's report changed to meet it (D-210).
+11. A session of an account whose only usable factors are social, downgraded since it
+    reached `delegated`, is answered `signIn` at a `delegated` gate; the session a new
+    sign-in with the provider establishes passes that gate, and a social credential
+    presented at step-up is still refused (D-243).
 
 ---
 
@@ -2101,8 +2129,8 @@ tests; a spec change that breaks one is a defect in the change.
 
 1. No requirement text in §5 or §6 names a factor.
 2. No gate reads the enrolment list.
-3. From every account state and for every gate, a path of at most two moves exists —
-   satisfy; or enrol / report a loss, then satisfy.
+3. From every account state and for every gate, a path of at most two moves exists:
+   satisfy; or enrol, report a loss, or sign in again, then satisfy (D-243).
 4. Removing an authenticator is never gated on presenting that authenticator.
 5. Reachable assurance (AUTH-STEP-006) never decreases without notification to at
    least two channels and a completed `recovery.invalidation.window`.
@@ -2111,12 +2139,12 @@ tests; a spec change that breaks one is a defect in the change.
 7. Session lifetime reads exactly one anchor — the policy-required level
    (AUTH-SESS-005).
 
-A known issue is carried into Milestone 2 by `implementation-plan.md` section 4: a
-social-only session downgraded since it reached `delegated` (AUTH-SESS-009) is answered
-`report-loss` at a `delegated` gate, so invariant 3 and AUTH-STEP-005 criterion 2 do not
-hold for it until Milestone 2 answers it (D-197).
+The known issue `implementation-plan.md` section 4 carried into Milestone 2 (D-197), a
+social-only session downgraded since it reached `delegated` (AUTH-SESS-009) answered
+`report-loss` at a `delegated` gate, is closed by D-243: AUTH-STEP-002 step 3 answers it
+`signIn`, and invariant 3 holds for it.
 
-*Source: D-141, D-197*
+*Source: D-141, D-197, D-243*
 
 ---
 
@@ -2580,6 +2608,12 @@ or one at a sign-in whose identifier names no account, counts under it as every 
 credential does (D-199); every ask of a link, an email code or a recovery is delayed
 under it.
 
+**A sign-in opened without an identifier (D-244).** At a passkey sign-in opened without
+an identifier (`20` REG-IDENT-003), a refused assertion SHALL be counted against the
+source always, and against the account once its user handle resolves to one. There is
+no identifier count, as none was given. The delay SHALL be asked before the challenge
+opens, against the source.
+
 **Values (D-166).** A **source** is the address the connection arrived on, after the
 proxies the host names to the framework as trusted: an IPv4 address; an IPv4-mapped
 IPv6 address, read as its IPv4 address; the /64 prefix of any other IPv6 address; or
@@ -2633,7 +2667,8 @@ for; an assertion presented as `passkey` whose credential that account does not 
 one at a sign-in whose identifier names no account, is refused `auth.factor.rejected`, a
 failed attempt (AUTH-FACT-002b, D-197, D-198, D-199).
 
-*Source: D-013, D-166, D-183, D-186, D-188, D-189, D-190, D-193, D-197, D-198, D-199*
+*Source: D-013, D-166, D-183, D-186, D-188, D-189, D-190, D-193, D-197, D-198, D-199,
+D-244*
 
 Lockout is a denial-of-service weapon usable by anyone who knows a user's email, at
 no cost to the attacker.
@@ -2694,6 +2729,10 @@ the control without handing over the lever.
 14. A provider's return carrying its own `error`, a cancel included, or no `code`, from
    a source under no delay, returns the browser with `auth.factor.rejected` and counts
    and records nothing.
+15. At a passkey sign-in opened without an identifier, a refused assertion counts
+    against the source, and against the account its user handle names where it names
+    one, and under no identifier; a begin without an identifier from a source under a
+    delay opens no challenge (D-244).
 
 ---
 

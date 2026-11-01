@@ -137,8 +137,9 @@ its kind is refused with `identity.identifier.maximum`.
 ---
 
 **REG-IDENT-003** — Every verified identifier SHALL be usable to sign in.
-`POST /auth/begin` SHALL take **one** `identifier` field, detect its kind, canonicalise it
-and answer identically whether or not it resolves to an account.
+`POST /auth/begin` SHALL take **one** `identifier` field, which MAY be absent (D-244),
+and, where it is given, SHALL detect its kind, canonicalise it and answer identically
+whether or not it resolves to an account.
 
 **Kind detection (D-155).** After trimming: a value containing `@` is an email; a value
 that, with spaces, hyphens, dots and parentheses removed and a leading `+` or `00`
@@ -147,13 +148,27 @@ allowed, is digits of any script is a phone; anything else is a username where
 concealed path. A username therefore always contains at least one letter
 (REG-IDENT-009), so no value is both a phone and a username.
 
-*Source: D-146, AUTH-ABUSE-003*
+**Without an identifier (D-244).** A begin with no `identifier` SHALL open a passkey
+challenge with no allow-list, bound to the pre-authentication session, and SHALL answer
+it with `available` `["passkey"]`, so it discloses nothing about any account. The
+passkey's user handle names the account at `POST /auth/factor`; an assertion with no
+user handle is refused, as REG-PM-001 refuses one. A pre-authentication session SHALL
+hold at most one challenge opened without an identifier: each such begin replaces it,
+so page loads cannot open challenges without bound. With an identifier, begin is
+unchanged.
+
+*Source: D-146, AUTH-ABUSE-003, D-244*
 
 **Acceptance criteria**
 1. Signing in with a non-primary verified email or phone succeeds exactly as with the
    primary.
 2. The response to `/auth/begin` for an unknown identifier is byte- and timing-identical
    to the response for a known one; timing verified by construction (one code path, fixed-time comparison, identical bytes), asserted by the byte identity, and named in the report as verified by construction (CONV-TEST-007, D-153).
+3. A begin with no `identifier` answers `available` `["passkey"]` and a WebAuthn
+   challenge with no allow-list; a passkey assertion against it signs in the account its
+   user handle names, and one with no user handle is refused. A second such begin from
+   the same pre-authentication session replaces the first's challenge, so the session
+   holds one (D-244).
 
 ---
 
@@ -998,7 +1013,17 @@ read its origin from `GET /auth/session` (`landing`); where no client was stored
 address SHALL receive a signed-in session and nothing else; restoring what the person
 was doing is the application's responsibility.
 
-*Source: D-146, D-162, D-166; D-057, D-198, D-224*
+**A pending authorization (D-242).** Where the person came from an application's
+`/oidc/authorize` and registered instead of signing in, the terms step SHALL carry the
+browser's pending authorization into the session it establishes, as a sign-in's
+completion does, and SHALL answer `continueTo` (`02` AUTH-SESS-012). `continueTo` wins
+over `landing` where both stand, and `landing` answers otherwise. `GET /auth/session`
+SHALL answer `continueTo` while that pending authorization lives, and the done step
+SHALL go there where it is answered, and to `landing` otherwise; the steps between are
+unchanged (`18` FE-REG-005). A pending authorization that lapsed during the registration
+is not carried, and `landing` applies; nothing extends it.
+
+*Source: D-146, D-162, D-166; D-057, D-198, D-224, D-242*
 
 **Acceptance criteria**
 1. No registration step accepts or forwards a destination parameter.
@@ -1007,6 +1032,11 @@ was doing is the application's responsibility.
 3. `GET /auth/session` on the account application, after its sign-on from the record
    the terms step established, answers the same `landing` the authentication
    application does.
+4. A registration begun while a pending authorization waits is answered `continueTo` at
+   the terms step and by `GET /auth/session` while it lives, and the done step, reached
+   through steps 7 to 10, goes there and returns the person to the application that
+   sent them; one whose pending authorization lapsed is answered no `continueTo`, and
+   `landing` applies (D-242).
 
 ---
 

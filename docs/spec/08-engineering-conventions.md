@@ -1920,7 +1920,7 @@ author trusted with full application privilege.
 **CONV-DEP-004** — Security updates SHALL be applied promptly; other updates SHALL be
 taken **as they arrive**, merged when checks pass. Neither is a calendar task.
 
-*Source: D-046, D-110, D-184, D-205, D-215*
+*Source: D-046, D-110, D-184, D-205, D-215, D-246*
 
 Vulnerability alerting opens a change when an advisory lands; routine updates arrive
 as they are published. Acting on them is a habit at the point of a pull request, not a
@@ -1945,12 +1945,27 @@ resolved from the framework in every project (CONV-LAYOUT-001), so no lockfile h
 and neither the restore's audit nor the platform's alerting reports an advisory against
 it. Such an advisory is met by the runtime's servicing release, taken as a security
 update. What brings each servicing release to the library's pipeline and to a deployment,
-since no alert does, is a known issue carried into Milestone 2
-(`implementation-plan.md` section 4, D-205).
+since no alert does, was a known issue carried into Milestone 2
+(`implementation-plan.md` section 4, D-205), and is closed by D-246 as below.
+
+**Servicing the SDK (D-246).** A scheduled workflow runs daily and when dispatched. It
+reads the 10.0 channel's release metadata from Microsoft's published location and
+compares the newest SDK in the feature band of `global.json`'s pin with the pin. Where a
+newer one is out, it opens one issue, or updates the open one, naming the version and
+whether it carries security fixes. It holds `issues: write` and nothing else. It opens no
+pull request and writes no commit: a bot's commit would break the rule that every commit
+is the owner's, and a pull request opened with the workflow's token runs no gates.
+`global.json`'s version moves in an ordinary commit in the project's form, merged when
+the checks pass, and a security release is applied promptly. A deployment's runtime is
+its base image's (`19` INF-DEP-003).
 
 **Acceptance criteria**
 1. Security alerts are actioned rather than accumulating.
 2. No recurring calendar entry exists for dependency updates.
+3. With an SDK newer than `global.json`'s pin out in its feature band, the servicing
+   workflow opens one issue naming the version and whether it carries security fixes,
+   or updates the open one, and opens no pull request and writes no commit; it holds
+   `issues: write` and no other permission (D-246).
 
 ---
 
