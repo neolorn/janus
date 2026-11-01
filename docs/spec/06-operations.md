@@ -971,6 +971,40 @@ name the deployment (`10` section 4), and it is protected from then on (OPS-CFG-
 
 *Source: D-146, D-166*
 
+**A business organization from the server (D-248).** Beside `bootstrap`, the command
+`organization` creates an organization by name and writes its policy, so a deployment
+is set up before any person can work without an administrator's credential held by a
+script: `identity organization --name <name> --policy <file> --reason <text>`, with
+`--multiplememberships true|false` optional. Every argument is `--<name> <value>` and is
+judged as `bootstrap` judges its own: an unknown name, one given twice or without a value
+answers `api.request.malformed` naming it. The file holds the policy object
+`PUT /admin/organizations/{id}/policy` takes, without its `reason`. In one transaction
+the command:
+
+- creates the organization where none of that name exists, recorded as
+  `identity.organization.created`, and writes its policy key as
+  `POST /admin/organizations` does;
+- writes the policy from the file as that `PUT` writes it, with the same checks and
+  codes, as a configuration change (OPS-CFG-005);
+- with `--multiplememberships`, writes `organization.multiplememberships` as a
+  configuration change;
+- records each change under the system principal `organization` (`10` section 5.29),
+  with the reason given.
+
+Where one organization of that name exists, it writes only what differs and changes
+nothing else; where two or more share the name, it refuses with `api.request.malformed`
+naming `name` and writes nothing. It refuses a deployment not yet bootstrapped, a policy
+the policy route would refuse (with that route's code), and a missing or empty
+`--reason` (`config.change.reasonrequired`); nothing of a refused run is written. It
+writes no grant and no membership: the organization's first grants are given as before,
+by a person holding `system:administer` (AUTHZ-SCOPE-001, D-207). Exit code 0 with the
+organization's identifier as the one line on standard output; a refusal exits 1 with its
+code, as `bootstrap` does. The command runs only where the database is reachable, as
+`bootstrap` and `configure` do, and asks no step-up: whoever runs it already holds the
+server (D-028).
+
+*Source: D-248*
+
 **Acceptance criteria**
 1. Running it on a deployment already stood up (the administrative organization
    exists, or an allow grant of a role holding `system:administer` stands unrevoked,
@@ -994,6 +1028,18 @@ name the deployment (`10` section 4), and it is protected from then on (OPS-CFG-
    administrative organization's identifier.
 9. After bootstrap the administrative organization's `grammaticalGender` is `true`
    (D-236).
+10. On a bootstrapped deployment where no organization holds the name, `organization`
+    creates one, writes its policy from the file and, where `--multiplememberships` is
+    given, `organization.multiplememberships`, records each change under the system
+    principal `organization` with the reason given, writes no grant and no membership,
+    and prints the organization's identifier as the one line on standard output (D-248).
+11. Run again where one organization holds the name, `organization` writes and records
+    only what differs from what stands, and prints that organization's identifier.
+12. Where two or more organizations hold the name, `organization` is refused with
+    `api.request.malformed` naming `name`, and nothing is written.
+13. `organization` is refused on a deployment not yet bootstrapped, for a policy the
+    policy route would refuse (with that route's code), and for a missing or empty
+    `--reason` (`config.change.reasonrequired`); nothing of a refused run is written.
 
 ---
 
