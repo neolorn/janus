@@ -631,7 +631,7 @@ hands the token to on a press:
 | `loss-report` | Account | `POST /recovery/report-loss/{id}/cancel` (AUTH-RECOV-007) |
 
 *Source: D-148; D-146; REG-SESS-003, AUTH-FACT-003, API-LAND-001, BFF-CSRF-005b,
-LIB-HOST-001, D-166, D-187, D-190, D-224*
+LIB-HOST-001, D-166, D-187, D-190, D-224, D-233*
 
 **What a link does not carry (D-224).** A link names no record: where the flow's route
 takes `{id}`, the landing sends the nil UUID, `00000000-0000-0000-0000-000000000000`,
@@ -640,7 +640,11 @@ which a route given a link token does not read, and a sign-in link's press sends
 another tab of the originating browser reaches the tab that asked through
 `GET /auth/session`, which it polls while it waits, or through a message from the
 landing tab; where the press's answer carries `continueTo`, the landing sends the
-browser there (FE-API-006).
+browser there (FE-API-006). Where the press leaves the sign-in open, its answer
+(`factorRequired`, or `deviceVerificationRequired`) names the challenge in
+`challengeId`, and the landing tab presents the second step, or the new-browser code
+(`POST /auth/device/verify`), on that challenge and completes the sign-in itself, so it
+needs no other tab and no channel between tabs (D-233).
 
 The server decides which case applies: the landing call without `press` returns
 `sameBrowser` and, where false, the code (`09` `POST /register/verify/{id}`). The
@@ -672,6 +676,10 @@ control to end the attempt.
 8. A press of a sign-in, registration, identifier, undo or loss-report link from a
    landing that holds no challenge or record identifier completes as the flow states;
    the landing sends the nil UUID wherever a route takes `{id}`.
+9. A press of a sign-in link whose answer is `factorRequired` or
+   `deviceVerificationRequired` presents, in the landing tab, the second step or the
+   new-browser code on the challenge the answer names, and the sign-in completes there
+   with the tab that asked for the link closed.
 
 ---
 

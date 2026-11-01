@@ -91,12 +91,16 @@ for the old address (REG-IDENT-007).
    restriction on that channel, or the approval limits of AUTH-RECOV-002), nothing was
    approved and no link went: approve again once the time shown has passed.
 5. The account owner is notified on a separate channel automatically.
-6. If the person's old mailbox is unreachable, the re-enrolment session lets them set
-   a new email address; the old address is notified without a link and the remaining
-   channels hold the undo for `identifier.change.coolingoff` (REG-IDENT-006, REG-IDENT-007).
-   If the lost channel is the phone, the same session lets them replace the phone
-   number, confirmed by the new number alone, with the notice and the undo going to
-   the recorded email (REG-IDENT-007, AUTH-RECOV-002).
+6. If the person's old mailbox is unreachable and the approval recorded it as lost, the
+   re-enrolment session lets them replace that email address with a new one, confirmed
+   by the new address alone, whatever `identifiers.email.max` is; the new address takes
+   the old one's place, primary included. The session takes one replace, of an email
+   the enrolment lists, counted once its swap applies; it holds one pending replace at a
+   time (another is refused while one is pending, and one abandoned before its swap
+   leaves the person free to stage another), and adds or removes no identifier; any
+   other lost address is tidied after an ordinary sign-in. The old address is notified
+   without a link and the remaining channels hold the undo for
+   `identifier.change.coolingoff` (REG-IDENT-006, REG-IDENT-007, AUTH-RECOV-002, D-234).
 
 **Do not** accept a phone number or address provided during the request. The
 pre-existing channel is the entire control.

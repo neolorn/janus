@@ -890,13 +890,15 @@ erasure pass; what a host derived from the subject's fields is the host's to cle
 
 **IDN-LIFE-008** — On removal or replacement of a sign-in identifier (REG-IDENT-006,
 REG-IDENT-007), the session under which the change completes SHALL rotate and every
-other session SHALL terminate; a replacement (REG-IDENT-007) completes when its swap
-applies, and one that completes under no session (the old address's confirmation, an
-enrolment session) terminates every session. An undo (REG-IDENT-006) completes under no
-session: whatever it restores or displaces, it terminates every session of the account
-(D-190).
+other session SHALL terminate; a replacement (REG-IDENT-007), an enrolment session's in
+any address mode included (D-234), completes when its swap applies, and one that
+completes under no session (the old address's confirmation, an enrolment session)
+terminates every session of the account; an enrolment session it completes under stays
+open, so the person goes on to set the credential (AUTH-RECOV-002). An undo
+(REG-IDENT-006) completes under no session: whatever it restores or displaces, it
+terminates every session of the account (D-190).
 
-*Source: D-035, D-033.4, D-146, D-166, D-190*
+*Source: D-035, D-033.4, D-146, D-166, D-190, D-234*
 
 **Acceptance criteria**
 1. Sessions on other devices are invalidated within one request cycle: the first request
