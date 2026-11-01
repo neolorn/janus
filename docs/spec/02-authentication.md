@@ -3314,7 +3314,16 @@ client the token was issued to (the default resource indicator of RFC 9068 secti
 and the mail server verifies `aud` as well as the signature (INT-MAIL-004). No error
 the provider answers carries `error_description` or `error_uri` (LIB-API-003). A
 `public-application` client's token takes its client's audience as `aud` instead
-(AUTH-OIDC-001, D-252).
+(AUTH-OIDC-001, D-252); `--audience` stays optional, and where it is absent each token's
+`aud` is the client itself.
+
+**CORS for a public application (D-252).** A `public-application` client may run its
+code exchange in the browser. So `POST /oidc/token`, the discovery document and
+`GET /oidc/jwks` SHALL answer CORS for the origin of each registered
+`public-application` return address: that origin exactly, no credentials, the methods
+and headers the token request needs, and the preflight answered. No other route and no
+other origin gains CORS: a browser request to them from any other origin gets no CORS
+headers.
 
 *Source: D-164, D-166, D-252*
 
@@ -3353,6 +3362,11 @@ it to its audience, which convention alone does not.
    the client itself, its access token's `aud` is its audience alone and its scopes
    `openid` and those of its registered scopes its request asks for, and no refresh
    token is issued to it (D-252).
+6. A preflight and a token request to `POST /oidc/token`, and a request for discovery
+   or `GET /oidc/jwks`, from the origin of a registered `public-application` return
+   address carry CORS for that origin exactly, with no credentials allowed; the same
+   from any other origin carry no CORS headers, and no other route answers CORS
+   (D-252).
 
 ---
 
