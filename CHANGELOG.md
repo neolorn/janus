@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A recovery's approval is refused 403 `authz.role.notassignable` unless the approver
+  may hand out every role the account holds through a live allow grant, its own or a
+  group's, in the organization of that grant. It is judged before the step-up, writes
+  nothing and is recorded as a refusal; only a system administrator approves a system
+  administrator's recovery, and an account holding no role is approved as before.
 - A current member of an organization reads another current member's photo:
   `GET /organizations/{id}/members/{account}/photo` and `IAccounts.MemberPhotoAsync`,
   where every organization the colleague belongs to shows photos. It is served as the

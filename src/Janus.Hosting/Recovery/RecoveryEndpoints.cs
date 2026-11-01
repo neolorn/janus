@@ -80,7 +80,7 @@ internal static class RecoveryEndpoints
                     ErrorCodes.Denied, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.RecoveryReasonRequired, ErrorCodes.RecoveryChannelNotOnAccount,
                     ErrorCodes.RecoverySelfApproval, ErrorCodes.Throttled,
-                    ErrorCodes.RestrictionExceeded))
+                    ErrorCodes.RestrictionExceeded, ErrorCodes.RoleNotAssignable))
             .Accepts<ApproveRecoveryRequest>(MediaTypeNames.Application.Json)
             .Produces<ApprovedRecoveryView>();
         _ = endpoints.MapPost("/enrol/begin", EnrolAsync)
