@@ -1920,7 +1920,7 @@ author trusted with full application privilege.
 **CONV-DEP-004** — Security updates SHALL be applied promptly; other updates SHALL be
 taken **as they arrive**, merged when checks pass. Neither is a calendar task.
 
-*Source: D-046, D-110, D-184, D-205, D-215, D-246*
+*Source: D-046, D-110, D-184, D-205, D-215, D-246, D-249*
 
 Vulnerability alerting opens a change when an advisory lands; routine updates arrive
 as they are published. Acting on them is a habit at the point of a pull request, not a
@@ -1952,7 +1952,8 @@ since no alert does, was a known issue carried into Milestone 2
 reads the 10.0 channel's release metadata from Microsoft's published location and
 compares the newest SDK in the feature band of `global.json`'s pin with the pin. Where a
 newer one is out, it opens one issue, or updates the open one, naming the version and
-whether it carries security fixes. It holds `issues: write` and nothing else. It opens no
+whether it carries security fixes. It holds `issues: write` and `contents: read`, so it
+reads `global.json` if the repository turns private (D-249), and nothing else. It opens no
 pull request and writes no commit: a bot's commit would break the rule that every commit
 is the owner's, and a pull request opened with the workflow's token runs no gates.
 `global.json`'s version moves in an ordinary commit in the project's form, merged when
@@ -1965,7 +1966,7 @@ its base image's (`19` INF-DEP-003).
 3. With an SDK newer than `global.json`'s pin out in its feature band, the servicing
    workflow opens one issue naming the version and whether it carries security fixes,
    or updates the open one, and opens no pull request and writes no commit; it holds
-   `issues: write` and no other permission (D-246).
+   `issues: write` and `contents: read` and no other permission (D-246, D-249).
 
 ---
 

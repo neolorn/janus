@@ -20080,6 +20080,8 @@ release. With it, `servicing.yml` also reads the repository's contents.
 - `01` IDN-ATTR-002;
 - `06` OPS-CFG-002;
 - `09` (the policy route's below-system rule);
+- `10` section 1 (`config.policy.belowsystem`) and section 4.1a (the below-system
+  sentence);
 - `08` CONV-DEP-004 (the workflow's permissions);
 - `implementation-plan.md` (round H10).
 

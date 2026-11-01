@@ -1326,7 +1326,7 @@ language in use and case 3 becomes nearly unreachable.
 until enabled, the administrative organization included; available to enable once the
 deployment declares an image codec (LIB-HOST-001).
 
-*Source: D-060, D-002, D-162, D-166*
+*Source: D-060, D-002, D-162, D-166, D-249, D-250*
 
 **Values (D-166).** Availability is the policy field `photos` (`10` section 4.1a), a
 boolean whose system default is `false`; setting it to `true` is a loosening
@@ -1344,6 +1344,25 @@ and changes nothing. While any stored policy enables photos and no image codec i
 declared, startup fails with `model.startup.declarationmissing`, `details.key`
 `imageCodec`.
 
+**An organization turns photos on (D-249).** An organization's policy MAY set `photos`
+to `true` whatever the system policy says: it is not refused as below the system policy
+(`config.policy.belowsystem`), and it stays a loosening for what OPS-CFG-002 asks of
+one. It reaches that organization's members as AUTH-PRIN-002 resolves every field; an
+account with no membership follows the system policy, so customers keep photos off
+while it says so. Every other field of an override is judged against the system policy
+as before.
+
+**A colleague's photo (D-250).** A current member of an organization MAY read the photo
+of another current member of the same organization, where that organization's policy
+has `photos` on (`09` `GET /organizations/{id}/members/{account}/photo`, and its library
+call `IAccounts.MemberPhotoAsync`, `07` LIB-API-005). No permission beyond the two
+memberships is asked, and a system principal is refused. The rule above governs this
+read too, so the member's photo is read only where it is shown. Anything else (either
+not a current member, photos off, no photo set) is answered 404 `identity.photo.notfound`
+alike, so the read discloses nothing about membership to an outsider. Each admitted
+read counts one record toward the reader's read volume (`06` OPS-ALERT-005); no audit
+row is written.
+
 **Acceptance criteria**
 1. Availability is a policy value, not a user-type branch.
 2. Enabling it for another organization requires no code change.
@@ -1354,13 +1373,22 @@ declared, startup fails with `model.startup.declarationmissing`, `details.key`
 5. An account of two organizations, one of which does not enable photos, shows no
    photo: `GET /account/photo` and `GET /admin/accounts/{subject}/photo` answer 404
    `identity.photo.notfound`, as for an account with no photo set.
+6. With the system policy's `photos` `false`, an organization's policy setting `photos`
+   to `true` is admitted as a loosening, not refused `config.policy.belowsystem`; a
+   member of that organization alone shows a photo, and an account with no membership
+   shows none (D-249).
+7. A current member reads a colleague's photo in an organization whose policy has
+   photos on, and the read counts one record toward their read volume and writes no
+   audit row; a caller or a colleague who is not a current member, photos off and no
+   photo set are each answered 404 `identity.photo.notfound` in identical bytes
+   (D-250).
 
 ---
 
 **IDN-ATTR-003** — Photo bytes SHALL be stored in the database, in a table of their
 own, so ordinary queries never read them.
 
-*Source: D-060*
+*Source: D-060, D-250*
 
 Storage on the filesystem would sit outside the backup regime, split erasure into two
 operations that can disagree, and need its own serving path with its own authorization.
@@ -1372,12 +1400,17 @@ so erasure is key destruction and the row persists (IDN-PRIN-003). This also bri
 photo under PRIV-SENS-002's criterion that a database dump yields no personal field —
 which an unencrypted image would have failed.
 
+**A colleague's photo (D-250)** is served as the caller's own is: through the access
+gate, with `Cache-Control: no-store`, no entity tag and no public address.
+
 **Acceptance criteria**
 1. Erasing the account renders the photo unreadable in the same transaction
    (IDN-LIFE-003a) — the photo is encrypted under the subject key that transaction
    destroys.
 2. Ordinary account queries do not read photo bytes.
 3. The photo is served through the access gate, never a public URL.
+4. A colleague's photo is answered with `Cache-Control: no-store` and no entity tag
+   (D-250).
 
 ---
 

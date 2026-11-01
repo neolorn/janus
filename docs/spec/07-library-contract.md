@@ -211,7 +211,7 @@ host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. 
 operations named below as called in process only have no endpoint.
 
 *Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208, D-218, D-221,
-D-247*
+D-247, D-250*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -225,7 +225,7 @@ restriction lift and deletion cancel; the takedown; the data-subject request que
 consent and objection records; erasure progress and manual completion; audit query by
 subject; explanation resolution; compliance-text publishing; the assessment
 records; credential and factor management; profile photo and language
-preference; the registration session; identifier, preference and session management; the
+preference, and a colleague's photo (`01` IDN-ATTR-002, D-250); the registration session; identifier, preference and session management; the
 restriction set and grants, the roles a giver may hand out among them (`03`
 AUTHZ-GRANT-005, D-247); mail app passwords; domain lock (D-146); the generation of
 the break-glass credential and whether one stands (OPS-BOOT-004, OPS-BOOT-001 AC3); the
@@ -245,6 +245,11 @@ caller's access context and the organization, answers
 `Result<IReadOnlyList<AssignableRole>>`, sorted by name; `AssignableRole` holds `Name`
 and `GrantsMustEnd`. Its endpoint is `GET /admin/grants/assignable?organization={id}`
 (`09`).
+
+**A colleague's photo (D-250).** `IAccounts.MemberPhotoAsync`, taking the caller's access
+context, the organization and the member, answers the member's photo where `01`
+IDN-ATTR-002 admits the read, and refuses a system principal. Its endpoint is
+`GET /organizations/{id}/members/{account}/photo` (`09`).
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
