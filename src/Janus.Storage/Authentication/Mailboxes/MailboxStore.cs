@@ -128,6 +128,7 @@ internal sealed class MailboxStore(
             FingerprintVersion = Fingerprint.CurrentVersion(ring),
             CanonicalisationVersion = CanonicalForm.UnicodeVersion,
             ReservedAt = mailbox.ReservedAt,
+            MayAdopt = mailbox.MayAdopt,
         };
 
         await CarryAsync(mailbox, record, cancellationToken).ConfigureAwait(false);
@@ -364,7 +365,8 @@ internal sealed class MailboxStore(
                 record.Attempts,
                 record.NextAttemptAt,
                 record.FailedAt,
-                record.Attempted);
+                record.Attempted,
+                record.MayAdopt);
         }
         finally
         {

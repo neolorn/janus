@@ -509,6 +509,7 @@ public sealed class ModelTests
             "mailboxes.fingerprint_version",
             "mailboxes.holder",
             "mailboxes.id",
+            "mailboxes.may_adopt",
             "mailboxes.next_attempt_at",
             "mailboxes.pending",
             "mailboxes.pending_key",

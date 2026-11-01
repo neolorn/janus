@@ -177,6 +177,27 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// REG-MAIL-003 (D-255): a mailbox reserved under <c>adopt</c> is read back as one
+    /// whose push may adopt, and its push carries it; one reserved otherwise is not.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_MAIL_003_AMailboxReservedToAdoptIsReadSoAsync()
+    {
+        var adopting = Mailbox.ReservedToAdopt(Parsed("adopting@example.test"), Noon);
+        var plain = Mailbox.Reserved(Parsed("plain@example.test"), Noon);
+
+        await WrittenAsync(store => store.AddAsync(adopting, TestContext.Current.CancellationToken));
+        await WrittenAsync(store => store.AddAsync(plain, TestContext.Current.CancellationToken));
+
+        Mailbox read = await StandingAsync(adopting.Id);
+
+        Assert.True(read.MayAdopt);
+        Assert.False((await StandingAsync(plain.Id)).MayAdopt);
+        Assert.True(read.Due(stands: false, Noon)!.MayAdopt);
+    }
+
+    /// <summary>
     /// INT-MAIL-007: the outstanding push and its key are carried onto the row and read
     /// back, so a retry after a restart is made under the same key; a removal the server
     /// has confirmed is no longer read.

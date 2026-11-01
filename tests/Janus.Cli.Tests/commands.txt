@@ -33,6 +33,7 @@ configure
     --hosting.crossborderbasis optional setting
     --hosting.location optional setting
     --integration.mailserver.endpoint optional setting
+    --integration.mailserver.ownaccounts optional setting
     --legal.governinglanguage optional setting
     --privacy.calendar.timezone optional setting
     --redirect.defaultclient optional setting

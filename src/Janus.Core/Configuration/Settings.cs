@@ -337,6 +337,14 @@ public static class Settings
     public static TextSetting IntegrationMailServerEndpoint { get; } =
         new("integration.mailserver.endpoint", SettingScope.Protected, string.Empty);
 
+    /// <summary>
+    /// The names of the individual accounts at the mail server the deployment keeps for
+    /// itself, which reconciliation neither counts nor acts on and a push that meets is
+    /// refused at; read at the start (D-254).
+    /// </summary>
+    public static TextListSetting IntegrationMailServerOwnAccounts { get; } =
+        new("integration.mailserver.ownaccounts", SettingScope.Protected, []);
+
     /// <summary>Callbacks accepted from one source a minute, before any lookup.</summary>
     public static IntegerSetting IntegrationCallbackRateLimit { get; } =
         new("integration.callback.ratelimit", SettingScope.Runtime, 60, loosening: SettingDirection.Increase);
@@ -989,6 +997,7 @@ public static class Settings
         OidcJwksRateLimit,
         IntegrationCallbackClaimTimeout,
         IntegrationMailServerEndpoint,
+        IntegrationMailServerOwnAccounts,
         Restrictions,
         CodeVerificationLifetime,
         CodeVerificationAttempts,

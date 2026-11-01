@@ -2068,6 +2068,200 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-MAIL-001 AC9 (D-253): a current member of the administrative organization with
+    /// no mailbox is given one: reserved, held and owed <c>enabled</c> at once, its
+    /// address a verified email and the primary, the member's own email being of another
+    /// domain and left unlocked, the set as it stood told once, the giving recorded with
+    /// its reason and announced, and the answer the mailbox's identifier, address and
+    /// state.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_AC9_ACurrentMemberIsGivenAMailboxAsync()
+    {
+        (SubjectId member, IdentifierId personal) = Member();
+
+        GivenMailbox given = Accepted(await GiveAsync(Staff, member, new MailboxGift(Corporate, Why)));
+
+        Mailbox mailbox = Assert.Single(_mailboxes.Held);
+        HeldIdentifiers held = await _identifiers.HeldAsync(member, TestContext.Current.CancellationToken);
+        HeldIdentifier corporate = held.OfKind(IdentifierKind.Email).Single(email => email.Canonical == Corporate);
+        OutboundMessage told = Assert.Single(_notifications.Sent);
+
+        Assert.Equal(new GivenMailbox(mailbox.Id, Parsed(Corporate), MailboxState.Enabled), given);
+        Assert.Equal((member, MailboxState.Enabled, false), (mailbox.Holder, mailbox.Owed(stands: true), mailbox.MayAdopt));
+        Assert.True(corporate is { IsVerified: true, IsPrimary: true, IsLocked: false });
+        Assert.True(held.Find(personal) is { IsVerified: true, IsPrimary: false, IsLocked: false });
+        Assert.Equal((Personal, MessageKind.IdentifierAdded), (told.Destination.Canonical, told.Message));
+        Assert.Equal(
+            (AuditActions.MailboxGiven, Staff, Why, member, (MailboxId?)mailbox.Id, (FormerMailbox?)null),
+            (_audit.Changes[^1].Action, _audit.Changes[^1].Organization, _audit.Changes[^1].Reason, _audit.Changes[^1].Member, _audit.Changes[^1].Mailbox, _audit.Changes[^1].FormerMailbox));
+        Assert.Equal(corporate.Id, Assert.Single(_events.Of<IdentifierAdded>()).Identifier);
+        Assert.Equal(corporate.Id, Assert.Single(_events.Of<IdentifierPrimaryChanged>()).Identifier);
+
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
+
+        Assert.Equal((true, mailbox.Id), (_server.Hosts(Corporate), _server.Carried(Corporate)));
+    }
+
+    /// <summary>
+    /// REG-MAIL-001 AC9 and AC10 (D-253): a system administrator gives themselves a
+    /// mailbox; where the account holds an email of the address's domain already, the
+    /// given address is not made the primary and nothing is announced as one.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_AC10_AnAdministratorGivesThemselvesAMailboxAsync()
+    {
+        (SubjectId administrator, _) = Member(_inviter);
+        IdentifierId own = _identifiers.Verified(administrator, IdentifierKind.Email, "admin@staff.test");
+
+        GivenMailbox given = Accepted(await GiveAsync(Staff, administrator, new MailboxGift(Corporate, Why)));
+
+        HeldIdentifiers held = await _identifiers.HeldAsync(administrator, TestContext.Current.CancellationToken);
+
+        Assert.Equal(administrator, Assert.Single(_mailboxes.Held).Holder);
+        Assert.Equal(MailboxState.Enabled, given.State);
+        Assert.False(held.OfKind(IdentifierKind.Email).Single(email => email.Canonical == Corporate).IsPrimary);
+        Assert.Single(_events.Of<IdentifierAdded>());
+        Assert.Empty(_events.Of<IdentifierPrimaryChanged>());
+        Assert.NotNull(held.Find(own));
+    }
+
+    /// <summary>
+    /// REG-MAIL-001 AC10 (D-253): giving a mailbox is refused, and nothing written, for an
+    /// account that holds one, one whose emails fill the maximum, an address another
+    /// account holds as an email, one with no current membership of the administrative
+    /// organization and an organization that is not it alike, one neither active nor
+    /// restricted, the emergency account, and a deployment with no mail server.
+    /// </summary>
+    /// <param name="refusal">The case.</param>
+    [Theory]
+    [InlineData("held")]
+    [InlineData("maximum")]
+    [InlineData("taken")]
+    [InlineData("nonmember")]
+    [InlineData("organization")]
+    [InlineData("suspended")]
+    [InlineData("emergency")]
+    [InlineData("unavailable")]
+    public async Task REG_MAIL_001_AC10_GivingAMailboxIsRefusedAndWritesNothingAsync(string refusal)
+    {
+        (SubjectId member, _) = Member();
+        var gift = new MailboxGift(Corporate, Why);
+
+        switch (refusal)
+        {
+            case "held":
+                _ = Accepted(await GiveAsync(Staff, member, new MailboxGift("first@staff.test", Why)));
+                break;
+            case "maximum":
+                _configuration.Set(Settings.IdentifiersEmailMax, 1);
+                break;
+            case "taken":
+                _ = _identifiers.Verified(SubjectId.New(_randomness), IdentifierKind.Email, Corporate);
+                break;
+            case "nonmember":
+                member = SubjectId.New(_randomness);
+                _accounts.Stands(member, AccountState.Active);
+                break;
+            case "suspended":
+                _accounts.Stands(member, AccountState.Suspended);
+                break;
+            case "emergency":
+                _emergency.Account = member;
+                break;
+        }
+
+        int mailboxes = _mailboxes.Held.Count;
+        int changes = _audit.Changes.Count;
+
+        Error refused = Failure(await GiveAsync(
+            refusal is "organization" ? Customer : Staff,
+            member,
+            gift,
+            refusal is "unavailable" ? ServiceWithout : null));
+
+        Assert.Equal(
+            refusal switch
+            {
+                "held" => (ErrorCodes.MailboxHeld, null),
+                "maximum" => (ErrorCodes.IdentifierMaximum, null),
+                "taken" => (ErrorCodes.MailboxTaken, "address"),
+                "nonmember" or "organization" => (ErrorCodes.MembershipNotFound, null),
+                "suspended" => (ErrorCodes.AccountStateConflict, null),
+                "emergency" => (ErrorCodes.Denied, null),
+                _ => (ErrorCodes.MailServerUnavailable, (string?)null),
+            },
+            Coded(refused));
+        Assert.Equal((mailboxes, changes), (_mailboxes.Held.Count, _audit.Changes.Count));
+        Assert.DoesNotContain(_mailboxes.Held, mailbox => mailbox.Address.Value == Corporate);
+
+        if (refusal is "unavailable")
+        {
+            Assert.Equal("integration.mailserver.endpoint", refused.Details["requires"].GetString());
+        }
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC9 and INT-MAIL-006 (D-255): under <c>formerMailbox</c> <c>adopt</c>,
+    /// an invitation reserves a mailbox whose push takes over the unmarked account the
+    /// mail server holds at the address, recorded with its reason, and without
+    /// <c>adopt</c> the same account is still a conflict.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC9_UnderAdoptThePushTakesOverTheServersAccountAsync()
+    {
+        _server.Set(Corporate, enabled: true);
+
+        _ = Accepted(await IssueAsync(Staff, Taking(FormerMailbox.Adopt)));
+
+        Mailbox reserved = Assert.Single(_mailboxes.Held);
+
+        OrganizationAuditInMemory.OrganizationChange adopted =
+            Assert.Single(_audit.Changes, change => change.Action == AuditActions.MailboxAdopted);
+
+        Assert.True(reserved.MayAdopt);
+        Assert.Equal((Why, (MailboxId?)reserved.Id, _inviter), (adopted.Reason, adopted.Mailbox, adopted.Member));
+
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
+
+        Assert.Equal([Corporate], _server.Adopted);
+        Assert.Equal((reserved.Id, false), (_server.Carried(Corporate), _server.Hosts(Corporate)));
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC9 (D-255): <c>adopt</c> where the library already holds a mailbox at
+    /// the address is refused <c>api.request.invalid</c> naming <c>formerMailbox</c>, for an
+    /// invitation and for a mailbox given alike, and changes no mailbox; a mailbox given
+    /// under <c>adopt</c> where none stands may adopt and is recorded so.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC9_AdoptWhereTheLibraryHoldsAMailboxIsInvalidAsync()
+    {
+        (ErrorCode, string?) invalid = (ErrorCodes.RequestInvalid, "formerMailbox");
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+        _clock.Advance(Settings.LinkInvitationLifetime.Default + TimeSpan.FromMinutes(1));
+
+        (SubjectId member, _) = Member();
+
+        Assert.Equal(invalid, Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Adopt)))));
+        Assert.Equal(
+            invalid,
+            Coded(Failure(await GiveAsync(Staff, member, new MailboxGift(Corporate, Why) { FormerMailbox = FormerMailbox.Adopt }))));
+        Assert.False(Assert.Single(_mailboxes.Held).MayAdopt);
+
+        GivenMailbox given = Accepted(await GiveAsync(
+            Staff,
+            member,
+            new MailboxGift("held@staff.test", Why) { FormerMailbox = FormerMailbox.Adopt }));
+
+        Assert.True(_mailboxes.Held.Single(mailbox => mailbox.Id == given.Id).MayAdopt);
+        Assert.Equal(
+            [AuditActions.MailboxGiven, AuditActions.MailboxAdopted],
+            _audit.Changes.TakeLast(2).Select(change => change.Action));
+    }
+
+    /// <summary>
     /// REG-MAIL-003 AC8 and INT-MAIL-006 AC6: an address whose last holder was erased is
     /// invited without <c>formerMailbox</c>; the new mailbox adopts nothing while the
     /// erased holder's account stands at the server, and the attempt after the operator
@@ -2850,6 +3044,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     {
         PolicyResolution policies = Policies;
         StepUpGuard stepUp = Guard(policies);
+        var inUse = new MailServerInUseInMemory(server);
+        var reservations = new MailboxReservations(_mailboxes, _invitations, _audit);
 
         return new(
             _gate,
@@ -2887,7 +3083,26 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _clock),
             Ends(stepUp),
             _mailboxes,
-            new MailServerInUseInMemory(server),
+            reservations,
+            new MailboxGiving(
+                _gate,
+                stepUp,
+                _organizations,
+                _ending,
+                _emergency,
+                _accounts,
+                _identifiers,
+                new DomainLock(_memberships, _configuration, _domains),
+                reservations,
+                _mailboxes,
+                inUse,
+                _notifications,
+                _events,
+                _configuration,
+                _audit,
+                _work,
+                _clock),
+            inUse,
             _notifications,
             Landing.Links,
             _configuration,
@@ -3028,6 +3243,34 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private ValueTask<Result> OpenAsync(SubjectId holder, string token) =>
         new InvitationOpening(_invitations, _work, _clock)
             .OpenAsync(AccessContext.Of(holder), token, TestContext.Current.CancellationToken);
+
+    private ValueTask<Result<GivenMailbox>> GiveAsync(
+        OrganizationId organization,
+        SubjectId member,
+        MailboxGift gift,
+        InvitationService? service = null) =>
+        (service ?? Service).GiveMailboxAsync(
+            AccessContext.Of(_inviter),
+            Stepped(),
+            organization,
+            member,
+            gift,
+            Source,
+            TestContext.Current.CancellationToken);
+
+    // A current member of the staff organization with no mailbox, as the bootstrap
+    // administrator is where it was bootstrapped without one, holding a verified
+    // personal email.
+    private (SubjectId Member, IdentifierId Personal) Member(SubjectId? member = null)
+    {
+        SubjectId subject = member ?? SubjectId.New(_randomness);
+
+        _memberships.Place(subject, Staff);
+        _accounts.Stands(subject, AccountState.Active);
+        _ = _mailboxes.Standing.Add(subject);
+
+        return (subject, _identifiers.Verified(subject, IdentifierKind.Email, Personal));
+    }
 
     private ValueTask<Result<IssuedInvitation>> IssueAsync(OrganizationId organization, InvitationRequest request) =>
         Service.IssueAsync(

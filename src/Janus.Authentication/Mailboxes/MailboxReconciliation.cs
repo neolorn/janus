@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Core;
+using Janus.Core.Configuration;
 
 namespace Janus.Authentication.Mailboxes;
 
@@ -15,6 +16,7 @@ namespace Janus.Authentication.Mailboxes;
 /// </summary>
 /// <param name="mailboxes">Where the library's mailboxes are.</param>
 /// <param name="inUse">The mail server in use, where the deployment has one.</param>
+/// <param name="configuration">Where the accounts the deployment keeps for itself are read.</param>
 /// <param name="alerts">Where the drift's alert goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -28,11 +30,14 @@ namespace Janus.Authentication.Mailboxes;
 /// library holds is counted, and the account a mailbox of an erased holder left is
 /// among those, since that mailbox is not read at all. What differs is reported as
 /// <c>degradation</c> and changed on neither side: silent correction would hide the
-/// pipeline that failed.
+/// pipeline that failed. An account that is not an individual one, which the library never
+/// creates, and one <c>integration.mailserver.ownaccounts</c> names, which the deployment
+/// keeps for itself, carry no mailbox the library holds and are not counted (D-254).
 /// </remarks>
 internal sealed class MailboxReconciliation(
     IMailboxStore mailboxes,
     IMailServerInUse inUse,
+    IConfigurationStore configuration,
     IAlertRaising alerts,
     TimeProvider time)
 {
@@ -58,6 +63,16 @@ internal sealed class MailboxReconciliation(
 
         DateTimeOffset now = time.GetUtcNow();
         Error? failure = null;
+
+        IReadOnlyList<string> own = (await configuration
+                .ReadAsync(Settings.IntegrationMailServerOwnAccounts, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(read => read, error => Withheld<IReadOnlyList<string>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<MailboxDrift>(failure);
+        }
 
         IReadOnlyList<HostedMailbox> hosted = (await server.MailboxesAsync(cancellationToken)
                 .ConfigureAwait(false))
@@ -91,7 +106,7 @@ internal sealed class MailboxReconciliation(
             {
                 listed[carried] = account;
             }
-            else
+            else if (!Own(account, own))
             {
                 unknown++;
             }
@@ -144,6 +159,11 @@ internal sealed class MailboxReconciliation(
             : throw new ArgumentException(
                 "The pass runs as a system principal that may reconcile.",
                 nameof(context));
+
+    // INT-MAIL-007 (D-254): the mail server's own accounts, a group or one the deployment
+    // keeps for itself, are never the library's, so they are neither counted nor acted on.
+    private static bool Own(HostedMailbox account, IReadOnlyList<string> own) =>
+        !account.Individual || (account.Name is string name && own.Contains(name, StringComparer.Ordinal));
 
     // IDN-ACCT-004: the server's address is read in its canonical form before it is
     // compared, and one that does not read is no mailbox's address.

@@ -21,7 +21,9 @@ namespace Janus.Authentication.Mailboxes;
 /// here removes a mailbox anyone has held but a replacement. A retired mailbox keeps its
 /// last holder until it is reserved again, so an erasure of that holder reaches the
 /// address it held. A push marked failed is begun again under the same key a day after
-/// it was last marked failed, for as long as its state is owed (D-177).
+/// it was last marked failed, for as long as its state is owed (D-177). A mailbox reserved
+/// under <c>formerMailbox</c> <c>adopt</c> carries that permission on every push, so the
+/// push may take over the account the mail server already holds at its name (D-255).
 /// </remarks>
 internal sealed class Mailbox
 {
@@ -68,6 +70,12 @@ internal sealed class Mailbox
     /// its reservation released: from then it no longer stands for its address.
     /// </summary>
     public DateTimeOffset? RemovalOwedAt { get; private set; }
+
+    /// <summary>
+    /// Whether its push may take over an account the mail server already holds at its
+    /// name: it was reserved under <c>formerMailbox</c> <c>adopt</c> (D-255).
+    /// </summary>
+    public bool MayAdopt { get; private init; }
 
     /// <summary>
     /// Whether it is the mailbox that stands for its address: neither replaced nor
@@ -145,6 +153,16 @@ internal sealed class Mailbox
         new(MailboxId.Of(at), address, at);
 
     /// <summary>
+    /// A mailbox reserved for an address under <c>formerMailbox</c> <c>adopt</c>, whose
+    /// push may take over the account the mail server already holds there (D-255).
+    /// </summary>
+    /// <param name="address">The address.</param>
+    /// <param name="at">When it is reserved.</param>
+    /// <returns>The mailbox, owed a push that adopts or creates it.</returns>
+    public static Mailbox ReservedToAdopt(EmailAddress address, DateTimeOffset at) =>
+        new(MailboxId.Of(at), address, at) { MayAdopt = true };
+
+    /// <summary>
     /// The mailbox as it already stands. This is the store's translation of a stored
     /// row and no change anyone made.
     /// </summary>
@@ -161,6 +179,7 @@ internal sealed class Mailbox
     /// <param name="nextAttemptAt">When it is next attempted.</param>
     /// <param name="failedAt">When it was last marked failed.</param>
     /// <param name="attempted">Whether any push of it was ever attempted.</param>
+    /// <param name="mayAdopt">Whether it was reserved under <c>adopt</c>.</param>
     /// <returns>The mailbox.</returns>
     public static Mailbox Existing(
         MailboxId id,
@@ -175,9 +194,11 @@ internal sealed class Mailbox
         int attempts,
         DateTimeOffset? nextAttemptAt,
         DateTimeOffset? failedAt,
-        bool attempted) =>
+        bool attempted,
+        bool mayAdopt) =>
         new(id, address, reservedAt)
         {
+            MayAdopt = mayAdopt,
             Holder = holder,
             RetiredAt = retiredAt,
             RemovalOwedAt = removalOwedAt,
@@ -373,7 +394,7 @@ internal sealed class Mailbox
         }
 
         return FailedAt is null && (NextAttemptAt is null || NextAttemptAt <= now)
-            ? new MailboxPush(Id, PendingKey.Value, Address, owed)
+            ? new MailboxPush(Id, PendingKey.Value, Address, owed) { MayAdopt = MayAdopt }
             : null;
     }
 

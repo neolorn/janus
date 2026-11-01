@@ -717,6 +717,61 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal([clerk], Assert.Single(_deployment.Invitations.Held).GrantEnd?.Roles);
     }
 
+    /// <summary>
+    /// REG-MAIL-001 AC9 and AC10 (D-253, D-255): a current member of the administrative
+    /// organization is given a mailbox over
+    /// <c>POST /admin/organizations/{id}/members/{account}/mailbox</c>, answered <c>201</c>
+    /// with the mailbox's <c>id</c>, <c>address</c> and <c>state</c>; a second is
+    /// <c>409</c> <c>identity.mailbox.held</c>, another organization <c>404</c>
+    /// <c>identity.membership.notfound</c>, a request without a reason <c>400</c> naming it,
+    /// and <c>formerMailbox</c> <c>adopt</c> is read and recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_MAIL_001_AC9_AMemberIsGivenAMailboxOverTheWireAsync()
+    {
+        var member = new SubjectId(Guid.NewGuid());
+        var adopter = new SubjectId(Guid.NewGuid());
+
+        foreach (SubjectId one in new[] { member, adopter })
+        {
+            _deployment.Memberships.Place(one, Administration);
+            _deployment.Accounts.Stands(one, AccountState.Active);
+            _ = _deployment.Identifiers.Verified(one, IdentifierKind.Email, one + "@elsewhere.test");
+        }
+
+        Browser administrator = await AuthorisedAsync();
+
+        Answer unreasoned = await administrator.SendAsync("POST", MailboxOf(Administration, member), """{"address":"given@example.test"}""");
+        Answer given = await administrator.SendAsync("POST", MailboxOf(Administration, member), Giving("given@example.test", adopt: false));
+        Answer again = await administrator.SendAsync("POST", MailboxOf(Administration, member), Giving("again@example.test", adopt: false));
+        Answer elsewhere = await administrator.SendAsync("POST", MailboxOf(Branch, adopter), Giving("other@example.test", adopt: false));
+        Answer adopted = await administrator.SendAsync("POST", MailboxOf(Administration, adopter), Giving("kept@example.test", adopt: true));
+
+        Janus.Authentication.Mailboxes.Mailbox mailbox = _deployment.Mailboxes.Held.Single(held => held.Holder == member);
+
+        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal(StatusCodes.Status201Created, given.Status);
+        Assert.Equal(
+            (mailbox.Id.ToString(), "given@example.test", "enabled"),
+            (given.Text("id"), given.Text("address"), given.Text("state")));
+        Assert.Equal((StatusCodes.Status409Conflict, ErrorCodes.MailboxHeld.ToString()), (again.Status, again.Text("code")));
+        Assert.Equal((StatusCodes.Status404NotFound, ErrorCodes.MembershipNotFound.ToString()), (elsewhere.Status, elsewhere.Text("code")));
+        Assert.Equal(StatusCodes.Status201Created, adopted.Status);
+        Assert.True(_deployment.Mailboxes.Held.Single(held => held.Holder == adopter).MayAdopt);
+        Assert.Equal(
+            [AuditActions.MailboxGiven, AuditActions.MailboxGiven, AuditActions.MailboxAdopted],
+            _deployment.OrganizationChanges.Changes.Select(change => change.Action));
+    }
+
+    private static string Giving(string address, bool adopt) =>
+        System.Text.Json.JsonSerializer.Serialize(adopt
+            ? new { address, formerMailbox = "adopt", reason = "Joined before the mail server." }
+            : (object)new { address, reason = "Joined before the mail server." });
+
+    private static string MailboxOf(OrganizationId organization, SubjectId member) =>
+        "/admin/organizations/" + organization + "/members/" + member + "/mailbox";
+
     private static string Inviting(string[] roles, DateTimeOffset? grantEndsAt) =>
         System.Text.Json.JsonSerializer.Serialize(new { phone = "+441632960099", roles, grantEndsAt });
 

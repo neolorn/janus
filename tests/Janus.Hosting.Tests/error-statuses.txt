@@ -92,6 +92,7 @@ identity.invitation.identifiermismatch 422
 identity.invitation.mailboxheld 409
 identity.invitation.notfound 404
 identity.link.lastcredential 409
+identity.mailbox.held 409
 identity.mailbox.notfound 404
 identity.mailbox.taken 409
 identity.membership.limitreached 409
@@ -129,6 +130,7 @@ integration.callback.inprogress 409
 integration.callback.rejected 422
 integration.endpoint.insecure 422
 integration.mailserver.conflict 500
+integration.mailserver.unavailable 422
 model.containment.cycle 500
 model.derivation.undeclaredreference 500
 model.derivation.unindexed 500

@@ -37,6 +37,8 @@ namespace Janus.Authentication.Invitations;
 /// <param name="acknowledgement">What attaches the membership an invitation offers.</param>
 /// <param name="end">What ends a membership.</param>
 /// <param name="mailboxes">Where the corporate mailboxes are reserved.</param>
+/// <param name="reservations">The rules a corporate mailbox is reserved under.</param>
+/// <param name="giving">What gives a current member a mailbox.</param>
 /// <param name="inUse">
 /// The mail server in use, which the administrative organization's mail is integrated
 /// with where the deployment has one.
@@ -74,6 +76,8 @@ internal sealed class InvitationService(
     InvitationAcknowledgement acknowledgement,
     MembershipEnd end,
     IMailboxStore mailboxes,
+    MailboxReservations reservations,
+    MailboxGiving giving,
     IMailServerInUse inUse,
     IGovernedSend sending,
     LandingLinks landing,
@@ -175,12 +179,14 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(unended);
         }
 
-        Reservation? reservation = null;
+        MailboxReservation? reservation = null;
 
         if (bound.Corporate is EmailAddress corporate)
         {
-            reservation = (await ReservedAsync(corporate, takeover, now, cancellationToken).ConfigureAwait(false))
-                .Match(value => value, error => Withheld<Reservation>(error, ref failure));
+            reservation = (await reservations
+                    .ReservedAsync(corporate, takeover?.Choice, "corporateEmail", now, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(value => value, error => Withheld<MailboxReservation>(error, ref failure));
 
             if (failure is not null)
             {
@@ -273,7 +279,26 @@ internal sealed class InvitationService(
 
         if (reservation is not null)
         {
-            await ReserveAsync(reservation, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);
+            await reservations
+                .ReserveAsync(reservation, acting, context.BreakGlassReason, now, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // REG-MAIL-003 (D-255): taking over an account the mail server holds is never
+        // implicit, so it is recorded with its reason where the invitation names it.
+        if (reservation is not null && takeover is { Choice: FormerMailbox.Adopt })
+        {
+            await audit
+                .MailboxAdoptedAsync(
+                    organization,
+                    reservation.Mailbox.Id,
+                    acting,
+                    takeover.Reason,
+                    acting,
+                    context.BreakGlassReason,
+                    now,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await invitations.AddAsync(invitation, cancellationToken).ConfigureAwait(false);
@@ -403,7 +428,7 @@ internal sealed class InvitationService(
             return Result.Success();
         }
 
-        await WithdrawnAsync(held, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);
+        await reservations.WithdrawAsync(held, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);
 
         // REG-MAIL-001: a reservation nobody ever took is given up with the invitation
         // that made it; a mailbox someone has held stays, disabled.
@@ -687,87 +712,6 @@ internal sealed class InvitationService(
         return Result.Success<IReadOnlyList<InvitationDocument>>(shown);
     }
 
-    // REG-MAIL-001: one mailbox stands for an address, and one invitation over it. A
-    // mailbox an account holds is taken; an invitation still open over it is taken
-    // too, until it is revoked; one that expired unacknowledged is replaced.
-    // REG-MAIL-003, D-178: a mailbox someone has held passes on only under the choice
-    // the invitation names; an address whose last holder was erased is found no more,
-    // so it is one never held, and a choice where no held mailbox stands is refused.
-    private async ValueTask<Result<Reservation>> ReservedAsync(
-        EmailAddress corporate,
-        MailboxTakeover? takeover,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        if (await mailboxes.FindAsync(corporate, cancellationToken).ConfigureAwait(false) is not Mailbox existing)
-        {
-            return takeover is null
-                ? Result.Success(new Reservation(Mailbox.Reserved(corporate, now), IsNew: true, [], Former: null))
-                : Result.Failure<Reservation>(Named(ErrorCodes.RequestInvalid, "formerMailbox"));
-        }
-
-        if (existing.IsHeld)
-        {
-            return Result.Failure<Reservation>(Named(ErrorCodes.MailboxTaken, "corporateEmail"));
-        }
-
-        IReadOnlyList<Invitation> standing = await invitations
-            .ReservingAsync(existing.Id, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (standing.Any(invitation => !invitation.HasExpired(now)))
-        {
-            return Result.Failure<Reservation>(Named(ErrorCodes.MailboxTaken, "corporateEmail"));
-        }
-
-        if (!existing.WasHeld)
-        {
-            return takeover is null
-                ? Result.Success(new Reservation(existing, IsNew: false, standing, Former: null))
-                : Result.Failure<Reservation>(Named(ErrorCodes.RequestInvalid, "formerMailbox"));
-        }
-
-        return takeover?.Choice switch
-        {
-            null => Result.Failure<Reservation>(Error.From(ErrorCodes.InvitationMailboxHeld)),
-            FormerMailbox.Transfer => Result.Success(new Reservation(existing, IsNew: false, standing, Former: null)),
-            _ => Result.Success(new Reservation(Mailbox.Reserved(corporate, now), IsNew: true, standing, Former: existing)),
-        };
-    }
-
-    private async ValueTask ReserveAsync(
-        Reservation reservation,
-        SubjectId acting,
-        string? breakGlassReason,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        foreach (Invitation replaced in reservation.Replaced)
-        {
-            await WithdrawnAsync(replaced, acting, breakGlassReason, now, cancellationToken).ConfigureAwait(false);
-        }
-
-        // REG-MAIL-003, D-178: the old mailbox stands aside, owed its removal, before
-        // the new one takes the address.
-        if (reservation.Former is Mailbox former)
-        {
-            former.Replace(now);
-
-            await mailboxes.RecordAsync(former, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (reservation.IsNew)
-        {
-            await mailboxes.AddAsync(reservation.Mailbox, cancellationToken).ConfigureAwait(false);
-
-            return;
-        }
-
-        reservation.Mailbox.Reserve();
-
-        await mailboxes.RecordAsync(reservation.Mailbox, cancellationToken).ConfigureAwait(false);
-    }
-
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<AttachedInvitation>> AttachedAsync(
@@ -906,6 +850,17 @@ internal sealed class InvitationService(
         reads.MembersAsync(context, organization, after, limit, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<Result<GivenMailbox>> GiveMailboxAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        SubjectId member,
+        MailboxGift request,
+        string source,
+        CancellationToken cancellationToken) =>
+        giving.GiveAsync(context, session, organization, member, request, source, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Result<MemberSummary>> MemberAsync(
         AccessContext context,
         OrganizationId organization,
@@ -919,29 +874,6 @@ internal sealed class InvitationService(
         OrganizationId organization,
         CancellationToken cancellationToken) =>
         reads.StandingAsync(context, organization, cancellationToken);
-
-    private async ValueTask WithdrawnAsync(
-        Invitation invitation,
-        SubjectId acting,
-        string? breakGlassReason,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        invitation.Revoke(now);
-
-        await invitations.RecordAsync(invitation, cancellationToken).ConfigureAwait(false);
-        await audit
-            .InvitationChangedAsync(
-                AuditActions.InvitationRevoked,
-                invitation.Organization,
-                invitation.Id,
-                takeover: null,
-                acting,
-                breakGlassReason,
-                now,
-                cancellationToken)
-            .ConfigureAwait(false);
-    }
 
     private async ValueTask<Error?> SentAsync(
         EmailAddress linked,
@@ -998,5 +930,4 @@ internal sealed class InvitationService(
 
     private sealed record NamedRoles(IReadOnlyList<RoleName> Names, IReadOnlyList<RoleName> Ending);
 
-    private sealed record Reservation(Mailbox Mailbox, bool IsNew, IReadOnlyList<Invitation> Replaced, Mailbox? Former);
 }

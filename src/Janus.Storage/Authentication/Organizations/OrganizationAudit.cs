@@ -169,6 +169,74 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
     }
 
     /// <inheritdoc/>
+    public async ValueTask MailboxGivenAsync(
+        OrganizationId organization,
+        MailboxId mailbox,
+        SubjectId member,
+        string reason,
+        FormerMailbox? formerMailbox,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        var details = new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
+        {
+            ["mailbox"] = JsonSerializer.SerializeToElement(mailbox.ToString()),
+            ["reason"] = JsonSerializer.SerializeToElement(reason),
+        };
+
+        if (formerMailbox is FormerMailbox choice)
+        {
+            details["formerMailbox"] = JsonSerializer.SerializeToElement(WrittenName.Of(choice));
+        }
+
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    AuditActions.MailboxGiven,
+                    at,
+                    actor,
+                    member,
+                    breakGlassReason,
+                    organization,
+                    details),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask MailboxAdoptedAsync(
+        OrganizationId organization,
+        MailboxId mailbox,
+        SubjectId subject,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    AuditActions.MailboxAdopted,
+                    at,
+                    actor,
+                    subject,
+                    breakGlassReason,
+                    organization,
+                    new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                    {
+                        ["mailbox"] = JsonSerializer.SerializeToElement(mailbox.ToString()),
+                        ["reason"] = JsonSerializer.SerializeToElement(reason),
+                    }),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask MembershipEndedAsync(
         OrganizationId organization,
         MembershipId membership,

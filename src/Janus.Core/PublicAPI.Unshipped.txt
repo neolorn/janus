@@ -9,6 +9,22 @@ Janus.Core.CollectedRecord.Equals(Janus.Core.CollectedRecord? other) -> bool
 Janus.Core.CollectedRecord.Subject.get -> Janus.Core.SubjectId
 Janus.Core.CollectedRecord.Subject.init -> void
 Janus.Core.ConsentMechanism.Collection = 4 -> Janus.Core.ConsentMechanism
+Janus.Core.FormerMailbox.Adopt = 2 -> Janus.Core.FormerMailbox
+Janus.Core.GivenMailbox
+Janus.Core.GivenMailbox.<Clone>$() -> Janus.Core.GivenMailbox!
+Janus.Core.GivenMailbox.Address.get -> Janus.Core.EmailAddress
+Janus.Core.GivenMailbox.Address.init -> void
+Janus.Core.GivenMailbox.Deconstruct(out Janus.Core.MailboxId Id, out Janus.Core.EmailAddress Address, out Janus.Core.MailboxState State) -> void
+Janus.Core.GivenMailbox.Equals(Janus.Core.GivenMailbox? other) -> bool
+Janus.Core.GivenMailbox.GivenMailbox(Janus.Core.MailboxId Id, Janus.Core.EmailAddress Address, Janus.Core.MailboxState State) -> void
+Janus.Core.GivenMailbox.Id.get -> Janus.Core.MailboxId
+Janus.Core.GivenMailbox.Id.init -> void
+Janus.Core.GivenMailbox.State.get -> Janus.Core.MailboxState
+Janus.Core.GivenMailbox.State.init -> void
+Janus.Core.HostedMailbox.Individual.get -> bool
+Janus.Core.HostedMailbox.Individual.init -> void
+Janus.Core.HostedMailbox.Name.get -> string?
+Janus.Core.HostedMailbox.Name.init -> void
 Janus.Core.IGovernedSend
 Janus.Core.AccessContext
 Janus.Core.AccessContext.Acting.get -> Janus.Core.SubjectId?
@@ -1501,6 +1517,7 @@ Janus.Core.IInvitations
 Janus.Core.IInvitations.AcknowledgeAsync(Janus.Core.AccessContext! context, Janus.Core.InvitationId invitation, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.AttachedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AttachedInvitation!>>
 Janus.Core.IInvitations.EndMembershipAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! reason, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IInvitations.GiveMailboxAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, Janus.Core.MailboxGift! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GivenMailbox!>>
 Janus.Core.IInvitations.SetMembershipEndAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, System.DateTimeOffset endsAt, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.CancelMembershipEndAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.IssueAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.InvitationRequest! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedInvitation!>>
@@ -1832,6 +1849,17 @@ Janus.Core.LossReported.Equals(Janus.Core.LossReported? other) -> bool
 Janus.Core.LossReported.InvalidatesAt.get -> System.DateTimeOffset
 Janus.Core.LossReported.InvalidatesAt.init -> void
 Janus.Core.LossReported.LossReported(Janus.Core.AuthenticatorId Credential, System.DateTimeOffset InvalidatesAt) -> void
+Janus.Core.MailboxGift
+Janus.Core.MailboxGift.<Clone>$() -> Janus.Core.MailboxGift!
+Janus.Core.MailboxGift.Address.get -> string!
+Janus.Core.MailboxGift.Address.init -> void
+Janus.Core.MailboxGift.Deconstruct(out string! Address, out string! Reason) -> void
+Janus.Core.MailboxGift.Equals(Janus.Core.MailboxGift? other) -> bool
+Janus.Core.MailboxGift.FormerMailbox.get -> Janus.Core.FormerMailbox?
+Janus.Core.MailboxGift.FormerMailbox.init -> void
+Janus.Core.MailboxGift.MailboxGift(string! Address, string! Reason) -> void
+Janus.Core.MailboxGift.Reason.get -> string!
+Janus.Core.MailboxGift.Reason.init -> void
 Janus.Core.MailboxId
 Janus.Core.MailboxId.Deconstruct(out System.Guid Value) -> void
 Janus.Core.MailboxId.Equals(Janus.Core.MailboxId other) -> bool
@@ -1850,6 +1878,8 @@ Janus.Core.MailboxPush.Key.init -> void
 Janus.Core.MailboxPush.Mailbox.get -> Janus.Core.MailboxId
 Janus.Core.MailboxPush.Mailbox.init -> void
 Janus.Core.MailboxPush.MailboxPush(Janus.Core.MailboxId Mailbox, System.Guid Key, Janus.Core.EmailAddress Address, Janus.Core.MailboxState State) -> void
+Janus.Core.MailboxPush.MayAdopt.get -> bool
+Janus.Core.MailboxPush.MayAdopt.init -> void
 Janus.Core.MailboxPush.State.get -> Janus.Core.MailboxState
 Janus.Core.MailboxPush.State.init -> void
 Janus.Core.FormerMailbox
@@ -3758,6 +3788,9 @@ override Janus.Core.GeneratedRecoveryCodes.ToString() -> string!
 override Janus.Core.GeneratorEnrolment.Equals(object? obj) -> bool
 override Janus.Core.GeneratorEnrolment.GetHashCode() -> int
 override Janus.Core.GeneratorEnrolment.ToString() -> string!
+override Janus.Core.GivenMailbox.Equals(object? obj) -> bool
+override Janus.Core.GivenMailbox.GetHashCode() -> int
+override Janus.Core.GivenMailbox.ToString() -> string!
 override Janus.Core.GrantChanged.<Clone>$() -> Janus.Core.GrantChanged!
 override Janus.Core.GrantChanged.Equals(object? obj) -> bool
 override Janus.Core.GrantChanged.GetHashCode() -> int
@@ -3835,6 +3868,9 @@ override Janus.Core.LinkLanding.ToString() -> string!
 override Janus.Core.LossReported.Equals(object? obj) -> bool
 override Janus.Core.LossReported.GetHashCode() -> int
 override Janus.Core.LossReported.ToString() -> string!
+override Janus.Core.MailboxGift.Equals(object? obj) -> bool
+override Janus.Core.MailboxGift.GetHashCode() -> int
+override Janus.Core.MailboxGift.ToString() -> string!
 override Janus.Core.MailboxId.GetHashCode() -> int
 override Janus.Core.MailboxId.ToString() -> string!
 override Janus.Core.MailboxPush.Equals(object? obj) -> bool
@@ -4296,6 +4332,8 @@ static Janus.Core.AuditActions.KeyRotationRetired.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.KeyRotationStarted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.MailCredentialCreated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.MailCredentialRevoked.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.MailboxAdopted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.MailboxGiven.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.MembershipEnded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.MembershipEndSet.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionRecorded.get -> Janus.Core.AuditAction
@@ -4373,6 +4411,7 @@ static Janus.Core.CollectedRecord.operator !=(Janus.Core.CollectedRecord? left, 
 static Janus.Core.CollectedRecord.operator ==(Janus.Core.CollectedRecord? left, Janus.Core.CollectedRecord? right) -> bool
 static Janus.Core.ComplianceRecord.operator !=(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
 static Janus.Core.ComplianceRecord.operator ==(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
+static Janus.Core.Configuration.Settings.IntegrationMailServerOwnAccounts.get -> Janus.Core.Configuration.TextListSetting!
 static Janus.Core.Configuration.Settings.OidcPublicApplicationAccessTokenLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordDeletionGrace.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecordsAccessLifetime.get -> Janus.Core.Configuration.DurationSetting!
@@ -4692,6 +4731,8 @@ static Janus.Core.ErrorCodes.LinkLastCredential.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportNotPermitted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportPending.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MailServerConflict.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.MailServerUnavailable.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.MailboxHeld.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MailboxNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MailboxTaken.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MembershipLimitReached.get -> Janus.Core.ErrorCode
@@ -4812,6 +4853,8 @@ static Janus.Core.GeneratedRecoveryCodes.operator !=(Janus.Core.GeneratedRecover
 static Janus.Core.GeneratedRecoveryCodes.operator ==(Janus.Core.GeneratedRecoveryCodes? left, Janus.Core.GeneratedRecoveryCodes? right) -> bool
 static Janus.Core.GeneratorEnrolment.operator !=(Janus.Core.GeneratorEnrolment? left, Janus.Core.GeneratorEnrolment? right) -> bool
 static Janus.Core.GeneratorEnrolment.operator ==(Janus.Core.GeneratorEnrolment? left, Janus.Core.GeneratorEnrolment? right) -> bool
+static Janus.Core.GivenMailbox.operator !=(Janus.Core.GivenMailbox? left, Janus.Core.GivenMailbox? right) -> bool
+static Janus.Core.GivenMailbox.operator ==(Janus.Core.GivenMailbox? left, Janus.Core.GivenMailbox? right) -> bool
 static Janus.Core.GrantChanged.operator !=(Janus.Core.GrantChanged? left, Janus.Core.GrantChanged? right) -> bool
 static Janus.Core.GrantChanged.operator ==(Janus.Core.GrantChanged? left, Janus.Core.GrantChanged? right) -> bool
 static Janus.Core.GrantId.New(System.TimeProvider! time) -> Janus.Core.GrantId
@@ -4881,6 +4924,8 @@ static Janus.Core.LinkLanding.operator !=(Janus.Core.LinkLanding? left, Janus.Co
 static Janus.Core.LinkLanding.operator ==(Janus.Core.LinkLanding? left, Janus.Core.LinkLanding? right) -> bool
 static Janus.Core.LossReported.operator !=(Janus.Core.LossReported? left, Janus.Core.LossReported? right) -> bool
 static Janus.Core.LossReported.operator ==(Janus.Core.LossReported? left, Janus.Core.LossReported? right) -> bool
+static Janus.Core.MailboxGift.operator !=(Janus.Core.MailboxGift? left, Janus.Core.MailboxGift? right) -> bool
+static Janus.Core.MailboxGift.operator ==(Janus.Core.MailboxGift? left, Janus.Core.MailboxGift? right) -> bool
 static Janus.Core.MailboxId.Of(System.DateTimeOffset reservedAt) -> Janus.Core.MailboxId
 static Janus.Core.MailboxId.operator !=(Janus.Core.MailboxId left, Janus.Core.MailboxId right) -> bool
 static Janus.Core.MailboxId.operator ==(Janus.Core.MailboxId left, Janus.Core.MailboxId right) -> bool

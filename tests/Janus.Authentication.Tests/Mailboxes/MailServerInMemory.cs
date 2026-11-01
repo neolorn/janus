@@ -103,6 +103,13 @@ internal sealed class MailServerInMemory : IMailServer
     /// </param>
     public void Set(string address, bool? enabled, MailboxId? mailbox = null)
     {
+        if (enabled is bool && _hosted.TryGetValue(address, out Hosted? group) && !group.Individual)
+        {
+            _hosted[address] = group with { Enabled = enabled.Value };
+
+            return;
+        }
+
         if (enabled is bool value)
         {
             _hosted[address] = new Hosted(
@@ -114,6 +121,20 @@ internal sealed class MailServerInMemory : IMailServer
             _ = _hosted.Remove(address);
         }
     }
+
+    /// <summary>
+    /// Has the server hold a group account at an address, which carries no mailbox
+    /// identifier and is not an individual one (D-254).
+    /// </summary>
+    /// <param name="address">The address.</param>
+    public void SetGroup(string address) =>
+        _hosted[address] = new Hosted(Mailbox: null, Enabled: false) { Individual = false };
+
+    /// <summary>
+    /// Gets the names of the accounts the server refuses a push at, as an adapter refuses
+    /// one at an account <c>integration.mailserver.ownaccounts</c> names (D-254).
+    /// </summary>
+    public HashSet<string> Own { get; } = new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public ValueTask<Result> ProvisionAsync(MailboxPush push, CancellationToken cancellationToken)
@@ -133,9 +154,22 @@ internal sealed class MailServerInMemory : IMailServer
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.SystemFault)));
         }
 
-        if (_hosted.TryGetValue(push.Address.Value, out Hosted? found) && found.Mailbox != push.Mailbox)
+        if (Own.Contains(Name(push.Address.Value)))
         {
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.MailServerConflict)));
+        }
+
+        if (_hosted.TryGetValue(push.Address.Value, out Hosted? found) && found.Mailbox != push.Mailbox)
+        {
+            // D-255: a push that may adopt takes over an individual account carrying no
+            // mailbox identifier, and nothing else.
+            if (!push.MayAdopt || found.Mailbox is not null || !found.Individual)
+            {
+                return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.MailServerConflict)));
+            }
+
+            _hosted[push.Address.Value] = found with { Mailbox = push.Mailbox };
+            Adopted.Add(push.Address.Value);
         }
 
         if (_applied.Add(push.Key))
@@ -162,7 +196,18 @@ internal sealed class MailServerInMemory : IMailServer
             Unreachable
                 ? Result.Failure<IReadOnlyList<HostedMailbox>>(Error.From(ErrorCodes.SystemFault))
                 : Result.Success<IReadOnlyList<HostedMailbox>>(
-                    [.. _hosted.Select(pair => new HostedMailbox(pair.Value.Mailbox, Listed(pair.Key), pair.Value.Enabled))]));
+                    [
+                        .. _hosted.Select(pair => new HostedMailbox(pair.Value.Mailbox, Listed(pair.Key), pair.Value.Enabled)
+                        {
+                            Individual = pair.Value.Individual,
+                            Name = Name(pair.Key),
+                        }),
+                    ]));
+
+    /// <summary>
+    /// Gets the addresses whose account a push took over (D-255).
+    /// </summary>
+    public List<string> Adopted { get; } = [];
 
     /// <summary>
     /// The app passwords the server holds for the account at an address.
@@ -250,7 +295,13 @@ internal sealed class MailServerInMemory : IMailServer
     private static EmailAddress? Listed(string address) =>
         EmailAddress.TryParse(address, out EmailAddress listed) ? listed : null;
 
-    private sealed record Hosted(MailboxId? Mailbox, bool Enabled);
+    // The name the server gives an account: its address's local part.
+    private static string Name(string address) => address.Contains('@', StringComparison.Ordinal) ? address[..address.LastIndexOf('@')] : address;
+
+    private sealed record Hosted(MailboxId? Mailbox, bool Enabled)
+    {
+        public bool Individual { get; init; } = true;
+    }
 
     // The account a call acts on: the one under the mailbox's address that carries its
     // identifier, where the server is reached and holds one.

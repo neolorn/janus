@@ -500,6 +500,12 @@ public static class ErrorCodes
     public static ErrorCode MailboxTaken { get; } = ErrorCode.Parse("identity.mailbox.taken");
 
     /// <summary>
+    /// The account is given a mailbox while it already holds one. Nothing is written.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-001 (D-253), chapter 10 section 1.1.</remarks>
+    public static ErrorCode MailboxHeld { get; } = ErrorCode.Parse("identity.mailbox.held");
+
+    /// <summary>
     /// The account holds no mailbox the mail server is told to enable, or the deployment
     /// has no mail server registered; the app passwords are not present for it. A member
     /// of the administrative organization is given a mailbox by invitation.
@@ -1148,6 +1154,13 @@ public static class ErrorCodes
     /// <c>degradation</c> scoped <c>mailbox.conflict:&lt;mailbox id&gt;</c>.
     /// </remarks>
     public static ErrorCode MailServerConflict { get; } = ErrorCode.Parse("integration.mailserver.conflict");
+
+    /// <summary>
+    /// A mailbox is given where the deployment registers no mail server. The details name
+    /// what it requires, <c>integration.mailserver.endpoint</c>. Nothing is written.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-001 and INT-MAIL-001 (D-253), chapter 10 section 1.6.</remarks>
+    public static ErrorCode MailServerUnavailable { get; } = ErrorCode.Parse("integration.mailserver.unavailable");
 
     /// <summary>
     /// The processing needs a consent the subject has not given. Ask for it on the
