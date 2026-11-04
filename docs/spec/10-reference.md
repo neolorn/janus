@@ -89,6 +89,8 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.preference.wrongtype` | A preference value of a type other than its declaration; 422 | REG-PREF-001, D-153 |
 | `identity.preference.toolarge` | The preference set would exceed `preferences.maxsize`; 422 | REG-PREF-001, D-153 |
 | `identity.preference.administratoronly` | The person set a preference declared administrator-only; 422 | REG-PREF-001, D-153 |
+| `identity.search.queryinvalid` | A staff search refused on its query: a `q` that normalises to nothing or to more than 64 characters, a `limit` outside 1 to 50, or a `kinds` member other than `account` and `record`; `details.member` names the member; 422 | IDN-SRCH-001, D-256 |
+| `identity.search.unavailable` | The process does not serve the staff search: `details.reason` (section 5.53) `off` where its `Janus:Search:Enabled` is not true, `building` until its index is built, the answer carrying `Retry-After`, `capacity` where the subjects to index pass `Janus:Search:MaxSubjects`, `unsafe` where a memory check failed under `Janus:Search:MemoryChecks` `enforce`; at the route and at `ISearch.SearchAsync` alike; 503 | IDN-SRCH-003, D-256 |
 
 ### 1.2 Authentication
 
@@ -122,7 +124,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `auth.stepup.required` **(new)** | The gate is not met; `details` carries `required` (`level`, `phishingResistant`, `maxAge` in whole seconds, null where the gate asks none, D-193), `outcome` (`present` · `enrol` · `report-loss` · `signIn` · `pending`; `signIn` where AUTH-STEP-002 step 3 sends the person through a new sign-in with the provider, D-243), `options` (the combinations of catalogue identifiers that would meet it) and `pendingUntil`, null unless the outcome is `pending`. At the invitation acknowledgement `details` carries `outcome` `enrol` and `policyRequirement` `{ field, value }` in place of the gate values. A gate judged from a host's assurance report (LIB-HOST-004), where no session of the library that is the acting person's own carries the request, that is not met (a provider failure included) carries `required`, `outcome` `present`, empty `options` and a null `pendingUntil`. Otherwise no `details` where no session of the library belonging to the acting account was judged (`09` `/auth/step-up`); on a navigation it is carried in `error` alone, with no `details` (BFF-STEP-001, D-192); 403 | AUTH-STEP-001, AUTH-STEP-002, LIB-HOST-004, D-141, D-166, D-183, D-192, D-193, D-243 |
 | `auth.stepup.unavailable` **(new)** | No assurance provider registered; 403 | AUTH-STEP-003, D-166 |
 | `auth.provider.unavailable` **(new)** | A social provider's round trip could not reach or read the provider: its discovery document (one naming no HTTPS authorization or token endpoint included), its published keys or its token endpoint (every answer but a success holding an identity token and an `invalid_grant` refusal included: a 5xx, a 429, `invalid_client`); the browser is returned with it in `error` (BFF-ERR-001), and no failed attempt is counted; 502 | IDN-LIFE-012, D-192, D-193 |
-| `auth.throttled` **(new)** | A progressive delay or a rate limit is in effect; `details.retryAt` is the instant the next attempt is looked at, and the answer carries `Retry-After`; a throttled navigation (a social provider's return) carries `error=auth.throttled` and `retryAt` in its query instead (BFF-ABUSE-001); 429 | AUTH-ABUSE-001, AUTH-ABUSE-002, AUTH-RECOV-002, OPS-ALERT-006, D-166 |
+| `auth.throttled` **(new)** | A progressive delay or a rate limit is in effect; `details.retryAt` is the instant the next attempt is looked at, and the answer carries `Retry-After`; a throttled navigation (a social provider's return) carries `error=auth.throttled` and `retryAt` in its query instead (BFF-ABUSE-001); 429 | AUTH-ABUSE-001, AUTH-ABUSE-002, AUTH-RECOV-002, OPS-ALERT-006, IDN-SRCH-002, D-166, D-256 |
 | `auth.restriction.exceeded` **(new)** | A send refused by a named restriction; `details.retryAt` is the earliest instant at which every bucket the send exceeds has room for it, identical whether or not the address is registered (AUTH-ABUSE-002, D-197). Replaces `integration.sms.windowactive`; on a navigation it is carried in `error`, with `retryAt` in the query (BFF-ABUSE-001, D-192); 429 | AUTH-ABUSE-004, D-146, D-166, D-192, D-197 |
 | `auth.restriction.notfound` | The restriction named in the path is not in the set (`GET` and `DELETE /admin/restrictions/{name}`, `POST /admin/restrictions/{name}/grant`); 404 | AUTH-ABUSE-004, D-166 |
 | ~~`auth.device.verificationrequired`~~ | *Retired by D-166. The held sign-in is the `status` value `deviceVerificationRequired` of `POST /auth/factor` (section 5.33), answered 200, not a code.* | |
@@ -262,11 +264,11 @@ IDN-READ-004 names, `record:read` and `record:erase`, and no other (D-218, D-221
 | `restriction:grant` | Granting credit to one key under a restriction (`POST /admin/restrictions/{name}/grant`, AUTH-ABUSE-004, D-146): the support role's permission, stepped up, audited with a reason |
 | `account:manage` | Suspending and reactivating an account, lifting a restriction, cancelling a deletion on a subject's behalf (D-106), and setting another person's preferences (`01` IDN-READ-003, D-218) |
 | `account:read` | Reading another person's account and finding an account by an identifier (`01` IDN-READ-003), with the reach of IDN-READ-004; a person's alone (D-218) |
-| `contact:read` | Reading another person's display name, primary verified email and phone, language, time zone and state (`01` IDN-READ-003), with the reach of IDN-READ-004. A host's job may declare it (D-218) |
+| `contact:read` | Reading another person's display name, primary verified email and phone, language, time zone and state (`01` IDN-READ-003), with the reach of IDN-READ-004. A host's job may declare it (D-218). Also finding accounts through the staff search, with the reach of IDN-SRCH-002; a job may not search (`01` IDN-SRCH-002, D-256) |
 | `consent:read` | Reading another person's state, consents and objections (`01` IDN-READ-003), with the reach of IDN-READ-004. A host's job may declare it (D-218) |
 | `takedown:execute` | The minor takedown operation: the trigger, the reversal and the read of its progress, of an account (IDN-LIFE-003) and of a person record (`21` REC-TKD-001, D-221). Its own permission because of what it does |
 | `record:create` | Entering a person record for someone who gave their details to staff (`21` REC-COL-003), asked in the organization the record is entered in (D-221) |
-| `record:read` | Reading and finding person records and the records attached to an account (`21` REC-ADM-001, REC-ATT-002), with the reach REC-ADM-001 gives. A host's job may declare it (D-221) |
+| `record:read` | Reading and finding person records and the records attached to an account (`21` REC-ADM-001, REC-ATT-002), with the reach REC-ADM-001 gives. A host's job may declare it (D-221). Also finding person records through the staff search, with the reach of IDN-SRCH-002; a job may not search (`01` IDN-SRCH-002, D-256) |
 | `record:manage` | Correcting a person record, recording a consent or an objection the person gave staff, exporting a record for the person, lifting its restriction and cancelling its deletion (`21` REC-ADM-002, D-221) |
 | `record:erase` | Erasing a person record the host keeps nothing about any longer (`21` REC-ADM-003). A host's job may declare it (D-221) |
 | `recovery:approve` | Administrative re-enrolment |
@@ -633,6 +635,18 @@ any relying party that validates offline against the JWKS (AUTH-OIDC-004, D-147)
 | `token.signing.rotation` | 90 days | R, duration, floor `P1D`; lengthening is loosening | AUTH-KEY-001, OPS-SEC-002, D-147, D-166, D-181, D-197: the cadence of the signing keys and of every registered client's secret, which the library generates and holds wrapped under the deployment's data key; overlap is `oidc.accesstoken.lifetime` plus 5 minutes, for a signing key the longest lifetime it signed under, the greater of `oidc.accesstoken.lifetime` and `oidc.publicapplication.accesstoken.lifetime` (D-252), not a key of its own |
 | `redirect.defaultclient` | empty | **P**, string, the identifier of a registered client of kind `browser-application`; startup refuses one the registry does not hold, or one of kind `protocol`, with `model.startup.redirectclient` | API-REDIR-001, API-REDIR-002, D-162, D-166: the client a browser falls back to where the identifier a request carried is not one the registry holds; while empty, no fallback destination is carried and the frontend chooses its own, and `GET /oidc/authorize/continue` with no authorization pending answers `/` (D-228) |
 
+### 4.10 The staff search
+
+Set per process: a deployment turns the search on in the processes that serve staff,
+and each process reads its own (`01` IDN-SRCH-003, `07` LIB-HOST-001, D-256).
+
+| Key | Default | Scope | Source |
+|---|---|---|---|
+| `Janus:Search:Enabled` | `false` | per process, boolean | IDN-SRCH-003, D-256: whether the process builds the staff search's index and serves the search; elsewhere the search answers `identity.search.unavailable` with `details.reason` `off` |
+| `Janus:Search:PerMinute` | 60 | per process, integer searches a minute per caller | IDN-SRCH-002, D-256: past it the search answers 429 `auth.throttled` with `Retry-After` and `details.retryAt`, as the library's other per-caller limits answer |
+| `Janus:Search:MaxSubjects` | 200000 | per process, integer subjects | IDN-SRCH-003, D-256: where the subjects to index pass it, the index is not built, the search answers `identity.search.unavailable` with `details.reason` `capacity`, and `search-capacity` is raised |
+| `Janus:Search:MemoryChecks` | `enforce` | per process: `enforce` · `warn` (section 5.53); `warn` admitted only where the host environment is `Development` | IDN-SRCH-003, D-256: under `enforce` a failed memory check stops the build, the search answers `identity.search.unavailable` with `details.reason` `unsafe`, and `search-unsafe` is raised naming the check; `warn` builds anyway and logs the failed check at Warning; outside `Development`, `warn` stops the start with the library's configuration error |
+
 ---
 
 ## 5. Fixed enumerations
@@ -989,7 +1003,11 @@ actor: `auth-failures-sustained` · `recovery-clustering` · `approver-volume` �
 `nonexistent-notice-rate` · `privacy-deadline-approaching` · `privacy-deadline-reached`
 · `expiry-approaching` · `holiday-list-exhausted` · `no-emergency-credential` ·
 `restriction-loosened` · `restriction-granted` · `domain-reverification-failed` ·
-`domain-removed` · `governing-language-changed` · `governing-text-missing`.
+`domain-removed` · `governing-language-changed` · `governing-text-missing` ·
+`search-capacity` · `search-unsafe`.
+
+`search-unsafe` names the memory check that failed and never a value (`01`
+IDN-SRCH-003, D-256).
 
 `breakglass-used` and `breakglass-generated` (a first issue or a replacement) are High,
 and reach the owner as well as the operator when the host delivers them (OPS-BOOT-002,
@@ -1563,6 +1581,24 @@ of a document is the highest published (PRIV-CONS-005).
 
 *Source: REG-SESS-007, REC-COL-002, D-222*
 
+### 5.53 The staff search
+
+Kinds: `account` · `record`, a result's `kind` and the members of a query's `kinds`.
+Matched: `name` · `email` · `phone`, a result's `matched`, the field that matched first
+in that order. Unavailable reasons: `off` · `building` · `capacity` · `unsafe`, the
+`details.reason` of `identity.search.unavailable`. Memory checks: `enforce` · `warn`,
+the values of `Janus:Search:MemoryChecks` (section 4.10).
+
+*Source: IDN-SRCH-001, IDN-SRCH-003, D-256*
+
+### 5.54 Database channels
+
+`identity_registration` (the registration signal, `20` REG-SESS-003) · `janus_search`
+(the staff search's index, `01` IDN-SRCH-003, carrying the subject identifier alone).
+Each notification is sent in the transaction that changes what it signals.
+
+*Source: REG-SESS-003, IDN-SRCH-003, D-162, D-256*
+
 ---
 
 ## 5a. Step-up actions — library-owned
@@ -1723,6 +1759,7 @@ D-141, D-146, D-162, D-166, D-168, D-177, D-183, D-187, D-197, D-218, D-248*
 | 429 | Throttled, carries `Retry-After` |
 | 500 | An unhandled fault: `system.fault` with the correlation identifier and nothing else (BFF-ERR-002, D-153) |
 | 502 | A dependency outside the deployment could not be reached or read: `auth.provider.unavailable`, which only a navigation's `error` carries, so no response bears this status (D-192) |
+| 503 | The staff search is not served by the process: `identity.search.unavailable` with its `details.reason`, carrying `Retry-After` while the index is building (`01` IDN-SRCH-003, D-256) |
 
 **The status belongs to the code.** Each code of section 1 SHALL answer with the one
 status its row names, at every endpoint that raises it; no endpoint gives a code a
@@ -1737,7 +1774,7 @@ OPS-SEC-003); a conformance finding is a report of the suite (LIB-TEST-001);
 `integration.mailserver.conflict` is a mail server's answer to the provisioning job
 (INT-MAIL-007). None is answered by a request.
 
-*Source: API-CONV-003, D-162, D-166, D-177, D-183, D-192*
+*Source: API-CONV-003, D-162, D-166, D-177, D-183, D-192, D-256*
 
 ---
 

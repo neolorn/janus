@@ -211,7 +211,7 @@ host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. 
 operations named below as called in process only have no endpoint.
 
 *Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208, D-218, D-221,
-D-247, D-250, D-253*
+D-247, D-250, D-253, D-256*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -237,7 +237,8 @@ D-218); and the person records (`21`, D-221): their entry, reads and finding,
 correction, the consents and objections staff record, their export for the person,
 restriction lift, deletion and its cancellation, erasure and takedown, the account's
 operations on a record attached to it, and the offer and the attachment
-(`IPersonRecords`); and the outcome of a message the host reports (`ISendOutcomes`,
+(`IPersonRecords`); the staff search (`ISearch`, `01` IDN-SRCH-001 to IDN-SRCH-003,
+D-256); and the outcome of a message the host reports (`ISendOutcomes`,
 INT-SMS-005, D-225), called in process only. The endpoints are enumerated in
 `09-api-contract`; the permissions in `10-reference` §2.1.
 
@@ -258,6 +259,15 @@ caller's access context, the administrative organization, the member and the req
 address, `formerMailbox` and reason, gives that member a mailbox as `20` REG-MAIL-001
 states, and answers the mailbox's identifier, address and state. Its endpoint is
 `POST /admin/organizations/{id}/members/{account}/mailbox` (`09`).
+
+**The staff search (D-256).** `ISearch.SearchAsync`, in `Janus.Core`, taking the
+caller's access context and a `SearchQuery` (the organization, `q`, the kinds asked
+for as `SearchKinds`, `account` · `record`, and the limit), answers the results as `01`
+IDN-SRCH-001 orders and caps them, each a `SearchResult` carrying the subject, its kind,
+its display name and the field that matched first as `SearchMatch` (`name` · `email` ·
+`phone`), and no email or phone value. It answers whom IDN-SRCH-002 admits, refuses a
+system principal, and answers `identity.search.unavailable` where the process serves no
+index (IDN-SRCH-003). Its endpoint is `POST /admin/search` (`09`).
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
@@ -379,6 +389,7 @@ anyone acts, and reads no record of a person (D-218).
 | **Location file** | Optional: `ILocationSource`, which opens the IP-to-city file in the format INT-GEN-006 gives. Absent, no session carries a location and `degradation` is raised under the scopes `10` section 5.23 names (INT-GEN-006, AUTH-SESS-013, D-190) |
 | **Datacenter range file** | Optional: `IDatacenterRangeSource`, which opens the file of datacenter ranges in the format AUTH-ABUSE-008 gives. Absent or stale, `datacenterRange` does not fire and `degradation` is raised under the scopes `10` section 5.23 names until the host supplies one or takes `datacenterRange` out of `abuse.botdefence.signals` (AUTH-ABUSE-008, D-189, D-190) |
 | **Off-host erasure ledger** | Optional: `IErasureLedger`, which appends each completed erasure's line off the host (DR-016). Absent, erasures complete without a line, and a restore to a point before one reverses it (DR-006a); once one is registered, every erasure completed before it is appended too |
+| **Staff search** | Optional, per process: the `Janus:Search:*` keys of `10` section 4.10. `Janus:Search:Enabled` (default false) turns the staff search on in a process, which a deployment does in the processes that serve staff; `Janus:Search:PerMinute` (default 60), `Janus:Search:MaxSubjects` (default 200,000) and `Janus:Search:MemoryChecks` (`enforce` · `warn`, default `enforce`) govern it there (`01` IDN-SRCH-002, IDN-SRCH-003). Absent, the process builds no index and the search answers 503 `identity.search.unavailable` with `details.reason` `off`. `warn` where the host environment is not `Development` stops the start with the library's configuration error (D-256) |
 
 Everything else has a safe default the host may override (P-001, D-107), including the
 public-holiday list, whose safe default is empty and which staff maintain at runtime as
@@ -400,7 +411,7 @@ default, of which fourteen could be defaulted and six belonged here (D-107).*
 
 *Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177,
 D-179, D-180, D-183, D-189, D-190, D-197, D-202, D-203, D-204, D-206, D-209, D-237,
-D-254, D-255*
+D-254, D-255, D-256*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every
@@ -426,6 +437,10 @@ D-254, D-255*
    `landingOrigins.authentication` or `landingOrigins.account` naming it.
 7. Startup succeeds with none of the optional declarations registered, and each absence
    has the effect its row states.
+8. A process started with no `Janus:Search:*` key answers the search 503
+   `identity.search.unavailable` with `details.reason` `off`; one started with
+   `Janus:Search:MemoryChecks` `warn` where the host environment is not `Development`
+   does not start (D-256).
 
 ---
 

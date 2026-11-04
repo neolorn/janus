@@ -184,6 +184,32 @@ mistake automatically. The pipeline check in OPS-DEP-004 is the compensating con
 
 ---
 
+**INF-HOST-005**: A container that serves the staff search, and the host it runs on,
+SHALL keep that process's memory off disk.
+
+**Values (D-256).** The container: its memory limit equal to its memory-and-swap limit,
+core dumps off (`ulimit core=0`), `DOTNET_EnableDiagnostics=0`, a read-only file system,
+and no `SYS_PTRACE`. The host: no online snapshot of the server, and no
+`docker checkpoint` of the container. Before it builds the index, the process checks the
+swap limit, the core-dump limit, the diagnostics port and crash dumps, and under
+`Janus:Search:MemoryChecks` `enforce` builds nothing where one fails (`01`
+IDN-SRCH-003); the rest it cannot check, and the deployment keeps it.
+
+*Source: D-256*
+
+The index holds the plain, normalised names, emails and phones of everyone it covers,
+and is written nowhere; swap, a dump, a snapshot or a checkpoint would write it to disk,
+where it outlives an erasure (`15` section 3.9).
+
+**Acceptance criteria**
+1. A container serving the search has its memory limit equal to its memory-and-swap
+   limit, a core-dump limit of 0, `DOTNET_EnableDiagnostics=0`, a read-only file system
+   and no `SYS_PTRACE`.
+2. No online snapshot is taken of a server running such a container, and no
+   `docker checkpoint` of the container.
+
+---
+
 ## 4. Database
 
 **INF-DB-001** — PostgreSQL SHALL be provisioned with **ICU collation** and a

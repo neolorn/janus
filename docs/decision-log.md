@@ -20473,6 +20473,54 @@ LIB-EXT-001 (a push carries whether it may adopt); `implementation-plan.md` (rou
 
 ## D-256 — Round S: the staff search, in memory and nowhere else
 
+> **Amended.** 2026-11-04. Decisions on what writing the chapters raised; where these
+> differ from the body below, these win:
+> 1. **Turning it on.** Not a key: the host declares the staff search at registration
+>    (`AddJanus`), as it declares `ApplicationKind` (`07` LIB-HOST-001), in the
+>    processes that serve it; undeclared, the search answers 503
+>    `identity.search.unavailable` with `details.reason` `off`.
+> 2. **The keys** follow CONV-NAME-001 and `10` section 4: `search.perminute` (R,
+>    default 60, floor 1, ceiling 600, loosens upward), `search.maxsubjects` (P, default
+>    200000, floor 1, loosens upward), `search.memorychecks` (P, `enforce` · `warn`,
+>    default `enforce`, loosens on any change). Outside the host environment
+>    `Development`, `warn` acts as `enforce` and the start logs that once at Warning.
+>    The channel is `identity_search`, beside `identity_registration`.
+> 3. **Refusals** follow API-CONV-003 and D-218's reads: a `kinds` member outside its
+>    vocabulary, a `limit` outside 1 to 50, or a body member the body doesn't have
+>    answers 400 `api.request.malformed` naming the member; a `q` that normalises to
+>    nothing or to more than 64 characters answers 422 `api.request.invalid` naming
+>    `q`. `identity.search.queryinvalid` is not added.
+> 4. **Who sees what.** `kinds` absent means both. Of the kinds asked, the search answers
+>    those the caller may read; asked for kinds of which the caller may read none, it
+>    answers 403 `authz.denied`, as holding neither permission does. A permission held
+>    in the administrative organization admits a search asked in another organization,
+>    judged as one admission, as REC-ADM-001 admits a find (D-219). A system principal,
+>    a job's included, is refused 403 `authz.denied`.
+> 5. **The limit** is counted as the library's other per-caller limits are counted (the
+>    same store, a one-minute fixed window, across the deployment), and answered 429
+>    `auth.throttled` with `Retry-After` and `details.retryAt`.
+> 6. **While building,** `Retry-After` is 30 seconds.
+> 7. **Alerts.** `search-unsafe` is High, with `details.check` `swap` · `coredump`
+>    · `diagnostics` · `minidump`; `search-capacity` is Normal.
+> 8. **The types** (`07`): `ISearch.SearchAsync(AccessContext context, SearchQuery
+>    query, CancellationToken cancellationToken)` answering
+>    `Result<IReadOnlyList<SearchResult>>`; `SearchQuery(OrganizationId Organization,
+>    string Text, SearchKinds Kinds, int Limit)`; `SearchKinds` a flags enumeration,
+>    `None` 0, `Accounts` 1, `Records` 2, where `None` means both;
+>    `SearchResult(SubjectId Subject, <the kind type IDN-READ-003's contact read
+>    answers> Kind, string? DisplayName, SearchMatch Matched)`; `SearchMatch` an
+>    enumeration `Name`, `Email`, `Phone`. The route's answer is
+>    `{ results: [ { subject, kind, displayName, matched } ] }`, `matched`
+>    `name` · `email` · `phone`.
+> 9. **The normaliser** uses the library's pinned Unicode tables (IDN-ACCT-004, D-154),
+>    never the platform's, so a result never changes with the machine.
+> 10. **Never logged.** `08` CONV-LOG-003 adds the search's query and every indexed value,
+>    and the query's member is marked `[NeverLogged]`.
+> 11. **Accepted as written:** `01` section 6b; `10` sections 4.10, 5.53 and 5.54;
+>    `15` section 3.9; `19` INF-HOST-005, written as requirements; the erasure duty as
+>    a paragraph beside PRIV-RIGHT-005c's erasure steps (`04` has no table);
+>    `details.member`; the 503 rows of API-CONV-003 and `10` section 6.
+
 **Date:** 2026-11-04 · **Status:** accepted · **Amends:** IDN-READ-003, REC-ADM-001,
 OPS-ALERT-005
 
