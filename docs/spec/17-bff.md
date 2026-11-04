@@ -342,7 +342,7 @@ AUTH-OIDC-006), acting as a **confidential client** of the library's provider, a
 retain no token afterwards.
 
 *Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193, D-194,
-D-195, D-196, D-198, D-199, D-229*
+D-195, D-196, D-198, D-199, D-229, D-259*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -365,7 +365,9 @@ carries its break-glass reason where it has one (OPS-BOOT-002, D-171). On
 `login_required` it pushes again without `prompt=none`, so the person signs in at the
 authentication application and the flow repeats. The sign-on is a navigation route
 (BFF-ERR-001): a `state` that is absent, unbound or not the one the browser was sent out
-with is refused with `auth.session.csrfinvalid` and sent nowhere; any other refusal
+with is refused with `auth.session.csrfinvalid`, and the browser returned with 302 to
+the application's own root, `/` on the origin the sign-on is mounted for, carrying
+`error` `auth.session.csrfinvalid` (D-259); any other refusal
 returns the browser with 302, to `returnTo` at the start and to the stored return
 address at the return, with `error` `auth.session.expired`, the `error` or the library's
 own code it carried inside logged beside it (BFF-LOG-001, D-194), while a fault stays a
@@ -404,6 +406,15 @@ may configure.
 ID token, never exchanges a code from the browser, and never accepts a `redirect_uri`
 from a request — the registered value is the only one.
 
+**A return whose `state` fails (D-259).** The return is always a top-level navigation,
+so a failed binding or `state` sends the person back to the application's root rather
+than leaving them on a body. The address is fixed by the deployment, never read from the
+request, the `state` or a cookie, so it cannot be steered; nothing is established (no
+session, no code exchanged), so a forged return gains nothing; and the code tells the
+frontend to offer a sign-in (`18` FE-API-006). The check itself stays, and so does its
+log line (the route and the trace, never the `state`), and every non-navigation request
+the check refuses is still answered 403 `auth.session.csrfinvalid` (section 4).
+
 **Where it runs (D-229).** The sign-on belongs to an application at an origin apart from
 the authentication application's. An application served at that application's own
 origin is served by the sign-in session, the session that origin's cookie carries
@@ -419,6 +430,8 @@ origin is served by the sign-in session, the session that origin's cookie carrie
 4. After the exchange the BFF holds only its per-app session record; no token is
    persisted anywhere.
 5. Revoking the session record ends the per-app session on the next request.
+6. A return with a wrong `state` answers 302 to `/?error=auth.session.csrfinvalid` and
+   sets no cookie but the clearing of the start's (D-259).
 
 ---
 
@@ -947,13 +960,17 @@ SHALL NOT cross it, and the BFF SHALL NOT return HTML intended for a person to r
 including framework default error pages.
 
 *Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192, D-193, D-194, D-195, D-196,
-D-208*
+D-208, D-259*
 
 A navigation route (the social provider round trip, IDN-LIFE-012, and the sign-on round
 trip, BFF-SESS-006) answers a refusal of the person's attempt by returning the browser
 to where it started with the code in the query parameter `error`, placed before any
-fragment; a return whose binding or `state` fails is answered
-`403 auth.session.csrfinvalid` and sent nowhere. The codes each carries in `error` are
+fragment. A sign-on return whose binding or `state` fails is returned with 302 to the
+application's own root, `/` on the origin the sign-on is mounted for, carrying `error`
+`auth.session.csrfinvalid`, an address the deployment fixes and never one read from the
+request, the `state` or a cookie (BFF-SESS-006, D-259); a social provider return whose
+binding or `state` fails is answered `403 auth.session.csrfinvalid` and sent nowhere.
+The codes each carries in `error` are
 those `09` lists for it, which its routes declare (CONV-DESIGN-006), and nothing else of
 a refusal's `details` crosses, save `retryAt` (BFF-ABUSE-001, D-192). A fault on a
 navigation route is no refusal: it is answered as BFF-ERR-002 answers every fault, never
