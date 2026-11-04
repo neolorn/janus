@@ -1869,7 +1869,8 @@ the suffix rules the conversion sets aside being reviewed and updated with the l
 2. The package version equals the nearest tag; no version literal exists in a project
    file.
 3. A major-version section of the changelog links the migration note of LIB-VER-002, a
-   file in the repository; the release gate refuses a section that opens a major version
+   file in the repository, `MIGRATION.md` at its root with one section per major version,
+   the first, 1.0.0, being the first install and its migration order; the release gate refuses a section that opens a major version
    without the link. A release candidate's section opens no major version, and the gate
    asks it for no link to a migration note (D-232).
 4. A release's offline leaked-password list and Public Suffix List are drawn for that
