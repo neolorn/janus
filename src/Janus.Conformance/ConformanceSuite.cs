@@ -133,8 +133,9 @@ public static class ConformanceSuite
     /// An argument other than the factory is absent.
     /// </exception>
     /// <exception cref="ArgumentException">
-    /// The deployment declares no such type, a case names a scenario its declaration
-    /// does not place it in, the table holds a step-up case and no factory is given, or
+    /// The deployment declares no such type, the type or one containing it is sensitive
+    /// or declares <c>Subject</c>, so its records register with a subject, a case names a
+    /// scenario its declaration does not place it in, the table holds a step-up case and no factory is given, or
     /// a step-up case names a permission the declaration binds to no step-up gate. Each
     /// is refused before anything is written.
     /// </exception>

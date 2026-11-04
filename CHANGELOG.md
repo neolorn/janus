@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `ConformanceSuite.TruthTableAsync` refuses, before anything is written, a table over a
+  type whose records register with a subject, a sensitive type or one declaring
+  `Subject`, or over a type contained in one: the exception names the type. The table
+  registers every record with no subject, so such a table used to fault at its first
+  case.
 - `ResourceTypeDeclarationBuilder<TResource>.Subject(column)` names the column holding a
   type's data subject where no encrypted field names one, for a type whose data about
   the person are the host's own plain columns. A purpose resting on consent may then rest
