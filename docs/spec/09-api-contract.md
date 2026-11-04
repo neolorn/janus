@@ -1132,11 +1132,15 @@ that does not hold up a fault carrying the validation's own fault as its inner f
 and a client in no registry and a token carrying no session identifier in `sid` each add
 one entry at Error naming it (BFF-LOG-001, BFF-ERR-002, D-196).
 
-**403**: `auth.session.csrfinvalid`, for an absent, unbound or mismatched `state`; the
-browser is sent nowhere
+An absent, unbound or mismatched `state` at the return is refused with
+`auth.session.csrfinvalid`: the return answers **302** to the application's own root,
+`/` on the origin the sign-on is mounted for, carrying `error`
+`auth.session.csrfinvalid`, which the return declares; the address is the deployment's,
+never read from the request, the `state` or a cookie, and nothing is established and no
+code exchanged (BFF-SESS-006, D-259).
 
 *Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193, D-194, D-195, D-196,
-D-198*
+D-198, D-259*
 
 ---
 
