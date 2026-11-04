@@ -1388,7 +1388,8 @@ key in the database, all three writes commit together or none do.
 erased subject leaves the staff search's index at once: in the process that erases, and
 in every other indexing process on the notification the erasure's transaction sends;
 its text in the index's buffers is overwritten with zeros (`01` IDN-SRCH-003). The same
-holds for a takedown.
+holds for a takedown. Inside the database, an account's erasure deletes its rows of
+`identity.search_windows`, the staff search's per-minute counts (`01` IDN-SRCH-002).
 
 **The erasures table remains** (IDN-LIFE-003b), because it is still the record of what
 happened, when, and why, and because the host-side steps of a takedown (whatever the
@@ -1424,6 +1425,7 @@ pre-erasure backups completes when they expire.
 9. Once an erasure commits, no staff search in any indexing process answers the subject
    after its notification is received, and the index's buffers that held its text hold
    zeros (D-256).
+10. After an account's erasure, `identity.search_windows` holds no row for it (D-256).
 
 ---
 

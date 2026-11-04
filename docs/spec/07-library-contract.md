@@ -272,7 +272,9 @@ carries no email or phone value; `SearchMatch` is an enumeration, `Name`, `Email
 `Phone`, the field that matched first. It answers whom IDN-SRCH-002 admits, refuses a
 system principal with `authz.denied`, and answers `identity.search.unavailable` where
 the process serves no index (IDN-SRCH-003). Its endpoint is `POST /admin/search`
-(`09`).
+(`09`). The normaliser is public as `SearchForm`, a static class in `Janus.Core` beside
+`CanonicalForm` and `Precis`, whose `Of(string text)` answers the normalised text
+(IDN-SRCH-001).
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
@@ -394,7 +396,7 @@ anyone acts, and reads no record of a person (D-218).
 | **Location file** | Optional: `ILocationSource`, which opens the IP-to-city file in the format INT-GEN-006 gives. Absent, no session carries a location and `degradation` is raised under the scopes `10` section 5.23 names (INT-GEN-006, AUTH-SESS-013, D-190) |
 | **Datacenter range file** | Optional: `IDatacenterRangeSource`, which opens the file of datacenter ranges in the format AUTH-ABUSE-008 gives. Absent or stale, `datacenterRange` does not fire and `degradation` is raised under the scopes `10` section 5.23 names until the host supplies one or takes `datacenterRange` out of `abuse.botdefence.signals` (AUTH-ABUSE-008, D-189, D-190) |
 | **Off-host erasure ledger** | Optional: `IErasureLedger`, which appends each completed erasure's line off the host (DR-016). Absent, erasures complete without a line, and a restore to a point before one reverses it (DR-006a); once one is registered, every erasure completed before it is appended too |
-| **Staff search** | Optional, per process: declared at registration (`AddJanus`), as the application kind is, in the processes that serve staff; it turns the staff search on in that process (`01` IDN-SRCH-003). Undeclared, the process builds no index and the search answers 503 `identity.search.unavailable` with `details.reason` `off`. The keys `search.perminute`, `search.maxsubjects` and `search.memorychecks` govern it (`10` section 4.10); outside the host environment `Development`, `search.memorychecks` `warn` acts as `enforce`, and the start logs that once at Warning (D-256) |
+| **Staff search** | Optional, per process: `StaffSearch` (`Janus.Hosting`), an enumeration, `Off` 0 and `Served` 1, declared at registration as the fifth parameter of an overload of `AddJanus` (`StaffSearch search`); the four-parameter `AddJanus` means `Off`. `Served`, given in the processes that serve staff, turns the staff search on in that process (`01` IDN-SRCH-003). `Off`, the process builds no index and the search answers 503 `identity.search.unavailable` with `details.reason` `off`. The keys `search.perminute`, `search.maxsubjects` and `search.memorychecks` govern it (`10` section 4.10); outside the host environment `Development`, `search.memorychecks` `warn` acts as `enforce`, and the start logs that once at Warning (D-256) |
 
 Everything else has a safe default the host may override (P-001, D-107), including the
 public-holiday list, whose safe default is empty and which staff maintain at runtime as
@@ -442,8 +444,9 @@ D-254, D-255, D-256*
    `landingOrigins.authentication` or `landingOrigins.account` naming it.
 7. Startup succeeds with none of the optional declarations registered, and each absence
    has the effect its row states.
-8. A process whose registration does not declare the staff search answers the search
-   503 `identity.search.unavailable` with `details.reason` `off`; one declaring it, with
+8. A process registered with the four-parameter `AddJanus`, or with `StaffSearch.Off`,
+   answers the search 503 `identity.search.unavailable` with `details.reason` `off`; one
+   registered with `StaffSearch.Served`, with
    `search.memorychecks` `warn` where the host environment is not `Development`,
    starts, logs once at Warning that `warn` acts as `enforce`, and builds no index while
    a memory check fails (D-256).
