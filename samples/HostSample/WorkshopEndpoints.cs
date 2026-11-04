@@ -18,9 +18,9 @@ namespace HostSample;
 /// <summary>
 /// The workshop's own endpoints, mapped after the browser profile beside the library's.
 /// Each needs a signed-in person save the catalogue and a guest's walk-in, which answer
-/// anyone, and each that touches a record for a signed-in person asks the gate for the
-/// permission it acts under (BFF-HOST-001 to
-/// BFF-HOST-003).
+/// anyone, and a guest's own repair, which answers the browser that reached the guest's
+/// record by a code; each that touches a record for a signed-in person asks the gate for
+/// the permission it acts under (BFF-HOST-001 to BFF-HOST-003, REC-ACC-003).
 /// </summary>
 internal static class WorkshopEndpoints
 {
@@ -50,6 +50,7 @@ internal static class WorkshopEndpoints
         _ = endpoints.MapGet("/workshops/{workshop}/staff", StaffAsync);
         _ = endpoints.MapPost("/workshops/{workshop}/repairs", BookAsync);
         _ = endpoints.MapPost("/workshops/{workshop}/walk-ins", WalkInAsync).AllowNoSession();
+        _ = endpoints.MapGet("/walk-ins/{ticket}", GuestRepairAsync).AllowNoSession();
         _ = endpoints.MapGet("/repairs/{ticket}", ReadAsync);
         _ = endpoints.MapDelete("/repairs/{ticket}", CancelAsync);
         _ = endpoints.MapPost("/repairs/{ticket}/release", ReleaseAsync);
@@ -559,6 +560,53 @@ internal static class WorkshopEndpoints
                     repair.ReleasedAt));
             },
             Refused);
+
+    // A guest's own repair, read in the browser that reached the guest's record by a
+    // code: a repair whose customer the session does not reach is answered as one that
+    // does not exist (REC-ACC-003).
+    private static async Task<IResult> GuestRepairAsync(
+        string ticket,
+        IRecordAccess access,
+        IPersonalFields fields,
+        WorkshopContext context,
+        CancellationToken cancellationToken)
+    {
+        Result<IReadOnlyList<SubjectId>> reached = await access.ReachedAsync(cancellationToken).ConfigureAwait(false);
+
+        if (reached.Refusal() is Error unreached)
+        {
+            return Answers.Refused(unreached);
+        }
+
+        Repair? repair = await context.Repairs
+            .SingleOrDefaultAsync(row => row.Id == ticket, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (repair is null || !reached.Value().Contains(repair.Customer))
+        {
+            return Results.NotFound();
+        }
+
+        Result<IReadOnlyDictionary<string, string?>> names = await fields
+            .WithSubjectsAsync([repair.Customer], subjects => Contacts([repair], subjects), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (names.Refusal() is Error unread)
+        {
+            return Answers.Refused(unread);
+        }
+
+        string? contactName = names.Value()[repair.Id];
+
+        return Results.Ok(new RepairView(
+            repair.Id,
+            repair.WorkshopId,
+            repair.Kite,
+            contactName,
+            contactName is null,
+            repair.FollowUp,
+            repair.ReleasedAt));
+    }
 
     // A repaired kite released by a technician, which the gate binds to a step-up.
     private static Task<IResult> ReleaseAsync(
