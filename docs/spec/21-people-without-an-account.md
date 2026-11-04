@@ -482,6 +482,45 @@ Every action is recorded as the account's same action is, the record acting and 
 
 ---
 
+**REC-ACC-003** — A host SHALL be able to read, while it serves a browser's request, the
+subjects of the person records the browser's record access session reaches, so that it
+shows the person its own data about those records and nothing about any other.
+
+**Values (D-261).** `IRecordAccess` (`Janus.Core`) is a seam, as `IRecordCollection` is
+(`07` LIB-API-005): `ReachedAsync` has no endpoint, takes no access context and joins no
+unit of work. What admits it is the record access session (REC-ACC-001) bound to the
+browser of the request being served, read through the request's pre-authentication
+session (BFF-CSRF-005a), as the library's own `/records/access` endpoints read it. It
+answers a `Result<IReadOnlyList<SubjectId>>`:
+
+- the subjects of the records the session reaches at that moment, each re-read under its
+  record's lock as REC-ACC-001's every action is, so a record that has left the reach
+  (attached to an account, taken down, deleted) is not answered; in subject order;
+- an empty list where the session reaches nothing;
+- `auth.session.expired` (401) where the browser holds no record access session, or one
+  past `records.access.lifetime`, ended by `POST /records/access/end`, or presented from
+  another browser.
+
+Called outside a browser request, it is a fault of the calling code
+(`InvalidOperationException`). It changes nothing and records nothing: the session's
+opening and each reference already record `identity.record.accessed` for each record
+reached. The host answers a subject outside the reach exactly as one that does not
+exist.
+
+*Source: D-261*
+
+**Acceptance criteria**
+1. A request from the browser whose record access session reaches two records answers
+   both subjects, in subject order; a session that reaches none answers an empty list.
+2. A request from another browser, after `POST /records/access/end`, and after
+   `records.access.lifetime` has passed is refused with `auth.session.expired`.
+3. A record attached to an account after the session opened is not answered.
+4. A call outside a browser request throws `InvalidOperationException`.
+5. The sample host (LIB-TEST-004) shows its own data about a subject the session reaches,
+   and answers one it does not reach as one that does not exist.
+
+---
+
 ## 5. Attaching to an account
 
 **REC-ATT-001** — When an account proves, at that moment, that it holds an email or
