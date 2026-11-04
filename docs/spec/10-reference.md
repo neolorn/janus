@@ -639,7 +639,8 @@ any relying party that validates offline against the JWKS (AUTH-OIDC-004, D-147)
 ### 4.10 The staff search
 
 The search itself is turned on in a process by the host's declaration at registration
-(`AddJanus`), not by a key (`01` IDN-SRCH-003, `07` LIB-HOST-001, D-256); these keys
+(`AddJanus` with `StaffSearch.Served`), not by a key (`01` IDN-SRCH-003, `07`
+LIB-HOST-001, D-256); these keys
 govern it wherever it is declared.
 
 | Key | Default | Scope | Source |
