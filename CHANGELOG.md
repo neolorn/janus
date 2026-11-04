@@ -8,6 +8,8 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.4] - 2026-11-05
+
 ### Added
 
 - `IRecordAccess.ReachedAsync` reads, while a host serves a browser's request, the
