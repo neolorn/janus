@@ -20520,6 +20520,25 @@ LIB-EXT-001 (a push carries whether it may adopt); `implementation-plan.md` (rou
 >    `15` section 3.9; `19` INF-HOST-005, written as requirements; the erasure duty as
 >    a paragraph beside PRIV-RIGHT-005c's erasure steps (`04` has no table);
 >    `details.member`; the 503 rows of API-CONV-003 and `10` section 6.
+> 12. **The normaliser's call.** `SearchForm` is a public static class in `Janus.Core`,
+>    beside `CanonicalForm` and `Precis`, with `Of(string text)` answering the
+>    normalised text (`07` LIB-API, `01` IDN-SRCH-001's normaliser).
+> 13. **The switch** is an overload of `AddJanus` with a fifth parameter,
+>    `StaffSearch search`. `StaffSearch` is an enumeration in `Janus.Hosting`, `Off` 0
+>    and `Served` 1; the four-parameter `AddJanus` means `Off`. This replaces item 1's
+>    "as it declares `ApplicationKind`" with the exact shape (`07` LIB-HOST-001).
+> 14. **The limit's store** is the table `identity.search_windows`: `subject`,
+>    `window_start` (the minute, truncated) and `count`, with primary key (`subject`,
+>    `window_start`). Each search upserts its row and is refused 429 once the count
+>    passes `search.perminute`; the same statement deletes the subject's earlier
+>    windows, and an account's erasure deletes its rows. This replaces item 5's "the
+>    same store" as the other limits use (`01` IDN-SRCH-002; `04`, the erasure
+>    paragraph).
+> 15. **An unreadable check fails.** A memory check whose source cannot be read (no
+>    `memory.swap.max`, no `/proc/self/limits`) counts as failed, failing closed (`01`
+>    IDN-SRCH-003).
+> 16. **Spare room.** Slice lists keep a hundredth of their length as spare room, at
+>    least one place (`01` IDN-SRCH-003).
 
 **Date:** 2026-11-04 · **Status:** accepted · **Amends:** IDN-READ-003, REC-ADM-001,
 OPS-ALERT-005
