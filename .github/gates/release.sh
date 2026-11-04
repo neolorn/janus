@@ -22,6 +22,9 @@
 # final release no commit breaks the contract (D-232). A
 # commit with two parents is the merge commit the platform writes, which carries no
 # change of its own, so only single-parent commits are inspected.
+# CONV-VCS-005 (D-260): a release commit's notes take the form the release workflow
+# gives them, its section as the body or attached beside the packages, and the gate
+# says which before the tag is pushed.
 
 set -euo pipefail
 
@@ -343,6 +346,19 @@ for commit in $commits; do
       status=1
     fi
   done
+
+  # D-260: the notes are written as the release workflow writes them.
+  notes=$(mktemp -d)
+  git show "${commit}:CHANGELOG.md" > "${notes}/CHANGELOG.md"
+
+  if told=$("$(dirname "$0")/release-notes.sh" "$added" "${notes}/CHANGELOG.md" "${notes}/notes" "${GITHUB_REPOSITORY:-owner/repository}"); then
+    echo "${commit}: ${told}"
+  else
+    echo "${commit}: ${told}"
+    status=1
+  fi
+
+  rm -rf "$notes"
 
   # LIB-VER-001 and D-232: a release follows the newest release by SemVer precedence,
   # a release candidate numbered from 1 for its version. Before the first final

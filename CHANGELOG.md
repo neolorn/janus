@@ -8,6 +8,24 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] - 2026-11-04
+
+1.0.0-rc.2 was never tagged, because its release commit failed a gate. 1.0.0-rc.3 holds
+everything 1.0.0-rc.2 and 1.0.0-rc.1 name.
+
+## [1.0.0-rc.2] - 2026-11-04
+
+The release of 1.0.0-rc.1 could not be created, so it has no packages, and 1.0.0-rc.2 is
+the first release candidate with packages; it holds everything 1.0.0-rc.1 names.
+
+### Changed
+
+- A release's notes are its version's section of this changelog, in the release's body
+  where the section is at most 125,000 characters, the platform's limit for a body.
+  Where the section is longer, the body names the version and links `CHANGELOG.md` at
+  the tag, and the section is attached to the release as `release-notes-<version>.md`
+  beside the packages.
+
 ## [1.0.0-rc.1] - 2026-11-04
 
 ### Added

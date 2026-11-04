@@ -20833,6 +20833,36 @@ replacing each other's state is the likely one) and showed the JSON.
 - `10` section 1.2, the `auth.session.csrfinvalid` row (the amendment);
 - `implementation-plan.md` (section 4, a known issue closed).
 
+## D-260 — Release notes too long for a release body
+
+**Date:** 2026-11-04 · **Status:** accepted · **Amends:** D-245, CONV-VCS-005
+
+**TL;DR.** The release workflow puts the version's changelog section in the release's
+body only where it fits the platform's limit for a body, 125,000 characters. Where it is
+longer, the body is a short paragraph naming the version and linking `CHANGELOG.md` at
+the tag, and the section is attached to the release as `release-notes-<version>.md`
+beside the packages. Found at `1.0.0-rc.1`: its section, every line gathered through
+Milestone 1, passed the limit, the platform refused the release (HTTP 422, "body is too
+long"), and the tag stands with no release.
+
+- **`1.0.0-rc.1`** keeps its tag; a pushed tag is never moved or deleted. Its section stays
+  in the changelog as written. Its packages were never published, so `1.0.0-rc.2` is the
+  first release candidate a host takes, and its section names this change alone and says
+  why `1.0.0-rc.1` has no release.
+- **The check moves earlier.** The release gate measures the section and passes either
+  way; the workflow chooses the body and the attachment, so a long section never fails a
+  release again.
+- **What stays.** The section is still the release notes, and a release candidate's
+  release is still a pre-release.
+
+*Rejected:*
+- **Cutting the section to fit:** the notes would no longer name every change.
+- **Moving the tag:** a published tag is never rewritten.
+
+**Propagated to:**
+- `08` CONV-VCS-005 (the body or the attachment);
+- `implementation-plan.md` (section 4: release candidate 1.0.0-rc.2).
+
 ---
 
 # Index — all items closed
@@ -21104,6 +21134,7 @@ replacing each other's state is the likely one) and showed the JSON.
 | A type names its data subject without an encrypted field | D-257 |
 | Round R withdrawn: reports hold counts and amounts, and nothing is imported | D-258 |
 | A sign-on return whose state fails goes back to the application's root | D-259 |
+| Release notes too long for a release body | D-260 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
