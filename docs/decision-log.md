@@ -20867,6 +20867,19 @@ long"), and the tag stands with no release.
 
 ## D-261 — A host reads the reach of a record access session
 
+> **Amended.** 2026-11-05. Decisions on what building the round raised; where these
+> differ from the body below, these win:
+> 1. **No lock.** A record's lock is a row lock only a transaction holds, and the seam
+>    joins none. `ReachedAsync` re-reads the reach as the session's own state read
+>    (`GET /records/access`) does, with no lock: a read of that moment, as that read is.
+>    A host that changes something on the strength of the reach asks again inside its
+>    change.
+> 2. **REC-ACC-001's sentence** "every action re-reads, under the record's lock" reads:
+>    every action re-reads the reach, a change under the record's lock (REC-ACC-002's
+>    changes, as built) and a read without one (the session's state, the check before
+>    each right, as built). Nothing built changes.
+> 3. **Propagated to** gains `21` REC-ACC-001 (the sentence of item 2).
+
 **Date:** 2026-11-05 · **Status:** accepted · **Amends:** REC-ACC-001, LIB-API-005
 
 **TL;DR.** A host reads, while it serves a browser's request, the subjects of the person

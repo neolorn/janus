@@ -391,8 +391,9 @@ access session**, without an account and without contacting anyone.
   counted against the source and the value as a wrong code is, and is answered as one
   that adds some, with the session's state. A record staff entered, one attached to an
   account, one taken down or out-of-band deleting, and one `deleted` are never reached.
-- **Every action** re-reads, under the record's lock, whether the record is still in the
-  session's reach; one that has left it, and one it never reached, are answered
+- **Every action** re-reads whether the record is still in the session's reach, a change
+  under the record's lock and a read (the session's state, the check before each right)
+  without one (D-261); one that has left it, and one it never reached, are answered
   `identity.record.notfound` alike. A session past its lifetime, ended, or presented
   from another browser is answered `auth.session.expired` (401).
   `POST /records/access/end` ends it.
@@ -493,9 +494,10 @@ browser of the request being served, read through the request's pre-authenticati
 session (BFF-CSRF-005a), as the library's own `/records/access` endpoints read it. It
 answers a `Result<IReadOnlyList<SubjectId>>`:
 
-- the subjects of the records the session reaches at that moment, each re-read under its
-  record's lock as REC-ACC-001's every action is, so a record that has left the reach
-  (attached to an account, taken down, deleted) is not answered; in subject order;
+- the subjects of the records the session reaches at that moment, each re-read as the
+  session's own state read (`GET /records/access`) re-reads it, with no lock, so a record
+  that has left the reach (attached to an account, taken down, deleted) is not answered;
+  in subject order;
 - an empty list where the session reaches nothing;
 - `auth.session.expired` (401) where the browser holds no record access session, or one
   past `records.access.lifetime`, ended by `POST /records/access/end`, or presented from
