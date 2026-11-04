@@ -20688,6 +20688,33 @@ message needing it ended unsent.
 - `10` section 1.5, the `model.startup.declarationinvalid` row (the amendment, item 3);
 - `implementation-plan.md` (round H13).
 
+## D-258 — Round R withdrawn: reports hold counts and amounts, and nothing is imported
+
+**Date:** 2026-11-04 · **Status:** accepted · **Amends:** `implementation-plan.md` section 3a
+
+**TL;DR.** Round R was to give a host a feed of the library's people data for its
+reports, and a bulk import. The owner's answers (2026-11-01): a report carries counts
+and amounts only, never a person's name or contact; it is downloaded from the host's own
+screens, not opened live in a spreadsheet or business-intelligence tool; and nothing is
+imported at launch. A host computes counts and amounts from its own records, so the
+round has nothing left to build and is withdrawn. Section 4 follows the rounds S and
+H13.
+
+- **What stays.** Every read the library already has (IDN-READ-001 to 004, REC-ADM-001,
+  the staff search of D-256) is unchanged; a host may count what those reads answer, under
+  their permissions and their read volume.
+- **When it comes back** (the deferred table): a report that names people or reads their
+  contacts in bulk, a live feed to a spreadsheet or business-intelligence tool, or a bulk
+  import of accounts, members or person records. Each would be its own decision.
+
+*Rejected:*
+- **Building the feed anyway, for later:** a bulk read path of personal data with no host
+  to use it is risk with no benefit.
+
+**Propagated to:**
+- `implementation-plan.md` (round R withdrawn; the rounds' order);
+- the deferred table (its trigger).
+
 ---
 
 # Index — all items closed
@@ -20957,6 +20984,7 @@ message needing it ended unsent.
 | Adopting a mail account the server already holds | D-255 |
 | Round S: the staff search, in memory and nowhere else | D-256 |
 | A type names its data subject without an encrypted field | D-257 |
+| Round R withdrawn: reports hold counts and amounts, and nothing is imported | D-258 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
@@ -21004,3 +21032,4 @@ Per P-003 — nothing deferred silently.
 | District-level boundary polygons (D-061) | If city-level preselection proves too coarse |
 | Paid geocoding provider (D-061) | If customers demonstrably struggle with the address form |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
+| Round R: a report feed of people data and a bulk import (D-258) | A report that names people or reads their contacts in bulk, a live feed to a spreadsheet or business-intelligence tool, or a bulk import of accounts, members or person records |
