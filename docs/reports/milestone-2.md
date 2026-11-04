@@ -182,8 +182,8 @@ None.
 - The pipeline's runs on 88424102: the pull request's run (41822820169) green; the push
   run (41822810795) red in the unit tests.
   `SearchIndexServiceTests.IDN_SRCH_003_AC7_PastTheCapacityNoIndexIsBuiltAsync` read the
-  alerts once the index was withheld, and the alert is raised just after;  waits for
-  both.
+  alerts once the index was withheld, and the alert is raised just after; the test now
+  waits for both.
 - PR #25 is replaced by this branch's. On `milestone-2`, the same fix was pushed with a
   body line over 72 characters, which the commit-message gate refused on both runs. A
   pushed commit is never rewritten, so the lead cut `milestone-2-release` at 88424102,
@@ -197,4 +197,81 @@ None.
 ### 6. What the next step waits on
 
 The lead's tag `v1.0.0-rc.1` on the release commit, 1ecbb1cc, after the review, green
+checks and the merge.
+
+## Step 3: release 1.0.0-rc.2
+
+The tag `v1.0.0-rc.1` was pushed on 1ecbb1cc after PR #26 merged (e70b5862), and its
+release run (41832699304) failed when the release was created: the platform refused it
+with HTTP 422, its body being too long. The section of 1.0.0-rc.1 is 382,697
+characters, and a release's body holds 125,000. The packages were built and checked, and
+none was published. D-260 settles it, and this step carries it out.
+
+### 1. Items implemented
+
+**Release notes too long for a body (CONV-VCS-005, LIB-PKG-003, D-260)**
+
+- `.github/gates/release-notes.sh` writes a version's notes from the changelog. Where the
+  section is at most 125,000 characters, it is the body. Where it is longer, the body
+  names the version and links `CHANGELOG.md` at the tag, and the section is written as
+  `release-notes-<version>.md`. The script says which form the notes take, and it fails
+  only where the changelog has no section for the version.
+- `release.yml` writes the notes with the script, keeps its check of the version's form,
+  and attaches `release-notes-<version>.md` beside the packages where the script wrote
+  it.
+- The gate test the workflow's other rules have: `release.sh`, run by the `release`
+  gate on every push and pull request, writes the notes of each release commit in the
+  range as the workflow does, says which form they take, and passes either way. A long
+  section never fails a release again, and its form is known before the tag is pushed.
+- The changelog line under Unreleased, which moved into 1.0.0-rc.2.
+
+**The release commit, `chore: release 1.0.0-rc.2`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.2] - 2026-11-04`, the next release
+  candidate of 1.0.0. Its section opens with the sentence saying the release of
+  1.0.0-rc.1 could not be created and 1.0.0-rc.2 is the first release candidate with
+  packages, then the line for the change above. The section of 1.0.0-rc.1 stays as
+  written.
+- The public surface: no `PublicAPI.Unshipped.txt` holds a line since 1.0.0-rc.1, so
+  nothing moved into the shipped files.
+- The two lists are not drawn again. Both were drawn today for 1.0.0-rc.1, and
+  CONV-VCS-005 asks for one draw per release, so 1.0.0-rc.2 carries them as they are:
+  the leaked-password list of run 41814221201, dated 2026-11-04, and the Public Suffix
+  List at version 2026-10-31_14-17-28_UTC. `NOTICE` keeps both dates.
+- No migration note: a release candidate opens no major version.
+
+**Criteria verified otherwise**
+
+- The script run on the changelog at 1.0.0-rc.1 writes the short body and attaches the
+  section; run on a short section it writes the section as the body; run on a version
+  the changelog does not hold it fails. The release gate over the release commit of
+  1.0.0-rc.1 says its notes, 382,697 characters, are attached, and over this branch's
+  release commit says the notes of 1.0.0-rc.2, 552 characters, are the body.
+- The packages on the tag's release, marked as a pre-release, are the proof of the tag.
+
+### 2. Items not implemented
+
+None.
+
+### 3. Resolved by rule
+
+None.
+
+### 4. Open questions
+
+None.
+
+### 5. Gate result
+
+- Checks before the push: green. The build with warnings as errors, the format check, and
+  every unit test (5201 in eleven projects) pass.
+- The commit-message, changelog, release, truth-table change, acceptance-criterion test
+  name and forbidden-marker gates pass over `origin/main..HEAD`; the full-history secret
+  scan finds nothing.
+- Gate of record: the pipeline's run on this report's commit, whose identifier and
+  result the step's last message gives.
+
+### 6. What the next step waits on
+
+The lead's tag `v1.0.0-rc.2` on the release commit, 9948d927, after the review, green
 checks and the merge.
