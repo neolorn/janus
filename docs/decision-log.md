@@ -20614,6 +20614,8 @@ in backups, so the work is keeping memory off disk.
 - `19` the container and host duties above;
 - `implementation-plan.md` (round S).
 
+---
+
 ## D-257 — A type names its data subject without an encrypted field
 
 **Date:** 2026-11-04 · **Status:** accepted · **Amends:** AUTHZ-MODEL-003, AUTHZ-INHERIT-002
