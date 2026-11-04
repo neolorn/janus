@@ -2011,14 +2011,16 @@ log.
   diagnostics port is off (`DOTNET_EnableDiagnostics=0`) and its crash dumps are off
   (`DOTNET_DbgEnableMiniDump` not `1`). A check whose source cannot be read (no
   `memory.swap.max`, no `/proc/self/limits`) counts as failed. With
-  `search.memorychecks` `enforce`, the
-  default, a failed check stops the build, the search answers 503
-  `identity.search.unavailable` with `details.reason` `unsafe`, and the alert
-  `search-unsafe` is raised with `details.check` naming the check (`swap` · `coredump` ·
-  `diagnostics` · `minidump`, `10` section 5.53), never a value. `warn` builds anyway
-  and logs the failed check at Warning, for the host environment `Development` (a local
-  machine's Docker has swap); outside it, `warn` acts as `enforce`, and the start logs
-  that once at Warning.
+  `search.memorychecks` `enforce`, the default, a failed check stops the build, the
+  search answers 503 `identity.search.unavailable` with `details.reason` `unsafe`, and
+  the alert `search-unsafe` is raised with `details.check` naming the check (`swap` ·
+  `coredump` · `diagnostics` · `minidump`, `10` section 5.53), never a value. Under
+  `warn`, the index is built anyway, every failed check is logged at Warning on each
+  start, and `search-unsafe` is still raised naming the check, so the deployment is told
+  on every start (a local machine's Docker has swap). The library never reads its
+  environment (OPS-ENV-001): `search.memorychecks` is a protected key, changed only by
+  the server's `configure`, and that change raises `protected-setting-changed`
+  (OPS-CFG-004).
 
 What the deployment owes a process serving the search is `19` INF-HOST-005; what the
 index does not protect against is `15` section 3.9.
@@ -2048,16 +2050,18 @@ index does not protect against is `15` section 3.9.
 8. With swap allowed, a core-dump limit above 0, the diagnostics port on, or crash dumps
    on, under `enforce` no index is built, the search answers 503 with `details.reason`
    `unsafe`, and `search-unsafe` is raised with `details.check` `swap`, `coredump`,
-   `diagnostics` or `minidump` and no value; under `warn` in `Development` the index is
-   built and the check logged at Warning; under `warn` in any other environment the
-   failed check stops the build as under `enforce`, and the start logs that once at
-   Warning.
+   `diagnostics` or `minidump` and no value; under `warn` the index is built and the
+   search served, each failed check is logged at Warning at every start, and
+   `search-unsafe` is raised naming it, whatever environment the process runs in.
 9. After a build, a stream of changes and a run of searches, no table of the database,
    no file the process wrote and no log holds a normalised or indexed value.
 10. Where `memory.swap.max` or `/proc/self/limits` cannot be read, the check it serves
     counts as failed: under `enforce` no index is built and `search-unsafe` is raised.
 11. A built slice list holds spare room of a hundredth of its length, and at least one
     place.
+12. No code path of the search reads the host environment; setting
+    `search.memorychecks` to `warn` through `configure` raises
+    `protected-setting-changed`.
 
 ---
 

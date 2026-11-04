@@ -89,7 +89,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.preference.wrongtype` | A preference value of a type other than its declaration; 422 | REG-PREF-001, D-153 |
 | `identity.preference.toolarge` | The preference set would exceed `preferences.maxsize`; 422 | REG-PREF-001, D-153 |
 | `identity.preference.administratoronly` | The person set a preference declared administrator-only; 422 | REG-PREF-001, D-153 |
-| `identity.search.unavailable` | The process does not serve the staff search: `details.reason` (section 5.53) `off` where its registration does not declare the staff search (`07` LIB-HOST-001), `building` until its index is built, the answer carrying `Retry-After` 30 seconds, `capacity` where the subjects to index pass `search.maxsubjects`, `unsafe` where a memory check failed under `search.memorychecks` `enforce`, or under `warn` outside the host environment `Development`; at the route and at `ISearch.SearchAsync` alike; 503 | IDN-SRCH-003, D-256 |
+| `identity.search.unavailable` | The process does not serve the staff search: `details.reason` (section 5.53) `off` where its registration does not declare the staff search (`07` LIB-HOST-001), `building` until its index is built, the answer carrying `Retry-After` 30 seconds, `capacity` where the subjects to index pass `search.maxsubjects`, `unsafe` where a memory check failed under `search.memorychecks` `enforce`; at the route and at `ISearch.SearchAsync` alike; 503 | IDN-SRCH-003, D-256 |
 
 ### 1.2 Authentication
 
@@ -647,7 +647,7 @@ wherever it is declared.
 |---|---|---|---|
 | `search.perminute` | 60 | R, integer searches a minute per caller, floor 1, ceiling 600; raising is loosening | IDN-SRCH-002, D-256: counted as the library's other per-caller limits are counted, in the same store, in a one-minute fixed window, across the deployment; past it the search answers 429 `auth.throttled` with `Retry-After` and `details.retryAt` |
 | `search.maxsubjects` | 200000 | **P** (§4.8), integer subjects, floor 1; raising is loosening | IDN-SRCH-003, D-256: where the subjects to index pass it, the index is not built, the search answers `identity.search.unavailable` with `details.reason` `capacity`, and `search-capacity` is raised |
-| `search.memorychecks` | `enforce` | **P** (§4.8): `enforce` · `warn` (section 5.53); any change is loosening | IDN-SRCH-003, D-256: under `enforce` a failed memory check stops the build, the search answers `identity.search.unavailable` with `details.reason` `unsafe`, and `search-unsafe` is raised with `details.check`; `warn` builds anyway and logs the failed check at Warning; outside the host environment `Development`, `warn` acts as `enforce`, and the start logs that once at Warning |
+| `search.memorychecks` | `enforce` | **P** (§4.8): `enforce` · `warn` (section 5.53); any change is loosening | IDN-SRCH-003, D-256: under `enforce` a failed memory check stops the build, the search answers `identity.search.unavailable` with `details.reason` `unsafe`, and `search-unsafe` is raised with `details.check`; under `warn` the index is built anyway, every failed check is logged at Warning on each start, and `search-unsafe` is still raised naming the check; the library never reads its environment (OPS-ENV-001), and a change of the key, by `configure` alone, raises `protected-setting-changed` |
 
 ---
 
