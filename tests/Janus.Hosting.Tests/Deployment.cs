@@ -1507,6 +1507,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IRequestAccess>(provider => provider.GetRequiredService<RequestSession>());
         _ = services.AddHttpContextAccessor();
         _ = services.AddScoped<IRecordCollection, Janus.Hosting.Records.RequestRecordCollection>();
+        _ = services.AddScoped<IRecordAccess, Janus.Hosting.Records.RequestRecordAccess>();
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();

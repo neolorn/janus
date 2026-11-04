@@ -1,1 +1,3 @@
 #nullable enable
+Janus.Core.IRecordAccess
+Janus.Core.IRecordAccess.ReachedAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>!>>

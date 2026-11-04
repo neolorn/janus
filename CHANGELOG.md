@@ -8,6 +8,16 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+### Added
+
+- `IRecordAccess.ReachedAsync` reads, while a host serves a browser's request, the
+  subjects of the person records that browser's record access session reaches now, in
+  subject order, so the host shows its own data about them and answers any other subject
+  as one that does not exist. A record that has left the reach is not answered; a
+  browser holding no record access session, or one ended or past its lifetime, is
+  refused `auth.session.expired`. It has no endpoint, takes no access context, joins no
+  unit of work and records nothing.
+
 ## [1.0.0-rc.3] - 2026-11-04
 
 1.0.0-rc.2 was never tagged, because its release commit failed a gate. 1.0.0-rc.3 holds
