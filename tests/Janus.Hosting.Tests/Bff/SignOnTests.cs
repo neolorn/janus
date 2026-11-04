@@ -106,12 +106,13 @@ public sealed class SignOnTests
     }
 
     /// <summary>
-    /// BFF-SESS-006 AC3: a return presenting a state the browser was not sent out
-    /// with establishes nothing and is recorded.
+    /// BFF-SESS-006 AC3, AC6 (D-259): a return presenting a state the browser was not sent
+    /// out with establishes nothing and is recorded, and the browser is sent to the
+    /// application's root, a relative address carrying the code, with no cookie set.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_SESS_006_AC3_AMismatchedStateIsRejectedAndLoggedAsync()
+    public async Task BFF_SESS_006_AC6_AMismatchedStateIsSentToTheRootAndLoggedAsync()
     {
         await using var deployment = new Deployment();
 
@@ -129,10 +130,10 @@ public sealed class SignOnTests
                 "a-state-of-another-browser",
                 StringComparison.Ordinal));
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
-        Assert.Equal(
-            ErrorCodes.SessionCsrfInvalid.ToString(),
-            refused.Json().GetProperty("code").GetString());
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal("/?error=auth.session.csrfinvalid", refused.Location);
+        Assert.Empty(refused.SetCookie);
+        Assert.DoesNotContain(deployment.Sessions.All, session => session.Type is SessionType.PerApp);
         Assert.Contains(
             deployment.SignOnLog.Entries,
             entry => entry.Level is LogLevel.Warning);
@@ -159,7 +160,8 @@ public sealed class SignOnTests
 
         Answer again = await arriving.SendAsync("GET", Local(Where(issued)));
 
-        Assert.Equal(StatusCodes.Status403Forbidden, again.Status);
+        Assert.Equal(StatusCodes.Status302Found, again.Status);
+        Assert.Equal("/?error=auth.session.csrfinvalid", again.Location);
         _ = Assert.Single(
             deployment.Provider.Asked,
             asked => string.Equals(asked.AbsolutePath, "/oidc/token", StringComparison.Ordinal));

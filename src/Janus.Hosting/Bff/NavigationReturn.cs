@@ -6,7 +6,8 @@ namespace Janus.Hosting.Bff;
 
 /// <summary>
 /// Where a navigation route returns the browser it refused: back to where it started,
-/// carrying the code of the refusal.
+/// carrying the code of the refusal, or to the application's root where the return
+/// could not be bound.
 /// </summary>
 /// <remarks>
 /// Implements BFF-ERR-001, BFF-ABUSE-001 and CONV-CONTENT-001. The code crosses in the
@@ -18,6 +19,18 @@ namespace Janus.Hosting.Bff;
 internal static class NavigationReturn
 {
     private const string RetryAt = "retryAt";
+
+    // BFF-ERR-001 (D-259): the root of the application's own origin.
+    private const string Root = "/";
+
+    /// <summary>
+    /// The address a navigation return whose binding or state failed sends the browser
+    /// to: the application's own root, carrying <c>auth.session.csrfinvalid</c>. It is
+    /// fixed, never read from the request, the state or a cookie, since what the return
+    /// would have read its destination from is what failed.
+    /// </summary>
+    /// <returns>The address.</returns>
+    public static string Unbound() => Refused(Root, Error.From(ErrorCodes.SessionCsrfInvalid));
 
     /// <summary>
     /// The address a refused browser is returned to.

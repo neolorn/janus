@@ -52,9 +52,10 @@ internal sealed class TruthTable<TResource>(
     /// <param name="cancellationToken">Abandons the run.</param>
     /// <returns>A finding for each case that decided otherwise than it states.</returns>
     /// <exception cref="ArgumentException">
-    /// The deployment declares no such type, a case names a scenario the type's
-    /// declaration does not place it in, the table holds a step-up case and no factory
-    /// was given, or a step-up case names a permission the declaration binds to no gate.
+    /// The deployment declares no such type, the type or one containing it registers its
+    /// records with a subject, a case names a scenario the type's declaration does not
+    /// place it in, the table holds a step-up case and no factory was given, or a step-up
+    /// case names a permission the declaration binds to no gate.
     /// </exception>
     public async ValueTask<ConformanceReport> RunAsync(
         IReadOnlyList<TruthTableCase> cases,
@@ -64,6 +65,18 @@ internal sealed class TruthTable<TResource>(
 
         AuthorizationDeclaration declaration = services.GetRequiredService<AuthorizationDeclaration>();
         IReadOnlyList<ResourceTypeDeclaration> chain = Chain(declaration, rows.Type);
+
+        // LIB-TEST-001 AC2 (D-257): every record of a case, at each level of the chain,
+        // registers with no subject, so a type whose records need one, sensitive or
+        // declaring Subject (AUTHZ-INHERIT-002), is refused before anything is written.
+        if (chain.FirstOrDefault(Subjected) is ResourceTypeDeclaration subjected)
+        {
+            throw new ArgumentException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The type {subjected.Name} registers its records with a subject, and the truth table registers every record with none."),
+                nameof(cases));
+        }
 
         foreach (TruthTableCase row in cases)
         {
@@ -157,6 +170,9 @@ internal sealed class TruthTable<TResource>(
 
         return chain;
     }
+
+    private static bool Subjected(ResourceTypeDeclaration declared) =>
+        declared.SensitiveCategories.Count > 0 || declared.Subject is not null;
 
     private static bool Writable(TruthTableScenario scenario, IReadOnlyList<ResourceTypeDeclaration> chain) =>
         scenario switch

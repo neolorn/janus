@@ -520,12 +520,14 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// BFF-CSRF-005a: a return presenting a state this browser was not sent out with
-    /// establishes nothing and is recorded, and the code is never exchanged.
+    /// IDN-LIFE-012 AC7 (D-259), BFF-CSRF-005a: a return presenting a state this browser was
+    /// not sent out with establishes nothing and is recorded, the code is never exchanged,
+    /// and the browser is sent to the application's root, a relative address carrying the
+    /// code, with no cookie set.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_CSRF_005a_AProviderReturnWithAnotherStateIsRefusedAsync()
+    public async Task IDN_LIFE_012_AC7_AProviderReturnWithAnotherStateIsSentToTheRootAsync()
     {
         SubjectId subject = await RegisteredAsync();
 
@@ -539,8 +541,9 @@ public sealed class ProviderSignInTests : IAsyncDisposable
             "GET",
             "/auth/providers/google/return?code=" + Uri.EscapeDataString(code) + "&state=a-state-of-another-browser");
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
-        Assert.Equal(ErrorCodes.SessionCsrfInvalid.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal("/?error=auth.session.csrfinvalid", refused.Location);
+        Assert.Empty(refused.SetCookie);
         Assert.Contains((LogLevel.Warning, 18), _deployment.ProviderLog.Entries);
         Assert.Empty(_deployment.SocialProviders.Exchanges);
         Assert.Equal(StatusCodes.Status401Unauthorized, (await browser.SendAsync("GET", "/auth/session")).Status);
@@ -567,12 +570,12 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
         var elsewhere = new Browser(_deployment);
 
-        Assert.Equal(StatusCodes.Status403Forbidden, (await elsewhere.SendAsync("GET", continuation)).Status);
+        Assert.Equal("/?error=auth.session.csrfinvalid", (await elsewhere.SendAsync("GET", continuation)).Location);
         Assert.Equal(Page, (await browser.SendAsync("GET", continuation)).Location);
 
         browser.Forget();
 
-        Assert.Equal(StatusCodes.Status403Forbidden, (await browser.SendAsync("GET", continuation)).Status);
+        Assert.Equal("/?error=auth.session.csrfinvalid", (await browser.SendAsync("GET", continuation)).Location);
         Assert.Contains((LogLevel.Warning, 17), _deployment.ProviderLog.Entries);
     }
 
@@ -1486,8 +1489,8 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     /// IDN-LIFE-012 and chapter 09: a link's attempt is bound to its session, so a
     /// return whose session has ended since the browser left finds no attempt. It is
     /// refused as every return with none bound to the browser is, never returned with
-    /// the code of a session that is not there: the browser is sent nowhere and
-    /// nothing is linked.
+    /// the code of a session that is not there: the browser is sent to the application's
+    /// root with <c>auth.session.csrfinvalid</c> and nothing is linked (D-259).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -1506,9 +1509,8 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
         Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
 
-        Assert.Equal(StatusCodes.Status403Forbidden, landed.Status);
-        Assert.Equal(ErrorCodes.SessionCsrfInvalid.ToString(), landed.Text("code"));
-        Assert.Null(landed.Location);
+        Assert.Equal(StatusCodes.Status302Found, landed.Status);
+        Assert.Equal("/?error=auth.session.csrfinvalid", landed.Location);
         Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
     }
 

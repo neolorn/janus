@@ -1025,7 +1025,7 @@ it is not deleted, since membership may end.
 **IDN-LIFE-012** — Linking a Google or Apple identity SHALL attach a credential and
 SHALL have no effect on permissions or identity.
 
-*Source: D-005, original spec, D-146, D-166, D-192, D-193*
+*Source: D-005, original spec, D-146, D-166, D-192, D-193, D-259*
 
 The provider's email is never a key. It counts as verified by the sign-in only where
 the provider operates the mailbox; any other provider-supplied address is verified by
@@ -1053,7 +1053,12 @@ document lists `S256` in `code_challenge_methods_supported`; otherwise it relies
 token says is used (RFC 9700 sections 2.1.1 and 4.5.3.2). The identity token is accepted
 only where its signature verifies under the provider's published keys, its `iss` is the
 issuer the discovery document names, its `aud` is the client the round trip was started
-under, it has not expired and its `nonce` is the round trip's. Where the provider's
+under, it has not expired and its `nonce` is the round trip's. A provider's return,
+arriving by its callback and judged at its continuation, whose binding or `state` fails
+(no attempt bound to the browser, one naming another provider, or a `state` that does
+not match) is refused `auth.session.csrfinvalid`: the browser is answered 302 to `/` on its
+application's origin, a relative `Location`, carrying `error` `auth.session.csrfinvalid`
+(`17` BFF-ERR-001, D-259). Where the provider's
 discovery document, its published keys or its token endpoint cannot be reached or read,
 the round trip returns the browser with `error` `auth.provider.unavailable`, counts no
 failed attempt, since nothing the person presented failed, and raises `degradation`
@@ -1081,6 +1086,9 @@ raises nothing and the request is not answered (BFF-ERR-002, D-193).
    `auth.provider.unavailable`, counts no failed attempt and raises `degradation` under
    `provider.unavailable:<provider>`; a token endpoint answering `invalid_grant` returns
    `auth.factor.rejected`, counted and recorded.
+7. A provider return with a wrong `state` answers 302 with the relative `Location`
+   `/?error=auth.session.csrfinvalid`, signs in and links nothing, and sets no cookie
+   (D-259).
 
 ---
 
