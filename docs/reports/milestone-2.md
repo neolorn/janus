@@ -279,5 +279,61 @@ None.
 
 ### 6. What the next step waits on
 
-The lead's tag `v1.0.0-rc.2` on the release commit, 9948d927, after the review, green
+Nothing: 1.0.0-rc.2 is not tagged, and Step 4 releases 1.0.0-rc.3 in its place.
+
+## Step 4: release 1.0.0-rc.3
+
+A tag on 9948d927 would run the pipeline's gates there, since the release gate requires
+the tag on the commit that added the version, and the contract test of CONV-NAME-001
+fails at that commit. A release is not built from a commit that fails a gate, so
+1.0.0-rc.2 is never tagged, and 1.0.0-rc.3 is released on top of the fix.
+
+### 1. Items implemented
+
+**The release commit, `chore: release 1.0.0-rc.3`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.3] - 2026-11-04`. Its section says
+  1.0.0-rc.2 was never tagged because its release commit failed a gate, and 1.0.0-rc.3
+  holds everything 1.0.0-rc.2 and 1.0.0-rc.1 name. The section of 1.0.0-rc.2 stays as
+  written.
+- No line under Unreleased for the fix of the release gate: it changes no code of the
+  library, and CONV-VCS-005 AC1 asks a line of a change to the library's code alone.
+- The public surface: no `PublicAPI.Unshipped.txt` holds a line, so nothing moved into
+  the shipped files.
+- The two lists are not drawn again, as for 1.0.0-rc.2: the leaked-password list of run
+  41814221201, dated 2026-11-04, and the Public Suffix List at version
+  2026-10-31_14-17-28_UTC.
+- No migration note: a release candidate opens no major version.
+
+**Criteria verified otherwise**
+
+- The release gate accepts the untagged section of 1.0.0-rc.2 beneath 1.0.0-rc.3: it
+  names neither the numbering nor a missing tag. Over the range it says the notes of
+  1.0.0-rc.3, 133 characters, and of 1.0.0-rc.2, 552 characters, are the body.
+
+### 2. Items not implemented
+
+None.
+
+### 3. Resolved by rule
+
+None.
+
+### 4. Open questions
+
+None.
+
+### 5. Gate result
+
+- Checks before the push: green. The build with warnings as errors, the format check,
+  every unit test (5201 in eleven projects) and every contract test (214) pass.
+- The commit-message, changelog, release, truth-table change, acceptance-criterion test
+  name and forbidden-marker gates pass over `origin/main..HEAD`; the full-history secret
+  scan finds nothing.
+- Gate of record: the pipeline's run on this report's commit, whose identifier and
+  result the step's last message gives.
+
+### 6. What the next step waits on
+
+The lead's tag `v1.0.0-rc.3` on the release commit, c469cbff, after the review, green
 checks and the merge.
