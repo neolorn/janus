@@ -270,7 +270,15 @@ automated routine can be built later without first auditing the schema cold.
 several purposes on several bases SHALL continue to be processed under its
 non-consent bases when a consent-based purpose is withdrawn.
 
-*Source: D-066, D-166*
+**Whose consent (D-257).** The consent the gate reads for a record is its data subject's,
+the subject the record was registered with, read from its type's subject column: the
+column `Subject` names, or the one its encrypted fields name (`03` AUTHZ-MODEL-003,
+AUTHZ-INHERIT-002). A type whose data about the subject is its own plain columns, with
+no encrypted field, names the column through `Subject`, and a purpose resting on consent
+may then rest on it. Naming a subject encrypts nothing: the host's plain columns stay the
+host's to erase on `ErasureRequested` (PRIV-RIGHT-005b).
+
+*Source: D-066, D-166, D-257*
 
 A host's business record commonly carries several purposes at once: performing the
 contract (contractual obligation), retention (legal obligation), and a personalisation
@@ -293,6 +301,9 @@ under the contract when a subject withdraws mid-way, or a gate that does nothing
    generated records state that purpose's basis and retention unchanged, and no
    `ConsentChanged` names that purpose.
 4. Each declared purpose names its basis; a purpose without one fails validation.
+5. On a type that declares `Subject` and no encrypted field, a purpose resting on
+   consent is admitted on a record whose registered subject holds a live consent for
+   it, and refused on one whose subject has withdrawn it (D-257).
 
 ---
 
