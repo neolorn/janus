@@ -366,8 +366,8 @@ carries its break-glass reason where it has one (OPS-BOOT-002, D-171). On
 authentication application and the flow repeats. The sign-on is a navigation route
 (BFF-ERR-001): a `state` that is absent, unbound or not the one the browser was sent out
 with is refused with `auth.session.csrfinvalid`, and the browser returned with 302 to
-the application's own root, `/` on the origin the sign-on is mounted for, carrying
-`error` `auth.session.csrfinvalid` (D-259); any other refusal
+the application's own root, `/` on the origin the sign-on is mounted for, as a relative
+`Location`, carrying `error` `auth.session.csrfinvalid` (D-259); any other refusal
 returns the browser with 302, to `returnTo` at the start and to the stored return
 address at the return, with `error` `auth.session.expired`, the `error` or the library's
 own code it carried inside logged beside it (BFF-LOG-001, D-194), while a fault stays a
@@ -430,8 +430,8 @@ origin is served by the sign-in session, the session that origin's cookie carrie
 4. After the exchange the BFF holds only its per-app session record; no token is
    persisted anywhere.
 5. Revoking the session record ends the per-app session on the next request.
-6. A return with a wrong `state` answers 302 to `/?error=auth.session.csrfinvalid` and
-   sets no cookie but the clearing of the start's (D-259).
+6. A return with a wrong `state` answers 302 with the relative `Location`
+   `/?error=auth.session.csrfinvalid` and sets no cookie (D-259).
 
 ---
 
@@ -965,12 +965,14 @@ D-208, D-259*
 A navigation route (the social provider round trip, IDN-LIFE-012, and the sign-on round
 trip, BFF-SESS-006) answers a refusal of the person's attempt by returning the browser
 to where it started with the code in the query parameter `error`, placed before any
-fragment. A sign-on return whose binding or `state` fails is returned with 302 to the
-application's own root, `/` on the origin the sign-on is mounted for, carrying `error`
-`auth.session.csrfinvalid`, an address the deployment fixes and never one read from the
-request, the `state` or a cookie (BFF-SESS-006, D-259); a social provider return whose
-binding or `state` fails is answered `403 auth.session.csrfinvalid` and sent nowhere.
-The codes each carries in `error` are
+fragment. A return whose binding or `state` fails, the sign-on's and the social
+provider's (its callback and its continuation) alike, is returned with 302 to the
+application's own root, `/` on its application's origin, as a relative `Location`,
+carrying `error` `auth.session.csrfinvalid`: an address the deployment fixes and never
+one read from the request, the `state` or a cookie, with nothing established
+(BFF-SESS-006, IDN-LIFE-012, D-259). Every request that is not a navigation and that
+the check refuses is still answered 403 `auth.session.csrfinvalid` (section 4). The
+codes each carries in `error` are
 those `09` lists for it, which its routes declare (CONV-DESIGN-006), and nothing else of
 a refusal's `details` crosses, save `retryAt` (BFF-ABUSE-001, D-192). A fault on a
 navigation route is no refusal: it is answered as BFF-ERR-002 answers every fault, never
@@ -1016,6 +1018,10 @@ inside, and the value in no entry the library writes (D-196).
    read answered, an identity token that does not hold up a fault carrying the
    validation's own fault as its inner fault, and a client in no registry and a token
    carrying no session identifier in `sid` each add one entry at Error naming it.
+6. A sign-on return and a social provider return with a wrong `state` each answer 302
+   with the relative `Location` `/?error=auth.session.csrfinvalid` and set no cookie; a
+   request that is not a navigation, refused by the same check, answers 403
+   `auth.session.csrfinvalid` (D-259).
 
 ---
 
