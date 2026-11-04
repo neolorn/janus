@@ -8,6 +8,11 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] - 2026-11-04
+
+1.0.0-rc.2 was never tagged, because its release commit failed a gate. 1.0.0-rc.3 holds
+everything 1.0.0-rc.2 and 1.0.0-rc.1 name.
+
 ## [1.0.0-rc.2] - 2026-11-04
 
 The release of 1.0.0-rc.1 could not be created, so it has no packages, and 1.0.0-rc.2 is
