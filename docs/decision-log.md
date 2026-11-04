@@ -20614,6 +20614,51 @@ in backups, so the work is keeping memory off disk.
 - `19` the container and host duties above;
 - `implementation-plan.md` (round S).
 
+## D-257 — A type names its data subject without an encrypted field
+
+**Date:** 2026-11-04 · **Status:** accepted · **Amends:** AUTHZ-MODEL-003, AUTHZ-INHERIT-002
+
+**TL;DR.** A resource type MAY name the column that identifies its records' data subject
+without declaring an encrypted field, through the type builder's `Subject(column)`.
+The column then does everything an encrypted field's subject column does today: the
+host supplies the subject read from it when it registers the record (AUTHZ-INHERIT-002),
+and a purpose resting on consent may rest on the type, the consent gate reading that
+subject (PRIV-SENS-002, AUTHZ-GATE-005). Found by a host whose customer record holds no
+encrypted field (its customer data are its own plain columns, found by its own queries)
+but whose "offers and news" purpose rests on consent: the start refused the purpose with
+`model.startup.declarationmissing`, so no customer could give that consent and every
+message needing it ended unsent.
+
+- **The rule.** A type's subject column is the one `Subject` names, or the one its
+  encrypted fields name. Where both are given they must be the same column, and the
+  encrypted fields must name one column between them; otherwise the start stops with
+  `model.startup.declarationmissing`, `details.key` naming the type, as a type whose
+  fields name two columns stops it today.
+- **What follows.** Everything that reads a type's subject column reads it whichever way
+  it was named: the registration's subject (a registration of such a type naming no
+  subject is refused 400 `api.request.malformed` naming `subject`, as for a sensitive
+  type), the consent gate, the records of processing.
+- **What stays.** A consent-based purpose on a type that names no subject column at all
+  still stops the start. Naming a subject encrypts nothing and changes no erasure duty:
+  the host's own plain columns about the subject stay the host's to erase on
+  `ErasureRequested` (PRIV-RIGHT-004), as they are today.
+
+*Rejected:*
+- **A placeholder encrypted field:** encrypting a value only to name a column is a
+  workaround a host would have to keep for ever, and declares a personal field that
+  isn't one.
+- **Reading the subject from the registration alone, with no declared column:** the
+  declaration is what the records of processing and the startup checks read; a subject
+  only some registrations carry would make the gate's answer depend on the caller.
+
+**Propagated to:**
+- `03` AUTHZ-MODEL-003 (the subject column named by `Subject` or by the encrypted
+  fields; the table's row; the startup rule) and AUTHZ-INHERIT-002 (the registration's
+  subject);
+- `04` PRIV-SENS-002a where it names the encrypted fields' column;
+- `07` LIB-API-005 or the declaration builder's section (`ResourceTypeBuilder.Subject`);
+- `implementation-plan.md` (round H13).
+
 ---
 
 # Index — all items closed
@@ -20882,6 +20927,7 @@ in backups, so the work is keeping memory off disk.
 | Reconciliation leaves the mail server's own accounts alone | D-254 |
 | Adopting a mail account the server already holds | D-255 |
 | Round S: the staff search, in memory and nowhere else | D-256 |
+| A type names its data subject without an encrypted field | D-257 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
