@@ -28,9 +28,28 @@
   exist, 404 in the same bytes.
 - Test: `GuestTests.REC_ACC_003_AC5_AGuestSeesTheirOwnRepairAndNoOtherAsync`.
 
+**Section 4, step 4: the release commit, 42b03b81 `chore: release 1.0.0-rc.4`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.4] - 2026-11-05`, holding the line
+  of `IRecordAccess` under `Added`, and Unreleased is left empty.
+- The public surface: `Janus.Core`'s two unshipped lines, `IRecordAccess` and
+  `ReachedAsync`, moved into its `PublicAPI.Shipped.txt`, the unshipped file left
+  holding `#nullable enable` alone. No other unshipped file holds a line.
+- The two lists are not drawn again (CONV-VCS-005 as D-262 amends it): the
+  leaked-password list of run 41814221201 and the Public Suffix List at version
+  2026-10-31_14-17-28_UTC were both drawn on 2026-11-04, within 90 days before the
+  release commit. `NOTICE` keeps both dates.
+- No migration note: a release candidate opens no major version.
+
+**Criteria verified otherwise**
+
+- The release gate over `origin/main..HEAD` says the notes of 1.0.0-rc.4, 559
+  characters, are the release's body. The packages on the tag's release, marked as a
+  pre-release, are the proof of the tag.
+
 ## 2. Items not implemented
 
-- The release commit of section 4, step 4, `chore: release 1.0.0-rc.4`: parked by Q2.
+None.
 
 ## 3. Resolved by rule
 
@@ -70,6 +89,9 @@ the seam join no unit of work.
     release commit moves `Unreleased` and the unshipped surface alone.
 - Parked: the release commit. A release commit pushed under the wrong reading would need
   a 1.0.0-rc.5, since the tag must stand on the commit that adds the version.
+- Answered: D-262 (9d9b683b). A release candidate keeps its predecessor's lists while
+  they were drawn within 90 days before its release commit, and every final release
+  draws them. The release commit is built under it, with no new draw (section 1).
 
 ## 5. Gate result
 
@@ -80,5 +102,8 @@ the seam join no unit of work.
   and every contract test (214); the commit-message, changelog, release,
   truth-table change, acceptance-criterion test name and forbidden-marker gates pass
   over `origin/main..HEAD`; the full-history secret scan finds nothing.
+- Checks before the push of the release commit: green. Every unit test passes, and the
+  commit-message, changelog and release gates pass over `origin/main..HEAD`; the
+  full-history secret scan finds nothing.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
