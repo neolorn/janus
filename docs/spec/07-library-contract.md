@@ -105,7 +105,7 @@ candidate may change or remove any of them (LIB-VER-001, D-232).
 
 | Surface | Includes |
 |---|---|
-| **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, the encrypted fields and the capabilities of a type, roles, the roles a deployment starts with, the step-up gate and the purpose bound to an action, **derivations**, the host's jobs and cookies (`Capabilities`, `Role`, `Job`, `Cookie`, D-202, D-203, D-204); and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
+| **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, the encrypted fields, the column naming a type's data subject (`ResourceTypeDeclarationBuilder<T>.Subject`, `03` AUTHZ-MODEL-003, D-257) and the capabilities of a type, roles, the roles a deployment starts with, the step-up gate and the purpose bound to an action, **derivations**, the host's jobs and cookies (`Capabilities`, `Role`, `Job`, `Cookie`, D-202, D-203, D-204); and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
 | **Permission filter shape** | The expression form and the SQL fragment form |
 | **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` and `AppPasswordId` among them, and the value types they take (CONV-DESIGN-004), `RestrictionName` and `DocumentName` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the unit of work every area writes through (`IUnitOfWork`, whose `BeginAsync` answers whether it opened the outermost level, with `AfterCommit`, the registration of work to run after the outermost commit; CONV-DESIGN-003) and event publication (`IEvents`, CONV-DESIGN-002), which no host implements, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements; the request's access a host endpoint reads (`IRequestAccess`, `RequestAccess`, `17` BFF-HOST-001), and the seams a host's own work joins, `IResources`, `ICallbackReferences`, the field cipher of a host's own fields (`IPersonalFields`, `SubjectFields`, PRIV-RIGHT-005a) and the collection of a person record (`IRecordCollection`, `RecordCollection`, `CollectedRecord`, `21` REC-COL-002) (D-202, D-203, D-221) |
 | **Extension contracts** | The interfaces a host implements or replaces for the library to call: the export contributors (`IExportContributor`, PRIV-RIGHT-003, D-203); `INotificationHandler`, whose `SendAsync` answers `Result`, with `SendRequest` (the admitted message: its kind, channel, destination, subject, languages, values and the `SendReference` it is carried under, and none of the restrictions' inputs, INT-SMS-006), `IAlertHandler`, which takes each raised alert (OPS-ALERT-003), `SendDestination` and `SendReference` (with `TryParse`, since the store reads a reference back from its row), and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
@@ -122,7 +122,7 @@ candidate may change or remove any of them (LIB-VER-001, D-232).
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
 *Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176, D-183, D-186,
-D-187, D-188, D-202, D-203, D-204, D-206, D-207, D-232*
+D-187, D-188, D-202, D-203, D-204, D-206, D-207, D-232, D-257*
 
 The ancestry closure is public because hand-written SQL will query it. From the first
 final release on, it cannot be restructured without a major version.
@@ -341,7 +341,7 @@ anyone acts, and reads no record of a person (D-218).
 |---|---|
 | **Connection details** | Database |
 | **Enabled authentication factors** and their policy | Per organization |
-| **Resource types and containment** | The only place the library learns the host's domain — including, for each encrypted field, the column identifying its subject (PRIV-RIGHT-005a) and the data category the field holds (PRIV-PRIN-001 AC2), and, optionally, the permissions that are capabilities of the type (`Capabilities`, BFF-CAP-002, D-202); a field whose category no purpose on its type names fails startup with `model.startup.declarationinvalid`. Each record is registered with its data subject read from its subject column (PRIV-SENS-002) |
+| **Resource types and containment** | The only place the library learns the host's domain — including, for each encrypted field, the column identifying its subject (PRIV-RIGHT-005a) and the data category the field holds (PRIV-PRIN-001 AC2), and, for a type whose data subject no encrypted field names, the column identifying it (`ResourceTypeDeclarationBuilder<T>.Subject`, a compiler-checked member expression as every field reference is, AUTHZ-MODEL-001; where it and the encrypted fields name different columns, startup fails with `model.startup.declarationmissing` naming the type, AUTHZ-MODEL-003, D-257), and, optionally, the permissions that are capabilities of the type (`Capabilities`, BFF-CAP-002, D-202); a field whose category no purpose on its type names fails startup with `model.startup.declarationinvalid`. Each record is registered with its data subject read from its subject column (PRIV-SENS-002) |
 | **Roles** | The actions that exist, each with the step-up gate and the purpose it is bound to where it has one (AUTHZ-GATE-005), a binding of either to a library-owned permission failing startup with `model.startup.declarationinvalid`, `details.declaration` `binding.<permission>`, `details.field` `stepUpGate` or `purpose` (D-209); and, optionally, the named bundles the deployment starts with (`Role`), each seeded once at a start and from then on the administrators' to change (AUTHZ-GRANT-004, D-204), a role marked `.GrantsMustEnd()` seeded as one every grant of which carries an end date (AUTHZ-GRANT-003, D-237); a declared role naming a permission not declared or `system:administer`, named as a role of `10` section 3 or outside the rule of `09` `POST /admin/roles`, or declared twice, fails startup with `model.startup.declarationinvalid`, `details.declaration` `role.<name>` |
 | **Processing purposes and lawful bases** | Per resource type (AUTHZ-MODEL-003), each purpose with the data categories and subject categories it requires (PRIV-PRIN-001) and naming the legal document that governs its consent, the privacy notice where it names none; one purpose names one document across every type, and a document's name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_` (INT-SMS-003). A retention floor is declared for each data category a purpose is over, and is the default of `retention.<host-category>` (PRIV-RET-001). The jurisdiction's basis list with its properties, and its sensitive-data categories, are declared once; Egypt's ship as `LawfulBases.Default` and `SensitiveCategories.Default`, which the host passes to the builder. The library applies no list the host did not declare, and reads one category by name, `children` (PRIV-BASIS-001, PRIV-SENS-001, D-108) |
 | **Hosting location, environment and cross-border basis** | Configuration: `hosting.location` (INT-HOST-001) and `hosting.environment`, the free-text environment cell of the records of processing (PRIV-ROPA-001); the basis only where hosting is outside Egypt |
@@ -400,7 +400,7 @@ default, of which fourteen could be defaulted and six belonged here (D-107).*
 
 *Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177,
 D-179, D-180, D-183, D-189, D-190, D-197, D-202, D-203, D-204, D-206, D-209, D-237,
-D-254, D-255*
+D-254, D-255, D-257*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every
@@ -426,6 +426,10 @@ D-254, D-255*
    `landingOrigins.authentication` or `landingOrigins.account` naming it.
 7. Startup succeeds with none of the optional declarations registered, and each absence
    has the effect its row states.
+8. A resource type declared with `Subject` and no encrypted field, carrying a purpose
+   resting on consent, starts; one whose `Subject` and encrypted fields name different
+   columns fails startup with `model.startup.declarationmissing`, `details.key` naming
+   the type (D-257).
 
 ---
 
