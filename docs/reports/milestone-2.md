@@ -116,8 +116,9 @@ it.
 - Fast checks on every commit: green. These are the build with warnings as errors, the
   analysers, `dotnet format --verify-no-changes`, and the unit tests of the projects
   changed.
-- Checks before the push: green. Every unit test passes (5201 in eleven projects), the
-  commit-message gate passes over the step's commits, and the full-history secret scan finds nothing.
+- Checks before the push: green. Every unit test passes (5201 in eleven projects), and
+  the full-history secret scan finds nothing. The commit-message gate was run here on the
+  head commit alone; the pipeline's runs on 1253647c checked it over the range, green.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the step's last message gives.
 
@@ -178,9 +179,18 @@ None.
 ### 5. Gate result
 
 - Fast checks on the release commit: green.
+- The pipeline's runs on 88424102: the pull request's run (41822820169) green; the push
+  run (41822810795) red in the unit tests.
+  `SearchIndexServiceTests.IDN_SRCH_003_AC7_PastTheCapacityNoIndexIsBuiltAsync` read the
+  alerts once the index was withheld, and the alert is raised just after;  waits for
+  both.
+- PR #25 is replaced by this branch's. On `milestone-2`, the same fix was pushed with a
+  body line over 72 characters, which the commit-message gate refused on both runs. A
+  pushed commit is never rewritten, so the lead cut `milestone-2-release` at 88424102,
+  and the fix was made again here in a commit whose message passes.
 - Checks before the push: green. Every unit test passes (5201 in eleven projects); the
-  commit-message, changelog and release gates pass over the range; the full-history
-  secret scan finds nothing.
+  commit-message, changelog, release and acceptance-criterion test name gates pass over
+  `origin/main..HEAD`; the full-history secret scan finds nothing.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the step's last message gives.
 
