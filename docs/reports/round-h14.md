@@ -2,15 +2,35 @@
 
 ## 1. Items implemented
 
-None: every item of the round waits on Q1.
+**`21` REC-ACC-003 and `07` LIB-API-005: `IRecordAccess` (D-261)**
+
+- `IRecordAccess.ReachedAsync` (`Janus.Core`), mapped by `Janus.Hosting` to the record
+  access session the request's browser holds through the pre-authentication session, as
+  the `/records/access` endpoints read it. The reach is re-read as `GET /records/access`
+  re-reads it, through `IRecordDirectory.InReachAsync`, with no lock and outside any
+  transaction, and answered in subject order. No endpoint, no access context, no unit of
+  work, no audit.
+- Tests, in `RecordReachTests`:
+  - `REC_ACC_003_AC1_TheSubjectsTheSessionReachesAreAnsweredInOrderAsync`
+  - `REC_ACC_003_AC1_ASessionReachingNothingAnswersAnEmptyListAsync`
+  - `REC_ACC_003_AC2_ASessionThatHasEndedIsRefusedAsync` (another browser, ended, past
+    its lifetime)
+  - `REC_ACC_003_ABrowserSignedInHoldsNoSessionAsync`
+  - `REC_ACC_003_AC3_ARecordAttachedAfterTheSessionOpenedIsNotAnsweredAsync`
+  - `REC_ACC_003_AC4_OutsideABrowsersRequestTheReadIsAFaultAsync`
+- The public surface: `IRecordAccess` and `ReachedAsync` in `Janus.Core`'s unshipped
+  file. The changelog line under Unreleased.
+
+**REC-ACC-003 AC5: the sample host (LIB-TEST-004)**
+
+- `GET /walk-ins/{ticket}` shows a guest's own repair in the browser that reached the
+  guest's record by a code, and answers another guest's repair as one that does not
+  exist, 404 in the same bytes.
+- Test: `GuestTests.REC_ACC_003_AC5_AGuestSeesTheirOwnRepairAndNoOtherAsync`.
 
 ## 2. Items not implemented
 
-- `21` REC-ACC-003, AC1 to AC5: parked by Q1.
-- `07` LIB-API-005, `IRecordAccess`: parked by Q1, since it is the seam REC-ACC-003
-  states.
-- The sample host's page for a reached subject (REC-ACC-003 AC5): parked by Q1, since it
-  reads the seam.
+None.
 
 ## 3. Resolved by rule
 
@@ -18,31 +38,28 @@ None.
 
 ## 4. Open questions
 
-**Q1 (Tier 3).** REC-ACC-003 asks a lock that only a transaction holds, and asks that
+**Q1 (Tier 3).** REC-ACC-003 asked a lock that only a transaction holds, and asked that
 the seam join no unit of work.
 
-- `21` REC-ACC-003 (D-261): each record is "re-read under its record's lock as
-  REC-ACC-001's every action is", and `ReachedAsync` "joins no unit of work". `07`
-  LIB-API-005 says the same of `IRecordAccess`: it "joins no transaction".
-- In the code, a person record's lock is a row lock held until the transaction ends
-  (`IPersonRecordStore.HoldAsync`, `IRecordDirectory.HoldAsync`), and taking it outside a
-  transaction is a fault (`InvalidOperationException`). The library opens a transaction
-  only through `IUnitOfWork.BeginAsync`, which, while the host's unit of work is open,
-  joins it. So the seam cannot take the record's lock without joining a unit of work,
-  and cannot join none and take the lock.
-- What REC-ACC-001's actions do today: the changes of REC-ACC-002 re-read the record
-  under its lock in their own unit of work (`RecordRights`). The reads take no lock:
-  `GET /records/access` (`RecordAccessSessions.StateAsync`) and the reach check before
-  each right (`RecordAccessSessions.ReachesAsync`) re-read the reach through
-  `IRecordDirectory.InReachAsync`, outside any transaction. REC-ACC-001's sentence
-  "Every action re-reads, under the record's lock" is not what these two reads do.
-- Parks: every item of the round, and step 4 of the plan's section 4 (release
-  1.0.0-rc.4), which comes after the round.
+- Asked: `21` REC-ACC-003 and D-261 had each record "re-read under its record's lock",
+  and `ReachedAsync` join no unit of work. A person record's lock is a row lock held to
+  the transaction's end, taken only inside one, and the library opens a transaction only
+  through `IUnitOfWork.BeginAsync`, which joins the host's. REC-ACC-001's own reads
+  (`GET /records/access`, the check before each right) take no lock.
+- Parked: every item of the round.
+- Answered: D-261 amended (cdf7652c). `ReachedAsync` re-reads the reach as the session's
+  state read does, with no lock, a read of that moment; REC-ACC-001's sentence now says a
+  change re-reads under the record's lock and a read without one. The round is built from
+  the chapters as they now read.
 
 ## 5. Gate result
 
-- Fast checks: nothing in the code changed.
-- Checks before the push: the commit-message gate passes over `origin/main..HEAD`, and
-  the full-history secret scan finds nothing.
+- Fast checks on every commit: green. These are the build with warnings as errors, the
+  analysers, `dotnet format --verify-no-changes`, and the unit tests of the projects
+  changed.
+- Checks before the push: green. Every unit test passes (5209 in eleven projects)
+  and every contract test (214); the commit-message, changelog, release,
+  truth-table change, acceptance-criterion test name and forbidden-marker gates pass
+  over `origin/main..HEAD`; the full-history secret scan finds nothing.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
