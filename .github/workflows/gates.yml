@@ -253,9 +253,10 @@ jobs:
 
   secret-scanning:
     name: Secret scanning
-    # OPS-DEP-004 scans the full history on every push. The version is raised only in a
-    # commit of its own, with the SHA-256 the release publishes for its linux_x64 archive.
-    if: github.event_name == 'push'
+    # OPS-DEP-004 scans the full history on every push, and CONV-GATE-001 AC1 runs it on
+    # pull request too: the scan reads every branch and tag the checkout fetched, whatever
+    # the event. The version is raised only in a commit of its own, with the SHA-256 the
+    # release publishes for its linux_x64 archive.
     runs-on: ubuntu-latest
     env:
       GITLEAKS_VERSION: 8.30.1
