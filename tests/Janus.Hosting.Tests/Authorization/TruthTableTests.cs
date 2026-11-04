@@ -496,6 +496,27 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("the list, by a declared job of another organization", Decided.Allowed),
     ];
 
+    // The staff search's admission, asked for contact:read and record:read in an
+    // organization other than the administrative organization save where the case names
+    // that: each permission held there, or in the administrative organization by one of
+    // its members, admits its kind, recording no refusal, and a search asking only a kind
+    // the caller may not read, or asked by a caller holding neither, is refused once,
+    // naming the first permission asked in the organization the search names
+    // (IDN-SRCH-002 AC1, AC4, AUTHZ-CONCEAL-004, D-219, D-256).
+    private static readonly (string Scenario, Decided Decided)[] SearchReads =
+    [
+        ("a search of another organization, by a caller holding contact:read there", Decided.Allowed),
+        ("a search of another organization, by a caller holding record:read there", Decided.Allowed),
+        ("a search of another organization, by a caller holding both there", Decided.Allowed),
+        ("a search of another organization, by a caller holding contact:read in the administrative organization", Decided.Allowed),
+        ("a search of another organization, by a caller holding neither", Decided.Denied),
+        (
+            "a search of another organization, by a caller holding both in the administrative organization with no membership of it",
+            Decided.Denied),
+        ("a search of another organization asking records, by a caller holding contact:read there", Decided.Denied),
+        ("a search of the administrative organization, by a caller holding both there", Decided.Allowed),
+    ];
+
     /// <summary>
     /// The table as the run reads it.
     /// </summary>
@@ -555,6 +576,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The organization reads' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> OrganizationReadCases => Read(OrganizationReads);
+
+    /// <summary>
+    /// The staff search admissions' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> SearchReadCases => Read(SearchReads);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
@@ -878,6 +904,47 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
             Assert.Equal(Permissions.OrganizationRead, recorded?.Permission);
             Assert.Equal(listing ? administrative : organization, recorded?.Organization);
+        }
+    }
+
+    /// <summary>
+    /// IDN-SRCH-002 AC1, AC4 (D-256): every staff search admission decides the way the
+    /// table says through the read admission, answering the permissions held among those
+    /// asked, and a refusal recorded once, naming the first permission asked in the
+    /// organization the search names.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(SearchReadCases))]
+    public async Task IDN_SRCH_002_AC4_EverySearchAdmissionDecidesTheWayTheTableSaysThroughTheAdmissionAsync(
+        string scenario,
+        Decided decided)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        (AccessContext context, OrganizationId organization, Permission[] asked, Permission[] held) =
+            await SearchingAsync(scenario);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result<IReadOnlyList<Permission>> admitted = await scope.ServiceProvider
+            .GetRequiredService<IOrganizationReadAdmission>()
+            .ReadableAsync(context, asked, organization, cancellationToken);
+
+        Assert.Equal(decided, admitted.Match(_ => Decided.Allowed, Refused));
+        Assert.Equal(decided is Decided.Denied ? 1 : 0, await GrantRefusalsAsync(context, organization));
+
+        admitted.Switch(readable => Assert.Equal(asked.Intersect(held), readable), _ => { });
+
+        if (admitted.Match<Error?>(_ => null, error => error) is Error refusal)
+        {
+            DeniedAccess? recorded = await scope.ServiceProvider.GetRequiredService<IAccessAudit>().FindAsync(
+                new AuditRecordId(refusal.Details["correlation"].GetGuid()),
+                cancellationToken);
+
+            Assert.Equal(asked[0], recorded?.Permission);
+            Assert.Equal(organization, recorded?.Organization);
         }
     }
 
@@ -3947,6 +4014,54 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         }
 
         return (AccessContext.Of(caller), organization, administrative);
+    }
+
+    // IDN-SRCH-002 (D-256): the caller of a staff search admission's case, the
+    // organization the search names, the permissions it asks, contact:read then
+    // record:read save where the case asks records alone, and the permissions the caller
+    // holds. The caller holds them where the case says, as a member of the organization
+    // it holds them in save where the case says it is no member; one holding neither is
+    // a member of the organization the search names, so membership alone is seen to admit
+    // nothing.
+    private async Task<(AccessContext Context, OrganizationId Organization, Permission[] Asked, Permission[] Held)>
+        SearchingAsync(string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        _ = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        OrganizationId organization = scenario.StartsWith("a search of the administrative organization", StringComparison.Ordinal)
+            ? administrative
+            : deployment.Organization;
+        Permission[] asked = scenario.Contains("asking records", StringComparison.Ordinal)
+            ? [Permissions.RecordRead]
+            : [Permissions.ContactRead, Permissions.RecordRead];
+        Permission[] held = scenario.Contains("holding both", StringComparison.Ordinal)
+            ? [Permissions.ContactRead, Permissions.RecordRead]
+            : scenario.Contains("holding contact:read", StringComparison.Ordinal)
+                ? [Permissions.ContactRead]
+                : scenario.Contains("holding record:read", StringComparison.Ordinal)
+                    ? [Permissions.RecordRead]
+                    : [];
+        SubjectId caller = await deployment.AccountAsync(cancellationToken);
+        bool administering = scenario.Contains("in the administrative organization", StringComparison.Ordinal);
+        OrganizationId holding = administering ? administrative : organization;
+
+        if (held.Length > 0)
+        {
+            RoleName reading = await deployment.RoleAsync(held, cancellationToken);
+
+            await deployment.GrantAsync(GrantSubject.Of(caller), reading, null, false, null, holding, cancellationToken);
+        }
+
+        if (!scenario.EndsWith("with no membership of it", StringComparison.Ordinal))
+        {
+            await deployment.MemberAsync(caller, holding, cancellationToken);
+        }
+
+        return (AccessContext.Of(caller), organization, asked, held);
     }
 
     // AUTHZ-CONCEAL-004: the refusals a case's caller left recorded: a person's wherever

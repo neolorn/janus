@@ -353,6 +353,83 @@ internal sealed class AccessGate(
 
     /// <inheritdoc/>
     /// <remarks>
+    /// Implements IDN-SRCH-002, IDN-READ-004 and AUTHZ-SEAM-001 (D-219, D-256). Each
+    /// permission is decided in the organization the read names and then, for a person,
+    /// in the administrative organization, as the single check decides it, recording
+    /// nothing, so a search that may read one kind records no refusal of the other; one
+    /// admitted is asked what an export asks, as the admission of one read asks it. Where
+    /// none admits, the first permission's admission answers, so its refusal is the one
+    /// recorded and counted.
+    /// </remarks>
+    public async ValueTask<Result<IReadOnlyList<Permission>>> ReadableAsync(
+        AccessContext context,
+        IReadOnlyList<Permission> permissions,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        if (permissions.Count == 0)
+        {
+            throw new ArgumentException("A read names at least one permission.", nameof(permissions));
+        }
+
+        foreach (Permission permission in permissions)
+        {
+            Declared(permission);
+        }
+
+        OrganizationId? administering = await administrative.FindAsync(cancellationToken).ConfigureAwait(false);
+        var admitted = new List<Permission>(permissions.Count);
+
+        foreach (Permission permission in permissions)
+        {
+            if (await RestrictedPersonAsync(context, permission, cancellationToken).ConfigureAwait(false))
+            {
+                return Result.Failure<IReadOnlyList<Permission>>(Error.From(ErrorCodes.Restricted));
+            }
+
+            OrganizationId? admitting =
+                (await DecidedOnAsync(context, permission, organization, cancellationToken).ConfigureAwait(false)).Admits
+                    ? organization
+                    : !IsJob(context)
+                        && administering is OrganizationId reaching
+                        && reaching != organization
+                        && (await DecidedOnAsync(context, permission, reaching, cancellationToken).ConfigureAwait(false))
+                            .Admits
+                        ? reaching
+                        : null;
+
+            if (admitting is null)
+            {
+                continue;
+            }
+
+            if ((await exports
+                    .AdmitAsync(context, permission, OrganizationWide, admitting, record: null, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error unmet)
+            {
+                return Result.Failure<IReadOnlyList<Permission>>(unmet);
+            }
+
+            admitted.Add(permission);
+        }
+
+        if (admitted.Count > 0)
+        {
+            return Result.Success<IReadOnlyList<Permission>>(admitted);
+        }
+
+        return (await AdmitAsync(context, permissions[0], organization, cancellationToken).ConfigureAwait(false))
+            .Match(
+                () => Result.Success<IReadOnlyList<Permission>>([permissions[0]]),
+                Result.Failure<IReadOnlyList<Permission>>);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
     /// Implements IDN-READ-001 and IDN-READ-004 (D-219). Each organization is decided as
     /// the single check decides it, recording nothing. A person holding the permission in
     /// the administrative organization lists every organization; any other person lists
