@@ -20,6 +20,7 @@ namespace Janus.Hosting.Tests.Authorization;
 [Trait("kind", "integration")]
 public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<HostFixture>
 {
+    private static readonly ResourceType Customer = ResourceType.Parse("customer");
     private static readonly ResourceType Document = ResourceType.Parse("document");
     private static readonly ResourceType Note = ResourceType.Parse("note");
     private static readonly ResourceType Report = ResourceType.Parse("report");
@@ -239,6 +240,12 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         ResourceReference elsewhere = Reference(Workspace);
         ResourceReference first = Reference(Document);
         var undeclared = ResourceType.Parse("journey");
+        SubjectId nobody;
+
+        using (var randomness = RandomNumberGenerator.Create())
+        {
+            nobody = SubjectId.New(randomness);
+        }
 
         Ok(await RegisteredManyAsync(
         [
@@ -273,7 +280,7 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
             Invalid(Refused(await RegisteredManyAsync(
             [
                 new ResourceRegistration(first, ours.Organization, workspace, ours.Account),
-                new ResourceRegistration(Reference(Document), ours.Organization, workspace, null),
+                new ResourceRegistration(Reference(Document), ours.Organization, workspace, nobody),
             ]))));
         Assert.Equal(0, await RowsOfAsync(first));
     }
@@ -307,9 +314,9 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
     /// <summary>
     /// IDN-LIFE-002a AC1: a record of a sensitive type is registered only for a subject
-    /// holding an account, so a record naming nobody, one naming a subject the library
-    /// holds no account for, and one naming an account being deleted are each refused,
-    /// and a type that is not sensitive needs no subject.
+    /// holding an account, so a record naming nobody is refused malformed, one naming a
+    /// subject the library holds no account for and one naming an account being deleted
+    /// are each refused invalid, and a type that is not sensitive needs no subject.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -331,7 +338,7 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
         Assert.Equal(
             "subject",
-            Invalid(Refused(await RegisteredAsync(
+            Malformed(Refused(await RegisteredAsync(
                 new ResourceRegistration(Reference(Document), written.Organization, workspace, null)))));
         Assert.Equal(
             "subject",
@@ -350,6 +357,34 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         Ok(await RegisteredAsync(new ResourceRegistration(held, written.Organization, workspace, written.Account)));
 
         Assert.Equal(1, await RowsOfAsync(held));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC7 (D-257): a record of a type that declares <c>Subject</c> and is
+    /// not sensitive, registered naming no subject, is refused malformed naming
+    /// <c>subject</c> and writes nothing; naming one, it is registered with that subject.
+    /// A record of a type that neither is sensitive nor declares <c>Subject</c> is
+    /// registered naming no subject.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC7_ATypeNamingItsSubjectIsRegisteredOnlyWithOneAsync()
+    {
+        Case written = await BeginAsync();
+        ResourceReference nobodys = Reference(Customer);
+        ResourceReference held = Reference(Customer);
+        ResourceReference report = Reference(Report);
+
+        Assert.Equal(
+            "subject",
+            Malformed(Refused(await RegisteredAsync(new ResourceRegistration(nobodys, written.Organization, null, null)))));
+        Assert.Equal(0, await RowsOfAsync(nobodys));
+
+        Ok(await RegisteredAsync(new ResourceRegistration(held, written.Organization, null, written.Account)));
+        Ok(await RegisteredAsync(new ResourceRegistration(report, written.Organization, null, null)));
+
+        Assert.Equal(written.Account.Value, await SubjectOfAsync(held));
+        Assert.Equal(1, await RowsOfAsync(report));
     }
 
     /// <summary>
@@ -622,6 +657,15 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
         return await connection.QuerySingleAsync<int>(
             "SELECT count(*)::int FROM identity.resources WHERE resource_type = @type AND resource_id = @id;",
+            new { type = resource.Type.ToString(), id = resource.Id.ToString() });
+    }
+
+    private async Task<Guid?> SubjectOfAsync(ResourceReference resource)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<Guid?>(
+            "SELECT subject FROM identity.resources WHERE resource_type = @type AND resource_id = @id;",
             new { type = resource.Type.ToString(), id = resource.Id.ToString() });
     }
 

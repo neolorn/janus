@@ -26,6 +26,10 @@ namespace Janus.Core;
 /// <param name="Capabilities">
 /// The permissions a page of its records may be asked about, and no other.
 /// </param>
+/// <param name="Subject">
+/// The column naming its records' data subject where <c>Subject</c> names it, or nothing
+/// where its encrypted fields alone name one or it names none (D-257).
+/// </param>
 /// <remarks>Implements AUTHZ-MODEL-001, AUTHZ-MODEL-002, AUTHZ-MODEL-003, BFF-CAP-002.</remarks>
 public sealed record ResourceTypeDeclaration(
     ResourceType Name,
@@ -37,4 +41,5 @@ public sealed record ResourceTypeDeclaration(
     IReadOnlyList<PurposeDeclaration> Purposes,
     IReadOnlyList<DerivationDeclaration> Derivations,
     IReadOnlyList<EncryptedFieldDeclaration> EncryptedFields,
-    IReadOnlyList<Permission> Capabilities);
+    IReadOnlyList<Permission> Capabilities,
+    string? Subject);

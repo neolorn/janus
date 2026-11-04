@@ -128,6 +128,110 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-MODEL-003 AC3 (D-257): a type that names its subject through <c>Subject</c>,
+    /// with no encrypted field, carries a purpose resting on consent and starts, its
+    /// subject column the one <c>Subject</c> names.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_003_AC3_ATypeNamingItsSubjectAloneCarriesAConsentPurpose()
+    {
+        var model = AuthorizationModel.Of(Subjected(article => article.Subject(item => item.Author)));
+        ResourceTypeDeclaration article = Assert.Single(model.ResourceTypes);
+
+        Assert.Equal(nameof(HostDomain.Article.Author), article.Subject);
+        Assert.Empty(article.EncryptedFields);
+        Assert.Equal(nameof(HostDomain.Article.Author), AuthorizationModel.SubjectColumn(article));
+    }
+
+    /// <summary>
+    /// AUTHZ-MODEL-003 AC4 (D-257): a type whose <c>Subject</c> names one column and one of
+    /// whose encrypted fields names another stops the start with
+    /// <c>model.startup.declarationinvalid</c>, <c>details.key</c> naming the type; the
+    /// same field naming <c>Subject</c>'s column starts.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_003_AC4_ASubjectAndAnEncryptedFieldNamingAnotherColumnStopTheStart()
+    {
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(Subjected(article => article
+            .Subject(item => item.Author)
+            .Encrypted(item => item.Body, item => item.Editor, "identity"))));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("article", refused.Failure!.Details["key"].GetString());
+        Assert.NotNull(AuthorizationModel.Of(Subjected(article => article
+            .Subject(item => item.Author)
+            .Encrypted(item => item.Body, item => item.Author, "identity"))));
+    }
+
+    /// <summary>
+    /// AUTHZ-MODEL-003 AC5: a type with a purpose resting on consent that names no subject
+    /// column, by <c>Subject</c> or by an encrypted field, stops the start with
+    /// <c>model.startup.declarationmissing</c>, <c>details.key</c> naming
+    /// <c>&lt;type&gt;.&lt;purpose&gt;</c>; so does one without <c>Subject</c> whose encrypted
+    /// fields name two columns.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_003_AC5_AConsentPurposeOnATypeNamingNoOneSubjectColumnStopsTheStart()
+    {
+        StartupException unnamed = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Subjected(article => article)));
+        StartupException twice = Assert.Throws<StartupException>(() => AuthorizationModel.Of(Subjected(article => article
+            .Encrypted(item => item.Body, item => item.Author, "identity")
+            .Encrypted(item => item.Body, item => item.Editor, "identity", name: "edited"))));
+
+        Assert.All(
+            [unnamed, twice],
+            refused =>
+            {
+                Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+                Assert.Equal("article.newsletter", refused.Failure!.Details["key"].GetString());
+            });
+    }
+
+    /// <summary>
+    /// AUTHZ-MODEL-003 AC6 (D-257): a type with no <c>Subject</c> and no purpose resting on
+    /// consent, whose encrypted fields name two different columns, starts.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_003_AC6_FieldsNamingTwoColumnsWithNoSubjectAndNoConsentPurposeStart()
+    {
+        AuthorizationDeclaration declared = Encrypting(
+            new EncryptedFieldDeclaration("Body", "Author", "identity", "Body"),
+            new EncryptedFieldDeclaration("Body", "Editor", "identity", "Edited"));
+
+        ResourceTypeDeclaration article = Assert.Single(AuthorizationModel.Of(declared).ResourceTypes);
+
+        Assert.Null(article.Subject);
+        Assert.Null(AuthorizationModel.SubjectColumn(article));
+    }
+
+    /// <summary>
+    /// AUTHZ-MODEL-005 AC2, AUTHZ-MODEL-003 (D-257): the column <c>Subject</c> names is
+    /// written to the model's file, so naming another is a difference a reviewer reads.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_005_AC2_TheSubjectColumnIsInTheFile()
+    {
+        string author = AuthorizationModel.Of(Subjected(article => article.Subject(item => item.Author))).Serialize();
+        string editor = AuthorizationModel.Of(Subjected(article => article.Subject(item => item.Editor))).Serialize();
+
+        Assert.Contains("\"subject\": \"Author\"", author, StringComparison.Ordinal);
+        Assert.Contains("\"subject\": \"Editor\"", editor, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AUTHZ-MODEL-003 (D-257): a column <c>Subject</c> names that the type does not hold,
+    /// or that holds something that is not a subject, stops the start.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_003_ASubjectColumnNamingNoSubjectStopsTheStart()
+    {
+        Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Subjected(article => article.Subject(item => item.FolderId))));
+        Assert.Throws<StartupException>(() => AuthorizationModel.Of(Subjected(article => article.Subject(item => item.Id))));
+    }
+
+    /// <summary>
     /// PRIV-RET-001 AC1: a purpose over a category the host declares no retention
     /// floor for stops the deployment, naming the key that would hold its period.
     /// </summary>
@@ -998,6 +1102,20 @@ public sealed class AuthorizationModelTests
             ResourceTypes = [declared.ResourceTypes[0] with { EncryptedFields = fields }],
         };
     }
+
+    // AUTHZ-MODEL-003 (D-257): the article carrying a purpose resting on consent, and
+    // what the case declares of its subject.
+    private static AuthorizationDeclaration Subjected(
+        Func<ResourceTypeDeclarationBuilder<HostDomain.Article>, ResourceTypeDeclarationBuilder<HostDomain.Article>> subject) =>
+        new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
+            .LawfulBasis(Contract())
+            .LawfulBasis(new LawfulBasisDeclaration("consent", "Consent", true, true, false, false))
+            .Resource<HostDomain.Article>("article", article => subject(article
+                .BelongsToOrganization()
+                .Purpose("collaboration", "contract", data: ["identity"])
+                .Purpose("newsletter", "consent", data: ["identity"])))
+            .Build();
 
     // One purpose on the basis named, over a type whose encrypted field names its
     // subject, so a consent the purpose rests on has a subject to be read from and

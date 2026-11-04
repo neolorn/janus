@@ -342,5 +342,17 @@ public sealed class HostFixture : IAsyncLifetime
                 .BelongsToOrganization()
                 .Discloses()
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
+            // AUTHZ-MODEL-003 (D-257): a type naming its subject with no encrypted field, a
+            // purpose resting on consent resting on it.
+            .Resource<HostCustomer>("customer", type => type
+                .BelongsToOrganization()
+                .Subject(held => held.Person)
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"])
+                .Purpose(
+                    "recommendations",
+                    "agreement",
+                    data: ["identity"],
+                    subjects: ["members"],
+                    document: document))
             .Build();
 }

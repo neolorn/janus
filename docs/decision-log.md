@@ -20691,6 +20691,107 @@ in backups, so the work is keeping memory off disk.
 
 ---
 
+## D-257 — A type names its data subject without an encrypted field
+
+> **Amended.** 2026-11-04. Decisions on what writing the chapters raised; where these
+> differ from the body below, these win:
+> 1. **One column.** The encrypted fields must name `Subject`'s column only where the
+>    type declares `Subject`. A type with a purpose resting on consent still needs one
+>    column between its fields, as today. Otherwise PRIV-RIGHT-005a's criterion 3
+>    stands: the fields of a type that declares no `Subject` and carries no consent
+>    purpose may name different columns.
+> 2. **Startup codes.** `Subject` and the encrypted fields naming different columns is
+>    a declaration present but inconsistent: `model.startup.declarationinvalid`,
+>    `details.key` naming the type. A consent purpose on a type with no subject column
+>    at all stays `model.startup.declarationmissing`, `details.key` naming
+>    `<type>.<purpose>`.
+> 3. **`10`** joins "Propagated to": section 1.5's `model.startup.declarationinvalid`
+>    row gains the disagreement.
+> 4. **The refusal is not widened.** A registration naming no subject is refused 400
+>    `api.request.malformed` naming `subject` for a type that declares `Subject` (new)
+>    and for a sensitive type (as today); a non-sensitive type whose subject column
+>    comes only from its encrypted fields stays as today.
+> 5. **The signature.** `Subject` takes the parameter type the encrypted field
+>    declaration takes for its subject column: `Subject(Expression<Func<TResource,
+>    object?>> column)` on `ResourceTypeDeclarationBuilder<TResource>`.
+> 6. **The reference.** The body's "(PRIV-RIGHT-004)" for the host's erasure on
+>    `ErasureRequested` reads PRIV-RIGHT-005b.
+> 7. **The records of processing** read the subject column as the chapters already
+>    write it.
+
+**Date:** 2026-11-04 · **Status:** accepted · **Amends:** AUTHZ-MODEL-003, AUTHZ-INHERIT-002
+
+**TL;DR.** A resource type MAY name the column that identifies its records' data subject
+without declaring an encrypted field, through the type builder's `Subject(column)`.
+The column then does everything an encrypted field's subject column does today: the
+host supplies the subject read from it when it registers the record (AUTHZ-INHERIT-002),
+and a purpose resting on consent may rest on the type, the consent gate reading that
+subject (PRIV-SENS-002, AUTHZ-GATE-005). Found by a host whose customer record holds no
+encrypted field (its customer data are its own plain columns, found by its own queries)
+but whose "offers and news" purpose rests on consent: the start refused the purpose with
+`model.startup.declarationmissing`, so no customer could give that consent and every
+message needing it ended unsent.
+
+- **The rule.** A type's subject column is the one `Subject` names, or the one its
+  encrypted fields name. Where both are given they must be the same column, and the
+  encrypted fields must name one column between them; otherwise the start stops with
+  `model.startup.declarationmissing`, `details.key` naming the type, as a type whose
+  fields name two columns stops it today.
+- **What follows.** Everything that reads a type's subject column reads it whichever way
+  it was named: the registration's subject (a registration of such a type naming no
+  subject is refused 400 `api.request.malformed` naming `subject`, as for a sensitive
+  type), the consent gate, the records of processing.
+- **What stays.** A consent-based purpose on a type that names no subject column at all
+  still stops the start. Naming a subject encrypts nothing and changes no erasure duty:
+  the host's own plain columns about the subject stay the host's to erase on
+  `ErasureRequested` (PRIV-RIGHT-004), as they are today.
+
+*Rejected:*
+- **A placeholder encrypted field:** encrypting a value only to name a column is a
+  workaround a host would have to keep for ever, and declares a personal field that
+  isn't one.
+- **Reading the subject from the registration alone, with no declared column:** the
+  declaration is what the records of processing and the startup checks read; a subject
+  only some registrations carry would make the gate's answer depend on the caller.
+
+**Propagated to:**
+- `03` AUTHZ-MODEL-003 (the subject column named by `Subject` or by the encrypted
+  fields; the table's row; the startup rule) and AUTHZ-INHERIT-002 (the registration's
+  subject);
+- `04` PRIV-SENS-002a where it names the encrypted fields' column;
+- `07` LIB-API-005 or the declaration builder's section (`ResourceTypeBuilder.Subject`);
+- `10` section 1.5, the `model.startup.declarationinvalid` row (the amendment, item 3);
+- `implementation-plan.md` (round H13).
+
+## D-258 — Round R withdrawn: reports hold counts and amounts, and nothing is imported
+
+**Date:** 2026-11-04 · **Status:** accepted · **Amends:** `implementation-plan.md` section 3a
+
+**TL;DR.** Round R was to give a host a feed of the library's people data for its
+reports, and a bulk import. The owner's answers (2026-11-01): a report carries counts
+and amounts only, never a person's name or contact; it is downloaded from the host's own
+screens, not opened live in a spreadsheet or business-intelligence tool; and nothing is
+imported at launch. A host computes counts and amounts from its own records, so the
+round has nothing left to build and is withdrawn. Section 4 follows the rounds S and
+H13.
+
+- **What stays.** Every read the library already has (IDN-READ-001 to 004, REC-ADM-001,
+  the staff search of D-256) is unchanged; a host may count what those reads answer, under
+  their permissions and their read volume.
+- **When it comes back** (the deferred table): a report that names people or reads their
+  contacts in bulk, a live feed to a spreadsheet or business-intelligence tool, or a bulk
+  import of accounts, members or person records. Each would be its own decision.
+
+*Rejected:*
+- **Building the feed anyway, for later:** a bulk read path of personal data with no host
+  to use it is risk with no benefit.
+
+**Propagated to:**
+- `implementation-plan.md` (round R withdrawn; the rounds' order);
+- the deferred table (its trigger).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -20957,6 +21058,8 @@ in backups, so the work is keeping memory off disk.
 | Reconciliation leaves the mail server's own accounts alone | D-254 |
 | Adopting a mail account the server already holds | D-255 |
 | Round S: the staff search, in memory and nowhere else | D-256 |
+| A type names its data subject without an encrypted field | D-257 |
+| Round R withdrawn: reports hold counts and amounts, and nothing is imported | D-258 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
@@ -21004,3 +21107,4 @@ Per P-003 — nothing deferred silently.
 | District-level boundary polygons (D-061) | If city-level preselection proves too coarse |
 | Paid geocoding provider (D-061) | If customers demonstrably struggle with the address form |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
+| Round R: a report feed of people data and a bulk import (D-258) | A report that names people or reads their contacts in bulk, a live feed to a spreadsheet or business-intelligence tool, or a bulk import of accounts, members or person records |

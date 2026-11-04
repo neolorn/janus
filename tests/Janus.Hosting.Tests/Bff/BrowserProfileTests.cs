@@ -490,6 +490,7 @@ public sealed class BrowserProfileTests : IDisposable
     {
         string[] domain =
         [
+            nameof(HostCustomer),
             nameof(HostDocument),
             nameof(HostNote),
             nameof(HostReport),

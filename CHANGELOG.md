@@ -10,6 +10,19 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `ResourceTypeDeclarationBuilder<TResource>.Subject(column)` names the column holding a
+  type's data subject where no encrypted field names one, for a type whose data about
+  the person are the host's own plain columns. A purpose resting on consent may then rest
+  on the type, the consent gate reading the subject each record was registered with, and
+  a registration of such a record naming no subject is refused 400
+  `api.request.malformed` naming `subject`. Where the type also declares an encrypted
+  field naming another column, the start stops with `model.startup.declarationinvalid`,
+  `details.key` naming the type. Naming a subject encrypts nothing, and the column is
+  written to the serialized model.
+- A registration of a record of a sensitive type naming no subject is refused 400
+  `api.request.malformed` naming `subject`, as a member it needs left out, rather than
+  422; one naming a subject that holds no account or person record able to hold it
+  stays 422 `api.request.invalid`.
 - `SearchForm.Of` gives the one form the staff search reads a name and a query in:
   NFKC on the library's pinned Unicode tables, the Arabic alef forms, teh marbuta and
   alef maksura written one way, harakat and tatweel removed, Arabic-Indic digits as

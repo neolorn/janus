@@ -27,6 +27,8 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
 {
     private const string Recommendations = "recommendations";
 
+    private static readonly ResourceType Customer = ResourceType.Parse("customer");
+
     private static readonly ResourceType Document = ResourceType.Parse("document");
 
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
@@ -321,6 +323,50 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     public async Task PRIV_SENS_002_AC1_TheWrittenRecordIsAskedForByTheConsentBasedPurposeOnlyAsync()
     {
         Granted granted = await GrantedAsync();
+
+        Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(granted));
+        Assert.Null(await RefusalAsync(granted, HostPermissions.Read));
+    }
+
+    /// <summary>
+    /// AUTHZ-MODEL-003 AC3 (D-257): a type naming its subject through <c>Subject</c>, with
+    /// no encrypted field, carries a purpose resting on consent, and the gate admits the
+    /// action done for it on its record only where the subject the record was registered
+    /// with holds a live consent; the consent of the staff member asking is not read.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_MODEL_003_AC3_ATypeNamingItsSubjectAloneGatesItsConsentPurposeOnThatSubjectAsync()
+    {
+        (Granted granted, SubjectId person) = await CustomerAsync();
+
+        await RecordAsync(granted.Account, Held(ConsentKind.Written));
+
+        Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(granted));
+        Assert.Null(await RefusalAsync(granted, HostPermissions.Read));
+
+        await RecordAsync(person, Held(ConsentKind.Written));
+
+        Assert.Null(await RefusalAsync(granted));
+    }
+
+    /// <summary>
+    /// PRIV-SENS-002a AC5 (D-257): on a type that declares <c>Subject</c> and no encrypted
+    /// field, a purpose resting on consent is admitted on a record whose registered subject
+    /// holds a live consent for it, and refused once that subject has withdrawn it, the
+    /// purpose resting on the contract admitted throughout.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002a_AC5_AWithdrawalByTheRegisteredSubjectStopsThePurposeAsync()
+    {
+        (Granted granted, SubjectId person) = await CustomerAsync();
+
+        await RecordAsync(person, Held(ConsentKind.Written));
+
+        Assert.Null(await RefusalAsync(granted));
+
+        await RecordAsync(person, Held(ConsentKind.Written) with { WithdrawnAt = Deployment.Noon.AddDays(1) });
 
         Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(granted));
         Assert.Null(await RefusalAsync(granted, HostPermissions.Read));
@@ -750,6 +796,32 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
             cancellationToken);
 
         return new Granted(account, record, deployment.Organization);
+    }
+
+    // AUTHZ-MODEL-003 (D-257): a staff member granted on a customer record the host
+    // registers, through the library's registration, with the person it is about read
+    // from the column its type names through Subject.
+    private async Task<(Granted Granted, SubjectId Person)> CustomerAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read, HostPermissions.Recommend], cancellationToken);
+        SubjectId staff = await deployment.AccountAsync(cancellationToken);
+        SubjectId person = await deployment.AccountAsync(cancellationToken);
+        ResourceReference record = Reference(Customer);
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            (await scope.ServiceProvider.GetRequiredService<IResources>().RegisterAsync(
+                    new ResourceRegistration(record, deployment.Organization, null, person),
+                    cancellationToken))
+                .Switch(() => { }, error => Assert.Fail(error.Code.ToString()));
+        }
+
+        await deployment.GrantAsync(GrantSubject.Of(staff), role, record, false, null, null, cancellationToken);
+
+        return (new Granted(staff, record, deployment.Organization), person);
     }
 
     private async Task RecordAsync(SubjectId subject, ConsentRecord consent)
