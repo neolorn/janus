@@ -886,10 +886,11 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// OPS-DATA-002 AC2: nothing but the accessor retrieves a connection, so a
-    /// hand-written query can never run outside the operation's transaction. The one
-    /// other connection is the one that listens for registration signals, a
-    /// listen/notify use of OPS-DATA-003: it runs no query, holds no operation's
-    /// transaction, and nothing above the port it implements reaches it. Outside the
+    /// hand-written query can never run outside the operation's transaction. The two
+    /// other connections are the ones that listen for registration signals and for the
+    /// staff search's changes (D-256), listen/notify uses of OPS-DATA-003: each runs no
+    /// query, holds no operation's transaction, and nothing above the port it implements
+    /// reaches it. Outside the
     /// storage project, only <c>UseUnitOfWorkAsync</c> touches a context's connection,
     /// reading the host's to judge it and handing it the accessor's (D-206).
     /// </summary>
@@ -899,6 +900,7 @@ public sealed class LibraryStructureTests
             [
                 "src/Janus.Hosting/UnitOfWorkJoin.cs",
                 "src/Janus.Storage/Authentication/Registration/RegistrationSignals.cs",
+                "src/Janus.Storage/Authentication/Search/SearchSignals.cs",
                 "src/Janus.Storage/DataConnections.cs",
             ],
             Sources()

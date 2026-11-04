@@ -1743,7 +1743,13 @@ they answer an account's, each answer naming its `kind` (`account` · `record`):
 record's contact read carries its name, its contacts as held, verified or not, its
 language, no time zone and its state (`21` REC-ADM-001).
 
-*Source: D-218, D-221, D-236*
+**The staff search beside the exact find (D-256).** `IAccounts.FindAsync` stays the
+exact find of the subject bearing an identifier, by its fingerprint (PRIV-RIGHT-005c).
+Finding a person by part of a name, an email or a phone, typed loosely, is the staff
+search (IDN-SRCH-001 to IDN-SRCH-003), which answers no email or phone value: a host
+reads a result's contacts through `IAccounts.ContactAsync` under its own permission.
+
+*Source: D-218, D-221, D-236, D-256*
 
 **Acceptance criteria**
 1. An account read answers no credential, date of birth or photo, the legal name only
@@ -1812,6 +1818,250 @@ and another organization's customers are not among them.
 5. A holder of `membership:read` in the administrative organization lists the members of
    another organization; a holder in neither organization is refused `authz.denied`
    once, naming the organization the path names (D-219).
+
+---
+
+## 6b. The staff search (D-256)
+
+Staff find a person by part of a name, an email or a phone, typed loosely (an Arabic
+spelling variant, a prefix, one typo, a phone's last digits), across the accounts and
+the person records they may read. The exact finds by fingerprint (IDN-READ-003, `21`
+REC-ADM-001) stay as they are. The search runs over an index each serving process holds
+in its own memory and writes nowhere.
+
+**IDN-SRCH-001**: The library SHALL find accounts and person records by part of a
+name, an email or a phone, through one normaliser applied to the index and the query
+alike, and SHALL answer them sorted by name, capped, and with no email or phone value.
+
+**Values (D-256).**
+- **What is searched.** For an account: its display name, every verified email
+  identifier and every verified phone identifier. For a person record (`21`): its name,
+  its email and its phone. Nothing else: no note, no host free text, no address.
+- **The normaliser**, one function used for the index and the query alike: Unicode
+  NFKC; the Arabic alef forms (أ إ آ ٱ) to ا, ة to ه and ى to ي; the harakat (U+064B to
+  U+065F, U+0670) and the tatweel removed; Arabic-Indic and Eastern Arabic-Indic digits
+  to 0 to 9; Latin letters case-folded invariantly with their combining marks removed
+  (NFD, marks dropped); every run of whitespace and punctuation to one space. A phone is
+  held as the digits of its E.164 form without `+`, and an email as its canonical form
+  (IDN-ACCT-004). The normaliser uses the library's pinned Unicode tables (IDN-ACCT-004,
+  D-154), never the platform's, so a result never changes with the machine. It is
+  public as `SearchForm.Of(string text)`, a static class in `Janus.Core` beside
+  `CanonicalForm` and `Precis`, answering the normalised text (`07` LIB-API-005).
+- **Matching.** The query is normalised, then split into words. A subject matches when
+  every query word matches one of its fields:
+  - a word of 3 or more characters matches a field containing it, by 3-letter slices,
+    the slices at a word's edges included;
+  - a word of 1 or 2 characters matches a name word starting with it;
+  - a word of 4 or more characters also matches a name word one edit away (Levenshtein
+    distance 1);
+  - a word of digits alone, 3 to 15 of them, also matches a phone containing them.
+- **Order and size.** Results are sorted by normalised display name, then by subject
+  identifier; a subject with no name sorts last. At most `limit` results are answered,
+  1 to 50, 20 where none is given. There is no paging: staff narrow the query instead.
+- **The result.** Each result is the subject, its `kind` (`account` · `record`), its
+  display name, and `matched`, the field that matched first in the order name, email,
+  phone (`name` · `email` · `phone`, `10` section 5.53). No email or phone value is
+  answered: a host reads a result's contacts through `IAccounts.ContactAsync` under its
+  own permission (IDN-READ-003). The names answered are decrypted per query, so the
+  index holds normalised text only, never a display value.
+- **The call and the route.** `ISearch.SearchAsync` in `Janus.Core` (`07` LIB-API-005)
+  and `POST /admin/search` (`09` section 8a), taking `organization`, `q`, `kinds` and
+  `limit`, the last two optional; a `POST`, so the query never reaches an address or an
+  access log. A `kinds` member other than `account` and `record`, a `limit` outside 1 to
+  50, or a member the body does not take is refused 400 `api.request.malformed`,
+  `details.member` naming the member; a `q` that normalises to nothing or to more than
+  64 characters is refused 422 `api.request.invalid`, `details.member` `q`.
+
+*Source: D-256*
+
+No scheme over ciphertext gives substring, typo and sorted search without leaving
+name-revealing traces in backups, so the search runs in memory, and keeping that memory
+off disk is the work (IDN-SRCH-003).
+
+**Acceptance criteria**
+1. A query writing ة as ه, ى as ي, or أ as ا finds the name written with the other
+   letter, and a query carrying harakat or a tatweel finds the name written without
+   them.
+2. A three-letter query taken from inside a name word finds it; a two-letter query finds
+   a name with a word starting with those letters, and not one holding them only inside
+   a word.
+3. A query word of four or more characters one edit from a name word finds it; a word
+   of three characters one edit away does not.
+4. The last four digits of a verified phone, written in Arabic-Indic digits, find the
+   account holding it; an unverified email or phone identifier is not searched.
+5. A query of two words finds a subject only where each word matches one of its fields.
+6. A subject whose note, address or host field alone holds the query is not found.
+7. Results are sorted by normalised display name, then by subject identifier, a subject
+   with no name last, and at most `limit` are answered, 20 where none is given.
+8. No result carries an email or phone value; a subject whose name and email both match
+   is answered with `matched` `name`.
+9. A `kinds` member other than `account` and `record`, a `limit` of 0 or 51, and a
+   member the body does not take are each refused 400 `api.request.malformed` naming the
+   member; a `q` normalising to nothing or to more than 64 characters is refused 422
+   `api.request.invalid` naming `q`.
+10. The same query answers the same results on machines whose platform Unicode versions
+    differ.
+11. `SearchForm.Of` answers, for a name, the text the index holds for it, and for a
+    query the text the search matches.
+
+---
+
+**IDN-SRCH-002**: The staff search SHALL answer a caller only the kinds of subject
+their permissions read, within the reach of the organization they ask in, and SHALL keep
+the query and every indexed value out of every log, trace, metric and audit row.
+
+**Values (D-256).**
+- **Who sees what.** Asked in an organization, the search answers that organization's
+  current members to a holder of `contact:read` there, and the person records it holds
+  to a holder of `record:read` there. Asked in the administrative organization, it
+  answers every account not erased (customers with no membership included) and every
+  person record, under the same two permissions held there. A permission held in the
+  administrative organization admits a search asked in another organization, judged as
+  one admission, as REC-ADM-001 admits a find (D-219). `kinds` absent asks for both.
+  Of the kinds asked, the search answers those the caller may read; a caller who may
+  read none of the kinds asked, a caller holding neither permission among them, is
+  refused 403 `authz.denied`, the refusal recorded as AUTHZ-CONCEAL-004 records a
+  refusal. An organization the deployment does not hold answers 404
+  `identity.organization.notfound`. A system principal, a job's included, is refused 403
+  `authz.denied`.
+- **Limits.** A caller may search `search.perminute` times a minute (default 60), in a
+  one-minute fixed window, across the deployment. The count is held in the table
+  `identity.search_windows`: `subject`, `window_start` (the minute, truncated) and
+  `count`, primary key (`subject`, `window_start`). Each search upserts its row, and is
+  refused 429 `auth.throttled` with `Retry-After` and `details.retryAt` (`09`
+  API-CONV-002) once the count passes `search.perminute`; the same statement deletes
+  the subject's earlier windows. An account's erasure deletes its rows (`04`
+  PRIV-RIGHT-005c).
+- **Read volume.** Each search counts its results toward the caller's read volume, one
+  record per result (`06` OPS-ALERT-005).
+- **What is never recorded.** No audit row is written for a search, and no log line,
+  trace attribute or metric holds the query or any indexed value (`08` CONV-LOG-003);
+  the query's member is marked `[NeverLogged]`. The search logs, at Debug, its result
+  count and its duration alone.
+
+*Source: D-256*
+
+**Acceptance criteria**
+1. A holder of `contact:read` alone, asking in an organization, is answered that
+   organization's current members and no person record; a holder of `record:read` alone
+   is answered the records it holds and no account.
+2. Asked in an organization, the search answers no account that is not a current member
+   of it, a former member included, and no record another organization holds.
+3. A holder of both permissions in the administrative organization is answered an
+   account with no membership and a record of any organization; an erased account is
+   not answered.
+4. A caller holding neither permission, and a holder of `contact:read` alone asking with
+   `kinds` `[record]`, are refused 403 `authz.denied`, and the refusal is recorded; a
+   holder of both asking with no `kinds` is answered accounts and records.
+5. An organization the deployment does not hold answers 404
+   `identity.organization.notfound`.
+6. A search in a system principal's access context, a host's job included, is refused
+   403 `authz.denied` and answers no result.
+7. A caller's search past `search.perminute` inside a one-minute window is answered 429
+   `auth.throttled` with `Retry-After` and `details.retryAt`, whichever process each
+   search reached.
+8. A holder of `contact:read` in the administrative organization, searching in another
+   organization, is answered that organization's current members.
+9. A search answering five results adds five to the caller's read volume for the day.
+10. With the Debug level on, a search writes no audit row, and no log entry, trace
+    attribute or metric holding the query or any indexed value; its one Debug entry
+    holds the result count and the duration alone.
+11. After searches in two minutes, `identity.search_windows` holds one row for the
+    caller, the later minute's, with its count; once the caller's account is erased it
+    holds none.
+
+---
+
+**IDN-SRCH-003**: The staff search's index SHALL be held only in the memory of a
+process that serves the search, SHALL be kept current with every write that changes
+what it holds, and SHALL be written nowhere: not to PostgreSQL, not to disk, not to a
+log.
+
+**Values (D-256).**
+- **Where.** Only a process whose host registers the library with
+  `AddJanus(..., StaffSearch.Served)` builds and serves the index (`07` LIB-HOST-001);
+  a host does so in the processes that serve staff. With `StaffSearch.Off`, or the
+  four-parameter `AddJanus`, `ISearch.SearchAsync` and `POST /admin/search` answer 503
+  `identity.search.unavailable` with `details.reason` `off`.
+- **Building.** The index is built after the host has started, in the background, from
+  the database; until it is ready the search answers 503 `identity.search.unavailable`
+  with `details.reason` `building` and `Retry-After` 30 seconds. It is held as the
+  library's own character buffers, and slice lists kept in name order with spare room
+  of a hundredth of their length, at least one place, guarded for concurrent readers
+  and one writer. Once it is built, the process runs one aggressive,
+  compacting collection, so the build's garbage goes back to the system.
+- **Kept current.** Every write that changes an indexed value or what a subject is (an
+  identifier added, verified or removed, a display name changed, a record collected,
+  corrected or attached, a membership starting or ending, an erasure, a takedown) sends,
+  in its transaction, a PostgreSQL notification on the channel `identity_search` (`10`
+  section 5.54) carrying the subject identifier alone. Every indexing process listens,
+  rereads that subject and updates its index. When the listening connection is lost, the
+  process keeps answering from its index, reconnects, and rebuilds in the background,
+  swapping the new index in when it is ready.
+- **Erasure.** An erased or taken-down subject leaves the index at once, in the process
+  that erases and, on the notification, in every other, and its text in the index's
+  buffers is overwritten with zeros (`04` PRIV-RIGHT-005c). Removed entries leave holes;
+  when they pass a tenth of the index, it is rebuilt in the background and swapped in.
+- **Capacity.** Where the subjects to index pass `search.maxsubjects` (default
+  200000, `10` section 4.10), the index is not built, the search answers 503
+  `identity.search.unavailable` with `details.reason` `capacity`, and the alert
+  `search-capacity` is raised (`06` OPS-ALERT-001).
+- **Memory checks.** Before building, the process checks what keeps memory off disk:
+  its cgroup's swap limit is 0 (`memory.swap.max`), its core-dump limit is 0, .NET's
+  diagnostics port is off (`DOTNET_EnableDiagnostics=0`) and its crash dumps are off
+  (`DOTNET_DbgEnableMiniDump` not `1`). A check whose source cannot be read (no
+  `memory.swap.max`, no `/proc/self/limits`) counts as failed. With
+  `search.memorychecks` `enforce`, the default, a failed check stops the build, the
+  search answers 503 `identity.search.unavailable` with `details.reason` `unsafe`, and
+  the alert `search-unsafe` is raised with `details.check` naming the check (`swap` ·
+  `coredump` · `diagnostics` · `minidump`, `10` section 5.53), never a value. Under
+  `warn`, the index is built anyway, every failed check is logged at Warning on each
+  start, and `search-unsafe` is still raised naming the check, so the deployment is told
+  on every start (a local machine's Docker has swap). The library never reads its
+  environment (OPS-ENV-001): `search.memorychecks` is a protected key, changed only by
+  the server's `configure`, and that change raises `protected-setting-changed`
+  (OPS-CFG-004).
+
+What the deployment owes a process serving the search is `19` INF-HOST-005; what the
+index does not protect against is `15` section 3.9.
+
+*Source: D-256*
+
+**Acceptance criteria**
+1. In a process registered with `StaffSearch.Off` or the four-parameter `AddJanus`, no
+   index is built, and the call and the route answer 503 `identity.search.unavailable`
+   with `details.reason` `off`.
+2. Until the index is built, the search answers 503 `identity.search.unavailable` with
+   `details.reason` `building` and `Retry-After` 30 seconds.
+3. A display name changed, an identifier verified and a membership ended by another
+   process change what the next search answers once the notification on `identity_search`
+   is received, with no restart; the notification carries the subject identifier and
+   nothing else.
+4. An erased subject and a taken-down subject are answered by no search once the
+   erasure or the takedown commits, in the process that made it and, on the
+   notification, in another; the buffers that held their text hold zeros afterwards.
+5. With the listening connection lost, the search keeps answering from its index; once
+   the connection is back, a change made while it was lost is answered after the
+   rebuilt index is swapped in.
+6. Once removed entries pass a tenth of the index, a rebuilt index is swapped in, and
+   the search answers throughout.
+7. Past `search.maxsubjects` subjects, no index is built, the search answers 503
+   with `details.reason` `capacity`, and `search-capacity` is raised.
+8. With swap allowed, a core-dump limit above 0, the diagnostics port on, or crash dumps
+   on, under `enforce` no index is built, the search answers 503 with `details.reason`
+   `unsafe`, and `search-unsafe` is raised with `details.check` `swap`, `coredump`,
+   `diagnostics` or `minidump` and no value; under `warn` the index is built and the
+   search served, each failed check is logged at Warning at every start, and
+   `search-unsafe` is raised naming it, whatever environment the process runs in.
+9. After a build, a stream of changes and a run of searches, no table of the database,
+   no file the process wrote and no log holds a normalised or indexed value.
+10. Where `memory.swap.max` or `/proc/self/limits` cannot be read, the check it serves
+    counts as failed: under `enforce` no index is built and `search-unsafe` is raised.
+11. A built slice list holds spare room of a hundredth of its length, and at least one
+    place.
+12. No code path of the search reads the host environment; setting
+    `search.memorychecks` to `warn` through `configure` raises
+    `protected-setting-changed`.
 
 ---
 

@@ -154,11 +154,14 @@ public sealed class FactorCatalogueTests
             naming);
     }
 
-    // A line of code, comments and a record's origin aside, that names one kind of
+    // A line of code, comments, a record's origin and the declaration of whether a
+    // process serves the staff search (D-256) aside, that names one kind of
     // person.
     private static bool Distinguishes(string line)
     {
-        string code = line.TrimStart().Replace("PersonRecordOrigin.Staff", string.Empty, StringComparison.Ordinal);
+        string code = line.TrimStart()
+            .Replace("PersonRecordOrigin.Staff", string.Empty, StringComparison.Ordinal)
+            .Replace("StaffSearch", string.Empty, StringComparison.Ordinal);
 
         return !code.StartsWith("//", StringComparison.Ordinal)
             && (code.Contains("Staff", StringComparison.Ordinal)

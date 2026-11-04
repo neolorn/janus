@@ -1169,6 +1169,12 @@ table roles
   column hands_out text[] not null default '{}'::text[]
   column grants_must_end boolean not null default false
   constraint pk_roles PRIMARY KEY (name)
+table search_windows
+  column subject uuid not null
+  column window_start timestamp with time zone not null
+  column count integer not null
+  constraint ck_search_windows_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+  constraint pk_search_windows PRIMARY KEY (subject, window_start)
 table seeded_roles
   column name text not null
   constraint pk_seeded_roles PRIMARY KEY (name)

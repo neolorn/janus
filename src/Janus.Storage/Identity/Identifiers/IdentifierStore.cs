@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Search;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
@@ -210,6 +211,10 @@ internal sealed class IdentifierStore(
         }
 
         await RecordBackupsAsync(set, cancellationToken).ConfigureAwait(false);
+
+        // IDN-SRCH-003 (D-256): an identifier added, verified or removed changes what the
+        // staff search holds of the account.
+        await SearchChannel.RaiseAsync(context, set.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

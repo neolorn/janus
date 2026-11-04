@@ -119,6 +119,7 @@ identity.record.signedin 409
 identity.record.stateconflict 409
 identity.registration.incomplete 409
 identity.registration.signedin 409
+identity.search.unavailable 503
 identity.takedown.active 409
 identity.takedown.notfound 404
 identity.takedown.windowelapsed 422

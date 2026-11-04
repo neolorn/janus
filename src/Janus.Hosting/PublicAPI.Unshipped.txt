@@ -98,3 +98,7 @@ override Janus.Hosting.Callbacks.CallbackSecrets.ToString() -> string!
 override Janus.Hosting.Callbacks.CallbackSignature.Equals(object? obj) -> bool
 override Janus.Hosting.Callbacks.CallbackSignature.GetHashCode() -> int
 override Janus.Hosting.Callbacks.CallbackSignature.ToString() -> string!
+Janus.Hosting.StaffSearch
+Janus.Hosting.StaffSearch.Off = 0 -> Janus.Hosting.StaffSearch
+Janus.Hosting.StaffSearch.Served = 1 -> Janus.Hosting.StaffSearch
+static Janus.Hosting.HostingRegistration.AddJanus(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, Janus.Core.AuthorizationDeclaration! declaration, Janus.Hosting.Bff.ApplicationKind application, Janus.Hosting.StaffSearch search) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

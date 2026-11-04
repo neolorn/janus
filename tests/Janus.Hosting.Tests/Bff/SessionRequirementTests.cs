@@ -156,6 +156,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /admin/recovery/approve",
         "POST /admin/restrictions/{name}/grant",
         "POST /admin/roles",
+        "POST /admin/search",
         "POST /admin/sessions/revoke-all",
         "POST /auth/logout",
         "POST /auth/step-up",

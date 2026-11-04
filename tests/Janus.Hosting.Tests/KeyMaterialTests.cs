@@ -305,24 +305,32 @@ public sealed class KeyMaterialTests
 
     /// <summary>
     /// AUTH-KEY-002 AC4: the entry point takes the services, the connection string, the
-    /// authorization declaration and the kind of application, and nothing else, so no
-    /// secret reaches the library as an argument of it.
+    /// authorization declaration and the kind of application, and its overload whether the
+    /// process serves the staff search (D-256), and nothing else, so no secret reaches the
+    /// library as an argument of it.
     /// </summary>
     [Fact]
     public void AUTH_KEY_002_AC4_TheEntryPointTakesNoSecret()
     {
-        MethodInfo entry = Assert.Single(
-            typeof(HostingRegistration).GetMethods(BindingFlags.Public | BindingFlags.Static),
-            method => string.Equals(method.Name, nameof(HostingRegistration.AddJanus), StringComparison.Ordinal));
+        (string, Type)[] declared =
+        [
+            ("services", typeof(IServiceCollection)),
+            ("connectionString", typeof(string)),
+            ("declaration", typeof(AuthorizationDeclaration)),
+            ("application", typeof(ApplicationKind)),
+        ];
+
+        MethodInfo[] entries =
+        [
+            .. typeof(HostingRegistration)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(method => string.Equals(method.Name, nameof(HostingRegistration.AddJanus), StringComparison.Ordinal))
+                .OrderBy(method => method.GetParameters().Length),
+        ];
 
         Assert.Equal(
-            [
-                ("services", typeof(IServiceCollection)),
-                ("connectionString", typeof(string)),
-                ("declaration", typeof(AuthorizationDeclaration)),
-                ("application", typeof(ApplicationKind)),
-            ],
-            entry.GetParameters().Select(parameter => (parameter.Name!, parameter.ParameterType)));
+            [declared, [.. declared, ("search", typeof(StaffSearch))]],
+            entries.Select(entry => entry.GetParameters().Select(parameter => (parameter.Name!, parameter.ParameterType)).ToArray()));
     }
 
     // The keys a start that reads these versions encrypts and decrypts tokens with.

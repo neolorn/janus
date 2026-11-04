@@ -20471,6 +20471,226 @@ LIB-EXT-001 (a push carries whether it may adopt); `implementation-plan.md` (rou
 
 ---
 
+## D-256 — Round S: the staff search, in memory and nowhere else
+
+> **Amended.** 2026-11-04. Decisions on what writing the chapters raised; where these
+> differ from the body below, these win:
+> 1. **Turning it on.** Not a key: the host declares the staff search at registration
+>    (`AddJanus`), as it declares `ApplicationKind` (`07` LIB-HOST-001), in the
+>    processes that serve it; undeclared, the search answers 503
+>    `identity.search.unavailable` with `details.reason` `off`.
+> 2. **The keys** follow CONV-NAME-001 and `10` section 4: `search.perminute` (R,
+>    default 60, floor 1, ceiling 600, loosens upward), `search.maxsubjects` (P, default
+>    200000, floor 1, loosens upward), `search.memorychecks` (P, `enforce` · `warn`,
+>    default `enforce`, loosens on any change). Outside the host environment
+>    `Development`, `warn` acts as `enforce` and the start logs that once at Warning.
+>    The channel is `identity_search`, beside `identity_registration`.
+> 3. **Refusals** follow API-CONV-003 and D-218's reads: a `kinds` member outside its
+>    vocabulary, a `limit` outside 1 to 50, or a body member the body doesn't have
+>    answers 400 `api.request.malformed` naming the member; a `q` that normalises to
+>    nothing or to more than 64 characters answers 422 `api.request.invalid` naming
+>    `q`. `identity.search.queryinvalid` is not added.
+> 4. **Who sees what.** `kinds` absent means both. Of the kinds asked, the search answers
+>    those the caller may read; asked for kinds of which the caller may read none, it
+>    answers 403 `authz.denied`, as holding neither permission does. A permission held
+>    in the administrative organization admits a search asked in another organization,
+>    judged as one admission, as REC-ADM-001 admits a find (D-219). A system principal,
+>    a job's included, is refused 403 `authz.denied`.
+> 5. **The limit** is counted as the library's other per-caller limits are counted (the
+>    same store, a one-minute fixed window, across the deployment), and answered 429
+>    `auth.throttled` with `Retry-After` and `details.retryAt`.
+> 6. **While building,** `Retry-After` is 30 seconds.
+> 7. **Alerts.** `search-unsafe` is High, with `details.check` `swap` · `coredump`
+>    · `diagnostics` · `minidump`; `search-capacity` is Normal.
+> 8. **The types** (`07`): `ISearch.SearchAsync(AccessContext context, SearchQuery
+>    query, CancellationToken cancellationToken)` answering
+>    `Result<IReadOnlyList<SearchResult>>`; `SearchQuery(OrganizationId Organization,
+>    string Text, SearchKinds Kinds, int Limit)`; `SearchKinds` a flags enumeration,
+>    `None` 0, `Accounts` 1, `Records` 2, where `None` means both;
+>    `SearchResult(SubjectId Subject, <the kind type IDN-READ-003's contact read
+>    answers> Kind, string? DisplayName, SearchMatch Matched)`; `SearchMatch` an
+>    enumeration `Name`, `Email`, `Phone`. The route's answer is
+>    `{ results: [ { subject, kind, displayName, matched } ] }`, `matched`
+>    `name` · `email` · `phone`.
+> 9. **The normaliser** uses the library's pinned Unicode tables (IDN-ACCT-004, D-154),
+>    never the platform's, so a result never changes with the machine.
+> 10. **Never logged.** `08` CONV-LOG-003 adds the search's query and every indexed value,
+>    and the query's member is marked `[NeverLogged]`.
+> 11. **Accepted as written:** `01` section 6b; `10` sections 4.10, 5.53 and 5.54;
+>    `15` section 3.9; `19` INF-HOST-005, written as requirements; the erasure duty as
+>    a paragraph beside PRIV-RIGHT-005c's erasure steps (`04` has no table);
+>    `details.member`; the 503 rows of API-CONV-003 and `10` section 6.
+> 12. **The normaliser's call.** `SearchForm` is a public static class in `Janus.Core`,
+>    beside `CanonicalForm` and `Precis`, with `Of(string text)` answering the
+>    normalised text (`07` LIB-API, `01` IDN-SRCH-001's normaliser).
+> 13. **The switch** is an overload of `AddJanus` with a fifth parameter,
+>    `StaffSearch search`. `StaffSearch` is an enumeration in `Janus.Hosting`, `Off` 0
+>    and `Served` 1; the four-parameter `AddJanus` means `Off`. This replaces item 1's
+>    "as it declares `ApplicationKind`" with the exact shape (`07` LIB-HOST-001).
+> 14. **The limit's store** is the table `identity.search_windows`: `subject`,
+>    `window_start` (the minute, truncated) and `count`, with primary key (`subject`,
+>    `window_start`). Each search upserts its row and is refused 429 once the count
+>    passes `search.perminute`; the same statement deletes the subject's earlier
+>    windows, and an account's erasure deletes its rows. This replaces item 5's "the
+>    same store" as the other limits use (`01` IDN-SRCH-002; `04`, the erasure
+>    paragraph).
+> 15. **An unreadable check fails.** A memory check whose source cannot be read (no
+>    `memory.swap.max`, no `/proc/self/limits`) counts as failed, failing closed (`01`
+>    IDN-SRCH-003).
+> 16. **Spare room.** Slice lists keep a hundredth of their length as spare room, at
+>    least one place (`01` IDN-SRCH-003).
+> 17. **`warn` without the environment.** The library never reads its environment
+>    (OPS-ENV-001). `search.memorychecks` is a P key, so only the server's `configure`
+>    changes it, and that change raises the protected-setting alert. Under `warn`, the
+>    index is built anyway, every failed check is logged at Warning on each start, and
+>    `search-unsafe` is still raised naming the check. The deployment is told on every
+>    start, and nothing reads the environment. This replaces the Development clause in
+>    item 2 and everywhere the chapters carry it: `01` IDN-SRCH-003 and its criteria,
+>    `07` LIB-HOST-001's row and its criterion 8, and `10`'s `search.memorychecks` row.
+
+**Date:** 2026-11-04 · **Status:** accepted · **Amends:** IDN-READ-003, REC-ADM-001,
+OPS-ALERT-005
+
+**TL;DR.** Staff find a person by part of a name, email or phone, typed loosely (Arabic
+spelling variants, a prefix, one typo, a phone's last digits), across the accounts and
+the person records they may read, through an index each serving process holds in its
+own memory and writes nowhere: not to PostgreSQL, not to disk, not to a log. Exact finds
+by fingerprint (IDN-READ-003, REC-ADM-001) stay as they are. The owner chose the
+in-memory index, capped, logged without its text (lead research,
+`notes/encrypted-search-research.md`; the owner's answer of 2026-11-01). No scheme over
+ciphertext gives substring, typo and sorted search without leaving name-revealing traces
+in backups, so the work is keeping memory off disk.
+
+- **What is searched.** For an account: its display name, every verified email
+  identifier and every verified phone identifier. For a person record (`21`): its name,
+  its email and its phone. Nothing else: no notes, no host free text, no address.
+- **The normaliser** (one function, used for the index and the query alike): Unicode
+  NFKC; Arabic alef forms (أ إ آ ٱ) to ا, ة to ه, ى to ي, harakat (U+064B to U+065F,
+  U+0670) and tatweel removed; Arabic-Indic and Eastern Arabic-Indic digits to 0 to 9;
+  Latin letters case-folded invariantly with their combining marks removed (NFD, marks
+  dropped); every run of whitespace and punctuation to one space. A phone is held as the
+  digits of its E.164 form without `+`; an email as its canonical form (IDN-ACCT-004).
+- **Matching.** The query is normalised, then split into words. A subject matches when
+  every query word matches one of its fields:
+  - a word of 3 or more characters matches a field containing it (3-letter slices,
+    including the slices at a word's edges);
+  - a word of 1 or 2 characters matches a name word starting with it;
+  - a name-word query of 4 or more characters also matches a name word one edit away
+    (Levenshtein distance 1);
+  - a word of digits alone (3 to 15 of them) also matches a phone containing them.
+- **Order and size.** Results are sorted by normalised display name, then by subject
+  identifier; a subject with no name sorts last. At most `limit` results (1 to 50,
+  default 20); there is no paging: staff narrow the query instead. Each result is the
+  subject, its `kind` (`account` · `record`), its display name, and which field matched
+  first in the order name, email, phone (`matched`). No email or phone value is
+  answered: a host reads a result's contacts through `IAccounts.ContactAsync` under its
+  own permission (IDN-READ-003). The names shown are decrypted per query, so the index
+  holds normalised text only, never display values.
+- **Who sees what.** Asked in an organization, the search answers that organization's
+  current members to a holder of `contact:read` there, and the person records it holds
+  to a holder of `record:read` there; asked in the administrative organization, every
+  account not erased (customers with no membership included) and every record, under the
+  same two permissions held there. A caller holding neither is refused 403
+  `authz.denied`, recorded as AUTHZ-CONCEAL-004 records a refusal; holding one, they get
+  that kind alone. An organization the deployment does not hold answers
+  `identity.organization.notfound`. A system principal or a job may not search.
+- **Limits and records.** Each search counts its results toward the caller's read volume
+  (OPS-ALERT-005), one record per result. A caller may search `Janus:Search:PerMinute`
+  times a minute (default 60), answered beyond it as the library's other per-caller
+  limits answer. No audit row is written, and no log line, trace attribute or metric holds
+  the query or any indexed value; the search logs, at Debug, its result count and
+  duration alone.
+- **The route and the call.** `POST /admin/search` with `{ organization, q, kinds?,
+  limit? }` (a `POST`, so the query never reaches an address or an access log), and
+  `ISearch.SearchAsync` in `Janus.Core`. A `q` that normalises to nothing or to more than
+  64 characters, a `limit` outside 1 to 50, or a `kinds` member other than `account` and
+  `record`, answers 422 `identity.search.queryinvalid` naming the field.
+- **The index.**
+  - *Where.* Only a process whose `Janus:Search:Enabled` is true (default false) builds
+    and serves it; elsewhere the route and the call answer 503
+    `identity.search.unavailable` with `details.reason` `off`. A deployment turns it on
+    in the processes that serve staff.
+  - *Building.* Built after the host has started, in the background, from the database;
+    until it is ready the search answers 503 `identity.search.unavailable`
+    (`details.reason` `building`, with `Retry-After`). It is held as the library's own
+    character buffers, slice lists kept in name order with spare room, guarded for
+    concurrent readers and one writer. Once built, the process runs one aggressive
+    collection, compacting, so the build's garbage goes back to the system.
+  - *Kept current.* Every write that changes an indexed value or what a subject is (an
+    identifier added, verified or removed, a display name changed, a record collected,
+    corrected or attached, a membership starting or ending, an erasure, a takedown)
+    sends, in its transaction, a PostgreSQL notification on the channel `janus_search`
+    carrying the subject identifier alone. Every indexing process listens, rereads that
+    subject and updates its index. When the listening connection is lost, the process
+    keeps answering from its index, reconnects, and rebuilds in the background, swapping
+    the new index in when it is ready.
+  - *Erasure.* An erased or taken-down subject leaves the index at once, in the process
+    that erases and on the notification elsewhere, and its text in the index's buffers is
+    overwritten with zeros. Removed entries leave holes; when they pass a tenth of the
+    index it is rebuilt in the background and swapped in.
+  - *Capacity.* Where the subjects to index pass `Janus:Search:MaxSubjects` (default
+    200,000), the index is not built, the search answers 503
+    (`details.reason` `capacity`), and the alert `search-capacity` is raised.
+  - *Memory checks.* Before building, the process checks what keeps memory off disk:
+    its cgroup's swap limit is 0 (`memory.swap.max`), its core-dump limit is 0, `.NET`'s
+    diagnostics port is off (`DOTNET_EnableDiagnostics=0`) and its crash dumps are off
+    (`DOTNET_DbgEnableMiniDump` not `1`). With `Janus:Search:MemoryChecks` `enforce` (the
+    default) a failed check stops the build, the search answers 503
+    (`details.reason` `unsafe`), and the alert `search-unsafe` is raised naming the
+    check, never a value. `warn` builds anyway and logs the failed check at Warning; it is
+    admitted only where the host environment is Development (a local machine's Docker
+    has swap), and outside it stops the start with the library's configuration error.
+- **What the deployment owes** (`19`, `06` OPS-ALERT): a container serving search with
+  its memory limit equal to its memory-and-swap limit, core dumps off (`ulimit core=0`),
+  `DOTNET_EnableDiagnostics=0`, a read-only file system, no `SYS_PTRACE`; on the host,
+  no online snapshot of the server and no `docker checkpoint` of the container.
+- **What it does not protect against,** stated in `15`: anyone who controls the running
+  server (root, the Docker group, the provider's hypervisor) reads the index, as they can
+  already read the key-encryption key. The index makes that breach immediate and
+  complete; it adds nothing a backup, a database copy or an injection can read.
+
+*Rejected:*
+- **Searchable tokens in PostgreSQL (blind indexes, n-gram fingerprints, order-revealing
+  schemes):** they land in every backup, and published frequency attacks turn them back
+  into names; erasure would leave them behind in backups.
+- **A search server (Elasticsearch, Meilisearch and the like) or an encrypted index on
+  disk:** a second store of the same plain text, or a disk copy that outlives erasure, for
+  no gain in protection.
+- **Lucene.NET or SQLite in memory:** slower at every query type in the benchmark, a
+  beta or a native engine to carry, and no control over where plain text lives or when
+  it is wiped.
+- **A host's fields declared searchable** (the round's first description): no host
+  encrypts fields through `IPersonalFields` yet, and rebuilding from a host's own tables
+  needs a seam that enumerates them. A later entry adds it when a host needs it.
+- **Paging through results:** a bulk-read path for a bug in the caller; 50 sorted hits
+  and a narrower query serve staff.
+- **A `GET` with the query in the address:** addresses reach access logs and proxies.
+
+**Propagated to:**
+- `01` a new section, the staff search: IDN-SRCH-001 (what is searched, the normaliser,
+  matching, order, size, the result), IDN-SRCH-002 (who sees what, limits, read volume,
+  what is never logged), IDN-SRCH-003 (the index: where, building, kept current,
+  erasure, capacity, memory checks), each with acceptance criteria; IDN-READ-003 (the
+  search beside the exact find);
+- `21` the scope paragraph (the search is `01`'s) and REC-ADM-001 (records in the search);
+- `04` PRIV-RIGHT-005c (the search serves loose matching, fingerprints stay for exact
+  finds) and the erasure duty table (the index is cleared at once);
+- `07` LIB-API-005 (`ISearch`, `SearchQuery`, `SearchKinds`, `SearchResult`,
+  `SearchMatch`), LIB-HOST-001 (the `Janus:Search:*` keys);
+- `09` the route `POST /admin/search` and its answers;
+- `10` the codes `identity.search.queryinvalid` and `identity.search.unavailable` (with
+  `details.reason` `off` · `building` · `capacity` · `unsafe`), the keys
+  `Janus:Search:Enabled`, `Janus:Search:PerMinute`, `Janus:Search:MaxSubjects`,
+  `Janus:Search:MemoryChecks`, the channel `janus_search`, the alerts `search-capacity`
+  and `search-unsafe`;
+- `06` OPS-ALERT (the two alerts), OPS-ALERT-005 (search results count toward read
+  volume);
+- `15` the index as an asset, with its threats and controls;
+- `19` the container and host duties above;
+- `implementation-plan.md` (round S).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -20736,6 +20956,7 @@ LIB-EXT-001 (a push carries whether it may adopt); `implementation-plan.md` (rou
 | A current member of the administrative organization gains a mailbox | D-253 |
 | Reconciliation leaves the mail server's own accounts alone | D-254 |
 | Adopting a mail account the server already holds | D-255 |
+| Round S: the staff search, in memory and nowhere else | D-256 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

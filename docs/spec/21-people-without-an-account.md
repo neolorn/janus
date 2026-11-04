@@ -14,7 +14,8 @@ staff enter for someone who called. It states the library's part: the record, th
 session that verifies a contact at collection, the call that writes the record, the code
 that opens the person's data to them, the link to an account, and what staff do with
 records. The screens a host collects in are the host's own (`18` FE-REC-001). The staff
-search over people is not here (plan, round S). Endpoints, shapes and status codes are
+search over people, person records among them, is `01`'s (IDN-SRCH-001 to IDN-SRCH-003,
+D-256). Endpoints, shapes and status codes are
 `09` section 7a and section 8a; names, defaults and codes are `10`.
 
 ---
@@ -613,7 +614,14 @@ or not), its language, no time zone, and its state. A host's declared job may de
 `record:read` (IDN-READ-004). A person's read of a record counts toward their read
 volume (OPS-ALERT-005).
 
-*Source: D-221*
+**Records in the staff search (D-256).** A person record's name, its email and its
+phone are searched by the staff search (`01` IDN-SRCH-001), which answers a holder of
+`record:read` in an organization the records that organization holds, and a holder in
+the administrative organization every record. `IPersonRecords.FindAsync` stays the
+exact find by fingerprint. A record leaves the search's index at once when it is erased
+or taken down (`01` IDN-SRCH-003).
+
+*Source: D-221, D-256*
 
 **Acceptance criteria**
 1. A holder of `record:read` in an organization reads a record it holds, and is answered
@@ -623,6 +631,9 @@ volume (OPS-ALERT-005).
    E.164 form; finding by a reference answers the records holding it.
 3. The contact read of a record's subject answers its name, contacts, language and state
    with `kind` `record`.
+4. A holder of `record:read` alone finds a record by part of its name, its email or its
+   phone through the staff search, answered with `kind` `record`, and is answered no
+   record another organization holds (D-256).
 
 ---
 

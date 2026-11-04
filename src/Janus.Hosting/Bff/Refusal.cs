@@ -26,6 +26,9 @@ namespace Janus.Hosting.Bff;
 /// </remarks>
 internal static class Refusal
 {
+    // IDN-SRCH-003 (D-256): the seconds a process still building its index is asked again in.
+    private const string BuildingRetry = "30";
+
     private static readonly IReadOnlyDictionary<string, JsonElement> Nothing =
         new Dictionary<string, JsonElement>(StringComparer.Ordinal);
 
@@ -69,7 +72,7 @@ internal static class Refusal
         context.Response.StatusCode = status;
         context.Response.ContentType = "application/json; charset=utf-8";
 
-        if (status is StatusCodes.Status429TooManyRequests)
+        if (status is StatusCodes.Status429TooManyRequests or StatusCodes.Status503ServiceUnavailable)
         {
             Wait(context, error);
         }
@@ -111,6 +114,18 @@ internal static class Refusal
     // library knows is the instant the bucket lifts (API-CONV-002, BFF-ABUSE-001).
     private static void Wait(HttpContext context, Error error)
     {
+        // IDN-SRCH-003 (D-256): a process still building the staff search's index is
+        // asked again in 30 seconds.
+        if (error.Code == ErrorCodes.SearchUnavailable
+            && error.Details.TryGetValue("reason", out JsonElement reason)
+            && reason.ValueKind is JsonValueKind.String
+            && reason.GetString() is "building")
+        {
+            context.Response.Headers[HeaderNames.RetryAfter] = BuildingRetry;
+
+            return;
+        }
+
         if (!error.Details.TryGetValue("retryAt", out JsonElement at)
             || !at.TryGetDateTimeOffset(out DateTimeOffset lifts))
         {

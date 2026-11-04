@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -28,6 +29,23 @@ internal interface IReadAdmission
     ValueTask<Error?> RefusedAsync(
         AccessContext context,
         Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Which of several reads of an organization are admitted, as one admission.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permissions">The reads' permissions, at least one.</param>
+    /// <param name="organization">The organization the read names.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The permissions admitted, recording nothing; where none is, the refusal, recorded
+    /// once and naming the organization the read names.
+    /// </returns>
+    ValueTask<Result<IReadOnlyList<Permission>>> ReadableAsync(
+        AccessContext context,
+        IReadOnlyList<Permission> permissions,
         OrganizationId organization,
         CancellationToken cancellationToken);
 

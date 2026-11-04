@@ -38,6 +38,25 @@ internal interface IOrganizationReadAdmission
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Which of several reads of an organization are admitted, as one admission: the
+    /// staff search's, under a permission for each kind of subject it answers.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permissions">The reads' permissions, at least one.</param>
+    /// <param name="organization">The organization the read names.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The permissions admitted, each as <see cref="AdmitAsync"/> admits it, recording
+    /// nothing; where none is, the refusal of the first in the organization the read
+    /// names, recorded once.
+    /// </returns>
+    ValueTask<Result<IReadOnlyList<Permission>>> ReadableAsync(
+        AccessContext context,
+        IReadOnlyList<Permission> permissions,
+        OrganizationId organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Which organizations a caller lists.
     /// </summary>
     /// <param name="context">Who is asking.</param>

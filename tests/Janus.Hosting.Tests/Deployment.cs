@@ -20,6 +20,7 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
+using Janus.Authentication.Search;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
@@ -37,6 +38,7 @@ using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Records;
 using Janus.Authentication.Tests.Recovery;
 using Janus.Authentication.Tests.Registration;
+using Janus.Authentication.Tests.Search;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Authentication.Tests.SignIn;
@@ -54,6 +56,7 @@ using Janus.Hosting.Oidc;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Search;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Tests.Bff;
 using Janus.Hosting.Tests.Credentials;
@@ -184,6 +187,10 @@ internal sealed class Deployment : IAsyncDisposable
     /// <c>UseAuthentication</c> of its own (BFF-ORDER-001 AC8); the pipeline is named
     /// by hand, unless it says otherwise.
     /// </param>
+    /// <param name="search">
+    /// Whether the process serves the staff search (IDN-SRCH-003); it does, unless it says
+    /// otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -201,8 +208,10 @@ internal sealed class Deployment : IAsyncDisposable
         Action<JsonOptions>? json = null,
         Action<IApplicationBuilder>? routing = null,
         Action<IServiceCollection>? services = null,
-        bool composed = false)
+        bool composed = false,
+        StaffSearch search = StaffSearch.Served)
     {
+        SearchHolder = new SearchIndexHolder(search is StaffSearch.Served);
         Events = new EventsInMemory { Work = Work };
         Records.Work = Work;
 
@@ -731,6 +740,22 @@ internal sealed class Deployment : IAsyncDisposable
     /// The records each person was given (OPS-ALERT-005).
     /// </summary>
     public ReadVolumeInMemory Volume { get; } = new();
+
+    /// <summary>
+    /// The subjects the staff search reads, as the database would answer them.
+    /// </summary>
+    public SearchSubjectsInMemory SearchSubjects { get; } = new();
+
+    /// <summary>
+    /// Each caller's searches a minute.
+    /// </summary>
+    public SearchWindowsInMemory SearchWindows { get; } = new();
+
+    /// <summary>
+    /// The index this deployment's process serves, which a test swaps in, building until
+    /// it does where the process serves the search.
+    /// </summary>
+    public SearchIndexHolder SearchHolder { get; }
 
     /// <summary>
     /// The events the operations published.
@@ -1266,6 +1291,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IReadVolume>(Volume);
         _ = services.AddScoped<AccountReach>();
         _ = services.AddScoped<IAccounts, AccountAdministration>();
+        _ = services.AddSingleton<ISearchSubjects>(SearchSubjects);
+        _ = services.AddSingleton<ISearchWindows>(SearchWindows);
+        _ = services.AddSingleton<ISearchLog, SearchLog>();
+        _ = services.AddSingleton(SearchHolder);
+        _ = services.AddScoped<ISearch, SearchService>();
         _ = services.AddScoped<TotpService>();
         _ = services.AddScoped<TextedEnrolments>();
         _ = services.AddScoped<BoundCredentials>();
@@ -1493,6 +1523,7 @@ internal sealed class Deployment : IAsyncDisposable
         await _ring.StoppedAsync(CancellationToken.None);
         await _application.DisposeAsync();
         await Work.DisposeAsync();
+        SearchHolder.Dispose();
 
         _server?.Dispose();
 

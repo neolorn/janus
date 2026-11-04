@@ -10,6 +10,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Passwords;
+using Janus.Authentication.Search;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization;
@@ -35,6 +36,7 @@ using Janus.Hosting.Privacy;
 using Janus.Hosting.Records;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Search;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Janus.Privacy;
@@ -87,7 +89,40 @@ public static class HostingRegistration
         this IServiceCollection services,
         string connectionString,
         AuthorizationDeclaration declaration,
-        ApplicationKind application)
+        ApplicationKind application) =>
+        AddJanus(services, connectionString, declaration, application, StaffSearch.Off);
+
+    /// <summary>
+    /// Registers the library over the host's database and declared domain, saying
+    /// whether this process serves the staff search.
+    /// </summary>
+    /// <param name="services">The host's collection.</param>
+    /// <param name="connectionString">
+    /// The application's own credential, which holds row-level access and no schema
+    /// right (OPS-MIG-003).
+    /// </param>
+    /// <param name="declaration">What the host declared about its own domain.</param>
+    /// <param name="application">
+    /// Which of the deployment's applications this process serves, which decides the
+    /// one cookie attribute that differs between them (BFF-CSRF-005).
+    /// </param>
+    /// <param name="search">
+    /// Whether this process builds the staff search's index and serves the search, as a
+    /// process serving staff does (IDN-SRCH-003).
+    /// </param>
+    /// <returns>The collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">The collection is absent.</exception>
+    /// <exception cref="StartupException">The declaration does not hold together.</exception>
+    /// <remarks>
+    /// Implements LIB-HOST-001 and IDN-SRCH-003 (D-256), beside what the four-parameter
+    /// overload implements, which declares <see cref="StaffSearch.Off"/>.
+    /// </remarks>
+    public static IServiceCollection AddJanus(
+        this IServiceCollection services,
+        string connectionString,
+        AuthorizationDeclaration declaration,
+        ApplicationKind application,
+        StaffSearch search)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -374,6 +409,26 @@ public static class HostingRegistration
         // entries is read once the host has written every rule it will, and before the
         // server serves.
         services.Insert(14, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
+
+        // IDN-SRCH-003 (D-256): the index the staff search reads is the process's own, and
+        // the host's declaration says whether the process builds one; a process that does
+        // builds it once the host has started.
+        bool served = search is StaffSearch.Served;
+
+        services.AddSingleton(_ => new SearchIndexHolder(served));
+        services.AddSingleton<ISearchLog, SearchLog>();
+
+        if (served)
+        {
+            services.AddHostedService(provider => new SearchIndexService(
+                provider.GetRequiredService<SearchIndexHolder>(),
+                provider.GetRequiredService<ISearchChannel>(),
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<IHostApplicationLifetime>(),
+                MemoryChecks.FailedHere,
+                provider.GetRequiredService<TimeProvider>(),
+                provider.GetRequiredService<ILogger<SearchIndexService>>()));
+        }
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(

@@ -114,9 +114,10 @@ instant the next attempt is looked at, built by one builder wherever it is answe
 | 409 | A state precondition failed, a duplicate identifier included; answered with a named code |
 | 422 | Well-formed but refused on meaning: a body referring to something that does not exist or cannot be acted on, a blocklisted password, a mixed-script identifier. Answered with a named code, and with `api.request.invalid` (`details.member`) where `10` names none more specific |
 | 429 | Throttled, or refused by a rate limit or a sending restriction (`auth.throttled`, `auth.restriction.exceeded`, and `integration.callback.rejected` for the callback rate limit only); carries `Retry-After` and `details.retryAt` |
+| 503 | The staff search is not served: `identity.search.unavailable`, `details.reason` `off` · `building` · `capacity` · `unsafe`, carrying `Retry-After` while the index is building (`01` IDN-SRCH-003, D-256) |
 
 *Source: D-016, AUTHZ-CONCEAL-001, D-162, D-166, D-179, D-183, D-187, D-190, D-192,
-D-193*
+D-193, D-256*
 
 **Acceptance criteria**
 1. A concealed denial is byte-identical and timing-identical to a genuine 404.
@@ -3272,6 +3273,30 @@ the reach, a `deleted` one, and a subject no account bears are answered **404**
 A person's read of an account, a contact, a standing or a member counts toward their read
 volume (OPS-ALERT-005). A read is not audited; its refusal is recorded as every refusal
 is (AUTHZ-CONCEAL-004).
+
+### The staff search (D-256)
+
+The search is asked in the organization its body names, under `contact:read` for
+accounts and `record:read` for person records, with the reach of `01` IDN-SRCH-002: in
+an organization, its current members and the records it holds; in the administrative
+organization, every account not erased and every record. A permission held in the
+administrative organization admits a search asked in another organization, judged as
+one admission (D-219). `kinds` absent asks for both; of the kinds asked, the caller is
+answered those they may read. **400** `api.request.malformed` names `organization`, `q`,
+`kinds` or `limit` where it is absent where required or does not read as its type, a
+`kinds` member other than `account` and `record`, a `limit` outside 1 to 50, and a
+member the body does not take. The route is a `POST` so the query never reaches an
+address or an access log.
+
+| Endpoint | Does |
+|---|---|
+| `POST /admin/search` | `contact:read` · `record:read`: `{ organization, q, kinds, limit }`, `kinds` and `limit` optional: the accounts and person records whose name, email or phone the query matches, as `01` IDN-SRCH-001 matches them. **200** `{ results: [ { subject, kind, displayName, matched } ] }`, sorted by normalised display name and then by subject, a subject with no name last, at most `limit`, 20 where it is absent, with no paging; `kind` is `account` or `record`, `matched` the field that matched first, `name` · `email` · `phone`, and no email or phone value is answered (a result's contacts are read through `GET /admin/accounts/{subject}/contact`) · **403** `authz.denied` where the caller may read none of the kinds asked, holding neither permission in the organization named or in the administrative organization among them, the refusal recorded (AUTHZ-CONCEAL-004) · **404** `identity.organization.notfound` where the organization named is none the deployment holds · **422** `api.request.invalid`, `details.member` `q`, where `q` normalises to nothing or to more than 64 characters · **429** `auth.throttled` past `search.perminute` searches by the caller in a one-minute fixed window, counted across the deployment, with `Retry-After` and `details.retryAt` · **503** `identity.search.unavailable`, `details.reason` `off` in a process whose registration does not declare the search, `building` with `Retry-After` 30 seconds until its index is built, `capacity` where the subjects to index pass `search.maxsubjects`, `unsafe` where a memory check failed under `enforce` (IDN-SRCH-003) |
+
+A search counts its results toward the caller's read volume, one record per result
+(OPS-ALERT-005). No audit row is written; its refusal is recorded as every refusal is
+(AUTHZ-CONCEAL-004).
+
+*Source: IDN-SRCH-001 to IDN-SRCH-003, D-256*
 
 ---
 

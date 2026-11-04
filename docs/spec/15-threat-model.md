@@ -25,6 +25,7 @@ here as the worked example a threat model needs; a host substitutes its own.
 | **Restriction records** | An HMAC of a destination address, its key version and send timestamps, for addresses that may belong to no account; deleted once the longest destination interval has passed since the newest send, whether or not another send is made (AUTH-ABUSE-004, R-A21, D-166) |
 | **Session location** | A city-level location per live session, resolved from a local IP database and kept only with the session record (AUTH-SESS-013) |
 | **Preference store** | Host-declared typed values under the subject key; the library never reads their meaning (REG-PREF-001) |
+| **Staff search index** | The normalised names, verified emails and verified phones of every account and person record a process serving staff indexes, held in that process's memory alone and written nowhere: not to PostgreSQL, not to disk, not to a log (`01` IDN-SRCH-003, D-256); section 3.9 |
 
 ---
 
@@ -202,6 +203,30 @@ control, or the owner's identifier detached from the owner.
 it every verification link is an invitation the attacker can send on the victim's behalf.
 The direction of the undo is the second: an undo that reached the removed address would
 let a compromised mailbox veto its own removal.
+
+---
+
+### 3.9 The staff search's index
+
+Added with D-256, when staff gained a search by part of a name, an email or a phone.
+The index holds that text in plain, normalised form, in the memory of each process that
+serves the search. The attacker wants it, or a person's presence in it, without the
+key-encryption key.
+
+| Method | Covered? |
+|---|---|
+| Read the index from a backup, a database copy or a dump | Covered: the index is written to no table, file or log, so nothing of it reaches a backup (`01` IDN-SRCH-003) |
+| Read searchable tokens through an injection into the database | Covered: the database holds no searchable token of a name, an email or a phone; a fingerprint finds a whole value only, under a key held outside the database (`04` PRIV-RIGHT-005c) |
+| Read the index from swap, a core dump, a crash dump or the diagnostics port | Covered where the deployment keeps its part (`19` INF-HOST-005): before building, the process checks that swap is 0, the core-dump limit is 0, the diagnostics port is off and crash dumps are off, and under `enforce` builds nothing when a check fails, raising `search-unsafe` (IDN-SRCH-003) |
+| Read the index from an online snapshot of the server or a `docker checkpoint` of the container, or trace the process with `SYS_PTRACE` | The deployment's: no online snapshot of the server, no checkpoint of the container, and no `SYS_PTRACE` (`19` INF-HOST-005) |
+| Read an erased person's text left in memory | Covered: an erased or taken-down subject leaves the index at once in every indexing process, and its text in the index's buffers is overwritten with zeros (IDN-SRCH-003) |
+| Read a query or an indexed value from logs, traces, metrics or the audit trail | Covered: none holds the query or any indexed value, and no audit row is written; the search logs its result count and duration alone (IDN-SRCH-002) |
+| Read people in bulk through the search | Bounded: at most 50 results, no paging, `search.perminute` searches a minute per caller, and every result counted toward the caller's read volume (IDN-SRCH-002, OPS-ALERT-005) |
+| Control the running server: root, the Docker group, the provider's hypervisor | **Not covered.** They read the index, as they can already read the key-encryption key. The index makes that breach immediate and complete; it adds nothing a backup, a database copy or an injection can read |
+
+**Assessment.** No scheme over ciphertext gives substring, typo and sorted search
+without leaving name-revealing traces in backups, so the control is keeping memory off
+disk: the process checks it before it builds, and the deployment keeps it.
 
 ---
 

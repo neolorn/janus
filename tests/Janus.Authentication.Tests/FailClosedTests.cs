@@ -79,7 +79,9 @@ public sealed class FailClosedTests
     /// <summary>
     /// OPS-ENV-001 AC2: nothing the library ships asks which environment it runs in, and
     /// no key it reads is a switch named to skip or turn off a check, so no environment
-    /// has a way round the gate, the sign-in or the screening that another lacks.
+    /// has a way round the gate, the sign-in or the screening that another lacks. The
+    /// staff search's reads of the runtime's diagnostics and crash-dump switches, which
+    /// IDN-SRCH-003 checks, ask nothing of the environment.
     /// </summary>
     [Fact]
     public void OPS_ENV_001_AC2_NoBypassFlagExistsInAnyEnvironment()
@@ -87,7 +89,7 @@ public sealed class FailClosedTests
         string[] asking = Files(line =>
             line.Contains("IsDevelopment", StringComparison.Ordinal)
             || line.Contains("EnvironmentName", StringComparison.Ordinal)
-            || line.Contains("GetEnvironmentVariable", StringComparison.Ordinal));
+            || (line.Contains("GetEnvironmentVariable", StringComparison.Ordinal) && !RuntimeSwitch(line)));
         string[] switches =
         [
             .. Settings.All
@@ -98,6 +100,13 @@ public sealed class FailClosedTests
         Assert.Empty(asking);
         Assert.Empty(switches);
     }
+
+    // IDN-SRCH-003: the staff search's memory checks read whether the runtime's
+    // diagnostics port and crash dumps are on, which says nothing of the environment.
+    private static bool RuntimeSwitch(string line) =>
+        line.Trim()
+            is "Environment.GetEnvironmentVariable(Diagnostics),"
+            or "Environment.GetEnvironmentVariable(MiniDump));";
 
     // The catch blocks that answer with anything but a refusal or an exception.
     private static string[] Allowing() =>

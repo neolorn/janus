@@ -175,10 +175,13 @@ public sealed class BrowserCookieTests : IDisposable
 
         string[] unset = Both(default);
 
-        Assert.Equal([nameof(HostingRegistration.AddJanus)], registering.Select(method => method.Name));
-        Assert.Contains(
-            registering[0].GetParameters(),
-            parameter => parameter.ParameterType == typeof(ApplicationKind));
+        Assert.NotEmpty(registering);
+        Assert.All(registering, method => Assert.Equal(nameof(HostingRegistration.AddJanus), method.Name));
+        Assert.All(
+            registering,
+            method => Assert.Contains(
+                method.GetParameters(),
+                parameter => parameter.ParameterType == typeof(ApplicationKind)));
         Assert.NotEmpty(mounting);
         Assert.DoesNotContain(
             mounting.SelectMany(method => method.GetParameters()),
