@@ -221,7 +221,7 @@ key-encryption key.
 | Read the index from an online snapshot of the server or a `docker checkpoint` of the container, or trace the process with `SYS_PTRACE` | The deployment's: no online snapshot of the server, no checkpoint of the container, and no `SYS_PTRACE` (`19` INF-HOST-005) |
 | Read an erased person's text left in memory | Covered: an erased or taken-down subject leaves the index at once in every indexing process, and its text in the index's buffers is overwritten with zeros (IDN-SRCH-003) |
 | Read a query or an indexed value from logs, traces, metrics or the audit trail | Covered: none holds the query or any indexed value, and no audit row is written; the search logs its result count and duration alone (IDN-SRCH-002) |
-| Read people in bulk through the search | Bounded: at most 50 results, no paging, `Janus:Search:PerMinute` searches a minute per caller, and every result counted toward the caller's read volume (IDN-SRCH-002, OPS-ALERT-005) |
+| Read people in bulk through the search | Bounded: at most 50 results, no paging, `search.perminute` searches a minute per caller, and every result counted toward the caller's read volume (IDN-SRCH-002, OPS-ALERT-005) |
 | Control the running server: root, the Docker group, the provider's hypervisor | **Not covered.** They read the index, as they can already read the key-encryption key. The index makes that breach immediate and complete; it adds nothing a backup, a database copy or an injection can read |
 
 **Assessment.** No scheme over ciphertext gives substring, typo and sorted search

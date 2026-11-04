@@ -1668,6 +1668,10 @@ sensitive-data disclosure.
 **Compliance text:** the content of consent or notice text in any language. Log the
 notice **version**.
 
+**The staff search:** its query, and every value its index holds, in any log, trace
+attribute or metric; the search logs its result count and duration alone (`01`
+IDN-SRCH-002, D-256). The query's member, `SearchQuery.Text`, is marked `[NeverLogged]`.
+
 **Carriers.** `[NeverLogged]` SHALL be placed on every type whose whole value is one
 listed above, on every property, field or column of another type that holds one, and on
 every `string`, `byte[]` or `ReadOnlyMemory<byte>` parameter through which one passes, in
@@ -1676,13 +1680,16 @@ fingerprints a session, a pre-authentication record or a link is found by. Token
 include the correlation references of callbacks (INT-GEN-003). A local variable cannot
 carry the marker and is outside JAN0002; a host marks its own sensitive types.
 
-*Source: PRIV-SENS-001, PRIV-PRIN-001, D-031, D-165, D-166*
+*Source: PRIV-SENS-001, PRIV-PRIN-001, D-031, D-165, D-166, D-256*
 
 **Acceptance criteria**
 1. An analyzer rule detects forbidden values and fails the build.
 2. A test asserts no log output contains a field of the body of an endpoint marked
    `SensitiveBody` (BFF-LOG-002).
 3. A test lists every carrier the library declares and asserts each is marked.
+4. `SearchQuery.Text` is marked `[NeverLogged]`, and a test asserts that no log output,
+   trace attribute or metric of a staff search holds its query or an indexed value
+   (D-256).
 
 ---
 

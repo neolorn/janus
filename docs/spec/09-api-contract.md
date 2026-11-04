@@ -3279,14 +3279,18 @@ is (AUTHZ-CONCEAL-004).
 The search is asked in the organization its body names, under `contact:read` for
 accounts and `record:read` for person records, with the reach of `01` IDN-SRCH-002: in
 an organization, its current members and the records it holds; in the administrative
-organization, every account not erased and every record. A caller holding one of the
-two is answered that kind alone. **400** `api.request.malformed` names `organization`,
-`q`, `kinds` or `limit` where it is absent where required or does not read as its type.
-The route is a `POST` so the query never reaches an address or an access log.
+organization, every account not erased and every record. A permission held in the
+administrative organization admits a search asked in another organization, judged as
+one admission (D-219). `kinds` absent asks for both; of the kinds asked, the caller is
+answered those they may read. **400** `api.request.malformed` names `organization`, `q`,
+`kinds` or `limit` where it is absent where required or does not read as its type, a
+`kinds` member other than `account` and `record`, a `limit` outside 1 to 50, and a
+member the body does not take. The route is a `POST` so the query never reaches an
+address or an access log.
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/search` | `contact:read` · `record:read`: `{ organization, q, kinds, limit }`, `kinds` and `limit` optional: the accounts and person records whose name, email or phone the query matches, as `01` IDN-SRCH-001 matches them. **200** `{ results: [ { subject, kind, displayName, matched } ] }`, sorted by normalised display name and then by subject, a subject with no name last, at most `limit`, 20 where it is absent, with no paging; `kind` is `account` or `record`, `matched` the field that matched first, `name` · `email` · `phone`, and no email or phone value is answered (a result's contacts are read through `GET /admin/accounts/{subject}/contact`) · **403** `authz.denied` where the caller holds neither permission in the organization named, the refusal recorded (AUTHZ-CONCEAL-004) · **404** `identity.organization.notfound` where the organization named is none the deployment holds · **422** `identity.search.queryinvalid`, `details.member` naming `q` where it normalises to nothing or to more than 64 characters, `limit` where it is outside 1 to 50, or `kinds` where it names a kind other than `account` and `record` · **429** `auth.throttled` past `Janus:Search:PerMinute` searches a minute by the caller, with `Retry-After` and `details.retryAt` · **503** `identity.search.unavailable`, `details.reason` `off` in a process that does not serve the search, `building` with `Retry-After` until its index is built, `capacity` where the subjects to index pass `Janus:Search:MaxSubjects`, `unsafe` where a memory check failed under `enforce` (IDN-SRCH-003) |
+| `POST /admin/search` | `contact:read` · `record:read`: `{ organization, q, kinds, limit }`, `kinds` and `limit` optional: the accounts and person records whose name, email or phone the query matches, as `01` IDN-SRCH-001 matches them. **200** `{ results: [ { subject, kind, displayName, matched } ] }`, sorted by normalised display name and then by subject, a subject with no name last, at most `limit`, 20 where it is absent, with no paging; `kind` is `account` or `record`, `matched` the field that matched first, `name` · `email` · `phone`, and no email or phone value is answered (a result's contacts are read through `GET /admin/accounts/{subject}/contact`) · **403** `authz.denied` where the caller may read none of the kinds asked, holding neither permission in the organization named or in the administrative organization among them, the refusal recorded (AUTHZ-CONCEAL-004) · **404** `identity.organization.notfound` where the organization named is none the deployment holds · **422** `api.request.invalid`, `details.member` `q`, where `q` normalises to nothing or to more than 64 characters · **429** `auth.throttled` past `search.perminute` searches by the caller in a one-minute fixed window, counted across the deployment, with `Retry-After` and `details.retryAt` · **503** `identity.search.unavailable`, `details.reason` `off` in a process whose registration does not declare the search, `building` with `Retry-After` 30 seconds until its index is built, `capacity` where the subjects to index pass `search.maxsubjects`, `unsafe` where a memory check failed under `enforce` (IDN-SRCH-003) |
 
 A search counts its results toward the caller's read volume, one record per result
 (OPS-ALERT-005). No audit row is written; its refusal is recorded as every refusal is

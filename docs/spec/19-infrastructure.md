@@ -192,7 +192,7 @@ core dumps off (`ulimit core=0`), `DOTNET_EnableDiagnostics=0`, a read-only file
 and no `SYS_PTRACE`. The host: no online snapshot of the server, and no
 `docker checkpoint` of the container. Before it builds the index, the process checks the
 swap limit, the core-dump limit, the diagnostics port and crash dumps, and under
-`Janus:Search:MemoryChecks` `enforce` builds nothing where one fails (`01`
+`search.memorychecks` `enforce` builds nothing where one fails (`01`
 IDN-SRCH-003); the rest it cannot check, and the deployment keeps it.
 
 *Source: D-256*
