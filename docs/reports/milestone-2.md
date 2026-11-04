@@ -268,6 +268,12 @@ None.
 - The commit-message, changelog, release, truth-table change, acceptance-criterion test
   name and forbidden-marker gates pass over `origin/main..HEAD`; the full-history secret
   scan finds nothing.
+- The pipeline's pull-request run on 112f7fb8 (41839704807) was red in the contract
+  tests: `ProductNameTests.CONV_NAME_001_AC2_TheProductNameAppearsOnlyInNamespacesIdentifiersAndTheEntryPoint`
+  found the product name in the release gate's default repository, used where
+  `GITHUB_REPOSITORY` is unset. The default is now `owner/repository`, and every contract
+  test passes (214). We had not run the contract tests before that push; they are run
+  before every push.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the step's last message gives.
 
