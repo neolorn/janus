@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `SearchForm.Of` gives the one form the staff search reads a name and a query in:
+  NFKC on the library's pinned Unicode tables, the Arabic alef forms, teh marbuta and
+  alef maksura written one way, harakat and tatweel removed, Arabic-Indic digits as
+  ASCII digits, Latin letters lowercased without their marks, and each run of
+  whitespace and punctuation one space.
+
 - Giving a mailbox (`IInvitations.GiveMailboxAsync`) at an address the account does not
   hold yet, or holds as an add it began, no longer fails with `system.fault` on
   PostgreSQL: the address takes the primary in the same write that takes it on, so

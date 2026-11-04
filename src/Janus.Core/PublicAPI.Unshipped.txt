@@ -2950,6 +2950,7 @@ Janus.Core.RoleDeclaration.RoleDeclaration(string! Name, System.Collections.Gene
 Janus.Core.RoleName
 Janus.Core.RoleName.Equals(Janus.Core.RoleName other) -> bool
 Janus.Core.RoleName.RoleName() -> void
+Janus.Core.SearchForm
 Janus.Core.ScriptMixing
 Janus.Core.SendContext
 Janus.Core.SendContext.<Clone>$() -> Janus.Core.SendContext!
@@ -4401,6 +4402,7 @@ static Janus.Core.CanonicalForm.AsciiDigits(string! value) -> string!
 static Janus.Core.CanonicalForm.Of(string! value) -> string!
 static Janus.Core.CanonicalForm.TryDomainToAscii(string! domain, out string! ascii) -> bool
 static Janus.Core.CanonicalForm.UnicodeVersion.get -> string!
+static Janus.Core.SearchForm.Of(string! text) -> string!
 static Janus.Core.Capability.operator !=(Janus.Core.Capability? left, Janus.Core.Capability? right) -> bool
 static Janus.Core.Capability.operator ==(Janus.Core.Capability? left, Janus.Core.Capability? right) -> bool
 static Janus.Core.CeremonyUser.operator !=(Janus.Core.CeremonyUser? left, Janus.Core.CeremonyUser? right) -> bool
