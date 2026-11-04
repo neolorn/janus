@@ -20929,6 +20929,37 @@ subject the browser names could be anyone's.
 
 ---
 
+## D-262 — A release candidate keeps its predecessor's lists while they are fresh
+
+**Date:** 2026-11-05 · **Status:** accepted · **Amends:** CONV-VCS-005
+
+**TL;DR.** The offline leaked-password list and the Public Suffix List are drawn again for
+every final release, and for a release candidate only where the lists it would carry
+were drawn more than 90 days before its release commit; otherwise a release candidate
+keeps its predecessor's lists as they are. Found at `1.0.0-rc.4`: CONV-VCS-005 had every
+release draw both, and the lists drawn on 2026-11-04 for `1.0.0-rc.1` would have been
+drawn again a day later, with a manual workflow run and two downloads, for nothing a
+reader could tell apart.
+
+- **Why 90 days.** Both lists age slowly: a quarter's new leaked passwords barely move a
+  top-100,000 list, and the suffix rules a quarter adds are new registries, rarely ones a
+  host's users hold. A run of release candidates still never carries lists older than a
+  quarter.
+- **The final release** draws both, always, as CONV-VCS-005 has it.
+- **What stays.** Each list carries the date it was drawn, and the pin of the suffix rules
+  set aside matches the list carried.
+
+*Rejected:*
+- **Drawing for every release candidate:** a manual run and two downloads for every
+  candidate, for lists a day or a week older.
+- **Drawing only at the final release:** a long run of candidates, which a host may run in
+  production, would carry lists of any age.
+
+**Propagated to:**
+- `08` CONV-VCS-005 (the refresh's sentence and criterion 4).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21200,6 +21231,7 @@ subject the browser names could be anyone's.
 | A sign-on return whose state fails goes back to the application's root | D-259 |
 | Release notes too long for a release body | D-260 |
 | A host reads the reach of a record access session | D-261 |
+| A release candidate keeps its predecessor's lists while they are fresh | D-262 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
