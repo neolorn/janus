@@ -8,6 +8,8 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-11-04
+
 ### Added
 
 - A navigation return whose binding or `state` fails, the sign-on's
