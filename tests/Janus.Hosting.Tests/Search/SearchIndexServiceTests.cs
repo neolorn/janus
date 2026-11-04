@@ -215,7 +215,8 @@ public sealed class SearchIndexServiceTests : IAsyncDisposable
         _ = Hold("Ahmed Saleh");
 
         await StartAsync();
-        await UntilAsync(() => Reason() == "capacity");
+        // The index is withheld before the alert is raised, so both are waited for.
+        await UntilAsync(() => Reason() == "capacity" && _alerts.Of<AlertRaised>().Count > 0);
 
         Assert.Equal(
             [AlertCondition.SearchCapacity],
