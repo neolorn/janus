@@ -1844,7 +1844,9 @@ alike, and SHALL answer them sorted by name, capped, and with no email or phone 
   (NFD, marks dropped); every run of whitespace and punctuation to one space. A phone is
   held as the digits of its E.164 form without `+`, and an email as its canonical form
   (IDN-ACCT-004). The normaliser uses the library's pinned Unicode tables (IDN-ACCT-004,
-  D-154), never the platform's, so a result never changes with the machine.
+  D-154), never the platform's, so a result never changes with the machine. It is
+  public as `SearchForm.Of(string text)`, a static class in `Janus.Core` beside
+  `CanonicalForm` and `Precis`, answering the normalised text (`07` LIB-API-005).
 - **Matching.** The query is normalised, then split into words. A subject matches when
   every query word matches one of its fields:
   - a word of 3 or more characters matches a field containing it, by 3-letter slices,
@@ -1899,6 +1901,8 @@ off disk is the work (IDN-SRCH-003).
    `api.request.invalid` naming `q`.
 10. The same query answers the same results on machines whose platform Unicode versions
     differ.
+11. `SearchForm.Of` answers, for a name, the text the index holds for it, and for a
+    query the text the search matches.
 
 ---
 
@@ -1920,10 +1924,14 @@ the query and every indexed value out of every log, trace, metric and audit row.
   refusal. An organization the deployment does not hold answers 404
   `identity.organization.notfound`. A system principal, a job's included, is refused 403
   `authz.denied`.
-- **Limits.** A caller may search `search.perminute` times a minute (default 60),
-  counted as the library's other per-caller limits are counted: in the same store, in a
-  one-minute fixed window, across the deployment. Beyond it the search is answered 429
-  `auth.throttled` with `Retry-After` and `details.retryAt` (`09` API-CONV-002).
+- **Limits.** A caller may search `search.perminute` times a minute (default 60), in a
+  one-minute fixed window, across the deployment. The count is held in the table
+  `identity.search_windows`: `subject`, `window_start` (the minute, truncated) and
+  `count`, primary key (`subject`, `window_start`). Each search upserts its row, and is
+  refused 429 `auth.throttled` with `Retry-After` and `details.retryAt` (`09`
+  API-CONV-002) once the count passes `search.perminute`; the same statement deletes
+  the subject's earlier windows. An account's erasure deletes its rows (`04`
+  PRIV-RIGHT-005c).
 - **Read volume.** Each search counts its results toward the caller's read volume, one
   record per result (`06` OPS-ALERT-005).
 - **What is never recorded.** No audit row is written for a search, and no log line,
@@ -1958,6 +1966,9 @@ the query and every indexed value out of every log, trace, metric and audit row.
 10. With the Debug level on, a search writes no audit row, and no log entry, trace
     attribute or metric holding the query or any indexed value; its one Debug entry
     holds the result count and the duration alone.
+11. After searches in two minutes, `identity.search_windows` holds one row for the
+    caller, the later minute's, with its count; once the caller's account is erased it
+    holds none.
 
 ---
 
@@ -1967,16 +1978,17 @@ what it holds, and SHALL be written nowhere: not to PostgreSQL, not to disk, not
 log.
 
 **Values (D-256).**
-- **Where.** Only a process whose host declares the staff search at registration
-  (`AddJanus`), as it declares `ApplicationKind` (`07` LIB-HOST-001), builds and serves
-  the index; a host declares it in the processes that serve staff. Undeclared,
-  `ISearch.SearchAsync` and `POST /admin/search` answer 503
+- **Where.** Only a process whose host registers the library with
+  `AddJanus(..., StaffSearch.Served)` builds and serves the index (`07` LIB-HOST-001);
+  a host does so in the processes that serve staff. With `StaffSearch.Off`, or the
+  four-parameter `AddJanus`, `ISearch.SearchAsync` and `POST /admin/search` answer 503
   `identity.search.unavailable` with `details.reason` `off`.
 - **Building.** The index is built after the host has started, in the background, from
   the database; until it is ready the search answers 503 `identity.search.unavailable`
-  with `details.reason` `building` and `Retry-After` 30 seconds. It is held as the library's own
-  character buffers, and slice lists kept in name order with spare room, guarded for
-  concurrent readers and one writer. Once it is built, the process runs one aggressive,
+  with `details.reason` `building` and `Retry-After` 30 seconds. It is held as the
+  library's own character buffers, and slice lists kept in name order with spare room
+  of a hundredth of their length, at least one place, guarded for concurrent readers
+  and one writer. Once it is built, the process runs one aggressive,
   compacting collection, so the build's garbage goes back to the system.
 - **Kept current.** Every write that changes an indexed value or what a subject is (an
   identifier added, verified or removed, a display name changed, a record collected,
@@ -1997,7 +2009,9 @@ log.
 - **Memory checks.** Before building, the process checks what keeps memory off disk:
   its cgroup's swap limit is 0 (`memory.swap.max`), its core-dump limit is 0, .NET's
   diagnostics port is off (`DOTNET_EnableDiagnostics=0`) and its crash dumps are off
-  (`DOTNET_DbgEnableMiniDump` not `1`). With `search.memorychecks` `enforce`, the
+  (`DOTNET_DbgEnableMiniDump` not `1`). A check whose source cannot be read (no
+  `memory.swap.max`, no `/proc/self/limits`) counts as failed. With
+  `search.memorychecks` `enforce`, the
   default, a failed check stops the build, the search answers 503
   `identity.search.unavailable` with `details.reason` `unsafe`, and the alert
   `search-unsafe` is raised with `details.check` naming the check (`swap` · `coredump` ·
@@ -2012,9 +2026,9 @@ index does not protect against is `15` section 3.9.
 *Source: D-256*
 
 **Acceptance criteria**
-1. In a process whose host did not declare the staff search at registration, no index
-   is built, and the call and the route answer 503 `identity.search.unavailable` with
-   `details.reason` `off`.
+1. In a process registered with `StaffSearch.Off` or the four-parameter `AddJanus`, no
+   index is built, and the call and the route answer 503 `identity.search.unavailable`
+   with `details.reason` `off`.
 2. Until the index is built, the search answers 503 `identity.search.unavailable` with
    `details.reason` `building` and `Retry-After` 30 seconds.
 3. A display name changed, an identifier verified and a membership ended by another
@@ -2040,6 +2054,10 @@ index does not protect against is `15` section 3.9.
    Warning.
 9. After a build, a stream of changes and a run of searches, no table of the database,
    no file the process wrote and no log holds a normalised or indexed value.
+10. Where `memory.swap.max` or `/proc/self/limits` cannot be read, the check it serves
+    counts as failed: under `enforce` no index is built and `search-unsafe` is raised.
+11. A built slice list holds spare room of a hundredth of its length, and at least one
+    place.
 
 ---
 
