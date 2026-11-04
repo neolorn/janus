@@ -432,11 +432,12 @@ Recursive resolution at request time SHALL NOT be used.
 **Values (D-166).** The create and move are `IResources.RegisterAsync`,
 `RegisterManyAsync` and `MoveAsync` (`Janus.Core`), which the host calls inside its own
 unit of work. A registration names the record, its organization, its container and,
-where its type declares a subject column for its encrypted fields, its data subject read
-from that column (AUTHZ-MODEL-003). A registration or move with a member absent or
-unreadable, a type the model does not declare and a record of a sensitive type naming no
-subject (IDN-LIFE-002a) included, is refused with 400 `api.request.malformed` naming the
-member. One well formed and refused on its meaning is refused with 422
+where its type has a subject column, named by `Subject` or by its encrypted fields, its
+data subject read from that column (AUTHZ-MODEL-003, D-257). A registration or move with
+a member absent or unreadable, a type the model does not declare, a record of a
+sensitive type naming no subject (IDN-LIFE-002a) and a record of a type with a subject
+column naming no subject (D-257) included, is refused with 400 `api.request.malformed`
+naming the member. One well formed and refused on its meaning is refused with 422
 `api.request.invalid` naming the member: the record is already registered; its container
 is not of the declared type, is unregistered, belongs to another organization or is
 absent where the type requires one; or, for a sensitive type, the subject it names is
@@ -485,7 +486,7 @@ registers the record again, encrypting its fields again under the new subject
 containers (AUTHZ-INHERIT-001), so whether a caller may do it is the host's own action,
 which the host asks of the gate before it writes.
 
-*Source: D-015, D-017, D-166, D-203, D-206, D-207, D-221*
+*Source: D-015, D-017, D-166, D-203, D-206, D-207, D-221, D-257*
 
 Precomputation is what keeps the rule composable into a query and therefore usable
 as a `WHERE` clause. Same-transaction maintenance is why permission data and business
@@ -510,6 +511,9 @@ service.
    unit of work it joined, it changes nothing; after the outermost commit or rollback
    the host's context uses the connection it was configured with (D-206), a context
    configured with a connection string keeping its provider's type mappings (D-207).
+7. A registration of a record whose type names its subject column through `Subject`
+   alone, naming no subject, is refused 400 `api.request.malformed` naming `subject`
+   and writes nothing; naming one, it is registered with that subject (D-257).
 
 ---
 
@@ -889,9 +893,10 @@ An enumeration would make every new resource type a library change.
 
 **AUTHZ-MODEL-003** — Each resource type declaration SHALL carry: containment,
 concealment behaviour, sensitivity, its processing purposes, each with its lawful basis
-and the data and subject categories it requires (PRIV-PRIN-001), and, for each encrypted
+and the data and subject categories it requires (PRIV-PRIN-001), for each encrypted
 field, **the column identifying that field's subject** and the data category the field
-holds.
+holds, and, optionally, **the column identifying its records' data subject** where it
+declares no encrypted field that names one (`Subject`, D-257).
 
 | Declared | Drives | Source |
 |---|---|---|
@@ -901,16 +906,28 @@ holds.
 | Purposes, lawful bases, data and subject categories | Records of processing | D-032, D-036, PRIV-PRIN-001 |
 | Derivations | Derived grants | D-043 |
 | **Subject column and data category, per encrypted field** | **Which key encrypts it; which purpose holds it (PRIV-PRIN-001 AC2)** | **D-099** |
+| **Subject column of the type, named by `Subject` or by its encrypted fields** | **The records' data subject: the registration's subject, the consent gate, the records of processing** | **D-162, D-257** |
 
-**Values (D-162, D-166).** The subject column of a type's encrypted fields also names
-the record's **data subject**, whose consent the gate reads for a consent-based purpose
-(PRIV-SENS-002, AUTHZ-GATE-005). The host supplies that subject when it registers the
-record, read from that column (AUTHZ-INHERIT-002), because the library reads no host
-table (LIB-HOST-002). A consent-based purpose on a type whose encrypted fields name no
-one subject column SHALL fail startup validation with `model.startup.declarationmissing`,
-`details.key` naming `<type>.<purpose>`.
+**Values (D-162, D-166, D-257).** A type's **subject column** is the column `Subject`
+names (`ResourceTypeDeclarationBuilder<T>.Subject`, `07` LIB-API-001), or the one its
+encrypted fields name. A type MAY name it through `Subject` with no encrypted field.
+Where both are given they SHALL be the same column, and the encrypted fields SHALL name
+one column between them; otherwise startup SHALL fail with
+`model.startup.declarationmissing`, `details.key` naming the type. The subject column
+names the record's **data subject**, whose consent the gate reads for a consent-based
+purpose (PRIV-SENS-002, PRIV-SENS-002a, AUTHZ-GATE-005). The host supplies that subject
+when it registers the record, read from that column (AUTHZ-INHERIT-002), because the
+library reads no host table (LIB-HOST-002). Everything that reads a type's subject
+column reads it whichever way it was named: the registration's subject, the consent
+gate and the records of processing. A consent-based purpose on a type that names no
+subject column, by `Subject` or by its encrypted fields, SHALL fail startup validation
+with `model.startup.declarationmissing`, `details.key` naming `<type>.<purpose>`.
 
-*Source: D-015, D-016, D-030, D-036, D-043, D-162, D-166*
+**Naming a subject encrypts nothing (D-257).** `Subject` declares no personal field and
+changes no erasure duty: the host's own plain columns about the subject stay the host's
+to erase on `ErasureRequested` (`04` PRIV-RIGHT-005b).
+
+*Source: D-015, D-016, D-030, D-036, D-043, D-162, D-166, D-257*
 
 One declaration describes the host's domain; permission filtering, error semantics,
 and compliance records all derive from it.
@@ -918,6 +935,16 @@ and compliance records all derive from it.
 **Acceptance criteria**
 1. A type declared without a purpose fails startup validation.
 2. Changing sensitivity changes consent behaviour without other edits.
+3. A type that declares `Subject` and no encrypted field, with a purpose resting on
+   consent, starts; the consent gate admits an action on its record under that purpose
+   only where the subject the record was registered with holds a live consent for it
+   (D-257).
+4. A type whose `Subject` names one column and whose encrypted fields name another
+   stops the start with `model.startup.declarationmissing`, `details.key` naming the
+   type (D-257).
+5. A type with a purpose resting on consent that names no subject column, by `Subject`
+   or by an encrypted field, stops the start with `model.startup.declarationmissing`,
+   `details.key` naming `<type>.<purpose>`.
 
 ---
 
