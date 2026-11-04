@@ -311,6 +311,7 @@ public sealed class PublicSurfaceTests
             typeof(IUnsignedCallback),
             typeof(HostingRegistration),
             typeof(IdentityEndpoints),
+            typeof(StaffSearch),
             typeof(AllowNoSessionAttribute),
             typeof(Answers),
             typeof(CapabilityFields),
@@ -597,7 +598,8 @@ public sealed class PublicSurfaceTests
     /// <summary>
     /// CONV-DESIGN-007 AC1: a host registers the library with one call, since the only
     /// public extension of the service collection in the shipped assemblies is
-    /// <c>AddJanus</c>, and it is declared once.
+    /// <c>AddJanus</c>, declared under that one name, the overload that declares the
+    /// staff search included (LIB-HOST-001, D-256).
     /// </summary>
     [Fact]
     public void CONV_DESIGN_007_AC1_TheEntryPointIsThePublicRegistrationAndTheOnlyOne()
@@ -607,7 +609,8 @@ public sealed class PublicSurfaceTests
             .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
             .Where(method => method.IsDefined(typeof(ExtensionAttribute), inherit: false))
             .Where(method => typeof(IServiceCollection).IsAssignableFrom(method.GetParameters()[0].ParameterType))
-            .Select(method => method.DeclaringType!.FullName + "." + method.Name);
+            .Select(method => method.DeclaringType!.FullName + "." + method.Name)
+            .Distinct();
 
         Assert.Equal([typeof(HostingRegistration).FullName + "." + nameof(HostingRegistration.AddJanus)], registrations);
     }
@@ -750,13 +753,15 @@ public sealed class PublicSurfaceTests
 
     /// <summary>
     /// CONV-DESIGN-007 AC7: of the types of another project, the entry point registers
-    /// itself only the host's declaration it is given and the two built by a factory that
-    /// reads a type of a project the type's own cannot reference: the sending validation,
-    /// whose placeholders come from the privacy project, and the declared processing,
-    /// read from the authorization model. Every other type of such a project is
-    /// registered by that project's own method, what evaluates a permission among them
-    /// (LIB-SEAM-001 AC1). What the entry point registers itself is read as what its
-    /// collection holds beyond what the other projects' methods register on their own.
+    /// itself only the host's declaration it is given and the three built by a factory
+    /// that reads a type of a project the type's own cannot reference: the sending
+    /// validation, whose placeholders come from the privacy project, the declared
+    /// processing, read from the authorization model, and the staff search's index holder,
+    /// read from the hosting project's declaration of the search. Every other type of such
+    /// a project is registered by that project's own method, what evaluates a permission
+    /// among them (LIB-SEAM-001 AC1). What the entry point registers itself is read as
+    /// what its collection holds beyond what the other projects' methods register on
+    /// their own.
     /// </summary>
     [Fact]
     public void CONV_DESIGN_007_AC7_TheEntryPointRegistersOfAnotherProjectTheDeclarationAndWhatNoOtherCan()
@@ -771,6 +776,7 @@ public sealed class PublicSurfaceTests
 
         Assert.Equal(
             [
+                typeof(Janus.Authentication.Search.SearchIndexHolder),
                 typeof(Janus.Authentication.Sending.SendingValidation),
                 typeof(AuthorizationDeclaration),
                 typeof(DeclaredProcessing),

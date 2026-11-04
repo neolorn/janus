@@ -1785,6 +1785,25 @@ GET /admin/ropa
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
+POST /admin/search
+  request application/json
+    organization: Guid?
+    q: string
+    kinds[]: string
+    limit: number?
+  200
+    application/json
+      results[].subject: Guid
+      results[].kind: SubjectKind
+      results[].displayName: string
+      results[].matched: SearchMatch
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.organization.notfound
+  422 api.request.invalid
+  429 auth.throttled
+  503 identity.search.unavailable
 POST /admin/sessions/revoke-all
   204
   401 auth.session.expired

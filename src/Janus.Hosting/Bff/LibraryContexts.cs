@@ -12,6 +12,7 @@ using Janus.Hosting.Privacy;
 using Janus.Hosting.Records;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Search;
 using Janus.Hosting.Sending;
 
 namespace Janus.Hosting.Bff;
@@ -45,6 +46,7 @@ internal static class LibraryContexts
         SendingJson.Default,
         AuthorizationJson.Default,
         OrganizationJson.Default,
+        SearchJson.Default,
         ApiErrorJson.Default,
     ];
 

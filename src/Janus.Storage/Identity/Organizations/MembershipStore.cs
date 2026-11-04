@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Organizations;
 using Janus.Storage.Authentication.Invitations;
+using Janus.Storage.Authentication.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Identity.Organizations;
@@ -120,6 +121,10 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        // IDN-SRCH-003 (D-256): a membership starting changes whose search answers the
+        // account.
+        await SearchChannel.RaiseAsync(context, membership.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -136,6 +141,9 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
         record.EndsAt = membership.EndSet?.At;
         record.EndSetBy = membership.EndSet?.SetBy;
         record.EndReason = membership.EndSet?.Reason;
+
+        // IDN-SRCH-003 (D-256): a membership ending changes whose search answers the account.
+        await SearchChannel.RaiseAsync(context, membership.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     // The rows are locked in one order, so two transactions locking overlapping sets

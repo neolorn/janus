@@ -31,6 +31,7 @@ using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Records;
+using Janus.Storage.Authentication.Search;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Grants;
@@ -96,6 +97,40 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(0, erasure.Attempts);
         Assert.Equal(Noon, erasure.RequestedAt);
     }
+
+    /// <summary>
+    /// PRIV-RIGHT-005c AC10, IDN-SRCH-002 AC11 (D-256): an account's erasure deletes its
+    /// rows of the staff search's per-minute counts, and leaves another account's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005c_AC10_AnErasureDeletesTheAccountsSearchWindowsAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        SubjectId other = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext counting = database.Context())
+        {
+            var windows = new SearchWindows(new DataConnections(counting));
+
+            _ = await windows.CountAsync(subject, Noon, TestContext.Current.CancellationToken);
+            _ = await windows.CountAsync(other, Noon, TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using NpgsqlConnection connection = new(database.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, await WindowsAsync(connection, subject));
+        Assert.Equal(1, await WindowsAsync(connection, other));
+    }
+
+    private static Task<int> WindowsAsync(NpgsqlConnection connection, SubjectId subject) =>
+        connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.search_windows WHERE subject = @subject;",
+            new { subject = subject.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
 
     /// <summary>
     /// REC-REC-003 AC1: after a person record's erasure its key no longer unwraps, so no

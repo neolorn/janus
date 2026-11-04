@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Profiles;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Search;
 using Janus.Storage.Privacy.SubjectKeys;
 
 namespace Janus.Storage.Identity.Profiles;
@@ -107,6 +108,10 @@ internal sealed class ProfileStore(
         {
             CryptographicOperations.ZeroMemory(dataKey);
         }
+
+        // IDN-SRCH-003 (D-256): a display name changed changes what the staff search holds
+        // of the account.
+        await SearchChannel.RaiseAsync(context, profile.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     private static string? Read(

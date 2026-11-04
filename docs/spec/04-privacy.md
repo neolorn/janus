@@ -1367,10 +1367,17 @@ version until it lapses, and the previous version is retired only then (OPS-SEC-
 (IDN-ACCT-004), 32 byte output. The neutralised value is 32 zero bytes, and no lookup
 path may match it.
 
-*Source: D-082, D-093, D-166, D-183, D-187*
+*Source: D-082, D-093, D-166, D-183, D-187, D-256*
 
 Email and phone must be matchable for sign-in lookup and duplicate detection, and
 anything searchable cannot be encrypted. This is inherent, not a gap.
+
+**Fingerprints serve exact finds; the staff search serves loose matching (D-256).** A
+fingerprint finds a whole value in its canonical form and nothing else. Finding a person
+by part of a name, an email or a phone, a spelling variant or one typo is the staff
+search (`01` IDN-SRCH-001), whose index each serving process holds in its own memory
+and writes nowhere (`01` IDN-SRCH-003): no searchable token of a name, an email or a
+phone is stored in the database or reaches a backup, so none outlives an erasure there.
 
 **Erasure is therefore two steps** — destroy the subject key, neutralise the
 fingerprint — **both at known locations, neither removing a row.**
@@ -1388,6 +1395,13 @@ separate service, so the two steps could not share a transaction and no ordering
 was safe — hence a durable intent record before either was attempted. With the wrapped
 key in the database, all three writes commit together or none do.
 
+**The staff search's index is cleared at once (D-256).** Outside the database, the
+erased subject leaves the staff search's index at once: in the process that erases, and
+in every other indexing process on the notification the erasure's transaction sends;
+its text in the index's buffers is overwritten with zeros (`01` IDN-SRCH-003). The same
+holds for a takedown. Inside the database, an account's erasure deletes its rows of
+`identity.search_windows`, the staff search's per-minute counts (`01` IDN-SRCH-002).
+
 **The erasures table remains** (IDN-LIFE-003b), because it is still the record of what
 happened, when, and why, and because the host-side steps of a takedown (whatever the
 host does in its own tables on `TakedownExecuted`, and clearing any derived copies)
@@ -1399,7 +1413,7 @@ wrapped key as it then was, so a restore to that point recovers the subject's fi
 The ledger (DR-016) re-applies erasures after any such restore, and otherwise erasure of
 pre-erasure backups completes when they expire.
 
-*Source: D-097, D-102*
+*Source: D-097, D-102, D-256*
 
 **Both locations are known**, so no search across the schema is required.
 
@@ -1417,6 +1431,12 @@ pre-erasure backups completes when they expire.
 6. No requirement obliges an application to maintain a per-schema redaction routine.
 7. Each fingerprint is stored with the key version it was computed under, and a lookup
    finds a value fingerprinted under any version the deployment holds.
+8. No table of the library's schema holds a token, slice or normalised form of a name,
+   an email or a phone for the staff search (D-256).
+9. Once an erasure commits, no staff search in any indexing process answers the subject
+   after its notification is received, and the index's buffers that held its text hold
+   zeros (D-256).
+10. After an account's erasure, `identity.search_windows` holds no row for it (D-256).
 
 ---
 

@@ -17,6 +17,7 @@ using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Recovery;
 using Janus.Storage.Authentication.Registration;
+using Janus.Storage.Authentication.Search;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authentication.SignIn;
@@ -180,6 +181,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// The exports the accounts have taken, one row an export.
     /// </summary>
     public DbSet<ExportRecordRow> PrivacyExports => Set<ExportRecordRow>();
+
+    /// <summary>
+    /// Each account's staff searches a minute, one row a minute.
+    /// </summary>
+    public DbSet<SearchWindowRecord> SearchWindows => Set<SearchWindowRecord>();
 
     /// <summary>
     /// The supplied fields of the records of processing, at one row.
@@ -656,6 +662,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new DeliveryConfirmationConfiguration());
         modelBuilder.ApplyConfiguration(new PrivacyRequestConfiguration());
         modelBuilder.ApplyConfiguration(new ExportConfiguration());
+        modelBuilder.ApplyConfiguration(new SearchWindowConfiguration());
         modelBuilder.ApplyConfiguration(new ComplianceConfiguration());
         modelBuilder.ApplyConfiguration(new LawfulBasisConfiguration());
         modelBuilder.ApplyConfiguration(new BackgroundJobConfiguration());

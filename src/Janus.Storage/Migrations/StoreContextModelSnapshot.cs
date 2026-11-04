@@ -2026,6 +2026,29 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Search.SearchWindowRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<DateTimeOffset>("WindowStart")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("window_start");
+
+                b.Property<int>("Count")
+                    .HasColumnType("integer")
+                    .HasColumnName("count");
+
+                b.HasKey("Subject", "WindowStart")
+                    .HasName("pk_search_windows");
+
+                b.ToTable("search_windows", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_search_windows_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.NoticeRecord", b =>
             {
                 b.Property<Guid>("Id")

@@ -222,6 +222,10 @@ internal static class ApiStatus
         // a navigation's redirect carries the code, so no response bears the status
         // (10 section 6).
         [ErrorCodes.ProviderUnavailable] = StatusCodes.Status502BadGateway,
+
+        // The process does not serve the staff search, which another process may
+        // (IDN-SRCH-003).
+        [ErrorCodes.SearchUnavailable] = StatusCodes.Status503ServiceUnavailable,
     }.ToFrozenDictionary();
 
     /// <summary>

@@ -13,6 +13,7 @@ using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
+using Janus.Authentication.Search;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
@@ -71,6 +72,14 @@ public sealed class NeverLoggedTests
             Member<PendingSignIn>(nameof(PendingSignIn.Browser)),
             Member<LandedSignIn>(nameof(LandedSignIn.Code)),
             Member<GeneratedBreakGlass>(nameof(GeneratedBreakGlass.Credential)),
+            Member<SearchQuery>(nameof(SearchQuery.Text)),
+            Member<SearchResult>(nameof(SearchResult.DisplayName)),
+            Member<SearchSubject>(nameof(SearchSubject.DisplayName)),
+            Member<SearchSubject>(nameof(SearchSubject.Emails)),
+            Member<SearchSubject>(nameof(SearchSubject.Phones)),
+            Member<IndexedSubject>(nameof(IndexedSubject.Name)),
+            Member<IndexedSubject>(nameof(IndexedSubject.Emails)),
+            Member<IndexedSubject>(nameof(IndexedSubject.Phones)),
         ]));
 
     /// <summary>

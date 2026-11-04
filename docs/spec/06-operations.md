@@ -522,6 +522,9 @@ declaration is absent with `model.startup.declarationmissing` naming the declara
   CONV-DESIGN-007), the mail server's accounts the deployment keeps for itself
   (`integration.mailserver.ownaccounts`, read at the start, D-254) and the default
   client (`redirect.defaultclient`)
+- What keeps the staff search's index off disk and bounded: its memory checks
+  (`search.memorychecks`) and its capacity (`search.maxsubjects`) (`01` IDN-SRCH-003,
+  D-256)
 
 Audit logging, token signature verification and step-up enforcement have no switch:
 the library performs them unconditionally. The emergency route past step-up is the
@@ -530,7 +533,8 @@ break-glass session (AUTH-STEP-004).
 This list and `10` section 4.8 are the same list; a key marked protected in `10`
 appears in both or in neither (D-152).
 
-*Source: D-148; D-010, D-020.1, D-045, D-146, D-152, D-166, D-176, D-181, D-197, D-254*
+*Source: D-148; D-010, D-020.1, D-045, D-146, D-152, D-166, D-176, D-181, D-197, D-254,
+D-256*
 
 The selection test is not "how sensitive is this setting" but **"does turning this
 off blind us to the person turning it off."** The governing language is protected on a
@@ -723,8 +727,11 @@ protected keys (OPS-CFG-005).
 | **Domain removed from a lock**: new sign-ins with addresses in it stop | Normal | REG-DOM-001, D-146 |
 | **`legal.governinglanguage` changed**, raised beside `protected-setting-changed` | Normal | PRIV-CONS-005, OPS-CFG-004, D-146 |
 | **Governing-language text missing**: a document version cannot publish, or a document that must be shown has no governing-language text | Normal | PRIV-CONS-006, D-146 |
+| **Staff search over capacity**: the subjects to index pass `search.maxsubjects`, so the index is not built and the search answers `identity.search.unavailable` (`capacity`) | Normal | IDN-SRCH-003, D-256 |
+| **Staff search unsafe**: a memory check failed under `search.memorychecks` `enforce`, so the index is not built and the search answers `identity.search.unavailable` (`unsafe`); the alert names the check in `details.check`, never a value | High | IDN-SRCH-003, D-256 |
 
-*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166, D-177, D-186, D-190, D-225*
+*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166, D-177, D-186, D-190, D-225,
+D-256*
 
 **Identifiers and thresholds (D-153, D-177).** Every row carries the identifier `10`
 section 5.23 lists, in table order; `AlertRaised` carries it, with the scope where the
@@ -749,7 +756,7 @@ transaction that rolls back raises nothing.
 The six conditions from the duplicate-identifier probe to the missing emergency
 credential were required elsewhere to "raise an alert", "be surfaced" or "produce a
 monitored signal" with no condition defined to consume them. The six after them are the
-conditions D-146 introduced.
+conditions D-146 introduced. The last two are the staff search's (D-256).
 
 **Acceptance criteria**
 1. Each condition produces an alert without anyone watching.
@@ -832,12 +839,14 @@ actor's mean daily count over `exfiltration.readvolume.baselinewindow` **and** e
 day silent. The host reports the records each gate-filtered query and each export
 returned through `IReadVolume`; the library's own routes run no gate-filtered query.
 An admitted read of a colleague's photo counts one record toward the reader's read
-volume (`01` IDN-ATTR-002, D-250). The actor is the acting person; work of a system
+volume (`01` IDN-ATTR-002, D-250), and each staff search counts its results toward the
+searcher's read volume, one record per result (`01` IDN-SRCH-002, D-256). The actor is
+the acting person; work of a system
 principal is not counted. The mean is the sum over the days of the window before today
 divided by the window's length, a day without reads counting as zero; both comparisons
 are strict. Counts older than the window are forgotten by the daily recount.
 
-*Source: D-045, D-071, D-166, D-250*
+*Source: D-045, D-071, D-166, D-250, D-256*
 
 A warehouse clerk's normal differs from an account manager's.
 
@@ -846,6 +855,8 @@ A warehouse clerk's normal differs from an account manager's.
 2. An actor whose normal volume is high does not alert continuously.
 3. Each admitted read of a colleague's photo adds one to the reader's count for the
    day, and a refused one adds nothing (D-250).
+4. A staff search answering five results adds five to the searcher's count for the day,
+   and a refused one adds nothing (D-256).
 
 ---
 

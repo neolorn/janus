@@ -121,6 +121,9 @@ retention family R
 retention.audit.routine duration R floor=P30D
 retention.audit.security duration R floor=P1830D
 retention.consent duration R floor=P366D
+search.maxsubjects integer P floor=1
+search.memorychecks choice P allowed=enforce,warn
+search.perminute integer R floor=1 ceiling=600
 service.name text R
 session.aal2.absolute duration R ceiling=P1D
 session.aal2.inactivity duration R ceiling=PT12H

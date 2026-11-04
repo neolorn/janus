@@ -47,6 +47,8 @@ public sealed class AlertsTests
         "domain-removed",
         "governing-language-changed",
         "governing-text-missing",
+        "search-capacity",
+        "search-unsafe",
     ];
 
     private static readonly AlertCondition[] High =
@@ -63,6 +65,7 @@ public sealed class AlertsTests
         AlertCondition.ErasureDeliveryExhausted,
         AlertCondition.PrivacyDeadlineReached,
         AlertCondition.NoEmergencyCredential,
+        AlertCondition.SearchUnsafe,
     ];
 
     /// <summary>

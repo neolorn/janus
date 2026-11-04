@@ -15,6 +15,7 @@ using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
+using Janus.Storage.Authentication.Search;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
@@ -123,7 +124,12 @@ internal sealed class SubjectEraser(
             await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
             await EraseOutstandingMessagesAsync(subject, cancellationToken).ConfigureAwait(false);
             await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
+            await ForgetSearchesAsync(subject, cancellationToken).ConfigureAwait(false);
         }
+
+        // IDN-SRCH-003 (D-256): every process serving the staff search drops the subject
+        // from its index once the erasure commits.
+        await SearchChannel.RaiseAsync(context, subject, cancellationToken).ConfigureAwait(false);
 
         var erasure = Erasure.Begun(subject, at, reason);
 
@@ -257,6 +263,16 @@ internal sealed class SubjectEraser(
         record.FormatMarker = key.FormatMarker;
         record.KeyVersion = key.KeyVersion;
         record.WrappedKey = key.WrappedKey.ToArray();
+    }
+
+    // IDN-SRCH-002, PRIV-RIGHT-005c (D-256): an erased account's staff searches are not
+    // counted any longer.
+    private async ValueTask ForgetSearchesAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        _ = await context.SearchWindows
+            .Where(window => window.Subject == subject)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // PRIV-RIGHT-005a, AUTH-ABUSE-004: a message admitted for the subject and not yet

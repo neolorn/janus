@@ -12,6 +12,7 @@ using Janus.Hosting.Credentials;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Search;
 using Xunit;
 
 namespace Janus.Hosting.Tests;
@@ -68,6 +69,8 @@ public sealed class NeverLoggedTests
             Member<IssuedAppPasswordView>(nameof(IssuedAppPasswordView.Secret)),
             Member<PresentBreakGlassRequest>(nameof(PresentBreakGlassRequest.Credential)),
             Member<GeneratedBreakGlassView>(nameof(GeneratedBreakGlassView.Credential)),
+            Member<SearchRequest>(nameof(SearchRequest.Q)),
+            Member<SearchResultView>(nameof(SearchResultView.DisplayName)),
         ]));
 
     private static PropertyInfo Member<T>(string name) =>

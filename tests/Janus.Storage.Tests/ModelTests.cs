@@ -908,6 +908,12 @@ public sealed class ModelTests
             "roles.hands_out",
             "roles.name",
 
+            // Not an account field: how many staff searches an account made in a minute,
+            // which no query's text reaches (IDN-SRCH-002, D-256).
+            "search_windows.count",
+            "search_windows.subject",
+            "search_windows.window_start",
+
             // Not an account field: the names of the declared roles a start has seeded,
             // so none is seeded again (AUTHZ-GRANT-004, D-204).
             "seeded_roles.name",

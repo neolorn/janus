@@ -211,7 +211,7 @@ host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. 
 operations named below as called in process only have no endpoint.
 
 *Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208, D-218, D-221,
-D-247, D-250, D-253*
+D-247, D-250, D-253, D-256*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -237,7 +237,8 @@ D-218); and the person records (`21`, D-221): their entry, reads and finding,
 correction, the consents and objections staff record, their export for the person,
 restriction lift, deletion and its cancellation, erasure and takedown, the account's
 operations on a record attached to it, and the offer and the attachment
-(`IPersonRecords`); and the outcome of a message the host reports (`ISendOutcomes`,
+(`IPersonRecords`); the staff search (`ISearch`, `01` IDN-SRCH-001 to IDN-SRCH-003,
+D-256); and the outcome of a message the host reports (`ISendOutcomes`,
 INT-SMS-005, D-225), called in process only. The endpoints are enumerated in
 `09-api-contract`; the permissions in `10-reference` §2.1.
 
@@ -258,6 +259,22 @@ caller's access context, the administrative organization, the member and the req
 address, `formerMailbox` and reason, gives that member a mailbox as `20` REG-MAIL-001
 states, and answers the mailbox's identifier, address and state. Its endpoint is
 `POST /admin/organizations/{id}/members/{account}/mailbox` (`09`).
+
+**The staff search (D-256).** `ISearch.SearchAsync(AccessContext context, SearchQuery
+query, CancellationToken cancellationToken)`, in `Janus.Core`, answers
+`Result<IReadOnlyList<SearchResult>>`, the results as `01` IDN-SRCH-001 orders and caps
+them. `SearchQuery(OrganizationId Organization, string Text, SearchKinds Kinds,
+int Limit)` carries the request; `SearchKinds` is a flags enumeration, `None` 0,
+`Accounts` 1, `Records` 2, where `None` means both. `SearchResult(SubjectId Subject,
+SubjectKind Kind, string? DisplayName, SearchMatch Matched)` is one result, `Kind` the
+`SubjectKind` the contact read of IDN-READ-003 answers (`ContactDetail.Kind`), and
+carries no email or phone value; `SearchMatch` is an enumeration, `Name`, `Email`,
+`Phone`, the field that matched first. It answers whom IDN-SRCH-002 admits, refuses a
+system principal with `authz.denied`, and answers `identity.search.unavailable` where
+the process serves no index (IDN-SRCH-003). Its endpoint is `POST /admin/search`
+(`09`). The normaliser is public as `SearchForm`, a static class in `Janus.Core` beside
+`CanonicalForm` and `Precis`, whose `Of(string text)` answers the normalised text
+(IDN-SRCH-001).
 
 **Endpoints that are not mappings of an operation.** An endpoint that establishes or
 rotates the browser's session maps its operation through the library's internal service,
@@ -379,6 +396,7 @@ anyone acts, and reads no record of a person (D-218).
 | **Location file** | Optional: `ILocationSource`, which opens the IP-to-city file in the format INT-GEN-006 gives. Absent, no session carries a location and `degradation` is raised under the scopes `10` section 5.23 names (INT-GEN-006, AUTH-SESS-013, D-190) |
 | **Datacenter range file** | Optional: `IDatacenterRangeSource`, which opens the file of datacenter ranges in the format AUTH-ABUSE-008 gives. Absent or stale, `datacenterRange` does not fire and `degradation` is raised under the scopes `10` section 5.23 names until the host supplies one or takes `datacenterRange` out of `abuse.botdefence.signals` (AUTH-ABUSE-008, D-189, D-190) |
 | **Off-host erasure ledger** | Optional: `IErasureLedger`, which appends each completed erasure's line off the host (DR-016). Absent, erasures complete without a line, and a restore to a point before one reverses it (DR-006a); once one is registered, every erasure completed before it is appended too |
+| **Staff search** | Optional, per process: `StaffSearch` (`Janus.Hosting`), an enumeration, `Off` 0 and `Served` 1, declared at registration as the fifth parameter of an overload of `AddJanus` (`StaffSearch search`); the four-parameter `AddJanus` means `Off`. `Served`, given in the processes that serve staff, turns the staff search on in that process (`01` IDN-SRCH-003). `Off`, the process builds no index and the search answers 503 `identity.search.unavailable` with `details.reason` `off`. The keys `search.perminute`, `search.maxsubjects` and `search.memorychecks` govern it (`10` section 4.10); under `search.memorychecks` `warn` the index is built anyway, each failed memory check logged at Warning at every start and `search-unsafe` raised naming it; the library reads no environment (OPS-ENV-001) (D-256) |
 
 Everything else has a safe default the host may override (P-001, D-107), including the
 public-holiday list, whose safe default is empty and which staff maintain at runtime as
@@ -400,7 +418,7 @@ default, of which fourteen could be defaulted and six belonged here (D-107).*
 
 *Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177,
 D-179, D-180, D-183, D-189, D-190, D-197, D-202, D-203, D-204, D-206, D-209, D-237,
-D-254, D-255, D-257*
+D-254, D-255, D-256, D-257*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every
@@ -426,7 +444,12 @@ D-254, D-255, D-257*
    `landingOrigins.authentication` or `landingOrigins.account` naming it.
 7. Startup succeeds with none of the optional declarations registered, and each absence
    has the effect its row states.
-8. A resource type declared with `Subject` and no encrypted field, carrying a purpose
+8. A process registered with the four-parameter `AddJanus`, or with `StaffSearch.Off`,
+   answers the search 503 `identity.search.unavailable` with `details.reason` `off`; one
+   registered with `StaffSearch.Served`, with `search.memorychecks` `warn` and a memory
+   check failing, builds its index, logs the failed check at Warning at every start and
+   raises `search-unsafe` naming it, whatever environment it runs in (D-256).
+9. A resource type declared with `Subject` and no encrypted field, carrying a purpose
    resting on consent, starts; one whose `Subject` and encrypted fields name different
    columns fails startup with `model.startup.declarationinvalid`, `details.key` naming
    the type (D-257).

@@ -19,6 +19,7 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
+using Janus.Authentication.Search;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
@@ -191,6 +192,10 @@ internal static class AuthenticationRegistration
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 
         services.AddScoped<OrganizationReads>();
+
+        // IDN-SRCH-001 (D-256): the staff search reads the index the process holds, which
+        // the registration that declares the search builds.
+        services.AddScoped<ISearch, SearchService>();
 
         // IDN-ATTR-002, OPS-CFG-003: a policy that shows photos is refused where the
         // deployment declared no codec, so what changes a policy takes the codec as it

@@ -146,6 +146,7 @@ public sealed class ErrorCodesTests
         "identity.record.stateconflict",
         "identity.registration.incomplete",
         "identity.registration.signedin",
+        "identity.search.unavailable",
         "identity.takedown.active",
         "identity.takedown.notfound",
         "identity.takedown.windowelapsed",

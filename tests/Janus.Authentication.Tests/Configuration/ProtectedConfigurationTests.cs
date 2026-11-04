@@ -76,6 +76,27 @@ public sealed class ProtectedConfigurationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-SRCH-003 AC12 (D-256): setting <c>search.memorychecks</c> to <c>warn</c> is a
+    /// protected change, raised as <c>protected-setting-changed</c> naming the key.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_SRCH_003_AC12_SettingTheMemoryChecksToWarnRaisesTheProtectedChangeAsync()
+    {
+        Result changed = await Configuration.ChangeAsync(
+            [new ProtectedSettingValue<string>(Settings.SearchMemoryChecks, "warn")],
+            Reason,
+            TestContext.Current.CancellationToken);
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Null(changed.Match(() => (Error?)null, error => error));
+        Assert.Equal(AlertCondition.ProtectedSettingChanged, raised.Condition);
+        Assert.Equal(Settings.SearchMemoryChecks.Key.ToString(), raised.Details["key"].GetString());
+        Assert.Equal(Settings.SearchMemoryChecks.Write("warn"), _settings.Written[Settings.SearchMemoryChecks.Key]);
+    }
+
+    /// <summary>
     /// OPS-ALERT-001: a change whose alert the channels cannot raise is not made; the
     /// refusal is the answer, and the transaction is not committed.
     /// </summary>
