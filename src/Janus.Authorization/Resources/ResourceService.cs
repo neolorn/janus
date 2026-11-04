@@ -321,12 +321,20 @@ internal sealed class ResourceService(
             return Invalid("containedIn");
         }
 
-        // IDN-LIFE-002a AC1, REC-AGE-001: data of a sensitive type about nobody, about
-        // somebody with no account or person record that stands, or about a person record
-        // with no age answer, would have no route by which a right is exercised or no
-        // screen of age before it, so it is not registered.
+        // IDN-LIFE-002a AC1, AUTHZ-INHERIT-002: a record of a sensitive type is about
+        // somebody, so a registration naming nobody lacks a member it needs.
+        if (registration.Subject is null && declared.SensitiveCategories.Count > 0)
+        {
+            return Malformed("subject");
+        }
+
+        // IDN-LIFE-002a AC1, REC-AGE-001: data of a sensitive type about somebody with no
+        // account or person record that stands, or about a person record with no age
+        // answer, would have no route by which a right is exercised or no screen of age
+        // before it, so it is not registered.
         if (declared.SensitiveCategories.Count > 0
-            && (registration.Subject is not SubjectId subject || !standing.Contains(subject)))
+            && registration.Subject is SubjectId subject
+            && !standing.Contains(subject))
         {
             return Invalid("subject");
         }

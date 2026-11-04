@@ -239,6 +239,12 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         ResourceReference elsewhere = Reference(Workspace);
         ResourceReference first = Reference(Document);
         var undeclared = ResourceType.Parse("journey");
+        SubjectId nobody;
+
+        using (var randomness = RandomNumberGenerator.Create())
+        {
+            nobody = SubjectId.New(randomness);
+        }
 
         Ok(await RegisteredManyAsync(
         [
@@ -273,7 +279,7 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
             Invalid(Refused(await RegisteredManyAsync(
             [
                 new ResourceRegistration(first, ours.Organization, workspace, ours.Account),
-                new ResourceRegistration(Reference(Document), ours.Organization, workspace, null),
+                new ResourceRegistration(Reference(Document), ours.Organization, workspace, nobody),
             ]))));
         Assert.Equal(0, await RowsOfAsync(first));
     }
@@ -307,9 +313,9 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
     /// <summary>
     /// IDN-LIFE-002a AC1: a record of a sensitive type is registered only for a subject
-    /// holding an account, so a record naming nobody, one naming a subject the library
-    /// holds no account for, and one naming an account being deleted are each refused,
-    /// and a type that is not sensitive needs no subject.
+    /// holding an account, so a record naming nobody is refused malformed, one naming a
+    /// subject the library holds no account for and one naming an account being deleted
+    /// are each refused invalid, and a type that is not sensitive needs no subject.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -331,7 +337,7 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
         Assert.Equal(
             "subject",
-            Invalid(Refused(await RegisteredAsync(
+            Malformed(Refused(await RegisteredAsync(
                 new ResourceRegistration(Reference(Document), written.Organization, workspace, null)))));
         Assert.Equal(
             "subject",

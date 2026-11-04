@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A registration of a record of a sensitive type naming no subject is refused 400
+  `api.request.malformed` naming `subject`, as a member it needs left out, rather than
+  422; one naming a subject that holds no account or person record able to hold it
+  stays 422 `api.request.invalid`.
 - `SearchForm.Of` gives the one form the staff search reads a name and a query in:
   NFKC on the library's pinned Unicode tables, the Arabic alef forms, teh marbuta and
   alef maksura written one way, harakat and tatweel removed, Arabic-Indic digits as
