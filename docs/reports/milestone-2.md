@@ -178,6 +178,10 @@ None.
 ### 5. Gate result
 
 - Fast checks on the release commit: green.
+- The pipeline's push run on 88424102 (41822810795): red in the unit tests.
+  `SearchIndexServiceTests.IDN_SRCH_003_AC7_PastTheCapacityNoIndexIsBuiltAsync` read the
+  alerts once the index was withheld, and the alert is raised just after. 8c7000ad waits for
+  both. The pull request's run on 88424102 (41822820169) was green.
 - Checks before the push: green. Every unit test passes (5201 in eleven projects); the
   commit-message, changelog and release gates pass over the range; the full-history
   secret scan finds nothing.
