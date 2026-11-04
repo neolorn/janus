@@ -351,7 +351,7 @@ for commit in $commits; do
   notes=$(mktemp -d)
   git show "${commit}:CHANGELOG.md" > "${notes}/CHANGELOG.md"
 
-  if told=$("$(dirname "$0")/release-notes.sh" "$added" "${notes}/CHANGELOG.md" "${notes}/notes" "${GITHUB_REPOSITORY:-neolorn/janus}"); then
+  if told=$("$(dirname "$0")/release-notes.sh" "$added" "${notes}/CHANGELOG.md" "${notes}/notes" "${GITHUB_REPOSITORY:-owner/repository}"); then
     echo "${commit}: ${told}"
   else
     echo "${commit}: ${told}"
