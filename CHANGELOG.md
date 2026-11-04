@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A navigation return whose binding or `state` fails, the sign-on's
+  (`GET /auth/signon/return`) and a social provider's continuation
+  (`GET /auth/providers/{provider}/return`), answers 302 to `/?error=auth.session.csrfinvalid`
+  on the application's own origin, rather than a 403 whose JSON body a person was left
+  on. Nothing is established, and no cookie is set. A request that is not a navigation
+  is still answered 403 `auth.session.csrfinvalid`.
 - `ConformanceSuite.TruthTableAsync` refuses, before anything is written, a table over a
   type whose records register with a subject, a sensitive type or one declaring
   `Subject`, or over a type contained in one: the exception names the type. The table

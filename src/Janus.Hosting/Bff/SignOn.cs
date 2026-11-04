@@ -184,7 +184,9 @@ internal sealed class SignOn(
         {
             BrowserProfileLog.SignOnUnbound(log, context.TraceIdentifier);
 
-            return Answers.Refused(ErrorCodes.SessionCsrfInvalid);
+            // BFF-SESS-006, BFF-ERR-001 (D-259): the return is a top-level navigation, so it
+            // goes to the application's root with the code rather than to a page of JSON.
+            return Results.Redirect(NavigationReturn.Unbound());
         }
 
         // BFF-SESS-006 AC3: the return is judged once, so the attempt is forgotten
@@ -198,7 +200,7 @@ internal sealed class SignOn(
         {
             BrowserProfileLog.SignOnStateRejected(log, context.TraceIdentifier);
 
-            return Answers.Refused(ErrorCodes.SessionCsrfInvalid);
+            return Results.Redirect(NavigationReturn.Unbound());
         }
 
         // BFF-ERR-001 AC5, chapter 09: an authorization response's error reaches here

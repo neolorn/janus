@@ -1929,16 +1929,20 @@ GET /auth/providers/apple
     error api.request.malformed auth.factor.notpermitted auth.provider.unavailable auth.session.expired auth.stepup.required authz.denied authz.restricted identity.registration.signedin
   403 auth.session.csrfinvalid
 GET /auth/providers/apple/return
+  302
+    error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.csrfinvalid auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
   303
-    error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
+    error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.csrfinvalid auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
   403 auth.session.csrfinvalid
 GET /auth/providers/google
   303
     error api.request.malformed auth.factor.notpermitted auth.provider.unavailable auth.session.expired auth.stepup.required authz.denied authz.restricted identity.registration.signedin
   403 auth.session.csrfinvalid
 GET /auth/providers/google/return
+  302
+    error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.csrfinvalid auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
   303
-    error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
+    error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.csrfinvalid auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
   403 auth.session.csrfinvalid
 POST /auth/restore
   request application/json
@@ -2002,7 +2006,7 @@ GET /auth/signon
   403 auth.session.csrfinvalid
 GET /auth/signon/return
   302
-    error auth.session.expired
+    error auth.session.csrfinvalid auth.session.expired
   403 auth.session.csrfinvalid
 POST /auth/step-up
   request application/json

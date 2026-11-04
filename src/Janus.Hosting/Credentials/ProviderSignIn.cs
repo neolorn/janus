@@ -224,7 +224,10 @@ internal sealed class ProviderSignIn(
         {
             BrowserProfileLog.ProviderUnbound(log, context.TraceIdentifier);
 
-            return Answers.Refused(ErrorCodes.SessionCsrfInvalid);
+            // BFF-ERR-001, IDN-LIFE-012 (D-259): the continuation is a top-level navigation,
+            // so it goes to the application's root with the code rather than to a page of
+            // JSON.
+            return Results.Redirect(NavigationReturn.Unbound());
         }
 
         if (state is not { Length: > 0 } presented
@@ -234,7 +237,7 @@ internal sealed class ProviderSignIn(
         {
             BrowserProfileLog.ProviderStateRejected(log, context.TraceIdentifier);
 
-            return Answers.Refused(ErrorCodes.SessionCsrfInvalid);
+            return Results.Redirect(NavigationReturn.Unbound());
         }
 
         // AUTH-ABUSE-001 AC12: an address that has earned a delay is sent back first,

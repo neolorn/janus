@@ -85,7 +85,7 @@ internal static class ProviderSignInEndpoints
                     string? error,
                     CancellationToken cancellationToken) =>
                     signIn.ReturnAsync(context, provider, code, state, error, cancellationToken))
-                .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid).Carrying(
+                .Declares(EndpointDeclaration.Answering().Carrying(
                     ErrorCodes.Throttled,
                     ErrorCodes.ProviderUnavailable,
                     ErrorCodes.FactorRejected,
@@ -101,8 +101,10 @@ internal static class ProviderSignInEndpoints
                     ErrorCodes.RestrictionExceeded,
                     ErrorCodes.StepUpRequired,
                     ErrorCodes.Restricted,
-                    ErrorCodes.Denied))
-                .Produces(StatusCodes.Status303SeeOther);
+                    ErrorCodes.Denied,
+                    ErrorCodes.SessionCsrfInvalid))
+                .Produces(StatusCodes.Status303SeeOther)
+                .Produces(StatusCodes.Status302Found);
 
             _ = endpoints.MapMethods(
                 Return + route + Returned,

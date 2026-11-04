@@ -36,7 +36,7 @@ internal static class SignOnEndpoints
             .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid).Carrying(ErrorCodes.SessionExpired))
             .Produces(StatusCodes.Status302Found);
         _ = endpoints.MapGet(SignOn.ReturnPath, ReturnAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid).Carrying(ErrorCodes.SessionExpired))
+            .Declares(EndpointDeclaration.Answering().Carrying(ErrorCodes.SessionExpired, ErrorCodes.SessionCsrfInvalid))
             .Produces(StatusCodes.Status302Found);
 
         return endpoints;

@@ -163,6 +163,7 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
             ErrorCodes.StepUpRequired,
             ErrorCodes.Restricted,
             ErrorCodes.Denied,
+            ErrorCodes.SessionCsrfInvalid,
         ];
         RouteEndpoint[] mounted = [.. _deployment.Endpoints.OfType<RouteEndpoint>()];
 
@@ -174,21 +175,26 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-006 AC3: both routes of the sign-on declare the one code chapter 09
-    /// gives them to carry in the query member <c>error</c> of their redirect, and
-    /// answer it in no body.
+    /// CONV-DESIGN-006 AC3: both routes of the sign-on declare the codes chapter 09 gives
+    /// them to carry in the query member <c>error</c> of their redirect, and answer them
+    /// in no body: the start the one of a session that is not there, and the return that
+    /// one and the one of a return whose binding or state fails (D-259).
     /// </summary>
     [Fact]
     public void CONV_DESIGN_006_AC3_TheSignOnDeclaresTheCodeItsRedirectCarries()
     {
         RouteEndpoint[] mounted = [.. _deployment.Endpoints.OfType<RouteEndpoint>()];
 
-        foreach (string route in new[] { "GET /auth/signon", "GET /auth/signon/return" })
+        foreach ((string route, ErrorCode[] carried) in new[]
         {
-            Assert.Equal([ErrorCodes.SessionExpired], Carried(mounted, route));
-            Assert.DoesNotContain(
-                ErrorCodes.SessionExpired,
-                EndpointDeclaration.Of(Assert.Single(mounted, candidate => Named(candidate) == route))!.Codes);
+            ("GET /auth/signon", new[] { ErrorCodes.SessionExpired }),
+            ("GET /auth/signon/return", [ErrorCodes.SessionExpired, ErrorCodes.SessionCsrfInvalid]),
+        })
+        {
+            Assert.Equal(carried, Carried(mounted, route));
+            Assert.Empty(
+                EndpointDeclaration.Of(Assert.Single(mounted, candidate => Named(candidate) == route))!.Codes
+                    .Intersect(carried));
         }
     }
 
