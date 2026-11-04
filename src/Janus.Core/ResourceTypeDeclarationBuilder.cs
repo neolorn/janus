@@ -10,7 +10,7 @@ namespace Janus.Core;
 /// than a permission that quietly stops matching.
 /// </summary>
 /// <typeparam name="TResource">The host's own type.</typeparam>
-/// <remarks>Implements AUTHZ-MODEL-001 and AUTHZ-MODEL-003.</remarks>
+/// <remarks>Implements AUTHZ-MODEL-001 and AUTHZ-MODEL-003 (D-257).</remarks>
 public sealed class ResourceTypeDeclarationBuilder<TResource>
 {
     private readonly List<Permission> _capabilities = [];
@@ -23,6 +23,7 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
     private bool _belongsToOrganization;
     private ConcealmentBehaviour _concealment = ConcealmentBehaviour.Conceal;
     private ResourceType? _containedIn;
+    private string? _subject;
 
     internal ResourceTypeDeclarationBuilder(ResourceType name) => _name = name;
 
@@ -157,6 +158,24 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
     }
 
     /// <summary>
+    /// Declares the column naming the data subject of this type's records, for a type
+    /// whose data about the subject is held in its own plain columns and no encrypted
+    /// field names one. The host registers each record with the subject read from it,
+    /// and a purpose resting on consent may then rest on this type. It encrypts nothing.
+    /// </summary>
+    /// <param name="column">The member naming the subject.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The expression is absent.</exception>
+    /// <exception cref="ArgumentException">The expression names no member.</exception>
+    /// <remarks>Implements AUTHZ-MODEL-003 (D-257).</remarks>
+    public ResourceTypeDeclarationBuilder<TResource> Subject(Expression<Func<TResource, object?>> column)
+    {
+        _subject = DeclaredMember.Of(column);
+
+        return this;
+    }
+
+    /// <summary>
     /// Declares that whoever holds a declared relationship in the host's own data
     /// holds a role on this type, with no grant written and nothing to keep in sync.
     /// </summary>
@@ -212,5 +231,6 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
             _purposes,
             _derivations,
             _encrypted,
-            _capabilities);
+            _capabilities,
+            _subject);
 }

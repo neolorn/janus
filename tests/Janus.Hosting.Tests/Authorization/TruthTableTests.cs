@@ -45,6 +45,7 @@ namespace Janus.Hosting.Tests.Authorization;
 [Trait("kind", "integration")]
 public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixture>
 {
+    private static readonly ResourceType Customer = ResourceType.Parse("customer");
     private static readonly ResourceType Document = ResourceType.Parse("document");
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
     private static readonly ResourceType Undeclared = ResourceType.Parse("ledger");
@@ -305,6 +306,19 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a record that names no data subject", Decided.ConsentRequired),
     ];
 
+    // An action bound to a consent-based purpose on a customer, a type that names its
+    // data subject through Subject and declares no encrypted field: the consent the gate
+    // reads is the one of the subject the record was registered with, and the caller,
+    // who holds the grant in every case, is not that subject (AUTHZ-MODEL-003 AC3,
+    // PRIV-SENS-002a AC5, D-257).
+    private static readonly (string Scenario, Decided Decided)[] SubjectConsents =
+    [
+        ("a consent of the customer the record was registered with", Decided.Allowed),
+        ("no consent", Decided.ConsentRequired),
+        ("a consent the customer withdrew", Decided.ConsentRequired),
+        ("a consent of the caller alone", Decided.ConsentRequired),
+    ];
+
     // A host's declared job asking a host permission on a record. While a request is
     // served, through either profile or neither and in a scope opened within the
     // request, the check and both renderings are refused with the code the check
@@ -543,6 +557,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     public static TheoryData<string, Decided> ConsentCases => Read(Consents);
 
     /// <summary>
+    /// The consents' table over a type naming its subject, as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> SubjectConsentCases => Read(SubjectConsents);
+
+    /// <summary>
     /// The jobs' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> JobCases => Read(Jobs);
@@ -696,6 +715,54 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(decided, await ChecksAsync(written));
         Assert.Equal(listed, await ExpressionAdmitsAsync(written));
         Assert.Equal(listed, await FragmentAdmitsAsync(written));
+    }
+
+    /// <summary>
+    /// AUTHZ-MODEL-003 AC3, PRIV-SENS-002a AC5 (D-257): every case of the consents' table
+    /// over a type naming its subject through <c>Subject</c> decides the way the table
+    /// says through the single check, reading the registered subject's consent alone.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(SubjectConsentCases))]
+    public async Task AUTHZ_MODEL_003_AC3_EverySubjectConsentCaseDecidesTheWayTheTableSaysThroughTheCheckAsync(
+        string scenario,
+        Decided decided)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read, HostPermissions.Recommend], cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        SubjectId customer = await deployment.AccountAsync(cancellationToken);
+        ResourceReference record = Reference(Customer);
+
+        await deployment.RegisterAsync(record, containedIn: null, cancellationToken, customer);
+        await deployment.GrantAsync(GrantSubject.Of(account), role, record, false, null, null, cancellationToken);
+
+        switch (scenario)
+        {
+            case "a consent of the customer the record was registered with":
+                await ConsentedAsync(customer);
+                break;
+            case "a consent the customer withdrew":
+                await ConsentedAsync(customer);
+                await EndedAsync(customer, withdrawn: true);
+                break;
+            case "a consent of the caller alone":
+                await ConsentedAsync(account);
+                break;
+            case "no consent":
+                break;
+            default:
+                throw new InvalidOperationException("The subject consents' table holds a case nothing writes.");
+        }
+
+        Assert.Equal(
+            decided,
+            await ChecksAsync(new Case(host, deployment, account, record, record, record, record, HostPermissions.Recommend)));
     }
 
     /// <summary>

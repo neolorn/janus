@@ -2834,7 +2834,7 @@ Janus.Core.ResourceTypeDeclaration.Concealment.get -> Janus.Core.ConcealmentBeha
 Janus.Core.ResourceTypeDeclaration.Concealment.init -> void
 Janus.Core.ResourceTypeDeclaration.ContainedIn.get -> Janus.Core.ResourceType?
 Janus.Core.ResourceTypeDeclaration.ContainedIn.init -> void
-Janus.Core.ResourceTypeDeclaration.Deconstruct(out Janus.Core.ResourceType Name, out System.Type! Entity, out Janus.Core.ResourceType? ContainedIn, out bool BelongsToOrganization, out Janus.Core.ConcealmentBehaviour Concealment, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, out System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>! Purposes, out System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>! Derivations, out System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>! EncryptedFields, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Capabilities) -> void
+Janus.Core.ResourceTypeDeclaration.Deconstruct(out Janus.Core.ResourceType Name, out System.Type! Entity, out Janus.Core.ResourceType? ContainedIn, out bool BelongsToOrganization, out Janus.Core.ConcealmentBehaviour Concealment, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, out System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>! Purposes, out System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>! Derivations, out System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>! EncryptedFields, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Capabilities, out string? Subject) -> void
 Janus.Core.ResourceTypeDeclaration.Derivations.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>!
 Janus.Core.ResourceTypeDeclaration.Derivations.init -> void
 Janus.Core.ResourceTypeDeclaration.EncryptedFields.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>!
@@ -2846,9 +2846,11 @@ Janus.Core.ResourceTypeDeclaration.Name.get -> Janus.Core.ResourceType
 Janus.Core.ResourceTypeDeclaration.Name.init -> void
 Janus.Core.ResourceTypeDeclaration.Purposes.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>!
 Janus.Core.ResourceTypeDeclaration.Purposes.init -> void
-Janus.Core.ResourceTypeDeclaration.ResourceTypeDeclaration(Janus.Core.ResourceType Name, System.Type! Entity, Janus.Core.ResourceType? ContainedIn, bool BelongsToOrganization, Janus.Core.ConcealmentBehaviour Concealment, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>! Purposes, System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>! Derivations, System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>! EncryptedFields, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Capabilities) -> void
+Janus.Core.ResourceTypeDeclaration.ResourceTypeDeclaration(Janus.Core.ResourceType Name, System.Type! Entity, Janus.Core.ResourceType? ContainedIn, bool BelongsToOrganization, Janus.Core.ConcealmentBehaviour Concealment, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>! Purposes, System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>! Derivations, System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>! EncryptedFields, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Capabilities, string? Subject) -> void
 Janus.Core.ResourceTypeDeclaration.SensitiveCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.ResourceTypeDeclaration.SensitiveCategories.init -> void
+Janus.Core.ResourceTypeDeclaration.Subject.get -> string?
+Janus.Core.ResourceTypeDeclaration.Subject.init -> void
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.BelongsToOrganization() -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Capabilities(params System.Collections.Generic.IReadOnlyList<string!>! permissions) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
@@ -2858,6 +2860,7 @@ Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Discloses() -> Janus.Core.R
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject, string! category, string? name = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null, Janus.Core.ConsentKind? consent = null, string? document = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Sensitive(string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
+Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Subject(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! column) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.Restriction
 Janus.Core.Restriction.<Clone>$() -> Janus.Core.Restriction!
 Janus.Core.Restriction.Buckets.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Bucket!>!

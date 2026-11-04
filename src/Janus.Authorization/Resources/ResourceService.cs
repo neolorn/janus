@@ -321,9 +321,11 @@ internal sealed class ResourceService(
             return Invalid("containedIn");
         }
 
-        // IDN-LIFE-002a AC1, AUTHZ-INHERIT-002: a record of a sensitive type is about
-        // somebody, so a registration naming nobody lacks a member it needs.
-        if (registration.Subject is null && declared.SensitiveCategories.Count > 0)
+        // IDN-LIFE-002a AC1, AUTHZ-INHERIT-002 (D-257): a record of a sensitive type,
+        // and one of a type that names its subject through Subject, is about somebody,
+        // so a registration naming nobody lacks a member it needs.
+        if (registration.Subject is null
+            && (declared.SensitiveCategories.Count > 0 || declared.Subject is not null))
         {
             return Malformed("subject");
         }

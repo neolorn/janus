@@ -47,6 +47,7 @@ internal sealed record SerializedModel(
     /// <param name="Purposes">What it is processed for.</param>
     /// <param name="Derivations">The relationships that confer a role on it.</param>
     /// <param name="EncryptedFields">Its encrypted fields.</param>
+    /// <param name="Subject">The column naming its records' data subject, where <c>Subject</c> names it.</param>
     internal sealed record Type(
         string Name,
         string? ContainedIn,
@@ -55,7 +56,8 @@ internal sealed record SerializedModel(
         IReadOnlyList<string> SensitiveCategories,
         IReadOnlyList<Purpose> Purposes,
         IReadOnlyList<Derivation> Derivations,
-        IReadOnlyList<Field> EncryptedFields);
+        IReadOnlyList<Field> EncryptedFields,
+        string? Subject);
 
     /// <summary>
     /// One purpose, the basis it rests on and what it requires.

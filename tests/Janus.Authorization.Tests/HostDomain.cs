@@ -64,6 +64,9 @@ internal static class HostDomain
 
         /// <summary>The subject whose key the body is held under.</summary>
         public SubjectId Author { get; init; }
+
+        /// <summary>The subject who last edited it.</summary>
+        public SubjectId Editor { get; init; }
     }
 
     /// <summary>

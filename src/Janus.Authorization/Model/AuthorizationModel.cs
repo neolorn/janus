@@ -508,7 +508,8 @@ internal sealed class AuthorizationModel
                     derivation.Relationship, derivation.Role.ToString(), derivation.Materialised))],
             [.. type.EncryptedFields
                 .OrderBy(field => field.Field, StringComparer.Ordinal)
-                .Select(field => new SerializedModel.Field(field.Field, field.SubjectColumn))]);
+                .Select(field => new SerializedModel.Field(field.Field, field.SubjectColumn))],
+            type.Subject);
 
     private static SerializedModel.Relationship Serialized(RelationshipDeclaration relationship) =>
         new(
@@ -630,9 +631,43 @@ internal sealed class AuthorizationModel
         CheckContainment(type, types);
         CheckOrganizationPath(type, types);
         CheckSensitivity(type, categories);
+        CheckSubject(type);
         CheckPurposes(type, bases, floors);
         CheckDerivations(type, relationships);
         CheckEncryptedFields(type);
+    }
+
+    // AUTHZ-MODEL-003 (D-257): a type naming its subject through Subject names one
+    // subject for its records, so the column holds a subject and every encrypted field
+    // names that column; a field naming another would encrypt under somebody the gate
+    // never reads.
+    private static void CheckSubject(ResourceTypeDeclaration type)
+    {
+        if (type.Subject is not string column)
+        {
+            return;
+        }
+
+        Type held = Held(type, column);
+
+        if ((Nullable.GetUnderlyingType(held) ?? held) != typeof(SubjectId))
+        {
+            throw Malformed("the type " + type.Name + " names its subject in " + column + ", which names no subject");
+        }
+
+        foreach (EncryptedFieldDeclaration field in type.EncryptedFields)
+        {
+            if (!string.IsNullOrWhiteSpace(field.SubjectColumn)
+                && !string.Equals(field.SubjectColumn, column, StringComparison.Ordinal))
+            {
+                throw Refused(
+                    ErrorCodes.StartupDeclarationInvalid,
+                    "key",
+                    type.Name.ToString(),
+                    "the type names its subject in " + column + " and its encrypted field "
+                    + field.Field + " names another");
+            }
+        }
     }
 
     // A floor for a category no purpose is over governs nothing, and is most often
@@ -851,11 +886,12 @@ internal sealed class AuthorizationModel
                 }
             }
 
-            // PRIV-SENS-002 AC1: the consent the gate reads is the record's data
-            // subject's, resolved from the column the type declares for its encrypted
-            // fields. A consent-based purpose on a type that names no such column, or
-            // names two, leaves the gate with nobody's consent to read, so the
-            // deployment stops here rather than admitting the action on nobody's.
+            // PRIV-SENS-002 AC1, AUTHZ-MODEL-003 (D-257): the consent the gate reads is
+            // the record's data subject's, resolved from the type's subject column, the
+            // one Subject names or the one its encrypted fields name. A consent-based
+            // purpose on a type that names no such column, or whose fields name two,
+            // leaves the gate with nobody's consent to read, so the deployment stops
+            // here rather than admitting the action on nobody's.
             if (basis.IsConsent && SubjectColumn(type) is null)
             {
                 throw Refused(
@@ -863,7 +899,7 @@ internal sealed class AuthorizationModel
                     "key",
                     type.Name + "." + purpose.Name,
                     "the purpose rests on consent and the type names no one column as "
-                    + "the subject of its encrypted fields");
+                    + "the subject of its records");
             }
         }
     }
@@ -871,11 +907,16 @@ internal sealed class AuthorizationModel
     private static string Compared(string name) =>
         string.Concat(name.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant));
 
-    // PRIV-RIGHT-005a: one record has one data subject, so the encrypted fields of a
-    // type name one column between them; a type naming two names no data subject the
-    // consent gate could read.
+    // PRIV-RIGHT-005a, AUTHZ-MODEL-003 (D-257): one record has one data subject, named
+    // by Subject or by its encrypted fields, which then name one column between them;
+    // a type whose fields name two names no data subject the consent gate could read.
     internal static string? SubjectColumn(ResourceTypeDeclaration type)
     {
+        if (type.Subject is string column)
+        {
+            return column;
+        }
+
         string? named = null;
 
         foreach (EncryptedFieldDeclaration field in type.EncryptedFields)

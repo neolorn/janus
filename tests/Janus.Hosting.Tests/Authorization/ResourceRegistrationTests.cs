@@ -20,6 +20,7 @@ namespace Janus.Hosting.Tests.Authorization;
 [Trait("kind", "integration")]
 public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<HostFixture>
 {
+    private static readonly ResourceType Customer = ResourceType.Parse("customer");
     private static readonly ResourceType Document = ResourceType.Parse("document");
     private static readonly ResourceType Note = ResourceType.Parse("note");
     private static readonly ResourceType Report = ResourceType.Parse("report");
@@ -359,6 +360,34 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
     }
 
     /// <summary>
+    /// AUTHZ-INHERIT-002 AC7 (D-257): a record of a type that declares <c>Subject</c> and is
+    /// not sensitive, registered naming no subject, is refused malformed naming
+    /// <c>subject</c> and writes nothing; naming one, it is registered with that subject.
+    /// A record of a type that neither is sensitive nor declares <c>Subject</c> is
+    /// registered naming no subject.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC7_ATypeNamingItsSubjectIsRegisteredOnlyWithOneAsync()
+    {
+        Case written = await BeginAsync();
+        ResourceReference nobodys = Reference(Customer);
+        ResourceReference held = Reference(Customer);
+        ResourceReference report = Reference(Report);
+
+        Assert.Equal(
+            "subject",
+            Malformed(Refused(await RegisteredAsync(new ResourceRegistration(nobodys, written.Organization, null, null)))));
+        Assert.Equal(0, await RowsOfAsync(nobodys));
+
+        Ok(await RegisteredAsync(new ResourceRegistration(held, written.Organization, null, written.Account)));
+        Ok(await RegisteredAsync(new ResourceRegistration(report, written.Organization, null, null)));
+
+        Assert.Equal(written.Account.Value, await SubjectOfAsync(held));
+        Assert.Equal(1, await RowsOfAsync(report));
+    }
+
+    /// <summary>
     /// REC-AGE-001 AC3, REC-COL-003 (D-221): a record staff entered without a date of
     /// birth holds no answer, and no sensitive record registers under it; one entered
     /// with the person's own answer does.
@@ -628,6 +657,15 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
         return await connection.QuerySingleAsync<int>(
             "SELECT count(*)::int FROM identity.resources WHERE resource_type = @type AND resource_id = @id;",
+            new { type = resource.Type.ToString(), id = resource.Id.ToString() });
+    }
+
+    private async Task<Guid?> SubjectOfAsync(ResourceReference resource)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<Guid?>(
+            "SELECT subject FROM identity.resources WHERE resource_type = @type AND resource_id = @id;",
             new { type = resource.Type.ToString(), id = resource.Id.ToString() });
     }
 

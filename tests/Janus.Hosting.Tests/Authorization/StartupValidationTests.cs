@@ -847,6 +847,51 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// LIB-HOST-001 AC9 (D-257): a resource type declared with <c>Subject</c> and no
+    /// encrypted field, carrying a purpose resting on consent, starts; one whose
+    /// <c>Subject</c> and encrypted field name different columns stops the start with
+    /// <c>model.startup.declarationinvalid</c>, <c>details.key</c> naming the type.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC9_ATypeNamingItsSubjectStartsAndOneWhoseFieldNamesAnotherIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var customer = ResourceType.Parse("customer");
+
+        using (IHost started = Deployed())
+        {
+            await started.StartAsync(cancellationToken);
+            await started.StopAsync(cancellationToken);
+        }
+
+        // The model is built as the library is registered, so the refusal comes before any
+        // start is asked.
+        StartupException refused = Assert.Throws<StartupException>(() => Deployed(model: declared => declared with
+        {
+            ResourceTypes =
+            [
+                .. declared.ResourceTypes.Select(type => type.Name == customer
+                    ? type with
+                    {
+                        EncryptedFields =
+                        [
+                            new EncryptedFieldDeclaration(
+                                nameof(HostCustomer.Note),
+                                nameof(HostCustomer.Referrer),
+                                "identity",
+                                nameof(HostCustomer.Note)),
+                        ],
+                    }
+                    : type),
+            ],
+        }).Dispose());
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("customer", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
     /// LIB-HOST-001 AC6: the authentication application is where the sign-in address
     /// is, so an authentication origin elsewhere is refused even where a browser client
     /// returns to it.
@@ -2085,7 +2130,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool landed = true,
         string source = "whole",
         bool materialised = false,
-        IReadOnlyList<RoleDeclaration>? roles = null) =>
+        IReadOnlyList<RoleDeclaration>? roles = null,
+        Func<AuthorizationDeclaration, AuthorizationDeclaration>? model = null) =>
         new HostBuilder()
             .ConfigureServices(services => Declared(
                 services,
@@ -2107,7 +2153,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 landed: landed,
                 source: source,
                 materialised: materialised,
-                roles: roles))
+                roles: roles,
+                model: model))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -2135,7 +2182,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool materialised = false,
         IReadOnlyList<CookieDeclaration>? cookies = null,
         IReadOnlyList<RoleDeclaration>? roles = null,
-        IReadOnlyList<JobDeclaration>? jobs = null)
+        IReadOnlyList<JobDeclaration>? jobs = null,
+        Func<AuthorizationDeclaration, AuthorizationDeclaration>? model = null)
     {
         Sourced(services, connection ?? host.ConnectionString, source);
 
@@ -2210,14 +2258,16 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             services.AddSingleton<ISecretSource>(secrets ?? HostFixture.Secrets(host.MaintenanceConnectionString));
         }
 
+        AuthorizationDeclaration declared = HostFixture.Declaration(materialised, document) with
+        {
+            Cookies = cookies ?? [],
+            Roles = roles ?? [],
+            Jobs = jobs ?? [],
+        };
+
         return services.AddJanus(
             connection ?? host.ConnectionString,
-            HostFixture.Declaration(materialised, document) with
-            {
-                Cookies = cookies ?? [],
-                Roles = roles ?? [],
-                Jobs = jobs ?? [],
-            },
+            model is null ? declared : model(declared),
             ApplicationKind.Public);
     }
 
