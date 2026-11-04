@@ -106,6 +106,8 @@ public sealed class VocabularyContractTests
         "domain-removed",
         "governing-language-changed",
         "governing-text-missing",
+        "search-capacity",
+        "search-unsafe",
     ];
 
     /// <summary>

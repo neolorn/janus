@@ -55,6 +55,35 @@ internal sealed class ReadAdmissionInMemory(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<Permission>>> ReadableAsync(
+        AccessContext context,
+        IReadOnlyList<Permission> permissions,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        List<Permission> admitted =
+        [
+            .. permissions.Where(permission => Admits(context, permission, organization)
+                || (context.Principal is null
+                    && administrative.Organization is OrganizationId administering
+                    && Admits(context, permission, administering))),
+        ];
+
+        if (admitted.Count > 0)
+        {
+            return Result.Success<IReadOnlyList<Permission>>(admitted);
+        }
+
+        return await RefusedAsync(context, permissions[0], organization, cancellationToken).ConfigureAwait(false)
+            is Error refused
+            ? Result.Failure<IReadOnlyList<Permission>>(refused)
+            : Result.Success<IReadOnlyList<Permission>>([permissions[0]]);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result<ReadableOrganizations>> ListedAsync(
         AccessContext context,
         Permission permission,

@@ -119,4 +119,15 @@ public enum AlertCondition
     /// <summary>A document has no text in the governing language.</summary>
     [JsonStringEnumMemberName("governing-text-missing")]
     GoverningTextMissing = 25,
+
+    /// <summary>
+    /// The subjects to index pass <c>search.maxsubjects</c>, so the staff search's index is
+    /// not built.
+    /// </summary>
+    [JsonStringEnumMemberName("search-capacity")]
+    SearchCapacity = 26,
+
+    /// <summary>A memory check failed, so the staff search's index is not built.</summary>
+    [JsonStringEnumMemberName("search-unsafe")]
+    SearchUnsafe = 27,
 }

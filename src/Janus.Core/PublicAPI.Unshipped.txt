@@ -5356,3 +5356,55 @@ Janus.Core.AssignableRole.Deconstruct(out Janus.Core.RoleName Name, out bool Gra
 Janus.Core.AssignableRole.AssignableRole(Janus.Core.RoleName Name, bool GrantsMustEnd) -> void
 static Janus.Core.Configuration.Settings.OidcJwksRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.OidcDiscoveryRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
+Janus.Core.AlertCondition.SearchCapacity = 26 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.SearchUnsafe = 27 -> Janus.Core.AlertCondition
+static Janus.Core.ErrorCodes.SearchUnavailable.get -> Janus.Core.ErrorCode
+static Janus.Core.Configuration.Settings.SearchPerMinute.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.SearchMaxSubjects.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.SearchMemoryChecks.get -> Janus.Core.Configuration.ChoiceSetting<string!>!
+Janus.Core.ISearch
+Janus.Core.ISearch.SearchAsync(Janus.Core.AccessContext! context, Janus.Core.SearchQuery! query, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.SearchResult!>!>>
+Janus.Core.SearchKinds
+Janus.Core.SearchKinds.None = 0 -> Janus.Core.SearchKinds
+Janus.Core.SearchKinds.Accounts = 1 -> Janus.Core.SearchKinds
+Janus.Core.SearchKinds.Records = 2 -> Janus.Core.SearchKinds
+Janus.Core.SearchMatch
+Janus.Core.SearchMatch.Name = 0 -> Janus.Core.SearchMatch
+Janus.Core.SearchMatch.Email = 1 -> Janus.Core.SearchMatch
+Janus.Core.SearchMatch.Phone = 2 -> Janus.Core.SearchMatch
+Janus.Core.SearchQuery
+Janus.Core.SearchQuery.SearchQuery(Janus.Core.OrganizationId Organization, string! Text, Janus.Core.SearchKinds Kinds, int Limit) -> void
+Janus.Core.SearchQuery.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.SearchQuery.Organization.init -> void
+Janus.Core.SearchQuery.Text.get -> string!
+Janus.Core.SearchQuery.Text.init -> void
+Janus.Core.SearchQuery.Kinds.get -> Janus.Core.SearchKinds
+Janus.Core.SearchQuery.Kinds.init -> void
+Janus.Core.SearchQuery.Limit.get -> int
+Janus.Core.SearchQuery.Limit.init -> void
+Janus.Core.SearchQuery.<Clone>$() -> Janus.Core.SearchQuery!
+Janus.Core.SearchQuery.Deconstruct(out Janus.Core.OrganizationId Organization, out string! Text, out Janus.Core.SearchKinds Kinds, out int Limit) -> void
+Janus.Core.SearchQuery.Equals(Janus.Core.SearchQuery? other) -> bool
+override Janus.Core.SearchQuery.Equals(object? obj) -> bool
+override Janus.Core.SearchQuery.GetHashCode() -> int
+override Janus.Core.SearchQuery.ToString() -> string!
+static Janus.Core.SearchQuery.operator !=(Janus.Core.SearchQuery? left, Janus.Core.SearchQuery? right) -> bool
+static Janus.Core.SearchQuery.operator ==(Janus.Core.SearchQuery? left, Janus.Core.SearchQuery? right) -> bool
+Janus.Core.SearchResult
+Janus.Core.SearchResult.SearchResult(Janus.Core.SubjectId Subject, Janus.Core.SubjectKind Kind, string? DisplayName, Janus.Core.SearchMatch Matched) -> void
+Janus.Core.SearchResult.Subject.get -> Janus.Core.SubjectId
+Janus.Core.SearchResult.Subject.init -> void
+Janus.Core.SearchResult.Kind.get -> Janus.Core.SubjectKind
+Janus.Core.SearchResult.Kind.init -> void
+Janus.Core.SearchResult.DisplayName.get -> string?
+Janus.Core.SearchResult.DisplayName.init -> void
+Janus.Core.SearchResult.Matched.get -> Janus.Core.SearchMatch
+Janus.Core.SearchResult.Matched.init -> void
+Janus.Core.SearchResult.<Clone>$() -> Janus.Core.SearchResult!
+Janus.Core.SearchResult.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.SubjectKind Kind, out string? DisplayName, out Janus.Core.SearchMatch Matched) -> void
+Janus.Core.SearchResult.Equals(Janus.Core.SearchResult? other) -> bool
+override Janus.Core.SearchResult.Equals(object? obj) -> bool
+override Janus.Core.SearchResult.GetHashCode() -> int
+override Janus.Core.SearchResult.ToString() -> string!
+static Janus.Core.SearchResult.operator !=(Janus.Core.SearchResult? left, Janus.Core.SearchResult? right) -> bool
+static Janus.Core.SearchResult.operator ==(Janus.Core.SearchResult? left, Janus.Core.SearchResult? right) -> bool

@@ -10,4 +10,4 @@ namespace Janus.Authentication.Search;
 /// <param name="Kind">Whether it is an account or a person record.</param>
 /// <param name="Matched">Which field matched first, in the order name, email, phone.</param>
 /// <remarks>Implements IDN-SRCH-001 (D-256).</remarks>
-internal readonly record struct IndexHit(SubjectId Subject, SubjectKind Kind, MatchedField Matched);
+internal readonly record struct IndexHit(SubjectId Subject, SubjectKind Kind, SearchMatch Matched);

@@ -51,7 +51,7 @@ public sealed class SearchIndexTests
         IReadOnlyList<IndexHit> hits = index.Find([word], Everyone, 20);
 
         Assert.Equal([Ahmed.Subject], hits.Select(hit => hit.Subject));
-        Assert.Equal(MatchedField.Name, hits[0].Matched);
+        Assert.Equal(SearchMatch.Name, hits[0].Matched);
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ public sealed class SearchIndexTests
     /// appears inside.
     /// </summary>
     [Fact]
-    public void Find_AOneOrTwoLetterWord_MatchesANameWordItBegins()
+    public void IDN_SRCH_001_AC2_ATwoLetterWordMatchesOnlyANameWordItBegins()
     {
         using SearchIndex index = Index();
 
@@ -94,7 +94,7 @@ public sealed class SearchIndexTests
     [InlineData("hasan")]
     [InlineData("hassann")]
     [InlineData("hossan")]
-    public void Find_AWordOneEditFromANameWord_FindsTheName(string word)
+    public void IDN_SRCH_001_AC3_AWordOfFourOneEditFromANameWordFindsIt(string word)
     {
         using SearchIndex index = Index();
 
@@ -130,7 +130,7 @@ public sealed class SearchIndexTests
 
         IReadOnlyList<IndexHit> hits = index.Find(["9876"], Everyone, 20);
 
-        Assert.Equal([new IndexHit(Mohamed.Subject, SubjectKind.Account, MatchedField.Phone)], hits);
+        Assert.Equal([new IndexHit(Mohamed.Subject, SubjectKind.Account, SearchMatch.Phone)], hits);
     }
 
     /// <summary>
@@ -144,7 +144,7 @@ public sealed class SearchIndexTests
 
         IReadOnlyList<IndexHit> hits = index.Find(["nameless"], Everyone, 20);
 
-        Assert.Equal([new IndexHit(Unnamed.Subject, SubjectKind.Account, MatchedField.Email)], hits);
+        Assert.Equal([new IndexHit(Unnamed.Subject, SubjectKind.Account, SearchMatch.Email)], hits);
     }
 
     /// <summary>
@@ -152,7 +152,7 @@ public sealed class SearchIndexTests
     /// field answered is the first matched in the order name, email, phone.
     /// </summary>
     [Fact]
-    public void Find_SeveralWords_EachMustMatchAFieldOfTheSubject()
+    public void IDN_SRCH_001_AC5_EachWordMustMatchAFieldOfTheSubject()
     {
         using SearchIndex index = Index();
 
@@ -162,9 +162,9 @@ public sealed class SearchIndexTests
         IReadOnlyList<IndexHit> emailFirst = index.Find(["org", "3344"], Everyone, 20);
 
         Assert.Empty(across);
-        Assert.Equal([new IndexHit(Ahmed.Subject, SubjectKind.Account, MatchedField.Name)], named);
-        Assert.Equal([new IndexHit(Ahmed.Subject, SubjectKind.Account, MatchedField.Name)], contacts);
-        Assert.Equal([new IndexHit(Ahmed.Subject, SubjectKind.Account, MatchedField.Email)], emailFirst);
+        Assert.Equal([new IndexHit(Ahmed.Subject, SubjectKind.Account, SearchMatch.Name)], named);
+        Assert.Equal([new IndexHit(Ahmed.Subject, SubjectKind.Account, SearchMatch.Name)], contacts);
+        Assert.Equal([new IndexHit(Ahmed.Subject, SubjectKind.Account, SearchMatch.Email)], emailFirst);
     }
 
     /// <summary>
@@ -205,7 +205,7 @@ public sealed class SearchIndexTests
     /// answers accounts with no membership too.
     /// </summary>
     [Fact]
-    public void Find_InAnOrganization_AnswersItsMembersAndItsRecordsByKind()
+    public void IDN_SRCH_002_AC2_InAnOrganizationOnlyItsMembersAndRecordsAreAnswered()
     {
         using SearchIndex index = Index();
 
@@ -217,7 +217,7 @@ public sealed class SearchIndexTests
 
         Assert.Equal([Ahmed.Subject, Guest.Subject], clinic.Select(hit => hit.Subject));
         Assert.Equal([Ahmed.Subject], accounts.Select(hit => hit.Subject));
-        Assert.Equal([new IndexHit(Guest.Subject, SubjectKind.Record, MatchedField.Name)], records);
+        Assert.Equal([new IndexHit(Guest.Subject, SubjectKind.Record, SearchMatch.Name)], records);
         Assert.Equal([Ahmed.Subject], pharmacy.Select(hit => hit.Subject));
         Assert.Equal([Customer.Subject, Ahmed.Subject, Guest.Subject], everyone.Select(hit => hit.Subject));
     }

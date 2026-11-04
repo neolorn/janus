@@ -892,6 +892,32 @@ public static class Settings
         new("redirect.defaultclient", SettingScope.Protected, string.Empty);
 
     /// <summary>
+    /// Staff searches one caller is admitted with in a one-minute fixed window, counted
+    /// across the deployment (IDN-SRCH-002).
+    /// </summary>
+    public static IntegerSetting SearchPerMinute { get; } =
+        new("search.perminute", SettingScope.Runtime, 60, floor: 1, ceiling: 600, loosening: SettingDirection.Increase);
+
+    /// <summary>
+    /// The most subjects the staff search's index is built over; past it the index is not
+    /// built (IDN-SRCH-003).
+    /// </summary>
+    public static IntegerSetting SearchMaxSubjects { get; } =
+        new("search.maxsubjects", SettingScope.Protected, 200000, floor: 1, loosening: SettingDirection.Increase);
+
+    /// <summary>
+    /// Whether a failed memory check stops the staff search's index from being built
+    /// (<c>enforce</c>), or is logged at Warning while it is built anyway (<c>warn</c>); either way the
+    /// check raises <c>search-unsafe</c> (IDN-SRCH-003).
+    /// </summary>
+    public static ChoiceSetting<string> SearchMemoryChecks { get; } =
+        new(
+            "search.memorychecks",
+            SettingScope.Protected,
+            "enforce",
+            new[] { "enforce", "warn" }.ToFrozenSet(StringComparer.Ordinal));
+
+    /// <summary>
     /// The algorithm tokens are signed with. The one place the value is held.
     /// </summary>
     public static ChoiceSetting<string> TokenSigningAlgorithm { get; } =
@@ -1078,6 +1104,9 @@ public static class Settings
         OidcCodeLifetime,
         OidcContinuationLifetime,
         RedirectDefaultClient,
+        SearchPerMinute,
+        SearchMaxSubjects,
+        SearchMemoryChecks,
         TokenSigningAlgorithm,
         TokenSigningRotation,
     ];

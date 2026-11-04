@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Accounts;
+using Janus.Storage.Authentication.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Identity.Accounts;
@@ -152,6 +153,9 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        // IDN-SRCH-003 (D-256): an account registered is searched.
+        await SearchChannel.RaiseAsync(context, account.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -170,6 +174,10 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
         record.DeletingSince = account.DeletingSince;
         record.DeletionHeld = account.DeletionHeld;
         record.DeletionHeldSince = account.DeletionHeldSince;
+
+        // IDN-SRCH-003 (D-256): an account erased or taken down leaves the staff search's
+        // index, and one whose takedown is reversed returns to it.
+        await SearchChannel.RaiseAsync(context, account.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

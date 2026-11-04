@@ -15,7 +15,26 @@ against the public contract of LIB-API-001.
   alef maksura written one way, harakat and tatweel removed, Arabic-Indic digits as
   ASCII digits, Latin letters lowercased without their marks, and each run of
   whitespace and punctuation one space.
-
+- The staff search: `POST /admin/search` and `ISearch.SearchAsync` find accounts and
+  person records by part of a name, an email or a phone, a spelling variant or one typo,
+  under `contact:read` for accounts and `record:read` for records, in the organization
+  asked or, in the administrative organization, across the deployment. A result carries
+  its subject, its kind, its display name and the field that matched, and never an email
+  or phone value. A search past `search.perminute` is refused 429 `auth.throttled`, and
+  a process serving no index answers 503 `identity.search.unavailable` with
+  `details.reason` `off`, `building`, `capacity` or `unsafe`. No query or indexed value
+  reaches a log, and no audit row is written for a search.
+- An overload of `AddJanus` takes a fifth parameter, `StaffSearch`: `Served` builds the
+  staff search's index in that process, in memory alone, and keeps it current from the
+  database channel `identity_search`; `Off`, and the four-parameter `AddJanus`, serve no
+  search.
+- The keys `search.perminute` (R, 60), `search.maxsubjects` (P, 200000) and
+  `search.memorychecks` (P, `enforce` or `warn`), and the alerts `search-capacity` and
+  `search-unsafe`, raised where the subjects pass the capacity or a check that keeps the
+  index's memory off disk fails.
+- The table `identity.search_windows` holds each caller's searches a minute, its
+  migration `AddSearchWindows` granting the application role its reads and writes; an
+  account's erasure deletes its rows.
 - Giving a mailbox (`IInvitations.GiveMailboxAsync`) at an address the account does not
   hold yet, or holds as an add it began, no longer fails with `system.fault` on
   PostgreSQL: the address takes the primary in the same write that takes it on, so

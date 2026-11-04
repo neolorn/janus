@@ -21,6 +21,7 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Records;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
+using Janus.Authentication.Search;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
@@ -69,6 +70,7 @@ using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Records;
 using Janus.Storage.Authentication.Recovery;
 using Janus.Storage.Authentication.Registration;
+using Janus.Storage.Authentication.Search;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authentication.SignIn;
@@ -340,6 +342,12 @@ internal static class StorageRegistration
         services.AddScoped<IRoleHandOut, RoleHandOut>();
         services.AddScoped<IApproverReach, ApproverReach>();
         services.AddScoped<IReadAdmission, ReadAdmission>();
+
+        // IDN-SRCH-001 to IDN-SRCH-003 (D-256): what the staff search reads, counts and
+        // listens to.
+        services.AddScoped<ISearchSubjects, SearchSubjectStore>();
+        services.AddScoped<ISearchWindows, SearchWindows>();
+        services.AddSingleton<ISearchChannel>(_ => new SearchSignals(connectionString));
         services.AddScoped<IResourceStore, ResourceStore>();
         services.AddScoped<IDataSubjects, DataSubjects>();
 

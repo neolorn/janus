@@ -28,6 +28,14 @@ internal sealed class ReadAdmission(IOrganizationReadAdmission admission, IMembe
             .Match<Error?>(() => null, error => error);
 
     /// <inheritdoc/>
+    public ValueTask<Result<IReadOnlyList<Permission>>> ReadableAsync(
+        AccessContext context,
+        IReadOnlyList<Permission> permissions,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        admission.ReadableAsync(context, permissions, organization, cancellationToken);
+
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<ReadableOrganizations>> ListedAsync(
         AccessContext context,

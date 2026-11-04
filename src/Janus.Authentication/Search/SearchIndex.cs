@@ -234,9 +234,9 @@ internal sealed class SearchIndex : IDisposable
 
     /// <summary>
     /// Overwrites every value and slice the index holds with zeros, as one swapped out
-    /// for a rebuilt index is.
+    /// for a rebuilt index is; a search that still reads it finds nothing.
     /// </summary>
-    public void Dispose()
+    public void Clear()
     {
         _guard.EnterWriteLock();
 
@@ -253,7 +253,14 @@ internal sealed class SearchIndex : IDisposable
         {
             _guard.ExitWriteLock();
         }
+    }
 
+    /// <summary>
+    /// Overwrites the index, as the process stops, and lets its guard go.
+    /// </summary>
+    public void Dispose()
+    {
+        Clear();
         _guard.Dispose();
     }
 
@@ -263,8 +270,8 @@ internal sealed class SearchIndex : IDisposable
     private static ulong Slice(ulong kind, char first, char second, char third) =>
         kind | ((ulong)first << 32) | ((ulong)second << 16) | third;
 
-    private static MatchedField? Matched(bool name, bool email, bool phone) =>
-        name ? MatchedField.Name : email ? MatchedField.Email : phone ? MatchedField.Phone : null;
+    private static SearchMatch? Matched(bool name, bool email, bool phone) =>
+        name ? SearchMatch.Name : email ? SearchMatch.Email : phone ? SearchMatch.Phone : null;
 
     private static bool Visible(IndexEntry entry, IndexScope scope) =>
         (entry.Kind == SubjectKind.Account ? scope.Accounts : scope.Records)
@@ -329,7 +336,7 @@ internal sealed class SearchIndex : IDisposable
         {
             IndexEntry entry = _entries[next];
 
-            if (Visible(entry, scope) && Matches(entry, words) is MatchedField matched)
+            if (Visible(entry, scope) && Matches(entry, words) is SearchMatch matched)
             {
                 hits.Add(new IndexHit(entry.Subject, entry.Kind, matched));
             }
@@ -371,7 +378,7 @@ internal sealed class SearchIndex : IDisposable
     }
 
     // Which field matched first where every word matches one of the entry's fields.
-    private MatchedField? Matches(IndexEntry entry, IReadOnlyList<string> words)
+    private SearchMatch? Matches(IndexEntry entry, IReadOnlyList<string> words)
     {
         bool name = false;
         bool email = false;

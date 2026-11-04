@@ -10,7 +10,7 @@ namespace Janus.Core.Tests;
 public sealed class SearchFormTests
 {
     /// <summary>
-    /// IDN-SRCH-001 AC1: a name written with teh marbuta or heh, alef maksura or yeh, an
+    /// A name written with teh marbuta or heh, alef maksura or yeh, an
     /// alef with a hamza or a madda or the bare alef, with harakat or a tatweel or
     /// without, reads as one form.
     /// </summary>
@@ -26,7 +26,7 @@ public sealed class SearchFormTests
     [InlineData("مُحَمَّد", "محمد")]
     [InlineData("محـــمد", "محمد")]
     [InlineData("عليٰ", "علي")]
-    public void IDN_SRCH_001_AC1_ArabicSpellingVariantsReadAsOneForm(string written, string other) =>
+    public void Of_ArabicSpellingVariants_ReadAsOneForm(string written, string other) =>
         Assert.Equal(SearchForm.Of(other), SearchForm.Of(written));
 
     /// <summary>

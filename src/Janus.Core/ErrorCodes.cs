@@ -637,6 +637,15 @@ public static class ErrorCodes
     public static ErrorCode PhotoNotFound { get; } = ErrorCode.Parse("identity.photo.notfound");
 
     /// <summary>
+    /// The process does not serve the staff search: its registration does not declare
+    /// it, its index is still building, the subjects to index pass
+    /// <c>search.maxsubjects</c>, or a memory check failed; <c>details.reason</c> says
+    /// which. Ask a process that serves the search, or ask again once the index is built.
+    /// </summary>
+    /// <remarks>Implements IDN-SRCH-003, chapter 10 section 1.1 (D-256).</remarks>
+    public static ErrorCode SearchUnavailable { get; } = ErrorCode.Parse("identity.search.unavailable");
+
+    /// <summary>
     /// A second username change fell inside <c>identifiers.username.changecooloff</c>.
     /// Repeat it after the end the details carry.
     /// </summary>

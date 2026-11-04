@@ -12,6 +12,7 @@ using Janus.Hosting.Privacy;
 using Janus.Hosting.Records;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Search;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Microsoft.AspNetCore.Builder;
@@ -81,6 +82,7 @@ public static class IdentityEndpoints
         _ = library.MapGroups();
         _ = library.MapRecords();
         _ = library.MapOrganizations();
+        _ = library.MapSearch();
 
         return endpoints;
     }

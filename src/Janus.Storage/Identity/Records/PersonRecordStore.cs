@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Records;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Search;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
@@ -108,6 +109,9 @@ internal sealed class PersonRecordStore(
         await CarryAsync(record, row, cancellationToken).ConfigureAwait(false);
 
         await context.PersonRecords.AddAsync(row, cancellationToken).ConfigureAwait(false);
+
+        // IDN-SRCH-003 (D-256): a record collected or entered is searched.
+        await SearchChannel.RaiseAsync(context, record.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -121,6 +125,10 @@ internal sealed class PersonRecordStore(
             ?? throw new InvalidOperationException("The person record has no row to carry what it holds.");
 
         await CarryAsync(record, row, cancellationToken).ConfigureAwait(false);
+
+        // IDN-SRCH-003 (D-256): a record corrected, attached, erased or taken down changes
+        // what the staff search holds of it.
+        await SearchChannel.RaiseAsync(context, record.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -230,6 +238,9 @@ internal sealed class PersonRecordStore(
         {
             CryptographicOperations.ZeroMemory(dataKey);
         }
+
+        // IDN-SRCH-003 (D-256): a record's email or phone is searched.
+        await SearchChannel.RaiseAsync(context, subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -246,6 +257,8 @@ internal sealed class PersonRecordStore(
         {
             context.PersonRecordContacts.Remove(row);
         }
+
+        await SearchChannel.RaiseAsync(context, subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
