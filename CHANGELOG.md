@@ -8,6 +8,14 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+### Changed
+
+- A release's notes are its version's section of this changelog, in the release's body
+  where the section is at most 125,000 characters, the platform's limit for a body.
+  Where the section is longer, the body names the version and links `CHANGELOG.md` at
+  the tag, and the section is attached to the release as `release-notes-<version>.md`
+  beside the packages.
+
 ## [1.0.0-rc.1] - 2026-11-04
 
 ### Added

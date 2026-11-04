@@ -42,6 +42,8 @@ jobs:
       # CONV-SETUP-003 AC2, LIB-TEST-002 AC1 and REF-001 AC2: the shipped file moves
       # only in a release commit, under a version raised by what the surface and the
       # contract's lists lost or gained. CONV-VCS-003 AC2: a break carries its marker.
+      # CONV-VCS-005 (D-260): the notes of a release commit are written as the release
+      # workflow writes them, and the form they take is said.
       - env:
           RANGE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           RANGE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}

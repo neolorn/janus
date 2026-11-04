@@ -38,17 +38,11 @@ jobs:
             exit 1
           fi
 
-          heading="## [${version}] - "
-
-          if ! grep -qE "^## \[${version//./[.]}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+          # D-260: the section is the body where it fits, and is attached where it does not.
+          if ! ./.github/gates/release-notes.sh "$version" CHANGELOG.md "$RUNNER_TEMP/notes" "$GITHUB_REPOSITORY"; then
             echo "CHANGELOG.md has no section for ${version}, so no release is made."
             exit 1
           fi
-
-          awk -v heading="$heading" '
-            !done && index($0, heading) == 1 { inside = 1; next }
-            inside && /^## / { inside = 0; done = 1 }
-            inside { print }' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
@@ -73,15 +67,21 @@ jobs:
         run: |
           version=${GITHUB_REF_NAME#v}
           candidate=()
+          attached=()
 
           if [ "${version%%-rc.*}" != "$version" ]; then
             candidate=(--prerelease)
+          fi
+
+          if [ -f "$RUNNER_TEMP/notes/release-notes-${version}.md" ]; then
+            attached=("$RUNNER_TEMP/notes/release-notes-${version}.md")
           fi
 
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
-            --notes-file "$RUNNER_TEMP/notes.md" \
+            --notes-file "$RUNNER_TEMP/notes/body.md" \
             "${candidate[@]}" \
-            "$RUNNER_TEMP"/packages/*.nupkg
+            "$RUNNER_TEMP"/packages/*.nupkg \
+            "${attached[@]}"
