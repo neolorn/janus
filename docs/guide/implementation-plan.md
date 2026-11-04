@@ -197,6 +197,11 @@ The final 1.0.0 comes on the owner's word (D-232).
   D-246: a daily workflow opens an issue for a newer SDK, and a deployment's base image
   is rebuilt on a floating minor tag (round H8).
 
+- The conformance suite's truth table registers its records with no subject, so a case
+  over a sensitive type or one declaring `Subject` faulted at registration (round H13's
+  report, question 1). Closed in LIB-TEST-001 criterion 2: such a case is refused at its
+  construction, naming the type; step 1 builds it.
+
 Section 4 also carries every further known issue the reports of the last corrections run
 of Milestone 1 and of each run that builds Tier 3 answers or a defect the owner's review
 found list (D-197, D-198, D-200).

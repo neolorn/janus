@@ -652,7 +652,9 @@ the host (D-172).
    AUTHZ-GATE-001 AC3 defines it, reporting each other entity under
    `authz.policy.unregistered` with `details.entity`.
 2. It runs the host's truth table, stated as cases over the library's scenarios, through
-   both check and filter and asserts agreement; a derived scenario runs once for each
+   both check and filter and asserts agreement, each case over a type whose records register
+   with no subject (neither sensitive nor declaring `Subject`, AUTHZ-INHERIT-002), a case
+   over another type being refused at its construction, naming the type (D-257); a derived scenario runs once for each
    derivation its type declares, and a finding on one names the relationship
    (`details.derivation`); a step-up scenario is judged with an assurance provider of
    the suite's own, set in the deployment's place for those cases alone, which gives
