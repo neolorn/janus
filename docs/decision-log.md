@@ -20618,6 +20618,32 @@ in backups, so the work is keeping memory off disk.
 
 ## D-257 — A type names its data subject without an encrypted field
 
+> **Amended.** 2026-11-04. Decisions on what writing the chapters raised; where these
+> differ from the body below, these win:
+> 1. **One column.** The encrypted fields must name `Subject`'s column only where the
+>    type declares `Subject`. A type with a purpose resting on consent still needs one
+>    column between its fields, as today. Otherwise PRIV-RIGHT-005a's criterion 3
+>    stands: the fields of a type that declares no `Subject` and carries no consent
+>    purpose may name different columns.
+> 2. **Startup codes.** `Subject` and the encrypted fields naming different columns is
+>    a declaration present but inconsistent: `model.startup.declarationinvalid`,
+>    `details.key` naming the type. A consent purpose on a type with no subject column
+>    at all stays `model.startup.declarationmissing`, `details.key` naming
+>    `<type>.<purpose>`.
+> 3. **`10`** joins "Propagated to": section 1.5's `model.startup.declarationinvalid`
+>    row gains the disagreement.
+> 4. **The refusal is not widened.** A registration naming no subject is refused 400
+>    `api.request.malformed` naming `subject` for a type that declares `Subject` (new)
+>    and for a sensitive type (as today); a non-sensitive type whose subject column
+>    comes only from its encrypted fields stays as today.
+> 5. **The signature.** `Subject` takes the parameter type the encrypted field
+>    declaration takes for its subject column: `Subject(Expression<Func<TResource,
+>    object?>> column)` on `ResourceTypeDeclarationBuilder<TResource>`.
+> 6. **The reference.** The body's "(PRIV-RIGHT-004)" for the host's erasure on
+>    `ErasureRequested` reads PRIV-RIGHT-005b.
+> 7. **The records of processing** read the subject column as the chapters already
+>    write it.
+
 **Date:** 2026-11-04 · **Status:** accepted · **Amends:** AUTHZ-MODEL-003, AUTHZ-INHERIT-002
 
 **TL;DR.** A resource type MAY name the column that identifies its records' data subject
@@ -20659,6 +20685,7 @@ message needing it ended unsent.
   subject);
 - `04` PRIV-SENS-002a where it names the encrypted fields' column;
 - `07` LIB-API-005 or the declaration builder's section (`ResourceTypeBuilder.Subject`);
+- `10` section 1.5, the `model.startup.declarationinvalid` row (the amendment, item 3);
 - `implementation-plan.md` (round H13).
 
 ---
