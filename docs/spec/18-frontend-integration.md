@@ -209,10 +209,14 @@ D-198). It finds none where `GET /auth/session` answers that no session is held,
 where any request other than a registration request (FE-REG-005) or one an enrolment
 session makes on its routes (FE-API-004, D-188, D-189) is refused 401 with no `details`
 (BFF-ORDER-001 stage 8). A route the browser was returned to with `error` (FE-API-003)
-SHALL render the refusal and SHALL NOT navigate to the sign-on by itself.
+SHALL render the refusal and SHALL NOT navigate to the sign-on by itself. The
+application's root page is such a route: a sign-on return whose `state` fails returns
+the browser to `/` with `error` `auth.session.csrfinvalid` (BFF-SESS-006), and the root
+page reads `error` as every page a refused sign-on returns to does, and offers to sign
+in (D-259).
 
 *Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188, D-189, D-198,
-D-224, D-229*
+D-224, D-229, D-259*
 
 The sign-on is the library's (BFF-SESS-006); the frontend only starts it, because only
 the frontend knows the route the person meant to reach.
@@ -237,6 +241,8 @@ where the provider answers the authorization that sent the person to sign in
 3. A route returned to with `error` shows the refusal and starts no sign-on of its own.
 4. A sign-on that met no session ends, once the person signs in, on the route of the
    application it began from, with a session and no further interaction.
+5. The root page opened with `error` `auth.session.csrfinvalid` renders the refusal and
+   offers to sign in, and starts no sign-on of its own (D-259).
 
 ---
 

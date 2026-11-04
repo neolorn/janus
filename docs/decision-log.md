@@ -20792,6 +20792,13 @@ H13.
 
 ## D-259 — A sign-on return whose state fails goes back to the application's root
 
+> **Amended.** 2026-11-04. Every navigation route's return, the social provider's
+> callback and continuation included, answers a failed binding or `state` with the 302
+> to `/` on its application's origin carrying `error=auth.session.csrfinvalid`; the
+> `Location` is relative. The criterion reads "sets no cookie". `10` joins "Propagated
+> to": section 1.2's `auth.session.csrfinvalid` row is answered in a 302 to `/` by a
+> navigation return and in a 403 by every other request.
+
 **Date:** 2026-11-04 · **Status:** accepted · **Amends:** BFF-ERR-001, BFF-SESS-006
 
 **TL;DR.** A navigation route's return whose binding or `state` fails is answered with a
@@ -20823,6 +20830,7 @@ replacing each other's state is the likely one) and showed the JSON.
   the clearing of the start's);
 - `18` (the root page reads `error`);
 - `09` (the return route's answers);
+- `10` section 1.2, the `auth.session.csrfinvalid` row (the amendment);
 - `implementation-plan.md` (section 4, a known issue closed).
 
 ---
