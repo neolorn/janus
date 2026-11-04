@@ -8,6 +8,11 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.2] - 2026-11-04
+
+The release of 1.0.0-rc.1 could not be created, so it has no packages, and 1.0.0-rc.2 is
+the first release candidate with packages; it holds everything 1.0.0-rc.1 names.
+
 ### Changed
 
 - A release's notes are its version's section of this changelog, in the release's body
