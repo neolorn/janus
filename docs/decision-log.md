@@ -20539,6 +20539,14 @@ LIB-EXT-001 (a push carries whether it may adopt); `implementation-plan.md` (rou
 >    IDN-SRCH-003).
 > 16. **Spare room.** Slice lists keep a hundredth of their length as spare room, at
 >    least one place (`01` IDN-SRCH-003).
+> 17. **`warn` without the environment.** The library never reads its environment
+>    (OPS-ENV-001). `search.memorychecks` is a P key, so only the server's `configure`
+>    changes it, and that change raises the protected-setting alert. Under `warn`, the
+>    index is built anyway, every failed check is logged at Warning on each start, and
+>    `search-unsafe` is still raised naming the check. The deployment is told on every
+>    start, and nothing reads the environment. This replaces the Development clause in
+>    item 2 and everywhere the chapters carry it: `01` IDN-SRCH-003 and its criteria,
+>    `07` LIB-HOST-001's row and its criterion 8, and `10`'s `search.memorychecks` row.
 
 **Date:** 2026-11-04 · **Status:** accepted · **Amends:** IDN-READ-003, REC-ADM-001,
 OPS-ALERT-005
