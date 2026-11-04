@@ -20790,6 +20790,41 @@ H13.
 - `implementation-plan.md` (round R withdrawn; the rounds' order);
 - the deferred table (its trigger).
 
+## D-259 — A sign-on return whose state fails goes back to the application's root
+
+**Date:** 2026-11-04 · **Status:** accepted · **Amends:** BFF-ERR-001, BFF-SESS-006
+
+**TL;DR.** A navigation route's return whose binding or `state` fails is answered with a
+302 to the application's own root, `/` on the origin the sign-on is mounted for, with
+`error=auth.session.csrfinvalid`, instead of a 403 with a JSON body. The return is always
+a top-level navigation, so the 403 left a person on a raw JSON page with no way on but a
+reload. Found by a host: after an idle lapse, in-app navigation started a sign-on whose
+return failed its state check (cause not reproduced; two near-simultaneous starts
+replacing each other's state is the likely one) and showed the JSON.
+
+- **Why it stays safe.** The address is fixed by the deployment, never read from the
+  request, the state or a cookie, so it can't be steered; nothing is established, no
+  session, no code exchanged, so a forged return gains nothing; and the code tells the
+  frontend to offer a sign-in, as for every refused sign-on.
+- **What stays.** The check itself, its log line (the route, the trace, never the
+  `state`), and the 403 `auth.session.csrfinvalid` for every non-navigation request the
+  check refuses (BFF-CSRF).
+- **The frontend's part** (`18`): the root page reads `error` as every page a refused
+  sign-on returns to does, and offers to sign in.
+
+*Rejected:*
+- **Restarting the sign-on at once:** a state that keeps failing (a blocked cookie) would
+  loop.
+- **Returning to the address the start named:** it is read from the state that failed.
+
+**Propagated to:**
+- `17` BFF-ERR-001 and BFF-SESS-006 (the return's answer; a criterion: a return with a
+  wrong `state` answers 302 to `/?error=auth.session.csrfinvalid` and sets no cookie but
+  the clearing of the start's);
+- `18` (the root page reads `error`);
+- `09` (the return route's answers);
+- `implementation-plan.md` (section 4, a known issue closed).
+
 ---
 
 # Index — all items closed
@@ -21060,6 +21095,7 @@ H13.
 | Round S: the staff search, in memory and nowhere else | D-256 |
 | A type names its data subject without an encrypted field | D-257 |
 | Round R withdrawn: reports hold counts and amounts, and nothing is imported | D-258 |
+| A sign-on return whose state fails goes back to the application's root | D-259 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

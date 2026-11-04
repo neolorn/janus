@@ -202,6 +202,13 @@ The final 1.0.0 comes on the owner's word (D-232).
   report, question 1). Closed in LIB-TEST-001 criterion 2: such a case is refused at its
   construction, naming the type; step 1 builds it.
 
+- A sign-on return whose `state` failed answered a top-level navigation with a JSON
+  403 (a host's report, 2026-11-04). Closed by D-259: it returns to the application's
+  root with `error=auth.session.csrfinvalid`; step 1 builds it.
+- Not for 1.0.0, recorded: a process that serves no browser (a host's background worker)
+  must still name a sign-on client it never uses (LIB-HOST-001). A host kind for it is a
+  later decision; hosts name their management client meanwhile.
+
 Section 4 also carries every further known issue the reports of the last corrections run
 of Milestone 1 and of each run that builds Tier 3 answers or a defect the owner's review
 found list (D-197, D-198, D-200).
