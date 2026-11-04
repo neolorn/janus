@@ -128,3 +128,63 @@ Step 2 waits on two things:
 - the lead's review of step 1 and word to make the release commit;
 - the leaked-password workflow dispatched by hand, since the release commit refreshes
   the offline list and the Public Suffix List (CONV-VCS-005 AC4).
+
+## Step 2: release 1.0.0-rc.1
+
+### 1. Items implemented
+
+- The release commit, 1ecbb1cc `chore: release 1.0.0-rc.1` (CONV-VCS-005, LIB-VER-001,
+  CONV-SETUP-003):
+  - `CHANGELOG.md`: `Unreleased` moved under `## [1.0.0-rc.1] - 2026-11-04`, its lines
+    under `Added` alone, and `Unreleased` left empty. The section is the release's notes,
+    as `release.yml` publishes it.
+  - The public surface shipped: every `PublicAPI.Unshipped.txt` moved into its
+    `PublicAPI.Shipped.txt`, each unshipped file left holding `#nullable enable` alone.
+  - The offline leaked-password list (AUTH-PASS-004): the draw of run 41814221201,
+    dispatched on `main`, its `leaked-passwords` artifact. It is dated 2026-11-04 and
+    holds 100,000 upper-case SHA-1 hashes in ascending order. The hashes drawn are the
+    same as before, and only its date line changed.
+  - The Public Suffix List (AUTH-FACT-010): version 2026-10-31_14-17-28_UTC, taken from
+    https://publicsuffix.org/list/public_suffix_list.dat on 2026-11-04 and carried
+    unmodified. The conversion sets aside no rule of it, so the pin of
+    `PublicSuffixListTests.CONV_VCS_005_AC4_ThePinMatchesTheRulesTheShippedListSetsAside`
+    still holds.
+  - `NOTICE`: both lists' dates.
+- No migration note: a release candidate's section opens no major version (CONV-VCS-005
+  AC3, D-232), and `MIGRATION.md` comes with the final 1.0.0's release commit.
+
+**Criteria verified otherwise**
+
+- The release gate passes over the range. Run against the release commit, the release
+  workflow's changelog step finds the section and keeps it as the notes. The packages
+  on the tag's release, marked as a pre-release, are the proof of the tag.
+
+### 2. Items not implemented
+
+None.
+
+### 3. Resolved by rule
+
+None.
+
+### 4. Open questions
+
+**Q2 (Tier 2).** Where the migration note lives, and what release notes are.
+
+- Answered: `MIGRATION.md` at the root, one section per major version, written with the
+  final 1.0.0's release commit (94bc6f33). Release candidates carry none. The release
+  notes are the version's changelog section.
+
+### 5. Gate result
+
+- Fast checks on the release commit: green.
+- Checks before the push: green. Every unit test passes (5201 in eleven projects); the
+  commit-message, changelog and release gates pass over the range; the full-history
+  secret scan finds nothing.
+- Gate of record: the pipeline's run on this report's commit, whose identifier and
+  result the step's last message gives.
+
+### 6. What the next step waits on
+
+The lead's tag `v1.0.0-rc.1` on the release commit, 1ecbb1cc, after the review, green
+checks and the merge.
