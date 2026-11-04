@@ -30,7 +30,7 @@
 
 ## 2. Items not implemented
 
-None.
+- The release commit of section 4, step 4, `chore: release 1.0.0-rc.4`: parked by Q2.
 
 ## 3. Resolved by rule
 
@@ -51,6 +51,25 @@ the seam join no unit of work.
   state read does, with no lock, a read of that moment; REC-ACC-001's sentence now says a
   change re-reads under the record's lock and a read without one. The round is built from
   the chapters as they now read.
+
+**Q2 (Tier 2).** Whether 1.0.0-rc.4 draws the two lists again.
+
+- Asked: CONV-VCS-005 has each release refresh the offline leaked-password list and the
+  Public Suffix List, and its AC4 has them drawn for that release. Both were drawn on
+  2026-11-04 for 1.0.0-rc.1 (the leaked-password list of run 41814221201, the Public
+  Suffix List at version 2026-10-31_14-17-28_UTC). 1.0.0-rc.2 and 1.0.0-rc.3 carried
+  them as they were, the reason given being that both were drawn that day. 1.0.0-rc.4 is
+  made on 2026-11-05, so that reason no longer holds.
+- Readings:
+  - **A:** every release candidate draws both lists again. Smallest fix: the
+    leaked-password workflow dispatched by hand on `main` and its artifact taken, the
+    Public Suffix List taken again, the pin of the suffix rules set aside reviewed, and
+    `NOTICE`'s two dates, all in the release commit.
+  - **B:** a release candidate carries the lists of the candidate before it, as
+    1.0.0-rc.2 and 1.0.0-rc.3 did, and the final 1.0.0 draws them. Smallest fix: the
+    release commit moves `Unreleased` and the unshipped surface alone.
+- Parked: the release commit. A release commit pushed under the wrong reading would need
+  a 1.0.0-rc.5, since the tag must stand on the commit that adds the version.
 
 ## 5. Gate result
 
