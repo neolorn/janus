@@ -1854,7 +1854,10 @@ a version section, moves `PublicAPI.Unshipped.txt` into `PublicAPI.Shipped.txt`
 package version from that tag (LIB-VER-001). A release candidate takes the same forms
 with its pre-release suffix (D-232): its version section is headed `X.Y.Z-rc.N`, its
 commit is tagged `vX.Y.Z-rc.N`, which MinVer reads as it is, and its release is marked
-as a pre-release. Nothing else sets a version number. The
+as a pre-release. A release's notes are its version's section: the release's body where
+the section fits the platform's limit for a body (125,000 characters), and otherwise a
+short body linking `CHANGELOG.md` at the tag, with the section attached as
+`release-notes-<version>.md` (D-260). Nothing else sets a version number. The
 first version's section records what that version holds, under `Added` alone; the other
 groups measure a version against a released predecessor. Each release also refreshes the
 two embedded lists that age, each dated when drawn: the offline leaked-password list
