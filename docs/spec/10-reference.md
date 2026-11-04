@@ -89,8 +89,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.preference.wrongtype` | A preference value of a type other than its declaration; 422 | REG-PREF-001, D-153 |
 | `identity.preference.toolarge` | The preference set would exceed `preferences.maxsize`; 422 | REG-PREF-001, D-153 |
 | `identity.preference.administratoronly` | The person set a preference declared administrator-only; 422 | REG-PREF-001, D-153 |
-| `identity.search.queryinvalid` | A staff search refused on its query: a `q` that normalises to nothing or to more than 64 characters, a `limit` outside 1 to 50, or a `kinds` member other than `account` and `record`; `details.member` names the member; 422 | IDN-SRCH-001, D-256 |
-| `identity.search.unavailable` | The process does not serve the staff search: `details.reason` (section 5.53) `off` where its `Janus:Search:Enabled` is not true, `building` until its index is built, the answer carrying `Retry-After`, `capacity` where the subjects to index pass `Janus:Search:MaxSubjects`, `unsafe` where a memory check failed under `Janus:Search:MemoryChecks` `enforce`; at the route and at `ISearch.SearchAsync` alike; 503 | IDN-SRCH-003, D-256 |
+| `identity.search.unavailable` | The process does not serve the staff search: `details.reason` (section 5.53) `off` where its registration does not declare the staff search (`07` LIB-HOST-001), `building` until its index is built, the answer carrying `Retry-After` 30 seconds, `capacity` where the subjects to index pass `search.maxsubjects`, `unsafe` where a memory check failed under `search.memorychecks` `enforce`, or under `warn` outside the host environment `Development`; at the route and at `ISearch.SearchAsync` alike; 503 | IDN-SRCH-003, D-256 |
 
 ### 1.2 Authentication
 
@@ -198,8 +197,8 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `config.value.lastdestination` | *Retired by D-225. Alert destinations are the host's.* | |
 | `config.change.superseded` | *Retired by D-225. Alert destinations are the host's.* | |
 | `config.policy.belowsystem` **(new)** | An organization policy field the replacement states is looser than the system default; `details.field` names the first such field in the order of section 4.1a; a field the replacement leaves out is not judged, and `photos` `true` is never refused with it (IDN-ATTR-002, D-249); 422 | AUTH-STEP-002a, D-143, D-166, D-249 |
-| `api.request.malformed` | The request could not be read: its body is not the shape the endpoint takes; a member it requires is absent or empty; a free-text member is outside 1 to 1024 characters after trimming (API-CONV-002; a blank reason whose absence has a code of its own answers that code); or a member or path segment holds a word outside the closed vocabulary this chapter or the declared model fixes for it (a takedown trigger outside section 5.12d, a configuration key the route does not serve, an undeclared permission), or a route or query value or a body member that does not read as its type (an identifier, an app password's identifier outside its form, or a role, restriction or document name outside its rule), `details.member` naming it. `details.member` names the member the reader stopped at, or the one the endpoint required, by its name as the request writes it: a member inside another by the member names from the body's top joined by dots; an element of a list, or a member inside one, by the list's name; a member inside an element of a body that is itself a list by its own name; and never with a `$` root or a list index (API-CONV-002); it carries nothing of the member's value; where the body failed before any member, the refusal carries the code alone. Also: an authorization request the provider refused and cannot return to a client, `details.error` then carrying the protocol's code and nothing else (LIB-API-003); a registration through `IResources` whose member is absent or unreadable, a sensitive type naming no `subject` included (AUTHZ-INHERIT-002, IDN-LIFE-002a); for a `Janus.Cli` command, a command, argument or input it cannot read, answered as one JSON line (OPS-BOOT-001, OPS-SEC-001, DR-016); and, at the sign-on's return, the code a refusal logs as carried inside and never answers, for a return carrying neither `code` nor `error` or one whose `error` does not read as RFC 6749 Appendix A.7 defines one or is longer than 64 characters, the browser returned with `auth.session.expired` (BFF-SESS-006, D-195, D-196); 400 | API-CONV-002, API-CONV-003, INT-SMS-003, D-162, D-166, D-179, D-183, CONV-DESIGN-004, D-187, D-195, D-196 |
-| `api.request.invalid` | A well-formed request refused on its meaning where no more specific code of section 1 exists: a body naming something that does not exist or cannot be acted on (an invitation's `documents` naming a document not published, `details.member` `documents`; an invitation's `formerMailbox` where no held mailbox stands for its corporate address, `details.member` `formerMailbox`, and its `adopt`, or a given mailbox's, where the library already holds a mailbox at the address (D-255); a group member that does not exist or belongs to another organization; an out-of-band privacy request naming a subject no account bears; a preferred second step naming a method the account has not enrolled, `details.member` `method`); a registration, move or removal through `IResources` that the declaration or the library's records refuse (a removal naming a record not registered, `details.member` `resource`); a host's field opened for a subject the deployment holds no key for (`IPersonalFields`, `details.member` `subject`). `details.member` names the member in the form `api.request.malformed` gives; 422 | API-CONV-002, API-CONV-003, REG-INV-001, REG-MAIL-003, AUTHZ-GROUP-001, IDN-ATTR-008, AUTHZ-INHERIT-002, IDN-LIFE-002a, PRIV-RIGHT-001, PRIV-RIGHT-005a, D-166, D-178, D-179, D-183, D-203, D-255 |
+| `api.request.malformed` | The request could not be read: its body is not the shape the endpoint takes; a member it requires is absent or empty; a free-text member is outside 1 to 1024 characters after trimming (API-CONV-002; a blank reason whose absence has a code of its own answers that code); or a member or path segment holds a word outside the closed vocabulary this chapter or the declared model fixes for it (a takedown trigger outside section 5.12d, a configuration key the route does not serve, an undeclared permission), or a route or query value or a body member that does not read as its type (an identifier, an app password's identifier outside its form, or a role, restriction or document name outside its rule), or a staff search's `limit` outside 1 to 50 (`01` IDN-SRCH-001, D-256), `details.member` naming it. `details.member` names the member the reader stopped at, or the one the endpoint required, by its name as the request writes it: a member inside another by the member names from the body's top joined by dots; an element of a list, or a member inside one, by the list's name; a member inside an element of a body that is itself a list by its own name; and never with a `$` root or a list index (API-CONV-002); it carries nothing of the member's value; where the body failed before any member, the refusal carries the code alone. Also: an authorization request the provider refused and cannot return to a client, `details.error` then carrying the protocol's code and nothing else (LIB-API-003); a registration through `IResources` whose member is absent or unreadable, a sensitive type naming no `subject` included (AUTHZ-INHERIT-002, IDN-LIFE-002a); for a `Janus.Cli` command, a command, argument or input it cannot read, answered as one JSON line (OPS-BOOT-001, OPS-SEC-001, DR-016); and, at the sign-on's return, the code a refusal logs as carried inside and never answers, for a return carrying neither `code` nor `error` or one whose `error` does not read as RFC 6749 Appendix A.7 defines one or is longer than 64 characters, the browser returned with `auth.session.expired` (BFF-SESS-006, D-195, D-196); 400 | API-CONV-002, API-CONV-003, INT-SMS-003, D-162, D-166, D-179, D-183, CONV-DESIGN-004, D-187, D-195, D-196, D-256 |
+| `api.request.invalid` | A well-formed request refused on its meaning where no more specific code of section 1 exists: a body naming something that does not exist or cannot be acted on (an invitation's `documents` naming a document not published, `details.member` `documents`; an invitation's `formerMailbox` where no held mailbox stands for its corporate address, `details.member` `formerMailbox`, and its `adopt`, or a given mailbox's, where the library already holds a mailbox at the address (D-255); a group member that does not exist or belongs to another organization; an out-of-band privacy request naming a subject no account bears; a preferred second step naming a method the account has not enrolled, `details.member` `method`); a registration, move or removal through `IResources` that the declaration or the library's records refuse (a removal naming a record not registered, `details.member` `resource`); a host's field opened for a subject the deployment holds no key for (`IPersonalFields`, `details.member` `subject`); a staff search's `q` that normalises to nothing or to more than 64 characters, `details.member` `q` (`01` IDN-SRCH-001, D-256). `details.member` names the member in the form `api.request.malformed` gives; 422 | API-CONV-002, API-CONV-003, REG-INV-001, REG-MAIL-003, AUTHZ-GROUP-001, IDN-ATTR-008, AUTHZ-INHERIT-002, IDN-LIFE-002a, PRIV-RIGHT-001, PRIV-RIGHT-005a, D-166, D-178, D-179, D-183, D-203, D-255, D-256 |
 | `model.containment.cycle` **(new)** | Containment declaration forms a cycle | AUTHZ-MODEL-004 |
 | `model.derivation.unindexed` **(new)** | Derivation names an unindexed column | AUTHZ-DERIVE-004 |
 | `model.purpose.missingassessment` **(new)** | Legitimate interest declared without an assessment | PRIV-BASIS-002 |
@@ -618,6 +617,8 @@ redeployment. Every change is recorded and alerted (OPS-ALERT-001).
 | `integration.mailserver.endpoint` | OPS-CFG-004; INT-MAIL-001, INT-GEN-001, D-166, D-176 |
 | `integration.mailserver.ownaccounts` | OPS-CFG-004; INT-MAIL-007, D-254 |
 | `redirect.defaultclient` | OPS-CFG-004; API-REDIR-001, D-162, D-166 |
+| `search.maxsubjects` | OPS-CFG-004; IDN-SRCH-003, D-256 |
+| `search.memorychecks` | OPS-CFG-004; IDN-SRCH-003, D-256 |
 
 ### 4.9 Tokens and keys
 
@@ -637,15 +638,15 @@ any relying party that validates offline against the JWKS (AUTH-OIDC-004, D-147)
 
 ### 4.10 The staff search
 
-Set per process: a deployment turns the search on in the processes that serve staff,
-and each process reads its own (`01` IDN-SRCH-003, `07` LIB-HOST-001, D-256).
+The search itself is turned on in a process by the host's declaration at registration
+(`AddJanus`), not by a key (`01` IDN-SRCH-003, `07` LIB-HOST-001, D-256); these keys
+govern it wherever it is declared.
 
 | Key | Default | Scope | Source |
 |---|---|---|---|
-| `Janus:Search:Enabled` | `false` | per process, boolean | IDN-SRCH-003, D-256: whether the process builds the staff search's index and serves the search; elsewhere the search answers `identity.search.unavailable` with `details.reason` `off` |
-| `Janus:Search:PerMinute` | 60 | per process, integer searches a minute per caller | IDN-SRCH-002, D-256: past it the search answers 429 `auth.throttled` with `Retry-After` and `details.retryAt`, as the library's other per-caller limits answer |
-| `Janus:Search:MaxSubjects` | 200000 | per process, integer subjects | IDN-SRCH-003, D-256: where the subjects to index pass it, the index is not built, the search answers `identity.search.unavailable` with `details.reason` `capacity`, and `search-capacity` is raised |
-| `Janus:Search:MemoryChecks` | `enforce` | per process: `enforce` · `warn` (section 5.53); `warn` admitted only where the host environment is `Development` | IDN-SRCH-003, D-256: under `enforce` a failed memory check stops the build, the search answers `identity.search.unavailable` with `details.reason` `unsafe`, and `search-unsafe` is raised naming the check; `warn` builds anyway and logs the failed check at Warning; outside `Development`, `warn` stops the start with the library's configuration error |
+| `search.perminute` | 60 | R, integer searches a minute per caller, floor 1, ceiling 600; raising is loosening | IDN-SRCH-002, D-256: counted as the library's other per-caller limits are counted, in the same store, in a one-minute fixed window, across the deployment; past it the search answers 429 `auth.throttled` with `Retry-After` and `details.retryAt` |
+| `search.maxsubjects` | 200000 | **P** (§4.8), integer subjects, floor 1; raising is loosening | IDN-SRCH-003, D-256: where the subjects to index pass it, the index is not built, the search answers `identity.search.unavailable` with `details.reason` `capacity`, and `search-capacity` is raised |
+| `search.memorychecks` | `enforce` | **P** (§4.8): `enforce` · `warn` (section 5.53); any change is loosening | IDN-SRCH-003, D-256: under `enforce` a failed memory check stops the build, the search answers `identity.search.unavailable` with `details.reason` `unsafe`, and `search-unsafe` is raised with `details.check`; `warn` builds anyway and logs the failed check at Warning; outside the host environment `Development`, `warn` acts as `enforce`, and the start logs that once at Warning |
 
 ---
 
@@ -1006,8 +1007,8 @@ actor: `auth-failures-sustained` · `recovery-clustering` · `approver-volume` �
 `domain-removed` · `governing-language-changed` · `governing-text-missing` ·
 `search-capacity` · `search-unsafe`.
 
-`search-unsafe` names the memory check that failed and never a value (`01`
-IDN-SRCH-003, D-256).
+`search-unsafe` (High) names the memory check that failed in `details.check` (section
+5.53) and never a value; `search-capacity` is Normal (`01` IDN-SRCH-003, D-256).
 
 `breakglass-used` and `breakglass-generated` (a first issue or a replacement) are High,
 and reach the owner as well as the operator when the host delivers them (OPS-BOOT-002,
@@ -1587,13 +1588,19 @@ Kinds: `account` · `record`, a result's `kind` and the members of a query's `ki
 Matched: `name` · `email` · `phone`, a result's `matched`, the field that matched first
 in that order. Unavailable reasons: `off` · `building` · `capacity` · `unsafe`, the
 `details.reason` of `identity.search.unavailable`. Memory checks: `enforce` · `warn`,
-the values of `Janus:Search:MemoryChecks` (section 4.10).
+the values of `search.memorychecks` (section 4.10). Checks: `swap` (the cgroup's swap
+limit, `memory.swap.max`, is not 0) · `coredump` (the core-dump limit is not 0) ·
+`diagnostics` (.NET's diagnostics port is on) · `minidump` (crash dumps are on), the
+`details.check` of `search-unsafe`. In `Janus.Core`, the kinds are `SearchKinds`
+(flags: `None` 0, `Accounts` 1, `Records` 2, `None` meaning both) and a result's kind
+`SubjectKind`; the matched field is `SearchMatch` (`Name`, `Email`, `Phone`) (`07`
+LIB-API-005).
 
 *Source: IDN-SRCH-001, IDN-SRCH-003, D-256*
 
 ### 5.54 Database channels
 
-`identity_registration` (the registration signal, `20` REG-SESS-003) · `janus_search`
+`identity_registration` (the registration signal, `20` REG-SESS-003) · `identity_search`
 (the staff search's index, `01` IDN-SRCH-003, carrying the subject identifier alone).
 Each notification is sent in the transaction that changes what it signals.
 
