@@ -858,6 +858,12 @@ names no organization the deployment holds is answered 404
    names no organization the deployment holds is refused 403 `authz.denied`, naming
    `grant:manage` and recorded against no organization, whatever the caller holds, save
    `authz.restricted` for an acting account under restriction (D-209).
+5. Under an organization-wide grant, the list filter, the SQL fragment and the capability
+   page admit only a row the library registers as owned by the grant's organization, as
+   the single check does: a row of another organization, and a row the library holds no
+   record for, is admitted by none of them. The capability page judges each record in the
+   organization that owns it. The truth table carries both rows, run through the single
+   check and the list filter alike (D-265).
 
 ---
 

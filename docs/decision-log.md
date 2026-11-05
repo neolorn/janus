@@ -21016,6 +21016,38 @@ offset other than 0 would still reach the driver as they came and answer 500.
 
 ---
 
+## D-265 — An organization-wide grant reaches only its own organization's rows in a list
+
+**Date:** 2026-11-05 · **Status:** accepted · **Amends:** AUTHZ-SCOPE-001
+
+**TL;DR.** Under an organization-wide grant, the list filter, the SQL fragment and the
+capability page admit a row only where the library registers it as owned by the grant's
+organization, exactly as the single check does. Found by the lead's review of the gate on
+2026-11-05: the predicate every rendering is built from (`PermissionRule.Matching` and
+`Matches`) asks nothing of the row once the grant names no resource, so a caller holding
+an organization-wide grant in one organization was admitted, in a list, to rows of another
+organization and to rows the library holds no record for, which the single check refuses.
+
+- **Why it is a defect, not a host's duty.** AUTHZ-SCOPE-001 scopes every evaluation to the
+  organization owning the resource, resolved from the resource, and AUTHZ-PRIN-001 makes
+  the single check and the list filter one rule with one outcome. A host that filters its
+  own query by organization hides the gap; a host whose list spans organizations, or holds
+  rows it never registered, leaks them.
+- **The capability page** judged a whole page in the organization of its first record; it
+  judges each record in its own.
+- **Unchanged:** grants on a resource or a container, whose ancestry already ties the row
+  to the grant's organization; deny precedence; the single check.
+
+*Rejected:*
+- **Documenting that hosts must filter by organization:** the gate exists so a host cannot
+  forget a permission rule, and one rule answered two ways is what AUTHZ-PRIN-001 forbids.
+
+**Propagated to:**
+- `03` AUTHZ-SCOPE-001 (criterion 5);
+- `implementation-plan.md` (round H16, release step 6).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
