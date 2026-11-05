@@ -58,7 +58,26 @@
   by PostgreSQL. The test above shows the server is handed it in UTC and lists it in UTC.
   `JmapMailServerTests.INT_MAIL_010_AC1_AnAppPasswordIsOneCallOnTheMailboxsAccountAsync`
   shows it is written in UTC.
+- The truth table (CONV-VCS-004), 118689dd: `GrantService` is permission logic, so the
+  change carries a row. That row restates an unchanged decision: "a grant written with
+  an end sent two hours ahead of UTC and then revoked, by a caller managing grants" is
+  Allowed, and its end is recorded in UTC. The pipeline's run on 762b8f9b had failed
+  the truth-table change gate for the missing row.
 - The changelog line under Unreleased, under `Fixed`.
+
+**Section 4, step 5: the release commit, d56f2996 `chore: release 1.0.0-rc.5`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.5] - 2026-11-05`, holding the two
+  lines under `Fixed`, and Unreleased is left empty.
+- The public surface: no `PublicAPI.Unshipped.txt` holds a line, so nothing moved into
+  the shipped files.
+- The two lists are not drawn again (CONV-VCS-005, D-262). The leaked-password list of
+  run 41814221201 and the Public Suffix List at version 2026-10-31_14-17-28_UTC were
+  both drawn on 2026-11-04, within 90 days before the release commit. `NOTICE` keeps
+  both dates.
+- No migration note: a release candidate opens no major version.
+- Criterion verified otherwise: the release gate over `origin/main..HEAD` says the notes
+  of 1.0.0-rc.5, 625 characters, are the release's body.
 
 ## 2. Items not implemented
 
@@ -101,7 +120,9 @@ None.
   changed.
 - Checks before the push: green. Every unit test passes, and the commit-message,
   changelog, release, acceptance-criterion test name and forbidden-marker gates pass
-  over `origin/main..HEAD`. The full-history secret scan finds nothing. The new
-  integration tests were run here against PostgreSQL, alone.
+  over `origin/main..HEAD`. The truth-table change gate also passes from 118689dd on.
+  The full-history secret scan finds nothing. The new integration tests, and the truth
+  table's operation rows, were run here against PostgreSQL, alone.
+- The pipeline's run on 118689dd, with D-264 in, was green before the release commit.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
