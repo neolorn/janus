@@ -266,6 +266,30 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 AC5 (D-264): an app password's end sent two hours ahead of UTC is
+    /// handed to the server, and listed, as the same instant in UTC.
+    /// </summary>
+    [Fact]
+    public async Task API_CONV_002_AC5_AnAppPasswordsEndSentAtAnOffsetIsHeldInUtcAsync()
+    {
+        var sent = new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.FromHours(2));
+
+        _ = Issued(await Passwords.CreateAsync(
+            Asking,
+            _session,
+            "Phone",
+            sent,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        DateTimeOffset? listed = Assert.Single(Listed(await ListAsync())).ExpiresAt;
+
+        Assert.Equal(
+            ((DateTimeOffset?)new DateTimeOffset(2026, 11, 30, 22, 0, 0, TimeSpan.Zero), TimeSpan.Zero),
+            (listed, listed?.Offset));
+    }
+
+    /// <summary>
     /// INT-MAIL-006 and REG-MAIL-002 AC3 and AC4: the operations are present only where
     /// the account holds a mailbox the server enables, so an account without one, one
     /// whose mailbox was retired, an account neither active nor restricted and a
