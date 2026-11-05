@@ -100,6 +100,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a fact in the host's data conferring a role", Decided.Allowed),
         ("a deny over a fact in the host's data", Decided.Denied),
         ("a fact in the host's data on a container above", Decided.Allowed),
+        ("a relationship row on a container a suspended organization owns", Decided.Denied),
         ("a grant on the container the record was moved into", Decided.Allowed),
         ("a grant on the container the record was moved out of", Decided.Denied),
         ("a grant on a record whose registration was removed, the record registered again", Decided.Denied),
@@ -1959,7 +1960,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         // row of it, and the gate reads none. AUTHZ-SCOPE-001 AC5 (D-265): a record
         // another organization owns is registered there, and a row the library holds no
         // record for is the host's alone, while the filter is asked of the case's own
-        // organization.
+        // organization; AC6 (D-266): so is a record a derivation reaches in another.
         switch (scenario)
         {
             case "a grant on the whole organization, on a record another organization owns":
@@ -1972,6 +1973,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
             case "a grant on the whole organization, on a row the library holds no record for":
                 await UnregisteredAsync(record);
+                break;
+
+            case "a relationship row on a container a suspended organization owns":
+                await ReviewedElsewhereAsync(record, account);
                 break;
 
             default:
@@ -4711,6 +4716,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
             case "a fact in the host's data conferring a role":
             case "a fact in the host's data on a container above":
+            case "a relationship row on a container a suspended organization owns":
                 break;
 
             case "a deny over a fact in the host's data":
@@ -5131,6 +5137,24 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "INSERT INTO host.documents (id, title) VALUES (@id, @title);",
             new { id = record.Id.ToString(), title = "A record the host never registered." },
             cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // AUTHZ-SCOPE-001 AC6 (D-266): the record sits in a workspace of a second
+    // organization, whose deletion was requested, and the account reviews that workspace
+    // in the host's own data. The single check judges the record there, where nothing
+    // confers, and the filter is asked of the case's own organization.
+    private async Task ReviewedElsewhereAsync(ResourceReference record, SubjectId account)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var elsewhere = new Deployment(host);
+        ResourceReference workspace = Reference(Workspace);
+
+        _ = await elsewhere.BeginAsync([HostPermissions.Read], cancellationToken);
+        await elsewhere.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await elsewhere.RegisterAsync(record, workspace, cancellationToken);
+        _ = await elsewhere.NamedRoleAsync(RoleName.Parse("reviewer"), [HostPermissions.Read], cancellationToken);
+        await elsewhere.ReviewAsync(workspace, account, cancellationToken);
+        await elsewhere.SuspendAsync(cancellationToken);
     }
 
     private static async Task JoinedAsync(

@@ -938,9 +938,10 @@ internal sealed class PermissionRule
 
         string type = Type.ToString();
         string on = relationship.On.ToString();
+        IQueryable<AncestryEntry> owned = Owned(ancestry);
 
         Expression<Func<string, string, bool>> above = (resource, identifier) =>
-            ancestry.Any(entry =>
+            owned.Any(entry =>
                 entry.ResourceType == type
                 && entry.ResourceId == identifier
                 && entry.AncestorType == on
@@ -998,10 +999,25 @@ internal sealed class PermissionRule
             Expression.AndAlso(Holds(relationship.Holder.Body), names),
             row));
 
-        return ancestry
+        return Owned(ancestry)
             .Where(Expression.Lambda<Func<AncestryEntry, bool>>(
                 Expression.AndAlso(scoped.Body, held),
                 above));
+    }
+
+    // AUTHZ-SCOPE-001 AC6 (D-266): a derivation reaches a row only through an ancestry
+    // row the library registers in the organization the rule is asked in, as a stored
+    // grant does; a paged rule judges each record in the organization owning it.
+    private IQueryable<AncestryEntry> Owned(IQueryable<AncestryEntry> ancestry)
+    {
+        if (_paged)
+        {
+            return ancestry;
+        }
+
+        Guid organization = _organization.Value;
+
+        return ancestry.Where(entry => entry.Organization == organization);
     }
 
     // Whether the row is held by one of the principal's subjects. The column is the
@@ -1039,6 +1055,7 @@ internal sealed class PermissionRule
                           FROM identity.ancestry AS {held}_above
                           WHERE {held}_above.resource_type = @{Prefix}type
                             AND {held}_above.resource_id = {row}
+                            AND {held}_above.organization = @{Prefix}organization
                             AND {held}_above.ancestor_type = @{held}_on
                             AND {held}_above.ancestor_id = {held}.{Identifier(relationship.ResourceColumn, nameof(relationship.ResourceColumn))}))
                 """));
