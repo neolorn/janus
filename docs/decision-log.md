@@ -21113,17 +21113,26 @@ references for getting it right, not the measure of what Janus is.
 
 **Date:** 2026-11-06 · **Status:** accepted · **Amends:** LIB-API-001
 
-**TL;DR.** No host implements an interface of LIB-API-001's operations contract,
-`IAccessGate` and `IStepUpGate` among them: a host calls them. The interfaces a host
-implements are those of the extension contracts and the conformance suite's host-rows
-seam. A member the library adds to an interface of the operations contract is therefore
-an additive change (LIB-VER-001 criterion 2), so the gate can take a new input, a batch
-of checks or a check of proposed values, in a minor version (D-267). The first point of
-the plan's list before the final 1.0.0.
+**TL;DR.** No host implements an interface of LIB-API-001's operations contract save the
+mail server's, `IAccessGate` and `IStepUpGate` among them: a host calls them. The
+interfaces a host implements are those of the extension contracts, the conformance
+suite's host-rows seam and the mail server's contract. A member the library adds to an
+interface of the operations contract other than the mail server's is therefore an
+additive change (LIB-VER-001 criterion 2), so the gate can take a new input, a batch of
+checks or a check of proposed values, in a minor version (D-267). The first point of the
+plan's list before the final 1.0.0.
 
-- **The row already said it** of the unit of work, event publication, the key ring and
-  the mail server in use; it now says it of the whole row. Every interface of the row is
-  implemented in the library today, and Cura calls the gate and implements none.
+- **The row already said it** of the unit of work, event publication and the key ring;
+  it now says it of the whole row save the mail server's contract. Every other interface
+  of the row is implemented in the library alone, and Cura calls the gate and implements
+  none of them.
+- **The mail server's contract stays a host's to implement.** A host may register its
+  own mail server in place of the shipped adapter (CONV-DESIGN-007 criterion 5), and
+  Cura's tests register an in-memory one; the row's earlier "no host implements" was
+  wrong of it. A capability the library later asks of a mail server therefore comes as an
+  interface of its own beside the contract, which a host's mail server implements when it
+  offers it, as D-271 does for the conformance rows; the contract's members do not
+  change.
 - **A sentence, not request objects.** Moving the gate's inputs into request objects
   would also stop its members doubling with each input (with and without the host's
   sources), but it changes every call a host makes today, for an input no host needs
