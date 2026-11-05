@@ -8,6 +8,20 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.6] - 2026-11-05
+
+### Fixed
+
+- Under an organization-wide grant, the list filter, the SQL fragment and the capability
+  page admit only a record the library registers in the grant's organization, as the
+  single check does. Before, they also admitted records of other organizations and rows
+  the library holds no record for. A capability page now judges each record in the
+  organization that owns it, not the whole page in its first record's organization.
+- A grant derived from the host's own data is bound the same way. The list filter and
+  the SQL fragment admit through a derivation only a record the library registers in the
+  organization they are asked for, where before they also admitted a record of another
+  organization whose container the person holds a relationship row on.
+
 ## [1.0.0-rc.5] - 2026-11-05
 
 ### Fixed

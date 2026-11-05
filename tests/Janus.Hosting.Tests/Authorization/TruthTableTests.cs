@@ -80,6 +80,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant on the container", Decided.Allowed),
         ("a grant two containers above", Decided.Allowed),
         ("a grant on the whole organization", Decided.Allowed),
+        ("a grant on the whole organization, on a record another organization owns", Decided.Denied),
+        ("a grant on the whole organization, on a row the library holds no record for", Decided.Denied),
         ("a grant on a sibling", Decided.Denied),
         ("no grant at all", Decided.Denied),
         ("a grant to a group the account belongs to", Decided.Allowed),
@@ -98,6 +100,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a fact in the host's data conferring a role", Decided.Allowed),
         ("a deny over a fact in the host's data", Decided.Denied),
         ("a fact in the host's data on a container above", Decided.Allowed),
+        ("a relationship row on a container a suspended organization owns", Decided.Denied),
         ("a grant on the container the record was moved into", Decided.Allowed),
         ("a grant on the container the record was moved out of", Decided.Denied),
         ("a grant on a record whose registration was removed, the record registered again", Decided.Denied),
@@ -1954,10 +1957,35 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await deployment.RegisterAsync(sibling, inner, cancellationToken);
 
         // A type the model does not declare is never registered: the library holds no
-        // row of it, and the gate reads none.
-        if (record.Type == Document)
+        // row of it, and the gate reads none. AUTHZ-SCOPE-001 AC5 (D-265): a record
+        // another organization owns is registered there, and a row the library holds no
+        // record for is the host's alone, while the filter is asked of the case's own
+        // organization; AC6 (D-266): so is a record a derivation reaches in another.
+        switch (scenario)
         {
-            await deployment.RegisterAsync(record, inner, cancellationToken);
+            case "a grant on the whole organization, on a record another organization owns":
+                await deployment.RegisterAsync(
+                    record,
+                    containedIn: null,
+                    cancellationToken,
+                    organization: await ElsewhereAsync());
+                break;
+
+            case "a grant on the whole organization, on a row the library holds no record for":
+                await UnregisteredAsync(record);
+                break;
+
+            case "a relationship row on a container a suspended organization owns":
+                await ReviewedElsewhereAsync(record, account);
+                break;
+
+            default:
+                if (record.Type == Document)
+                {
+                    await deployment.RegisterAsync(record, inner, cancellationToken);
+                }
+
+                break;
         }
 
         await GrantAsync(deployment, scenario, role, account, record, inner, outer, sibling, elsewhere);
@@ -4606,6 +4634,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 break;
 
             case "a grant on the whole organization":
+            case "a grant on the whole organization, on a record another organization owns":
+            case "a grant on the whole organization, on a row the library holds no record for":
                 await deployment.GrantAsync(
                     holder, role, null, false, null, null, cancellationToken);
                 break;
@@ -4686,6 +4716,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
             case "a fact in the host's data conferring a role":
             case "a fact in the host's data on a container above":
+            case "a relationship row on a container a suspended organization owns":
                 break;
 
             case "a deny over a fact in the host's data":
@@ -5094,6 +5125,36 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await elsewhere.BeginAsync([HostPermissions.Read], TestContext.Current.CancellationToken);
 
         return elsewhere.Organization;
+    }
+
+    // The host's own row of a record it never registered, which the library holds
+    // nothing of.
+    private async Task UnregisteredAsync(ResourceReference record)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO host.documents (id, title) VALUES (@id, @title);",
+            new { id = record.Id.ToString(), title = "A record the host never registered." },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // AUTHZ-SCOPE-001 AC6 (D-266): the record sits in a workspace of a second
+    // organization, whose deletion was requested, and the account reviews that workspace
+    // in the host's own data. The single check judges the record there, where nothing
+    // confers, and the filter is asked of the case's own organization.
+    private async Task ReviewedElsewhereAsync(ResourceReference record, SubjectId account)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var elsewhere = new Deployment(host);
+        ResourceReference workspace = Reference(Workspace);
+
+        _ = await elsewhere.BeginAsync([HostPermissions.Read], cancellationToken);
+        await elsewhere.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await elsewhere.RegisterAsync(record, workspace, cancellationToken);
+        _ = await elsewhere.NamedRoleAsync(RoleName.Parse("reviewer"), [HostPermissions.Read], cancellationToken);
+        await elsewhere.ReviewAsync(workspace, account, cancellationToken);
+        await elsewhere.SuspendAsync(cancellationToken);
     }
 
     private static async Task JoinedAsync(

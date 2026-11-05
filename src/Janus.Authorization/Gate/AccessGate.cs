@@ -1345,7 +1345,7 @@ internal sealed class AccessGate(
             type,
             resources,
             permissions,
-            (rule, _, _, token) => StoredAsync(rule, resources, token),
+            (_, set, token) => StoredAsync(PermissionRule.Paged(permissions, type, set, time.GetUtcNow()), resources, token),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -1377,7 +1377,7 @@ internal sealed class AccessGate(
             type,
             resources,
             permissions,
-            (_, organization, set, token) => TermedAsync(type, organization, set, permissions, resources, sources, token),
+            (registered, set, token) => TermedAsync(type, registered, set, permissions, resources, sources, token),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -1429,7 +1429,7 @@ internal sealed class AccessGate(
         ResourceType type,
         IReadOnlyList<ResourceId> resources,
         IReadOnlyList<Permission> permissions,
-        Func<PermissionRule, OrganizationId, SubjectSet, CancellationToken, ValueTask<Conferred>> conferredBy,
+        Func<IReadOnlyList<RegisteredResource>, SubjectSet, CancellationToken, ValueTask<Conferred>> conferredBy,
         CancellationToken cancellationToken)
     {
         Declared(type);
@@ -1445,18 +1445,17 @@ internal sealed class AccessGate(
             .FindManyAsync(type, resources, cancellationToken)
             .ConfigureAwait(false);
 
-        if (registered.FirstOrDefault(row => row.Reference.Id == resources[0]) is not
-            RegisteredResource first)
+        // AUTHZ-SCOPE-001 AC5 (D-265): each record is judged in the organization owning
+        // it, and a record the library holds no row for is one no grant reaches.
+        if (registered.Count == 0)
         {
             return Nothing(resources);
         }
 
         SubjectSet set = await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false);
 
-        var rule = new PermissionRule(permissions, type, first.Organization, set, time.GetUtcNow());
-
         (IReadOnlyList<PageCapability> conferred, IReadOnlyDictionary<Permission, IReadOnlySet<string>> derivedRows) =
-            await conferredBy(rule, first.Organization, set, cancellationToken).ConfigureAwait(false);
+            await conferredBy(registered, set, cancellationToken).ConfigureAwait(false);
 
         // AUTHZ-GATE-005 AC1, PRIV-SENS-002 AC1: a consent belongs to the record's data
         // subject, so the consents of every subject on the page are read in one query,
@@ -1646,24 +1645,43 @@ internal sealed class AccessGate(
     // so no permission costs a query of its own.
     private async ValueTask<Conferred> TermedAsync<TResource>(
         ResourceType type,
-        OrganizationId organization,
+        IReadOnlyList<RegisteredResource> registered,
         SubjectSet set,
         IReadOnlyList<Permission> permissions,
         IReadOnlyList<ResourceId> resources,
         FilterSources<TResource> sources,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<ConferredDerivation> conferring = await derived
-            .ConferringAsync(type, organization, cancellationToken)
-            .ConfigureAwait(false);
+        // AUTHZ-SCOPE-001 AC5 (D-265): each record is judged in the organization owning
+        // it, so what the derivations confer is read for each organization of the page,
+        // one suspended conferring nothing, and nothing confers in the organization the
+        // principal holds no current membership of (IDN-LIFE-009a).
+        var owning = new Dictionary<string, OrganizationId>(StringComparer.Ordinal);
+        var conferringIn = new Dictionary<OrganizationId, IReadOnlyList<ConferredDerivation>>();
 
-        var rule = new PermissionRule(
+        foreach (RegisteredResource row in registered)
+        {
+            owning[row.Reference.Id.ToString()] = row.Organization;
+
+            if (!conferringIn.ContainsKey(row.Organization))
+            {
+                conferringIn[row.Organization] = set.WithoutMembership == row.Organization
+                    ? []
+                    : await derived.ConferringAsync(type, row.Organization, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var rule = PermissionRule.Paged(
             permissions,
             type,
-            organization,
             set,
             time.GetUtcNow(),
-            [.. conferring.Select(one => one.Relationship)]);
+            [
+                .. conferringIn.Values
+                    .SelectMany(conferring => conferring)
+                    .Select(one => one.Relationship)
+                    .DistinctBy(relationship => relationship.Name, StringComparer.Ordinal),
+            ]);
 
         var stored = new Dictionary<(string Resource, string Permission), bool>();
         var admitted = new Dictionary<Permission, HashSet<string>>();
@@ -1678,6 +1696,10 @@ internal sealed class AccessGate(
 
             if (term.Kind is PageTerm.Deriving)
             {
+                IReadOnlyList<ConferredDerivation> conferring = owning.TryGetValue(term.Resource, out OrganizationId organization)
+                    ? conferringIn[organization]
+                    : [];
+
                 foreach (ConferredDerivation one in conferring.Where(one =>
                     string.Equals(one.Relationship.Name, term.Name, StringComparison.Ordinal)))
                 {

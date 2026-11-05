@@ -57,6 +57,8 @@ internal sealed class PermissionRule
     private readonly DateTimeOffset _at;
     private readonly RequiredConsent? _consent;
     private readonly bool _exercised;
+    private readonly bool _paged;
+    private readonly OrganizationId? _unheld;
 
     /// <summary>
     /// The rule one principal's evaluation of a set of permissions over one resource
@@ -127,6 +129,52 @@ internal sealed class PermissionRule
         RequiredConsent? consent)
         : this(permissions, type, organization, SubjectSet.None(), at, derivations: null, consent) =>
         _exercised = true;
+
+    private PermissionRule(
+        IReadOnlyList<Permission> permissions,
+        ResourceType type,
+        SubjectSet subjects,
+        DateTimeOffset at,
+        IReadOnlyList<RelationshipDeclaration>? derivations)
+        : this(permissions, type, default, subjects, at, derivations)
+    {
+        _paged = true;
+        _unheld = subjects.WithoutMembership;
+    }
+
+    /// <summary>
+    /// The rule a page of records runs, each record judged in the organization owning it
+    /// rather than in one organization for the whole page.
+    /// </summary>
+    /// <param name="permissions">What is being asked for.</param>
+    /// <param name="type">The kind of thing the records are.</param>
+    /// <param name="subjects">Who holds grants for the principal.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="derivations">
+    /// The relationships whose derivations confer one of the permissions on records of
+    /// the type in an organization of the page (AUTHZ-DERIVE-002).
+    /// </param>
+    /// <returns>The rule.</returns>
+    /// <exception cref="ArgumentNullException">The permissions or the subjects are absent.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-SCOPE-001 AC5 and AUTHZ-GATE-005 AC1 (D-265): a grant reaches a
+    /// record of the page only where the library registers the record in the grant's
+    /// organization, which is what <see cref="ToPage"/> and <see cref="ToPageTerms"/>
+    /// read, so the page stays one query whatever organizations its records sit in.
+    /// Nothing confers in the organization the principal holds no current membership of
+    /// (IDN-LIFE-009a).
+    /// </remarks>
+    public static PermissionRule Paged(
+        IReadOnlyList<Permission> permissions,
+        ResourceType type,
+        SubjectSet subjects,
+        DateTimeOffset at,
+        IReadOnlyList<RelationshipDeclaration>? derivations = null)
+    {
+        ArgumentNullException.ThrowIfNull(subjects);
+
+        return new(permissions, type, subjects, at, derivations);
+    }
 
     /// <summary>
     /// The rule a host's declared job is admitted under: every record of the type its
@@ -667,19 +715,34 @@ internal sealed class PermissionRule
     /// query rather than one per row.
     /// </summary>
     /// <returns>The statement and its parameters, naming the page by parameter.</returns>
-    public SqlFilter ToPage() => new(
-        string.Create(
-            CultureInfo.InvariantCulture,
-            $"""
-            SELECT {PageAlias}.{PageColumn} AS "{nameof(PageCapability.Resource)}",
-                   {Prefix}grant.permission AS "{nameof(PageCapability.Permission)}",
-                   bool_or({Prefix}grant.deny) AS "{nameof(PageCapability.Denied)}"
-            FROM unnest(CAST(@{PageParameter} AS text[])) AS {PageAlias}({PageColumn})
-            JOIN identity.effective_grants AS {Prefix}grant
-              ON {Matches(Prefix + "grant", PageAlias + "." + PageColumn)}
-            GROUP BY {PageAlias}.{PageColumn}, {Prefix}grant.permission;
-            """),
-        Parameters());
+    public SqlFilter ToPage()
+    {
+        Dictionary<string, object> parameters = Parameters();
+        string unheld = string.Empty;
+
+        // AUTHZ-SCOPE-001 AC5 (D-265): a paged rule names no organization of its own, the
+        // record's registration naming the grant's, and nothing confers in the
+        // organization the principal holds no current membership of (IDN-LIFE-009a).
+        if (_paged && _unheld is OrganizationId without)
+        {
+            parameters[Prefix + "without"] = without.Value;
+            unheld = "\n AND " + Prefix + "grant.organization <> @" + Prefix + "without";
+        }
+
+        return new(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                SELECT {PageAlias}.{PageColumn} AS "{nameof(PageCapability.Resource)}",
+                       {Prefix}grant.permission AS "{nameof(PageCapability.Permission)}",
+                       bool_or({Prefix}grant.deny) AS "{nameof(PageCapability.Denied)}"
+                FROM unnest(CAST(@{PageParameter} AS text[])) AS {PageAlias}({PageColumn})
+                JOIN identity.effective_grants AS {Prefix}grant
+                  ON {Matches(Prefix + "grant", PageAlias + "." + PageColumn, _paged ? null : Scoped)}{unheld}
+                GROUP BY {PageAlias}.{PageColumn}, {Prefix}grant.permission;
+                """),
+            parameters);
+    }
 
     // AUTHZ-DERIVE-001, AUTHZ-DERIVE-002 (D-160): a grant or a relationship row for one of
     // the principal's subjects, on the record or on something above it, and a deny
@@ -723,31 +786,60 @@ internal sealed class PermissionRule
 
     // AUTHZ-GATE-002 AC1: the one predicate every rendering over the host's rows is
     // built from: a live grant for one of the permissions, held by one of the
-    // principal's subjects, in this organization, on the record named or on something
-    // above it.
+    // principal's subjects, in this organization, on a record the library registers in
+    // the grant's organization, the grant naming the record, something above it, or no
+    // record at all (AUTHZ-SCOPE-001 AC5, D-265).
     private Expression<Func<EffectiveGrant, string, bool>> Matching(
         IQueryable<AncestryEntry> ancestry,
         string[] permissions)
     {
         string type = Type.ToString();
-        Guid organization = _organization.Value;
         Guid[] accounts = _subjects.Accounts;
         Guid[] groups = _subjects.Groups;
         DateTimeOffset at = _at;
 
-        return (grant, identifier) =>
+        Expression<Func<EffectiveGrant, string, bool>> matching = (grant, identifier) =>
             permissions.Contains(grant.Permission)
-            && grant.Organization == organization
             && grant.RevokedAt == null
             && (grant.ExpiresAt == null || grant.ExpiresAt > at)
             && ((grant.SubjectType == "user" && accounts.Contains(grant.SubjectId))
                 || (grant.SubjectType == "group" && groups.Contains(grant.SubjectId)))
-            && (grant.ResourceType == null
-                || ancestry.Any(entry =>
-                    entry.ResourceType == type
-                    && entry.ResourceId == identifier
-                    && entry.AncestorType == grant.ResourceType
-                    && entry.AncestorId == grant.ResourceId));
+            && ancestry.Any(entry =>
+                entry.ResourceType == type
+                && entry.ResourceId == identifier
+                && entry.Organization == grant.Organization
+                && ((grant.ResourceType == null && entry.Depth == 0)
+                    || (entry.AncestorType == grant.ResourceType && entry.AncestorId == grant.ResourceId)));
+
+        Expression<Func<EffectiveGrant, bool>> within = Within();
+
+        return Expression.Lambda<Func<EffectiveGrant, string, bool>>(
+            Expression.AndAlso(
+                new Substitution(within.Parameters[0], matching.Parameters[0]).Visit(within.Body),
+                matching.Body),
+            matching.Parameters);
+    }
+
+    // The organization a grant is read in: the rule's own, or for a paged rule whichever
+    // organization the record's registration names, save the one the principal holds no
+    // current membership of (IDN-LIFE-009a, D-265).
+    private Expression<Func<EffectiveGrant, bool>> Within()
+    {
+        if (!_paged)
+        {
+            Guid organization = _organization.Value;
+
+            return grant => grant.Organization == organization;
+        }
+
+        if (_unheld is OrganizationId without)
+        {
+            Guid unheld = without.Value;
+
+            return grant => grant.Organization != unheld;
+        }
+
+        return _ => true;
     }
 
     // PRIV-SENS-002, PRIV-CONS-007: the record's data subject holds a live consent for
@@ -846,9 +938,10 @@ internal sealed class PermissionRule
 
         string type = Type.ToString();
         string on = relationship.On.ToString();
+        IQueryable<AncestryEntry> owned = Owned(ancestry);
 
         Expression<Func<string, string, bool>> above = (resource, identifier) =>
-            ancestry.Any(entry =>
+            owned.Any(entry =>
                 entry.ResourceType == type
                 && entry.ResourceId == identifier
                 && entry.AncestorType == on
@@ -906,10 +999,25 @@ internal sealed class PermissionRule
             Expression.AndAlso(Holds(relationship.Holder.Body), names),
             row));
 
-        return ancestry
+        return Owned(ancestry)
             .Where(Expression.Lambda<Func<AncestryEntry, bool>>(
                 Expression.AndAlso(scoped.Body, held),
                 above));
+    }
+
+    // AUTHZ-SCOPE-001 AC6 (D-266): a derivation reaches a row only through an ancestry
+    // row the library registers in the organization the rule is asked in, as a stored
+    // grant does; a paged rule judges each record in the organization owning it.
+    private IQueryable<AncestryEntry> Owned(IQueryable<AncestryEntry> ancestry)
+    {
+        if (_paged)
+        {
+            return ancestry;
+        }
+
+        Guid organization = _organization.Value;
+
+        return ancestry.Where(entry => entry.Organization == organization);
     }
 
     // Whether the row is held by one of the principal's subjects. The column is the
@@ -947,6 +1055,7 @@ internal sealed class PermissionRule
                           FROM identity.ancestry AS {held}_above
                           WHERE {held}_above.resource_type = @{Prefix}type
                             AND {held}_above.resource_id = {row}
+                            AND {held}_above.organization = @{Prefix}organization
                             AND {held}_above.ancestor_type = @{held}_on
                             AND {held}_above.ancestor_id = {held}.{Identifier(relationship.ResourceColumn, nameof(relationship.ResourceColumn))}))
                 """));
@@ -1011,19 +1120,23 @@ internal sealed class PermissionRule
     }
 
     // The one predicate every rendering is built from: a live grant for one of the
-    // permissions, held by one of the principal's subjects, in this organization, on
-    // the record itself or on something above it.
-    private static string Matches(string grant, string row) => string.Create(
+    // permissions, held by one of the principal's subjects, in this organization, on a
+    // record the library registers in the grant's organization, the grant naming the
+    // record, something above it, or no record at all (AUTHZ-SCOPE-001 AC5, D-265). A
+    // paged rule names no organization of its own.
+    private static string Matches(string grant, string row, string? within = Scoped) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
-        {Live(grant, Scoped)}
-                  AND ({grant}.resource_type IS NULL OR EXISTS (
+        {Live(grant, within)}
+                  AND EXISTS (
                       SELECT 1
                       FROM identity.ancestry AS {grant}_above
                       WHERE {grant}_above.resource_type = @{Prefix}type
                         AND {grant}_above.resource_id = {row}
-                        AND {grant}_above.ancestor_type = {grant}.resource_type
-                        AND {grant}_above.ancestor_id = {grant}.resource_id))
+                        AND {grant}_above.organization = {grant}.organization
+                        AND (({grant}.resource_type IS NULL AND {grant}_above.depth = 0)
+                          OR ({grant}_above.ancestor_type = {grant}.resource_type
+                            AND {grant}_above.ancestor_id = {grant}.resource_id)))
         """);
 
     // The same predicate asked of the organization itself, which AUTHZ-GRANT-001 makes
@@ -1037,19 +1150,25 @@ internal sealed class PermissionRule
         """);
 
     // What every rendering asks of a grant before it asks what the grant reaches, within
-    // the organization the rendering names as SQL.
-    private static string Live(string grant, string within) => string.Create(
-        CultureInfo.InvariantCulture,
-        $"""
-        {grant}.permission = ANY(@{Prefix}permissions)
-                  AND {grant}.organization = {within}
-                  AND {grant}.revoked_at IS NULL
-                  AND ({grant}.expires_at IS NULL OR {grant}.expires_at > @{Prefix}at)
-                  AND (({grant}.subject_type = 'user'
-                          AND {grant}.subject_id = ANY(@{Prefix}accounts))
-                    OR ({grant}.subject_type = 'group'
-                          AND {grant}.subject_id = ANY(@{Prefix}groups)))
-        """);
+    // the organization the rendering names as SQL, where it names one.
+    private static string Live(string grant, string? within)
+    {
+        string scoped = within is null
+            ? string.Empty
+            : string.Create(CultureInfo.InvariantCulture, $"\n          AND {grant}.organization = {within}");
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"""
+            {grant}.permission = ANY(@{Prefix}permissions){scoped}
+                      AND {grant}.revoked_at IS NULL
+                      AND ({grant}.expires_at IS NULL OR {grant}.expires_at > @{Prefix}at)
+                      AND (({grant}.subject_type = 'user'
+                              AND {grant}.subject_id = ANY(@{Prefix}accounts))
+                        OR ({grant}.subject_type = 'group'
+                              AND {grant}.subject_id = ANY(@{Prefix}groups)))
+            """);
+    }
 
     private Dictionary<string, object> Parameters() => new(StringComparer.Ordinal)
     {
