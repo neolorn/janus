@@ -20991,6 +20991,31 @@ with the zone's offset and PostgreSQL's driver writes only offset 0 to a
 
 ---
 
+## D-264 — An instant a caller sends is held in UTC
+
+**Date:** 2026-11-05 · **Status:** accepted · **Amends:** API-CONV-002
+
+**TL;DR.** An instant a request carries, in a body, a query or a call of a service
+interface, may bear any offset ISO 8601 allows; the library converts it to the same
+instant in UTC where it takes it, before anything holds, compares or writes it. Found in
+round H15: with D-263's fault gone, `endsAt`, `expiresAt` and `grantEndsAt` sent with an
+offset other than 0 would still reach the driver as they came and answer 500.
+
+- **Accepting, not refusing.** An offset is a valid way to write an instant, and a host's
+  frontend in a zone ahead of UTC writes one naturally; refusing it would make every host
+  convert first for nothing the library gains.
+- **Answers stay UTC,** as every instant the library writes already is.
+
+*Rejected:*
+- **Refusing a non-zero offset** with `api.request.malformed`: valid input refused, and a
+  rule every host must learn.
+
+**Propagated to:**
+- `09` API-CONV-002 (criterion 5);
+- `implementation-plan.md` (round H15).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |

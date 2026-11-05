@@ -98,6 +98,10 @@ instant the next attempt is looked at, built by one builder wherever it is answe
    dots; an element of a list, or a member inside one, by the list's name; a member
    inside an element of a body that is itself a list by its own name; a route or query
    value by its name in the route or query. It carries nothing of the member's value.
+5. An instant a request carries (a body, a query or a call of a service interface) may
+   bear any offset; the library holds and writes it as the same instant in UTC, so an
+   `endsAt` sent as `2026-12-01T00:00:00+02:00` is recorded and answered as
+   `2026-11-30T22:00:00Z` (D-264).
 
 ---
 
