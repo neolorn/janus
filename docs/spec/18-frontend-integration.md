@@ -266,17 +266,24 @@ This is the requirement that stops a button appearing while the endpoint refuses
 **FE-CAP-002** — Absence of a capability SHALL hide or disable the control. A
 capability carrying `requires` SHALL be **shown and prompt** for what is needed.
 
-*Source: AUTHZ-GATE-005, D-078*
+*Source: AUTHZ-GATE-005, D-078, D-270*
 
 Not permitted → hidden. Permitted but gated → shown, and selecting it triggers the
 step-up or consent flow. This resolves the previous conflict between "never show a
 control that will fail" and "reject with a step-up code and let the frontend retry":
 a gated action is not a failure, it is a prompt.
 
+**A residual the frontend does not know (D-270).** The set of `10` section 5.20 may gain
+a member in a minor version. A capability whose `requires` names a residual the frontend
+does not know is treated as not permitted: its control is hidden or disabled, as for an
+absent capability, until the frontend learns to prompt for it.
+
 **Acceptance criteria**
 1. No control is presented whose action the capability array does not permit.
 2. A control requiring step-up is visible and initiates step-up when selected.
 3. A control requiring consent is visible and initiates the consent flow.
+4. A control whose capability requires a residual the frontend does not know is hidden or
+   disabled (D-270).
 
 ---
 

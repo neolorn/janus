@@ -801,6 +801,8 @@ drop the part that cannot be acted on.
 
 > **Amended.** Direct connection retrieval: `UseUnitOfWorkAsync` is the one place outside the accessor that touches a context's connection, reading the host's context's connection to judge it and handing it the accessor's connection and transaction (D-206).
 
+> **Amended.** The public ancestry closure: hand-written SQL reaches `identity.ancestry`, `identity.effective_grants` and `identity.consented_resources` only through the library's SQL fragment, composed into its own query; their rows are inputs to the gate's renderings, never a permission a query reads for itself, and what a row confers is the library's to decide (D-269).
+
 **Date:** 2026-08-25 · **Status:** accepted · **Affects:** D-015
 
 **Decision.** Both EF Core and Dapper from the start, with one unambiguous rule:
@@ -21107,6 +21109,217 @@ references for getting it right, not the measure of what Janus is.
 
 ---
 
+## D-268 — The operations contract is the library's to implement
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** LIB-API-001
+
+**TL;DR.** No host implements an interface of LIB-API-001's operations contract,
+`IAccessGate` and `IStepUpGate` among them: a host calls them. The interfaces a host
+implements are those of the extension contracts and the conformance suite's host-rows
+seam. A member the library adds to an interface of the operations contract is therefore
+an additive change (LIB-VER-001 criterion 2), so the gate can take a new input, a batch
+of checks or a check of proposed values, in a minor version (D-267). The first point of
+the plan's list before the final 1.0.0.
+
+- **The row already said it** of the unit of work, event publication, the key ring and
+  the mail server in use; it now says it of the whole row. Every interface of the row is
+  implemented in the library today, and Cura calls the gate and implements none.
+- **A sentence, not request objects.** Moving the gate's inputs into request objects
+  would also stop its members doubling with each input (with and without the host's
+  sources), but it changes every call a host makes today, for an input no host needs
+  yet. Once no host implements the gate, a new input is a new member, which breaks
+  nothing; the decision that brings the input chooses its shape then.
+- **Tests.** `Janus.Testing` ships no stand-in of either gate: a host's test asks the
+  library's own gate through its test deployment, which skips no check (LIB-TEST-003).
+  The fakes in the library's own test projects are the library's, changed with it.
+
+*Rejected:*
+- **Request objects for the gate's inputs now:** the reason above.
+- **Leaving it unsaid:** an interface a host might implement cannot gain a member before
+  a major version, so every later input would wait for one.
+
+**Propagated to:**
+- `07` LIB-API-001 (the operations contract's row);
+- `implementation-plan.md` (round H17; section 4's first point).
+
+---
+
+## D-269 — A row of the contract relations is an input, not a permission
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** D-017, LIB-API-001,
+AUTHZ-SEAM-001
+
+**TL;DR.** `identity.ancestry`, `identity.effective_grants` and
+`identity.consented_resources`, and the records a host maps them through
+(`AncestryEntry`, `EffectiveGrant`, `ConsentedResource`), are inputs to the gate's
+renderings. A permission is asked only through the gate: the check, the list filter, the
+SQL fragment a hand-written query composes, the capability page. No host code, and no
+library code outside the renderings, decides a permission by reading those relations
+itself. Their structure is the contract (the names, columns and types a host's context
+maps); what a row confers is the library's to decide, and a later version may add a
+column or narrow when a row confers as an additive change. The second point of the plan's
+list before the final 1.0.0.
+
+- **Why now.** A row of `effective_grants` already does not mean "this subject holds this
+  permission here": it carries a deny flag, an expiry and a revocation the renderings
+  apply at the instant asked, and an organization-wide grant's row reaches a record only
+  through an `ancestry` entry in the grant's organization (D-265). A condition, or a role
+  that must be activated (D-267), would make a row confer only sometimes. SQL a host wrote
+  over the view would over-grant at each such step, and the library could not catch it.
+- **D-017 amended.** D-017 made the ancestry closure public "since hand-written SQL will
+  query it". Hand-written SQL queries it through the SQL fragment, composed into its own
+  `WHERE` (AUTHZ-GATE-002, AUTHZ-PRIN-002); it never states a permission rule of its own
+  over it, which AUTHZ-SEAM-001 criterion 2 already forbids a call site.
+- **Unchanged:** the relations stay public and mapped into the host's context (D-159),
+  since the LINQ rendering reads them there; restructuring them still needs a major
+  version from the first final release.
+
+*Rejected:*
+- **Reserving now how a conditional row will be marked:** it fixes a column for a feature
+  not designed, and still leaves each host's own SQL to apply it, which is the rule
+  AUTHZ-PRIN-001 takes out of hosts' hands.
+
+**Propagated to:**
+- D-017 (an amendment note);
+- `03` AUTHZ-SEAM-001 (a paragraph and criterion 2);
+- `07` LIB-API-001 (the ancestry closure's row and the paragraph under the table);
+- `implementation-plan.md` (round H17; section 4's second point).
+
+---
+
+## D-270 — An empty `requires` keeps its promise, and the residuals may grow
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** AUTHZ-GATE-005, API-CAP-001,
+FE-CAP-002, `10` section 5.20
+
+**TL;DR.** "A capability with an empty `requires` always succeeds" stays a promise.
+Whatever the capability page can judge it judges as the action's check would; whatever it
+cannot, because only the action carries it (a value the person is about to enter, a state
+the action sets), it answers as a residual of `10` section 5.20, never as a bare
+capability. The set of residuals may grow in a minor version: a frontend treats a
+residual it does not know as not permitted, hiding or disabling the control as for an
+absent capability. The third point of the plan's list before the final 1.0.0.
+
+- **Why.** Every residual today is a fact of the session, the account or the data
+  subject, which the page reads. A condition on a proposed value (an amount limit,
+  D-267) cannot be judged before the value exists: answered as a bare capability it makes
+  the promise false, and left out of `can` it hides a control the person may use for a
+  smaller value.
+- **The frontend's rule.** A residual the frontend knows is prompted for, as today. One a
+  later version adds, which it does not know, is not permitted: the control is hidden or
+  disabled. That fails closed (AUTHZ-PRIN-003; FE-CAP-003 keeps it presentation) and lets
+  the closed set grow without a major version.
+- **Unchanged:** the five residuals and what each means.
+
+*Rejected:*
+- **Weakening the promise** to "usually succeeds": a frontend could no longer tell a
+  control that works from one that will fail, which is what capabilities are for.
+
+**Propagated to:**
+- `03` AUTHZ-GATE-005 (a paragraph);
+- `09` API-CAP-001 (a paragraph);
+- `10` section 5.20 (the set may grow);
+- `18` FE-CAP-002 (a paragraph and criterion 4);
+- `implementation-plan.md` (round H17; section 4's third point).
+
+---
+
+## D-271 — A later family of truth-table cases comes with its own host interface
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** LIB-TEST-001
+
+**TL;DR.** `IConformanceRows<TResource>` keeps the members it has. A later family of cases
+that needs the host to write something those members cannot (a record's attribute values
+for a condition, D-267) comes with an interface of its own, which the host implements
+beside `IConformanceRows`, and a suite member that takes it, both additions. A host that
+does not hand it over is not asked that family's cases; a table holding such a case
+without it is refused before anything is written, as a step-up case without a deployment
+factory is (LIB-TEST-001 criterion 2). The fourth point of the plan's list before the
+final 1.0.0.
+
+- **Why.** The host implements `IConformanceRows`, so a member added to it breaks every
+  host's implementation; a new interface breaks none.
+- **Default interface members,** the other additive path, are a pattern `08` does not
+  name, and a default that writes nothing would let a family's cases run over rows that
+  never received their values.
+- **The same path** serves the suite running the SQL fragment or the capability page in a
+  host's own table, as the library's own table runs them, should a host want that proven:
+  each is a family of its own, built when asked.
+- **Unchanged:** the suite's four calls, its report, its cases and every criterion of
+  LIB-TEST-001.
+
+*Rejected:*
+- **A parameter for attribute values on `WriteAsync` now:** it shapes the interface around
+  a vocabulary not designed (D-272 fixes only its boundary).
+
+**Propagated to:**
+- `07` LIB-TEST-001 (a paragraph);
+- `implementation-plan.md` (round H17; section 4's fourth point).
+
+---
+
+## D-272 — The boundary of a later condition vocabulary, not built
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** `03` section 2.6 (new)
+
+**TL;DR.** Nothing is built. `03` section 2.6 fixes the shape a condition takes when a host
+first needs one (D-267), so that no part of the public surface is shaped meanwhile in a way
+a condition could not keep: a condition narrows what confers access and never confers on
+its own (D-043); it is built from a closed vocabulary the library owns and renders both
+ways; a record's attributes are declared in the model with a selector and a column; its
+arguments are data and every value compared is a parameter; a type whose permissions may
+carry one is asked with the host's sources; what a capability page cannot judge is a
+residual (D-270); and deny, scoping, the explanation, the audit trail and the truth table
+take each condition as they take a grant. The fifth point of the plan's list before the
+final 1.0.0.
+
+- **Why write it before it is built.** The other points keep the doors open; this one
+  says which door. An interface shaped later around a host's delegate or SQL text could
+  neither render on the other path (AUTHZ-PRIN-001) nor be written to the reviewed model
+  file (AUTHZ-MODEL-005).
+- **Left to the owner, when a host needs it:** whether an attribute may ever permit on its
+  own, against D-043's "may only remove access"; separation of duties, and its scope;
+  whether a role must be activated before it confers.
+
+*Rejected:*
+- **Building a first condition now:** no host needs one, and the direction is to build
+  each piece when a host needs it (D-267).
+
+**Propagated to:**
+- `03` section 2.6 (new);
+- `00` section 7.3 and this log's deferred table (the attribute-based row names D-272);
+- `implementation-plan.md` (section 4's fifth point).
+
+---
+
+## D-273 — A member added to a public record is an init property
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** CONV-CODE-003
+
+**TL;DR.** From the first final release on, a member added to a public record (a
+declaration, an explanation, a contract row, an event, a truth-table case) is an `init`
+property whose default keeps the record's meaning without it: never a new positional
+parameter, and never `required`. A positional parameter is removed, renamed or reordered
+only in a major version. The sixth point of the plan's list before the final 1.0.0.
+
+- **Why.** A new positional parameter changes the record's constructor and its
+  `Deconstruct`, breaking every host that builds or deconstructs one; an `init` property
+  with a default breaks none. The public-surface files and the release gate already fail a
+  changed constructor after the first final release (LIB-TEST-002), so the rule needs no
+  new check: it names the change the gate passes.
+- **Before the first final release** a release candidate may still reshape a record
+  (LIB-VER-001, D-232).
+
+*Rejected:*
+- **Turning the public records into records of properties alone now:** every host that
+  builds one would change, for no need a host has.
+
+**Propagated to:**
+- `08` CONV-CODE-003 (a paragraph);
+- `implementation-plan.md` (section 4's sixth point).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21379,6 +21592,17 @@ references for getting it right, not the measure of what Janus is.
 | Release notes too long for a release body | D-260 |
 | A host reads the reach of a record access session | D-261 |
 | A release candidate keeps its predecessor's lists while they are fresh | D-262 |
+| The legal clock's instants are written in UTC | D-263 |
+| An instant a caller sends is held in UTC | D-264 |
+| An organization-wide grant reaches only its own organization's rows in a list | D-265 |
+| A derived grant reaches only its own organization's rows in a list | D-266 |
+| Janus's direction: a complete authorization library, built as needed | D-267 |
+| The operations contract is the library's to implement | D-268 |
+| A row of the contract relations is an input, not a permission | D-269 |
+| An empty `requires` keeps its promise, and the residuals may grow | D-270 |
+| A later family of truth-table cases comes with its own host interface | D-271 |
+| The boundary of a later condition vocabulary, not built | D-272 |
+| A member added to a public record is an init property | D-273 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
@@ -21428,5 +21652,5 @@ Per P-003 — nothing deferred silently.
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
 | Round R: a report feed of people data and a bulk import (D-258) | A report that names people or reads their contacts in bulk, a live feed to a spreadsheet or business-intelligence tool, or a bulk import of accounts, members or person records |
 | Full role-based access: roles composed of roles, static and dynamic separation of duties (D-267) | A host rule that a role must include another, or that one person may not hold or exercise two duties together |
-| Full attribute-based access: conditions over the subject's, the resource's, the action's and the environment's attributes, in a closed vocabulary the library owns, rendered for both the single check and the list filter (D-267) | A host rule that depends on a value: an amount limit, a record's status, a time, a network or the sign-in's strength |
+| Full attribute-based access: conditions over the subject's, the resource's, the action's and the environment's attributes, in a closed vocabulary the library owns, rendered for both the single check and the list filter (D-267; its boundary, D-272) | A host rule that depends on a value: an amount limit, a record's status, a time, a network or the sign-in's strength |
 | Authorization for a host's GraphQL API: field and type permissions, many decisions in one pass, each record judged in its own organization (D-267) | A host serving a GraphQL API |

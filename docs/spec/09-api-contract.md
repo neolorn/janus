@@ -3593,7 +3593,7 @@ statement beside it, never per record.
 }
 ```
 
-*Source: AUTHZ-GATE-005, D-078, D-087, D-202, D-206, D-207*
+*Source: AUTHZ-GATE-005, D-078, D-087, D-202, D-206, D-207, D-270*
 
 A capability means **"permitted by grants, subject to session gates."** It is not a
 promise the action will succeed: an action may still be refused for step-up, a
@@ -3606,7 +3606,10 @@ IDN-PRIN-001, D-207).
 5.20 (`stepup` · `reauthenticate` · `restricted` · `consent` · `accountstate`, D-153),
 so the frontend prompts rather than
 hiding a control the person is entitled to use or showing one that fails without
-explanation.
+explanation. What the page cannot judge, because only the action carries it, is a
+residual, never a bare capability, so criterion 2 holds; the set may grow in a minor
+version, and a frontend treats a residual it does not know as not permitted (`03`
+AUTHZ-GATE-005, `18` FE-CAP-002, D-270).
 
 The frontend renders controls from `can` and SHALL NOT infer permissions from role
 names.
