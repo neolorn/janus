@@ -75,6 +75,10 @@ internal sealed class GrantService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(request);
 
+        // API-CONV-002 AC5 (D-264): the end the caller sends is held as the same instant
+        // in UTC, whatever offset it bears.
+        DateTimeOffset? expiresAt = request.ExpiresAt?.ToUniversalTime();
+
         if (context.Acting is not SubjectId acting)
         {
             return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
@@ -150,7 +154,7 @@ internal sealed class GrantService(
 
         // AUTHZ-GRANT-003 (D-237): a role whose grants must end is granted with an end, or
         // not at all.
-        if (role.GrantsMustEnd && request.ExpiresAt is null)
+        if (role.GrantsMustEnd && expiresAt is null)
         {
             return Result.Failure<GrantId>(Error.From(
                 ErrorCodes.GrantEndRequired,
@@ -160,7 +164,7 @@ internal sealed class GrantService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        if (request.ExpiresAt <= now)
+        if (expiresAt <= now)
         {
             return Result.Failure<GrantId>(Error.From(ErrorCodes.GrantExpired));
         }
@@ -180,7 +184,7 @@ internal sealed class GrantService(
                 request.On.Type == OrganizationWide ? null : request.On,
                 request.Deny,
                 GrantKind.Stored,
-                request.ExpiresAt,
+                expiresAt,
                 acting,
                 now,
                 request.Reason)

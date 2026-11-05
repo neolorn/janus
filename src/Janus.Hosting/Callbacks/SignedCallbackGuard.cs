@@ -138,7 +138,9 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
             return CallbackCheck.Signature;
         }
 
-        if (presented.SignedAt is DateTimeOffset signedAt && (now - signedAt).Duration() > Window)
+        // API-CONV-002 AC5 (D-264): the instant the delivery carries is compared as the
+        // same instant in UTC, whatever offset it bears.
+        if (presented.SignedAt?.ToUniversalTime() is DateTimeOffset signedAt && (now - signedAt).Duration() > Window)
         {
             return CallbackCheck.Window;
         }

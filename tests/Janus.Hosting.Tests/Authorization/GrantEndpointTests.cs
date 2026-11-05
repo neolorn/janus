@@ -96,6 +96,29 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// API-CONV-002 AC5 (D-264): an <c>expiresAt</c> sent two hours ahead of UTC is held
+    /// as the same instant in UTC.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AC5_AGrantsEndSentAtAnOffsetIsHeldInUtcAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        Answer created = await GrantedAsync(
+            administrator,
+            "organization",
+            Branch.ToString(),
+            expiresAt: new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.FromHours(2)));
+
+        Grant grant = await StoredAsync(created);
+
+        Assert.Equal(
+            ((DateTimeOffset?)new DateTimeOffset(2026, 11, 30, 22, 0, 0, TimeSpan.Zero), TimeSpan.Zero),
+            (grant.ExpiresAt, grant.ExpiresAt?.Offset));
+    }
+
+    /// <summary>
     /// LIB-API-001, chapter 10 section 5b (D-218): a grant made and then revoked is
     /// announced as <c>GrantChanged</c> at each, <c>made</c> then <c>revoked</c>, in the
     /// transaction that makes the change, naming the grant, its kind, holder, role and

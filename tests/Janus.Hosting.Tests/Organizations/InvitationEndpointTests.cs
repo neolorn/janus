@@ -492,6 +492,33 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 AC5 (D-264): an <c>endsAt</c> sent as
+    /// <c>2026-12-01T00:00:00+02:00</c> is set as the same instant in UTC.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AC5_AnEndSentAtAnOffsetIsSetInUtcAsync()
+    {
+        var member = new SubjectId(Guid.NewGuid());
+
+        _deployment.Memberships.Place(member, Branch);
+
+        Browser administrator = await AuthorisedAsync();
+
+        Answer set = await administrator.SendAsync(
+            "PUT",
+            EndOf(Branch, member),
+            """{"endsAt":"2026-12-01T00:00:00+02:00","reason":"The contract ends."}""");
+
+        DateTimeOffset? held = _deployment.Endings.EndSetOn(member, Branch)?.At;
+
+        Assert.Equal(StatusCodes.Status204NoContent, set.Status);
+        Assert.Equal(
+            ((DateTimeOffset?)new DateTimeOffset(2026, 11, 30, 22, 0, 0, TimeSpan.Zero), TimeSpan.Zero),
+            (held, held?.Offset));
+    }
+
+    /// <summary>
     /// OPS-BOOT-002 AC7, IDN-MEM-001 AC6 and 09 section 8a (D-202): ending the reserved
     /// account's membership of the administrative organization is <c>403</c>
     /// <c>authz.denied</c> for an administrator holding <c>membership:manage</c> there,

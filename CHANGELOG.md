@@ -8,6 +8,19 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.5] - 2026-11-05
+
+### Fixed
+
+- A privacy request, submitted in the app or entered out of band, is recorded again
+  where `privacy.calendar.timezone` names a zone other than UTC; it failed with 500
+  before. Its decision deadline, warning and escalation are counted in that zone and
+  held in UTC, so the deadline read back is the same instant whatever the zone.
+- An instant sent with an offset other than 0, a grant's or an app password's
+  `expiresAt`, a membership's `endsAt` or an invitation's `grantEndsAt`, in a body or
+  a call of a service interface, is recorded and answered as the same instant in UTC;
+  it failed with 500 before.
+
 ## [1.0.0-rc.4] - 2026-11-05
 
 ### Added

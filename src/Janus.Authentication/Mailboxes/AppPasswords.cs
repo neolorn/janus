@@ -128,9 +128,10 @@ internal sealed class AppPasswords(
         }
 
         // INT-MAIL-010 AC1: one call to the server, which generates the secret; the
-        // library neither chooses one nor keeps the one it is handed.
+        // library neither chooses one nor keeps the one it is handed. The end the caller
+        // sends is held as the same instant in UTC (API-CONV-002 AC5, D-264).
         IssuedAppPassword created = (await hosting
-                .CreateAppPasswordAsync(mailbox.Id, mailbox.Address, named.Value, expiresAt, cancellationToken)
+                .CreateAppPasswordAsync(mailbox.Id, mailbox.Address, named.Value, expiresAt?.ToUniversalTime(), cancellationToken)
                 .ConfigureAwait(false))
             .Match(issued => issued, error => Withheld<IssuedAppPassword>(error, ref failure));
 

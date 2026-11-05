@@ -101,6 +101,10 @@ internal sealed class InvitationService(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(source);
 
+        // API-CONV-002 AC5 (D-264): the grants' end the caller sends is held as the same
+        // instant in UTC, whatever offset it bears.
+        DateTimeOffset? grantEndsAt = request.GrantEndsAt?.ToUniversalTime();
+
         // An invitation is issued by a person, whose identity the record carries.
         if (context.Acting is not SubjectId acting)
         {
@@ -174,7 +178,7 @@ internal sealed class InvitationService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        if (GrantEnd(named, request.GrantEndsAt, now + lifetime) is Error unended)
+        if (GrantEnd(named, grantEndsAt, now + lifetime) is Error unended)
         {
             return Result.Failure<IssuedInvitation>(unended);
         }
@@ -255,7 +259,7 @@ internal sealed class InvitationService(
 
         // AUTHZ-GRANT-003 (D-239): which roles must end is read again under the roles'
         // locks, so a rule turned on meanwhile is met before anything is written.
-        if ((failure ?? GrantEnd(held, request.GrantEndsAt, now + lifetime)) is Error unnamed)
+        if ((failure ?? GrantEnd(held, grantEndsAt, now + lifetime)) is Error unnamed)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -273,8 +277,8 @@ internal sealed class InvitationService(
             token.Fingerprint(),
             now,
             lifetime,
-            held.Ending.Count > 0 && request.GrantEndsAt is DateTimeOffset grantEndsAt
-                ? new InvitedGrantEnd(grantEndsAt, held.Ending)
+            held.Ending.Count > 0 && grantEndsAt is DateTimeOffset ending
+                ? new InvitedGrantEnd(ending, held.Ending)
                 : null);
 
         if (reservation is not null)
@@ -813,7 +817,9 @@ internal sealed class InvitationService(
         DateTimeOffset endsAt,
         string reason,
         CancellationToken cancellationToken) =>
-        end.SetEndAsync(context, session, organization, member, endsAt, reason, cancellationToken);
+        // API-CONV-002 AC5 (D-264): the end the caller sends is held as the same instant in
+        // UTC, whatever offset it bears.
+        end.SetEndAsync(context, session, organization, member, endsAt.ToUniversalTime(), reason, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Result> CancelMembershipEndAsync(
