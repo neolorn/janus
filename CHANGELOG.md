@@ -8,6 +8,8 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.6] - 2026-11-05
+
 ### Fixed
 
 - Under an organization-wide grant, the list filter, the SQL fragment and the capability
