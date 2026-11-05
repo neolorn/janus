@@ -81,10 +81,23 @@
   cases run here against PostgreSQL).
 - The changelog line under Unreleased, under `Fixed`.
 
+**Section 4, step 6: the release commit, 82e12d80 `chore: release 1.0.0-rc.6`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.6] - 2026-11-05`, holding the two
+  lines under `Fixed`, and Unreleased is left empty.
+- The public surface: no `PublicAPI.Unshipped.txt` holds a line, so nothing moved into
+  the shipped files.
+- The two lists are not drawn again (CONV-VCS-005, D-262). The leaked-password list of
+  run 41814221201 and the Public Suffix List at version 2026-10-31_14-17-28_UTC were
+  both drawn on 2026-11-04, within 90 days before the release commit. `NOTICE` keeps
+  both dates.
+- No migration note: a release candidate opens no major version.
+- Criterion verified otherwise: the release gate over `origin/main..HEAD` says the notes
+  of 1.0.0-rc.6, 775 characters, are the release's body.
+
 ## 2. Items not implemented
 
-- The release commit of section 4, step 6: it waits on the lead's word that the round's
-  review passed.
+None.
 
 ## 3. Resolved by rule
 
@@ -123,5 +136,9 @@ organization the filter is asked for.
   scan finds nothing. The new integration tests, the truth table, `GateBehaviourTests`,
   `ConsentGateTests`, `ExplanationTests` and `MaterialisationTests` were run here against
   PostgreSQL, alone.
+- The pipeline's runs on ca658c35, with D-266 in, were green before the release commit.
+  On the pull request's run the Format job failed on its first attempt while restoring
+  packages: nuget.org reset the connection. The same job passed when run again, with no
+  change.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
