@@ -8,6 +8,8 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.5] - 2026-11-05
+
 ### Fixed
 
 - A privacy request, submitted in the app or entered out of band, is recorded again
