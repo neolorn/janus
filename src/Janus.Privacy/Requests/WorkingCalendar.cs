@@ -15,11 +15,11 @@ namespace Janus.Privacy.Requests;
 /// </summary>
 /// <param name="configuration">Where the week, the holidays and the zone are read.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-002 and D-142. The calendar is read at the moment a deadline
-/// is counted and never held, so a holiday announced after a request arrived is
+/// Implements PRIV-RIGHT-002, D-142 and D-263. The calendar is read at the moment a
+/// deadline is counted and never held, so a holiday announced after a request arrived is
 /// honoured for it. A holiday missing from the list counts as a working day and
 /// yields an earlier deadline, which is always compliant, so the list running out
-/// refuses nothing.
+/// refuses nothing. Every instant it gives is held in UTC.
 /// </remarks>
 internal sealed class WorkingCalendar(IConfigurationStore configuration)
 {
@@ -35,7 +35,7 @@ internal sealed class WorkingCalendar(IConfigurationStore configuration)
     /// <param name="received">The calendar date the request reached the company.</param>
     /// <param name="workingDays">How many working days the decision has.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The instant the decision is due by, or the refusal the settings gave.</returns>
+    /// <returns>The instant the decision is due by, in UTC, or the refusal the settings gave.</returns>
     public async ValueTask<Result<DateTimeOffset>> DueAsync(
         DateOnly received,
         int workingDays,
@@ -53,7 +53,7 @@ internal sealed class WorkingCalendar(IConfigurationStore configuration)
     /// <param name="workingDays">How many working days the decision has.</param>
     /// <param name="lead">How many working days before the deadline to warn.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The instant the warning is due at, or the refusal the settings gave.</returns>
+    /// <returns>The instant the warning is due at, in UTC, or the refusal the settings gave.</returns>
     public async ValueTask<Result<DateTimeOffset>> WarnAtAsync(
         DateOnly received,
         int workingDays,
@@ -70,7 +70,7 @@ internal sealed class WorkingCalendar(IConfigurationStore configuration)
     /// </summary>
     /// <param name="due">The instant the decision is due by.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The start of that day in the deployment's zone.</returns>
+    /// <returns>The start of that day in the deployment's zone, in UTC.</returns>
     public async ValueTask<Result<DateTimeOffset>> DayOfAsync(
         DateTimeOffset due,
         CancellationToken cancellationToken) =>
@@ -152,11 +152,15 @@ internal sealed class WorkingCalendar(IConfigurationStore configuration)
         return day;
     }
 
+    // D-263: the zone decides where a day begins and ends, and the instant is then held
+    // in UTC, since a timestamp with time zone is written at offset 0 alone.
     private static DateTimeOffset End(Week week, DateOnly day) =>
-        new(day.ToDateTime(TimeOnly.FromTimeSpan(EndOfDay)), week.Offset(day, EndOfDay));
+        new DateTimeOffset(day.ToDateTime(TimeOnly.FromTimeSpan(EndOfDay)), week.Offset(day, EndOfDay))
+            .ToUniversalTime();
 
     private static DateTimeOffset Start(Week week, DateOnly day) =>
-        new(day.ToDateTime(TimeOnly.MinValue), week.Offset(day, TimeSpan.Zero));
+        new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), week.Offset(day, TimeSpan.Zero))
+            .ToUniversalTime();
 
     private async ValueTask<Result<Week>> WeekAsync(CancellationToken cancellationToken)
     {

@@ -8,6 +8,13 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+### Fixed
+
+- A privacy request, submitted in the app or entered out of band, is recorded again
+  where `privacy.calendar.timezone` names a zone other than UTC; it failed with 500
+  before. Its decision deadline, warning and escalation are counted in that zone and
+  held in UTC, so the deadline read back is the same instant whatever the zone.
+
 ## [1.0.0-rc.4] - 2026-11-05
 
 ### Added

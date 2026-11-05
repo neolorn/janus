@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -18,6 +19,8 @@ namespace Janus.Privacy.Tests.Requests;
 public sealed class WorkingCalendarTests
 {
     private const string Cairo = "Africa/Cairo";
+
+    private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById(Cairo);
 
     private readonly ConfigurationInMemory _configuration = new();
 
@@ -39,8 +42,8 @@ public sealed class WorkingCalendarTests
     {
         DateTimeOffset due = await DueAsync(new DateOnly(2026, 9, 20), workingDays: 6);
 
-        Assert.Equal(new DateOnly(2026, 9, 28), DateOnly.FromDateTime(due.DateTime));
-        Assert.Equal(new TimeSpan(23, 59, 59), due.TimeOfDay);
+        Assert.Equal(new DateOnly(2026, 9, 28), DateOnly.FromDateTime(InCairo(due).DateTime));
+        Assert.Equal(new TimeSpan(23, 59, 59), InCairo(due).TimeOfDay);
     }
 
     /// <summary>
@@ -68,10 +71,10 @@ public sealed class WorkingCalendarTests
 
         Assert.Equal(
             new DateOnly(2026, 9, 27),
-            DateOnly.FromDateTime(sundayToThursday.DateTime));
+            DateOnly.FromDateTime(InCairo(sundayToThursday).DateTime));
         Assert.Equal(
             new DateOnly(2026, 9, 25),
-            DateOnly.FromDateTime(mondayToFriday.DateTime));
+            DateOnly.FromDateTime(InCairo(mondayToFriday).DateTime));
     }
 
     /// <summary>
@@ -90,8 +93,8 @@ public sealed class WorkingCalendarTests
 
         DateTimeOffset after = await DueAsync(new DateOnly(2026, 9, 20), workingDays: 6);
 
-        Assert.Equal(new DateOnly(2026, 9, 28), DateOnly.FromDateTime(before.DateTime));
-        Assert.Equal(new DateOnly(2026, 9, 29), DateOnly.FromDateTime(after.DateTime));
+        Assert.Equal(new DateOnly(2026, 9, 28), DateOnly.FromDateTime(InCairo(before).DateTime));
+        Assert.Equal(new DateOnly(2026, 9, 29), DateOnly.FromDateTime(InCairo(after).DateTime));
     }
 
     /// <summary>
@@ -107,8 +110,8 @@ public sealed class WorkingCalendarTests
 
         DateTimeOffset at = warn.Match(value => value, error => throw new XunitException(error.Code.ToString()));
 
-        Assert.Equal(new DateOnly(2026, 9, 24), DateOnly.FromDateTime(at.DateTime));
-        Assert.Equal(TimeSpan.Zero, at.TimeOfDay);
+        Assert.Equal(new DateOnly(2026, 9, 24), DateOnly.FromDateTime(InCairo(at).DateTime));
+        Assert.Equal(TimeSpan.Zero, InCairo(at).TimeOfDay);
     }
 
     /// <summary>
@@ -124,8 +127,8 @@ public sealed class WorkingCalendarTests
         Result<DateTimeOffset> day = await Calendar.DayOfAsync(due, CancellationToken.None);
         DateTimeOffset at = day.Match(value => value, error => throw new XunitException(error.Code.ToString()));
 
-        Assert.Equal(DateOnly.FromDateTime(due.DateTime), DateOnly.FromDateTime(at.DateTime));
-        Assert.Equal(TimeSpan.Zero, at.TimeOfDay);
+        Assert.Equal(DateOnly.FromDateTime(InCairo(due).DateTime), DateOnly.FromDateTime(InCairo(at).DateTime));
+        Assert.Equal(TimeSpan.Zero, InCairo(at).TimeOfDay);
     }
 
     /// <summary>
@@ -162,6 +165,55 @@ public sealed class WorkingCalendarTests
             ErrorCodes.ConfigurationValueNotAllowed,
             due.Match(_ => throw new XunitException("The zone was accepted."), error => error.Code));
     }
+
+    /// <summary>
+    /// PRIV-RIGHT-002 AC6 (D-263): the deadline, the warning and the escalation are each
+    /// the instant the zone gives, held in UTC, on either side of the zone's daylight
+    /// saving change.
+    /// </summary>
+    /// <param name="received">The calendar date the request reached the company.</param>
+    /// <param name="deadline">The end of the sixth working day after it, in UTC.</param>
+    /// <param name="warning">The start of the second working day before it, in UTC.</param>
+    /// <param name="escalation">The start of the deadline day, in UTC.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("2026-09-20", "2026-09-28T20:59:59Z", "2026-09-23T21:00:00Z", "2026-09-27T21:00:00Z")]
+    [InlineData("2026-12-06", "2026-12-14T21:59:59Z", "2026-12-09T22:00:00Z", "2026-12-13T22:00:00Z")]
+    public async Task PRIV_RIGHT_002_AC6_EveryInstantTheClockGivesIsHeldInUtcAsync(
+        string received,
+        string deadline,
+        string warning,
+        string escalation)
+    {
+        var day = DateOnly.Parse(received, CultureInfo.InvariantCulture);
+        DateTimeOffset due = await DueAsync(day, workingDays: 6);
+        DateTimeOffset warnAt = (await Calendar.WarnAtAsync(day, workingDays: 6, lead: 2, CancellationToken.None))
+            .Match(value => value, error => throw new XunitException(error.Code.ToString()));
+        DateTimeOffset escalateAt = (await Calendar.DayOfAsync(due, CancellationToken.None))
+            .Match(value => value, error => throw new XunitException(error.Code.ToString()));
+
+        Assert.Equal(
+            (DateTimeOffset.Parse(deadline, CultureInfo.InvariantCulture), TimeSpan.Zero),
+            (due, due.Offset));
+        Assert.Equal(
+            (DateTimeOffset.Parse(warning, CultureInfo.InvariantCulture), TimeSpan.Zero),
+            (warnAt, warnAt.Offset));
+        Assert.Equal(
+            (DateTimeOffset.Parse(escalation, CultureInfo.InvariantCulture), TimeSpan.Zero),
+            (escalateAt, escalateAt.Offset));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-002 AC6 (D-263): the zone observes daylight saving, so the instants
+    /// above are counted on both of its offsets and no offset is assumed fixed.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_002_AC6_TheZoneObservesDaylightSaving() =>
+        Assert.NotEqual(
+            Zone.GetUtcOffset(new DateTimeOffset(2026, 9, 28, 12, 0, 0, TimeSpan.Zero)),
+            Zone.GetUtcOffset(new DateTimeOffset(2026, 12, 14, 12, 0, 0, TimeSpan.Zero)));
+
+    private static DateTimeOffset InCairo(DateTimeOffset instant) => TimeZoneInfo.ConvertTime(instant, Zone);
 
     private async Task<DateTimeOffset> DueAsync(DateOnly received, int workingDays)
     {
