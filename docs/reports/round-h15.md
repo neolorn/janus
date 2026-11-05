@@ -1,4 +1,4 @@
-# Round H15: the legal clock's instants in UTC
+# Round H15: the legal clock's instants, and a caller's, in UTC
 
 ## 1. Items implemented
 
@@ -25,6 +25,40 @@
   or a time of day, since the instant no longer carries the zone's offset. What they
   assert is unchanged.
 - The changelog line under Unreleased, under `Fixed`. No public surface change.
+
+**`09` API-CONV-002 criterion 5 (D-264), e6ab0a7c**
+
+- Every service interface parameter that carries a caller's instant is converted to UTC
+  at its entry, before anything holds, compares or writes it. The endpoints call these
+  entries, so a body is covered the same way:
+  - `IGrants.GrantAsync`, `GrantRequest.ExpiresAt` (`POST /admin/grants`);
+  - `IInvitations.SetMembershipEndAsync`, `endsAt`
+    (`PUT /admin/organizations/{id}/memberships/{subject}/end`);
+  - `IInvitations.IssueAsync`, `InvitationRequest.GrantEndsAt`
+    (`POST /admin/organizations/{id}/invitations`);
+  - `IAppPasswords.CreateAsync`, `expiresAt`, handed to the mail server in UTC;
+  - the signed-at instant a callback delivery carries (`CallbackSignature.SignedAt`),
+    which is compared and never held.
+- No other public operation takes an instant. `IMailServer.CreateAppPasswordAsync` is
+  the library's own call to the mail server, and it already writes UTC. No public
+  surface change.
+- Tests:
+  - `CallerInstantTests` (integration, PostgreSQL), each sending
+    `2026-12-01T00:00:00+02:00` and reading back `2026-11-30T22:00:00Z` from the row and
+    from the library's answer, at offset 0. Without the fix each fails on Npgsql's "only
+    offset 0 (UTC) is supported":
+    - `API_CONV_002_AC5_AGrantsEndSentAtAnOffsetIsHeldInUtcAsync`
+    - `API_CONV_002_AC5_AMembershipsEndSentAtAnOffsetIsHeldInUtcAsync`
+    - `API_CONV_002_AC5_AnInvitationsGrantEndSentAtAnOffsetIsHeldInUtcAsync`
+  - `GrantEndpointTests.API_CONV_002_AC5_AGrantsEndSentAtAnOffsetIsHeldInUtcAsync` and
+    `InvitationEndpointTests.API_CONV_002_AC5_AnEndSentAtAnOffsetIsSetInUtcAsync` (the
+    JSON body at +02:00 through the endpoint)
+  - `AppPasswordsTests.API_CONV_002_AC5_AnAppPasswordsEndSentAtAnOffsetIsHeldInUtcAsync`
+- Criterion verified otherwise: an app password's end is held by the mail server, not
+  by PostgreSQL. The test above shows the server is handed it in UTC and lists it in UTC.
+  `JmapMailServerTests.INT_MAIL_010_AC1_AnAppPasswordIsOneCallOnTheMailboxsAccountAsync`
+  shows it is written in UTC.
+- The changelog line under Unreleased, under `Fixed`.
 
 ## 2. Items not implemented
 
@@ -56,6 +90,9 @@ None.
     `api.request.malformed`, naming its member. Smallest fix: the check in each body's
     reading, with a sentence in `09`.
 - Parked: nothing of this round. Nothing was changed here.
+- Answered: D-264 (94ea9724), reading A. API-CONV-002 gains criterion 5, and the round
+  is widened to it. Built (section 1). Running the tests confirmed the 500 we had read
+  from the code.
 
 ## 5. Gate result
 
@@ -65,6 +102,6 @@ None.
 - Checks before the push: green. Every unit test passes, and the commit-message,
   changelog, release, acceptance-criterion test name and forbidden-marker gates pass
   over `origin/main..HEAD`. The full-history secret scan finds nothing. The new
-  integration test was run here against PostgreSQL, alone.
+  integration tests were run here against PostgreSQL, alone.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
