@@ -1859,13 +1859,15 @@ the section fits the platform's limit for a body (125,000 characters), and other
 short body linking `CHANGELOG.md` at the tag, with the section attached as
 `release-notes-<version>.md` (D-260). Nothing else sets a version number. The
 first version's section records what that version holds, under `Added` alone; the other
-groups measure a version against a released predecessor. Each release also refreshes the
-two embedded lists that age, each dated when drawn: the offline leaked-password list
+groups measure a version against a released predecessor. Each final release, and a release
+candidate whose lists were drawn more than 90 days before its release commit, also
+refreshes the two embedded lists that age, each dated when drawn (any other release
+candidate keeps its predecessor's, D-262): the offline leaked-password list
 (AUTH-PASS-004) and the Public Suffix List (AUTH-FACT-010), the test that pins by name
 the suffix rules the conversion sets aside being reviewed and updated with the list
 (D-189). The dictionary lists (AUTH-PASS-004) are static and are not refreshed.
 
-*Source: LIB-VER-001, LIB-VER-002, D-149, D-166, D-189, D-232*
+*Source: LIB-VER-001, LIB-VER-002, D-149, D-166, D-189, D-232, D-262*
 
 **Acceptance criteria**
 1. A behaviour-changing pull request without a changelog line fails a check.
@@ -1877,7 +1879,8 @@ the suffix rules the conversion sets aside being reviewed and updated with the l
    without the link. A release candidate's section opens no major version, and the gate
    asks it for no link to a migration note (D-232).
 4. A release's offline leaked-password list and Public Suffix List are drawn for that
-   release and carry the date they were drawn, and the pin of the suffix rules set aside
+   release, or, for a release candidate, within 90 days before its release commit
+   (D-262), and carry the date they were drawn, and the pin of the suffix rules set aside
    matches the list drawn.
 
 ---

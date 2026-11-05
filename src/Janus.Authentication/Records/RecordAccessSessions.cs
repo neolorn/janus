@@ -227,6 +227,34 @@ internal sealed class RecordAccessSessions(
     }
 
     /// <summary>
+    /// The subjects of the records an open session reaches now, which a host reads to
+    /// show its own data about them (REC-ACC-003).
+    /// </summary>
+    /// <param name="carried">The record access session the browser carries, or nothing.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The subjects in subject order, or <c>auth.session.expired</c>.</returns>
+    public async ValueTask<Result<IReadOnlyList<SubjectId>>> ReachedAsync(
+        RecordAccessSessionId? carried,
+        CancellationToken cancellationToken)
+    {
+        if (carried is not RecordAccessSessionId named
+            || await sessions.FindAsync(named, cancellationToken).ConfigureAwait(false) is not RecordAccessSession found
+            || !Open(found))
+        {
+            return Result.Failure<IReadOnlyList<SubjectId>>(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        // D-261: the reach is re-read as the session's state is, with no lock, so a record
+        // that has left it is not answered; it is a read of this moment.
+        IReadOnlyList<ReachedRecord> reached = await records
+            .InReachAsync(found.Reached, found.Kind, found.Fingerprints, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success<IReadOnlyList<SubjectId>>(
+            [.. reached.Select(record => record.Subject).OrderBy(subject => subject.Value)]);
+    }
+
+    /// <summary>
     /// Whether an open session reaches one record, which is what every right exercised
     /// on the record from the session asks first (REC-ACC-002).
     /// </summary>

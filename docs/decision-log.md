@@ -20865,6 +20865,101 @@ long"), and the tag stands with no release.
 
 ---
 
+## D-261 — A host reads the reach of a record access session
+
+> **Amended.** 2026-11-05. Decisions on what building the round raised; where these
+> differ from the body below, these win:
+> 1. **No lock.** A record's lock is a row lock only a transaction holds, and the seam
+>    joins none. `ReachedAsync` re-reads the reach as the session's own state read
+>    (`GET /records/access`) does, with no lock: a read of that moment, as that read is.
+>    A host that changes something on the strength of the reach asks again inside its
+>    change.
+> 2. **REC-ACC-001's sentence** "every action re-reads, under the record's lock" reads:
+>    every action re-reads the reach, a change under the record's lock (REC-ACC-002's
+>    changes, as built) and a read without one (the session's state, the check before
+>    each right, as built). Nothing built changes.
+> 3. **Propagated to** gains `21` REC-ACC-001 (the sentence of item 2).
+
+**Date:** 2026-11-05 · **Status:** accepted · **Amends:** REC-ACC-001, LIB-API-005
+
+**TL;DR.** A host reads, while it serves a browser's request, the subjects of the person
+records that the browser's record access session reaches now, through
+`IRecordAccess.ReachedAsync`, a seam as `IRecordCollection` is. Found by a host's guest
+checkout: a buyer without an account finds an order with its number and the email they
+used. The library's record access proves the email by a code and reaches the buyer's
+record, but the host's server had no way to learn what the session reaches. So it could
+not show its own data about the record (the order) to the person who proved it, and a
+subject the browser names could be anyone's.
+
+- **The seam.** `IRecordAccess` (`Janus.Core`), `ReachedAsync(CancellationToken)`,
+  answering `Result<IReadOnlyList<SubjectId>>`: the subjects of the records the session
+  reaches at that moment, each re-read under its record's lock as every action of
+  REC-ACC-001 re-reads it, in subject order. It has no endpoint, takes no access context
+  and joins no unit of work. What admits it is the record access session bound to the
+  browser of the request being served, read through the request's pre-authentication
+  session (BFF-CSRF-005a), as the library's own `/records/access` endpoints read it.
+- **Refusals.** No record access session the browser holds, or one past its lifetime,
+  ended, or presented from another browser: `auth.session.expired` (401), as REC-ACC-001's
+  actions answer it. A session that reaches nothing answers an empty list. Called
+  outside a browser request, it is a fault of the calling code
+  (`InvalidOperationException`), as `CollectAsync` is.
+- **What the host does with it.** The host shows its own data about a subject the session
+  reaches, and answers a subject outside the reach exactly as one that does not exist.
+  The person's way in stays the library's: the ask, the code, and the reference, which
+  reaches a record collected longer ago than `records.proof.age`; a host that gave its
+  order number as the collection's `reference` (REC-COL-002) passes it there.
+- **No audit of the read.** The session's opening and each reference already record
+  `identity.record.accessed` for each record they reach (REC-ACC-001); the host's own
+  reads of its own data are the host's to record.
+- **What stays.** The session, its lifetime, its binding, who it reaches, and the rights
+  of REC-ACC-002. The seam reads; it adds no right and changes nothing.
+
+*Rejected:*
+- **The host sending its own code to the address:** a second proof of the same address,
+  outside REC-ACC-001's delays, identical answers, attempts and audit.
+- **The browser naming the subject to the host:** anyone could name another's subject.
+- **The host's data only in the record's export:** the person would meet it as a file
+  among the record's sections, not as the host's own page.
+
+**Propagated to:**
+- `21` REC-ACC-003 (new);
+- `07` LIB-API-005: the operations contract's row and the paragraph on seams
+  (`IRecordAccess`);
+- `implementation-plan.md` (round H14; section 4, step 4, release 1.0.0-rc.4).
+
+---
+
+## D-262 — A release candidate keeps its predecessor's lists while they are fresh
+
+**Date:** 2026-11-05 · **Status:** accepted · **Amends:** CONV-VCS-005
+
+**TL;DR.** The offline leaked-password list and the Public Suffix List are drawn again for
+every final release, and for a release candidate only where the lists it would carry
+were drawn more than 90 days before its release commit; otherwise a release candidate
+keeps its predecessor's lists as they are. Found at `1.0.0-rc.4`: CONV-VCS-005 had every
+release draw both, and the lists drawn on 2026-11-04 for `1.0.0-rc.1` would have been
+drawn again a day later, with a manual workflow run and two downloads, for nothing a
+reader could tell apart.
+
+- **Why 90 days.** Both lists age slowly: a quarter's new leaked passwords barely move a
+  top-100,000 list, and the suffix rules a quarter adds are new registries, rarely ones a
+  host's users hold. A run of release candidates still never carries lists older than a
+  quarter.
+- **The final release** draws both, always, as CONV-VCS-005 has it.
+- **What stays.** Each list carries the date it was drawn, and the pin of the suffix rules
+  set aside matches the list carried.
+
+*Rejected:*
+- **Drawing for every release candidate:** a manual run and two downloads for every
+  candidate, for lists a day or a week older.
+- **Drawing only at the final release:** a long run of candidates, which a host may run in
+  production, would carry lists of any age.
+
+**Propagated to:**
+- `08` CONV-VCS-005 (the refresh's sentence and criterion 4).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21135,6 +21230,8 @@ long"), and the tag stands with no release.
 | Round R withdrawn: reports hold counts and amounts, and nothing is imported | D-258 |
 | A sign-on return whose state fails goes back to the application's root | D-259 |
 | Release notes too long for a release body | D-260 |
+| A host reads the reach of a record access session | D-261 |
+| A release candidate keeps its predecessor's lists while they are fresh | D-262 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

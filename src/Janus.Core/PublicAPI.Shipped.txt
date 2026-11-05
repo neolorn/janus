@@ -1594,6 +1594,8 @@ Janus.Core.IPurposeHandler.ObjectionChangedAsync(Janus.Core.ObjectionChanged! ch
 Janus.Core.IPurposeHandler.Purposes.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Janus.Core.IReadVolume
 Janus.Core.IReadVolume.ReturnedAsync(Janus.Core.AccessContext! context, int records, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRecordAccess
+Janus.Core.IRecordAccess.ReachedAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>!>>
 Janus.Core.IRecordCollection
 Janus.Core.IRecordCollection.CollectAsync(Janus.Core.RecordCollection! collection, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.CollectedRecord!>>
 Janus.Core.IRecovery

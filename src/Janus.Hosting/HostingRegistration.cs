@@ -179,6 +179,9 @@ public static class HostingRegistration
         // REC-COL-002: a host's own screen collects a person record through the session the
         // request's browser holds.
         services.AddScoped<IRecordCollection, RequestRecordCollection>();
+
+        // REC-ACC-003: a host's own page reads what the request's browser reaches by a code.
+        services.AddScoped<IRecordAccess, RequestRecordAccess>();
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();

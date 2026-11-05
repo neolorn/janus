@@ -15,10 +15,11 @@ namespace HostSample.Tests;
 /// Guests who hold no account at the workshop's counter: a guest's details collected
 /// under a person record through the library's collection steps and the workshop's own
 /// walk-in, the age answered and the consent recorded, a grip fitting registered under
-/// the record; the guest reading, exporting and erasing it by a code; and a guest who
-/// registers later attaching it (REC-COL-001, REC-COL-002, REC-ACC-002, REC-ATT-001,
-/// LIB-TEST-004). The test moves the deployment's clock past the record's deletion
-/// window, so it has a deployment of its own.
+/// the record; the guest reading, exporting and erasing it by a code, and seeing their
+/// own repair by it; and a guest who registers later attaching it (REC-COL-001,
+/// REC-COL-002, REC-ACC-002, REC-ACC-003, REC-ATT-001, LIB-TEST-004). The test moves the
+/// deployment's clock past the record's deletion window, so it has a deployment of its
+/// own.
 /// </summary>
 /// <param name="host">The deployment.</param>
 public sealed class GuestTests(WorkshopHost host) : IClassFixture<WorkshopHost>
@@ -117,6 +118,47 @@ public sealed class GuestTests(WorkshopHost host) : IClassFixture<WorkshopHost>
         Assert.Equal(
             walkedIn.Subject,
             Assert.Single(held.Body!.Value.EnumerateArray()).GetProperty("subject").GetGuid());
+    }
+
+    /// <summary>
+    /// REC-ACC-003 AC5: in the browser that reached a guest's record by a code, the
+    /// workshop shows the guest's own repair, and answers another guest's repair as one
+    /// that does not exist.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REC_ACC_003_AC5_AGuestSeesTheirOwnRepairAndNoOtherAsync()
+    {
+        EmailAddress email = Email("guest.three@kites.example.test");
+        EmailAddress other = Email("guest.four@kites.example.test");
+        string ticket = "kite-" + Guid.NewGuid().ToString("n");
+        string otherTicket = "kite-" + Guid.NewGuid().ToString("n");
+
+        using TestVisitor counter = host.Guest();
+        using TestVisitor otherCounter = host.Guest();
+
+        _ = await WalkedInAsync(counter, email, ticket, "Nadia Kamel", "A longer wrap for both grips");
+        _ = await WalkedInAsync(otherCounter, other, otherTicket, "Omar Lutfi", "A firmer wrap for a stiff right grip");
+
+        host.Clock.Advance(PastTheRestriction);
+
+        using TestVisitor guest = host.Guest();
+
+        Answered before = await Exchanges.SendAsync(guest, HttpMethod.Get, "walk-ins/" + ticket, null, Cancellation);
+        int held = host.Notifications.SentTo(email).Count;
+        Answered asked = await Exchanges.SendAsync(guest, HttpMethod.Post, "records/access", new { kind = "email", value = email.Value }, Cancellation);
+        Answered opened = await Exchanges.SendAsync(guest, HttpMethod.Post, "records/access/verify", new { code = await CodeAfterAsync(email, held) }, Cancellation);
+        Answered own = await Exchanges.SendAsync(guest, HttpMethod.Get, "walk-ins/" + ticket, null, Cancellation);
+        Answered another = await Exchanges.SendAsync(guest, HttpMethod.Get, "walk-ins/" + otherTicket, null, Cancellation);
+        Answered none = await Exchanges.SendAsync(guest, HttpMethod.Get, "walk-ins/kite-" + Guid.NewGuid().ToString("n"), null, Cancellation);
+
+        Assert.Equal((HttpStatusCode.Unauthorized, "auth.session.expired"), (before.Status, before.Code));
+        Assert.Equal((HttpStatusCode.Accepted, HttpStatusCode.OK), (asked.Status, opened.Status));
+        Assert.Equal(HttpStatusCode.OK, own.Status);
+        Assert.Equal(ticket, own.Body!.Value.GetProperty("ticket").GetString());
+        Assert.Equal("Nadia Kamel", own.Body!.Value.GetProperty("contactName").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, another.Status);
+        Assert.Equal((none.Status, none.Body?.GetRawText()), (another.Status, another.Body?.GetRawText()));
     }
 
     private static EmailAddress Email(string entered) =>
