@@ -864,6 +864,13 @@ names no organization the deployment holds is answered 404
    record for, is admitted by none of them. The capability page judges each record in the
    organization that owns it. The truth table carries both rows, run through the single
    check and the list filter alike (D-265).
+6. A derived grant obeys criterion 5 as a stored one does: in the list filter and the SQL
+   fragment a derivation reaches a row only where the library registers it in the
+   organization the rule is asked in, and on the capability page in the organization that
+   owns the record, an organization that is suspended, or the administrative organization
+   for a principal holding no current membership of it, conferring nothing, as in the
+   single check. The truth table carries a derivation over a container of another
+   organization, run through the single check and the list filter alike (D-266).
 
 ---
 

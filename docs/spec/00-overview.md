@@ -91,6 +91,18 @@ human judgment is under-specified and should be raised rather than guessed at.
 
 *Source: D-005, D-006, D-015, D-018*
 
+**Its direction.** The authorization part is to grow, as hosts need each piece and never
+ahead of the need, into a complete authorization library: full role-based access (roles
+composed of roles, separation of duties), full attribute-based access (rules over the
+subject's, the resource's, the action's and the environment's attributes) and the
+authorization a host serving a GraphQL API needs (field and type permissions, nested
+lists, many decisions in one pass). Each piece is built as an extension of the one rule
+engine, through the model builder, the rule's single definition, the truth table and the
+explanation, so AUTHZ-PRIN-001 and AUTHZ-PRIN-002 keep holding; none is a second path
+beside it. Other authorization products are references for getting it right, never the
+measure of what Janus is. A change to the library is judged also by whether it keeps
+this path clean (D-267).
+
 ### 2.1 Tech stack
 
 Latest production-safe versions — verify current releases rather than assuming.
@@ -305,6 +317,9 @@ Nothing is deferred silently.
 | Profile photos enabled for customers (D-060) | When a feature makes a customer photo meaningful |
 | Object storage for uploads (D-060) | Customer photos, or any genuinely large artifact |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
+| Full role-based access: roles composed of roles, static and dynamic separation of duties (D-267) | A host rule that a role must include another, or that one person may not hold or exercise two duties together |
+| Full attribute-based access: conditions over the subject's, the resource's, the action's and the environment's attributes, in a closed vocabulary the library owns, rendered for both the single check and the list filter (D-267) | A host rule that depends on a value: an amount limit, a record's status, a time, a network or the sign-in's strength |
+| Authorization for a host's GraphQL API: field and type permissions, many decisions in one pass, each record judged in its own organization (D-267) | A host serving a GraphQL API |
 
 This table carries every row of the decision log's "Deferred, with reactivation
 triggers" table (D-147); a deferral recorded in the log and absent here is a defect.

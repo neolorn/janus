@@ -21048,6 +21048,65 @@ organization and to rows the library holds no record for, which the single check
 
 ---
 
+## D-266 — A derived grant reaches only its own organization's rows in a list
+
+**Date:** 2026-11-05 · **Status:** accepted · **Amends:** AUTHZ-SCOPE-001
+
+**TL;DR.** D-265's rule holds for derived grants as for stored ones. In the list filter and
+the SQL fragment a derivation reaches a row only where the library registers it in the
+organization the rule is asked in; on the capability page it is judged in the organization
+that owns the record, and a suspended organization, or the administrative organization for
+a principal holding no current membership of it, confers nothing, as in the single check.
+Found in round H16 (Q1): a filter asked for one organization admitted, through a
+relationship row on a container above it, a record of another organization that the
+single check refuses.
+
+- **One rule, every source.** AUTHZ-SCOPE-001 and AUTHZ-PRIN-001 do not distinguish stored
+  grants from derived ones (AUTHZ-GRANT-001); neither may the renderings.
+
+*Rejected:*
+- **Leaving derivations to the host's query:** the same reason as D-265.
+
+**Propagated to:**
+- `03` AUTHZ-SCOPE-001 (criterion 6);
+- `implementation-plan.md` (round H16).
+
+---
+
+## D-267 — Janus's direction: a complete authorization library, built as needed
+
+**Date:** 2026-11-05 · **Status:** accepted · **Amends:** `00` section 2, section 7.3
+
+**TL;DR.** The owner's direction (2026-11-05): the authorization part of Janus is to grow
+into a complete authorization library, covering full role-based access, full
+attribute-based access and the authorization a host serving a GraphQL API needs. Each
+piece is built when a host needs it, never ahead of the need, and always as an extension
+of the existing rule engine, never as a workaround beside it. Other products are
+references for getting it right, not the measure of what Janus is.
+
+- **Why it is reachable without a redesign** (the lead's review of 2026-11-05, kept in the
+  lead's notes): the rule engine is internal (LIB-API-002); derivations already bring host
+  data into the query, and consent already renders one condition both in SQL and in the
+  single check; the capability page already answers a page in one query.
+- **What "an extension" means here:** a new kind of rule is declared through the model
+  builder, takes one definition that renders both the single check and the list filter
+  (AUTHZ-PRIN-001; today's predicate is written twice and kept equal by the truth table,
+  and a condition vocabulary must not widen that), filters inside the host's query
+  (AUTHZ-PRIN-002), and joins the truth table, the explanation and the audit trail.
+- **A closed vocabulary.** Conditions are written in terms the library owns and can render
+  to SQL and to the reviewed model file; arbitrary host code cannot be, and is not part of
+  this direction.
+- **Before the final 1.0.0** the public surface is settled so that this growth breaks no
+  host: the implementation plan's section 4 lists the points.
+- **Nothing is built now.** Each piece is a deferral with its trigger (`00` section 7.3).
+
+**Propagated to:**
+- `00` section 2 (its direction) and section 7.3 (three rows);
+- this log's deferred table (three rows);
+- `implementation-plan.md` section 4 (before the final 1.0.0).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21368,3 +21427,6 @@ Per P-003 — nothing deferred silently.
 | Paid geocoding provider (D-061) | If customers demonstrably struggle with the address form |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
 | Round R: a report feed of people data and a bulk import (D-258) | A report that names people or reads their contacts in bulk, a live feed to a spreadsheet or business-intelligence tool, or a bulk import of accounts, members or person records |
+| Full role-based access: roles composed of roles, static and dynamic separation of duties (D-267) | A host rule that a role must include another, or that one person may not hold or exercise two duties together |
+| Full attribute-based access: conditions over the subject's, the resource's, the action's and the environment's attributes, in a closed vocabulary the library owns, rendered for both the single check and the list filter (D-267) | A host rule that depends on a value: an amount limit, a record's status, a time, a network or the sign-in's strength |
+| Authorization for a host's GraphQL API: field and type permissions, many decisions in one pass, each record judged in its own organization (D-267) | A host serving a GraphQL API |
