@@ -156,6 +156,7 @@ round's report is reviewed.
 | H14 | A host reads the reach of a record access session | D-261 | Every item the decision's "Propagated to" lines name: `21` REC-ACC-003, `07` LIB-API-005 (`IRecordAccess`), and the sample host showing its own data for a reached subject | `IRecordAccess.ReachedAsync` answers the subjects the browser's record access session reaches now and an empty list where it reaches none; another browser's session, an ended one and an expired one are refused `auth.session.expired`; a record attached after the session opened is not answered; every acceptance criterion of the items listed has a passing test carrying its identifier, or is named in the report as one a test cannot decide with how it was verified |
 | H15 | The legal clock's instants, and a caller's, in UTC | D-263, D-264 | Every item the decision's "Propagated to" lines name: `04` PRIV-RIGHT-002 criterion 6, the working calendar's instants held in UTC before anything holds or writes them; `09` API-CONV-002 criterion 5, every instant a request or a call carries converted to UTC where it is taken | With `privacy.calendar.timezone` a zone other than UTC observing daylight saving, an in-app request and an out-of-band one are recorded on PostgreSQL and the deadline read back is the end of the sixth working day in that zone; an `endsAt`, an `expiresAt` and a `grantEndsAt` sent with an offset of +02:00 are recorded and answered as the same instant in UTC; every acceptance criterion of PRIV-RIGHT-002 still passes |
 | H16 | A grant, stored or derived, bound to its own organization's rows | D-265, D-266 | Every item the decisions' "Propagated to" lines name: `03` AUTHZ-SCOPE-001 criterion 5, the list filter, the SQL fragment and the capability page admitting under an organization-wide grant only rows the library registers in the grant's organization, each page record judged in its own; criterion 6, a derivation bound the same way, with the single check's suspension and administrative-organization rules on the page | On PostgreSQL, a caller holding an organization-wide grant in one organization is refused, by the single check, the list filter, the SQL fragment and the capability page alike, a row of a second organization and a row the library holds no record for, and still admitted every row its organization owns; a page holding records of two organizations answers each by its own; a derivation over a container of a second organization admits nothing in a filter asked for the first, as the single check refuses it; the truth table carries the three rows; every existing truth-table row still passes |
+| H17 | The public surface settled for the authorization part's growth | D-268, D-269, D-270, D-271, D-272, D-273 | Every item the decisions' "Propagated to" lines name: `07` LIB-API-001 (the operations contract's row, the ancestry closure's row and the paragraph under the table) and LIB-TEST-001 (later families of cases); `03` AUTHZ-SEAM-001 (the contract relations, criterion 2), AUTHZ-GATE-005 (an empty `requires`) and section 2.6; `09` API-CAP-001; `10` section 5.20; `18` FE-CAP-002 (criterion 4, a host frontend's); `08` CONV-CODE-003. Nothing of section 2.6 is built, and CONV-CODE-003's rule binds from the first final release, held by the release gate as it stands. What is built: AUTHZ-SEAM-001 criterion 2's test widened to the contract relations, over every source project of the library and the sample host: none names `identity.ancestry`, `identity.effective_grants` or `identity.consented_resources`, or reads the `AncestryEntry`, `EffectiveGrant` or `ConsentedResource` sets, save where the gate renders, the relations are kept, mapped or counted as the library's own (AUTHZ-GATE-001 criterion 3), or the sets are handed to the gate; the XML documentation of each interface of the operations contract saying no host implements it (D-268), of `AncestryEntry`, `EffectiveGrant` and `ConsentedResource` saying a row is an input to the gate's renderings and what it confers is the library's (D-269), and of `IConformanceRows` saying a later family of cases comes with an interface of its own (D-271); one `CHANGELOG.md` line under `Unreleased` for each of D-268, D-269, D-270 and D-271, written for a reader of the package. No behaviour changes | The widened test passes on the tree, and fails where a source outside those places reads one of the relations; the public surface files are unchanged; every gate passes |
 
 The rounds come in this order, each after the pull request of the one before is merged.
 Every round comes before section 4 begins, whose release workflow builds the sample host
@@ -180,24 +181,28 @@ D-225).
 | 4 | Release 1.0.0-rc.4 | implementer, lead approves and tags | Round H14 merged; `Unreleased` moved to `1.0.0-rc.4` | Version 1.0.0-rc.4's packages on the tag's release, marked as a pre-release |
 | 5 | Release 1.0.0-rc.5 | implementer, lead approves and tags | Round H15 merged; `Unreleased` moved to `1.0.0-rc.5` | Version 1.0.0-rc.5's packages on the tag's release, marked as a pre-release |
 | 6 | Release 1.0.0-rc.6 | implementer, lead approves and tags | Round H16 merged; `Unreleased` moved to `1.0.0-rc.6`; the lists drawn per D-262 | Version 1.0.0-rc.6's packages on the tag's release, marked as a pre-release |
+| 7 | Release 1.0.0-rc.7 | implementer, lead approves and tags | Round H17 merged; `Unreleased` moved to `1.0.0-rc.7`; the lists drawn per D-262 | Version 1.0.0-rc.7's packages on the tag's release, marked as a pre-release |
 
 The final 1.0.0 comes on the owner's word (D-232).
 
 **Before the final 1.0.0** (D-267), the public surface is settled so that the authorization
 part can grow into full role-based access, attribute-based access and GraphQL
 authorization without breaking a host. Each point is a decision, written by the lead, then
-built; none adds a feature:
-- whether a host may implement `IAccessGate`: LIB-API-001 says none does, or its inputs
-  move into request objects, so a new input is not another pair of overloads;
+built; none adds a feature. All six are decided, and round H17 builds what they need:
+- whether a host may implement `IAccessGate`: decided by D-268, no host implements an
+  interface of the operations contract, so a new input is a new member;
 - what a row of the public `effective_grants` view means once a grant may carry a
-  condition or a role needs activating, so SQL a host writes over it cannot over-grant;
-- the promise that a capability whose `requires` is empty always succeeds, which a condition
-  on a proposed value or on the environment cannot keep, and what a frontend does with a
-  residual it does not know;
-- a way for the host's `IConformanceRows` to write a case's attribute values;
-- the boundary of a future condition vocabulary written into `03`, without building it;
+  condition or a role needs activating: decided by D-269, a row is an input to the gate's
+  renderings and a permission is asked only through the gate;
+- the promise that a capability whose `requires` is empty always succeeds, and what a
+  frontend does with a residual it does not know: decided by D-270, what a page cannot
+  judge is a residual, and an unknown residual is not permitted;
+- a way for the host's `IConformanceRows` to write a case's attribute values: decided by
+  D-271, a later family of cases comes with an interface of its own;
+- the boundary of a future condition vocabulary written into `03`, without building it:
+  decided by D-272, `03` section 2.6;
 - that a new member of a public positional record is added as an init property, which
-  breaks no host.
+  breaks no host: decided by D-273, `08` CONV-CODE-003.
 
 **Known issues carried into Milestone 2.**
 
