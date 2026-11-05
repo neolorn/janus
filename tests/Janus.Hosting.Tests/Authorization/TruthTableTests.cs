@@ -171,6 +171,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         (
             "a grant written and then revoked, each announced in its transaction, by a caller managing grants",
             Decided.Allowed),
+        (
+            "a grant written with an end sent two hours ahead of UTC and then revoked, by a caller managing grants",
+            Decided.Allowed),
         ("a grant of a role no role of the caller hands out, by a caller managing grants", Decided.NotAssignable),
         (
             "a revocation of a grant of a role no role of the caller hands out, by a caller managing grants",
@@ -2181,6 +2184,16 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a grant written and then revoked, each announced in its transaction, by a caller managing grants":
                 return await GrantedAndRevokedAsync(deployment, role, caller, announced: true);
 
+            // API-CONV-002 AC5 (D-264): an end sent at an offset other than 0 is held as
+            // the same instant in UTC, which decides nothing; the grant is written and
+            // revoked as before.
+            case "a grant written with an end sent two hours ahead of UTC and then revoked, by a caller managing grants":
+                return await GrantedAndRevokedAsync(
+                    deployment,
+                    role,
+                    caller,
+                    expiresAt: new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.FromHours(2)));
+
             // AUTHZ-GRANT-005 (D-212, D-217): a grant, and a revocation, hand out the role
             // they name; a deny of the role whose list names it defeats the list; an allow
             // grant to the caller widens its own access whatever it may hand out; and a
@@ -3620,7 +3633,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Deployment deployment,
         RoleName role,
         SubjectId caller,
-        bool announced = false)
+        bool announced = false,
+        DateTimeOffset? expiresAt = null)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         SubjectId account = await deployment.AccountAsync(cancellationToken);
@@ -3642,7 +3656,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     ResourceType.Parse("organization"),
                     ResourceId.Parse(deployment.Organization.ToString())),
                 Deny: false,
-                ExpiresAt: null,
+                expiresAt,
                 "The reason the grant was asked for."),
             cancellationToken);
 
@@ -3652,6 +3666,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         }
 
         GrantId grant = written.Match(made => made, _ => default);
+
+        if (expiresAt is DateTimeOffset sent)
+        {
+            await using NpgsqlConnection connection = await host.OpenAsync();
+
+            Assert.Equal(
+                sent.UtcDateTime,
+                await connection.ExecuteScalarAsync<DateTime?>(new CommandDefinition(
+                    "SELECT expires_at FROM identity.grants WHERE id = @id;",
+                    new { id = grant.Value },
+                    cancellationToken: cancellationToken)));
+        }
         Decided decided = (await grants.RevokeAsync(context, session, grant, "No longer needed.", cancellationToken))
             .Match(() => Decided.Allowed, Refused);
 
