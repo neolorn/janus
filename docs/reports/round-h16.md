@@ -1,4 +1,4 @@
-# Round H16: an organization-wide grant bound to its own organization's rows
+# Round H16: a grant, stored or derived, bound to its own organization's rows
 
 ## 1. Items implemented
 
@@ -47,6 +47,40 @@
   still passes (407 cases run here against PostgreSQL).
 - The changelog line under Unreleased, under `Fixed`. No public surface change.
 
+**`03` AUTHZ-SCOPE-001 criterion 6 (D-266), d4b855ee**
+
+- `PermissionRule`, both builders from one definition: a derivation reaches a row only
+  through an ancestry row the library registers in the organization the rule is asked
+  in. In the expressions, the `Derived` and `Admits` terms read the ancestry through
+  `Owned`. The SQL `Derived` term asks `organization` of its ancestry row.
+- A paged rule judges each record in the organization owning it. Section 1 above already
+  made the page read each organization's derivations, with a suspended organization, and
+  the administrative one for a principal holding no current membership of it,
+  conferring nothing.
+- Tests:
+  - `TruthTableTests`, a row of `Table`: "a relationship row on a container a suspended
+    organization owns", Denied, through the single check, the expression and the
+    fragment and every test that reads the table. Without the fix the filter and the
+    fragment admit it.
+    - The second organization in this row is suspended. In a live one the single check
+      judges the record in that organization and admits it there, while a filter asked
+      for the first refuses it, so the case could not decide one way through both paths.
+      The live case is covered by the list test below.
+  - `DerivedGrantScopeTests` (integration, PostgreSQL):
+    - `AUTHZ_SCOPE_001_AC6_AListAdmitsNoRowADerivationReachesInAnotherOrganizationAsync`,
+      with the second organization live and suspended. The filter and the fragment asked
+      for the first admit its own record alone. The single check admits the second
+      organization's record in that organization while it is live, and refuses it once
+      it is suspended. Both cases fail without the fix.
+    - `AUTHZ_SCOPE_001_AC6_APageJudgesEachDerivationInTheOrganizationOwningItsRecordAsync`,
+      with the second organization live, suspended, or the administrative one the account
+      holds no membership of. The page answers the second organization's record by its
+      derivation only while that organization is live, as the single check does.
+- Every case of the truth table, `GateBehaviourTests`, `ConsentGateTests`,
+  `ExplanationTests`, `MaterialisationTests` and the two classes above passes (476
+  cases run here against PostgreSQL).
+- The changelog line under Unreleased, under `Fixed`.
+
 ## 2. Items not implemented
 
 - The release commit of section 4, step 6: it waits on the lead's word that the round's
@@ -75,6 +109,8 @@ organization the filter is asked for.
   refuses that record, which AUTHZ-PRIN-001 forbids.
 - D-265 names organization-wide grants alone, and says nothing of derivations. Nothing
   was changed here.
+- Answered: D-266 (10849f94). A derived grant is bound as D-265 binds a stored one, and
+  AUTHZ-SCOPE-001 gains criterion 6. Built (section 1).
 
 ## 5. Gate result
 
@@ -84,7 +120,8 @@ organization the filter is asked for.
 - Checks before the push: green. Every unit test passes (5215 in eleven projects), and
   the commit-message, changelog, release, truth-table change, acceptance-criterion test
   name and forbidden-marker gates pass over `origin/main..HEAD`. The full-history secret
-  scan finds nothing. The new integration tests, the truth table, `GateBehaviourTests`
-  and `ConsentGateTests` were run here against PostgreSQL, alone.
+  scan finds nothing. The new integration tests, the truth table, `GateBehaviourTests`,
+  `ConsentGateTests`, `ExplanationTests` and `MaterialisationTests` were run here against
+  PostgreSQL, alone.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
