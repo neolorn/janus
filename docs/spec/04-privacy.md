@@ -860,6 +860,10 @@ business-availability matter the library cannot control.
    refused by lapse*, the subject is notified unless a sending restriction refuses the
    notice, and the record persists.
 5. A decision made before the deadline (fulfil or refuse) cancels both alerts.
+6. With `privacy.calendar.timezone` a zone other than UTC, observing daylight saving,
+   an in-app request and an out-of-band one are each recorded, and the deadline read
+   back is the instant the end of the sixth working day in that zone, held in UTC
+   (D-263).
 
 ---
 

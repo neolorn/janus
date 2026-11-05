@@ -154,6 +154,7 @@ round's report is reviewed.
 | H13 | A type names its data subject without an encrypted field | D-257 | Every item the decision's "Propagated to" lines name | A type naming its subject through `Subject` and no encrypted field carries a purpose resting on consent and starts; its registration naming no subject is refused `api.request.malformed` naming `subject`; the consent gate admits an action on its record under that purpose only with the registered subject's consent; a type whose `Subject` and encrypted fields name different columns stops the start with `model.startup.declarationmissing`; every acceptance criterion of the items listed has a passing test carrying its identifier, or is named in the report as one a test cannot decide with how it was verified |
 | R | ~~Reports and import~~ | withdrawn by D-258 | nothing: reports carry counts and amounts a host computes from its own records, and nothing is imported | nothing |
 | H14 | A host reads the reach of a record access session | D-261 | Every item the decision's "Propagated to" lines name: `21` REC-ACC-003, `07` LIB-API-005 (`IRecordAccess`), and the sample host showing its own data for a reached subject | `IRecordAccess.ReachedAsync` answers the subjects the browser's record access session reaches now and an empty list where it reaches none; another browser's session, an ended one and an expired one are refused `auth.session.expired`; a record attached after the session opened is not answered; every acceptance criterion of the items listed has a passing test carrying its identifier, or is named in the report as one a test cannot decide with how it was verified |
+| H15 | The legal clock's instants in UTC | D-263 | Every item the decision's "Propagated to" lines name: `04` PRIV-RIGHT-002 criterion 6, the working calendar's instants held in UTC before anything holds or writes them | With `privacy.calendar.timezone` a zone other than UTC observing daylight saving, an in-app request and an out-of-band one are recorded on PostgreSQL and the deadline read back is the end of the sixth working day in that zone; every acceptance criterion of PRIV-RIGHT-002 still passes |
 
 The rounds come in this order, each after the pull request of the one before is merged.
 Every round comes before section 4 begins, whose release workflow builds the sample host
@@ -176,6 +177,7 @@ D-225).
 
 | 3 | Release 1.0.0-rc.2 | implementer, lead approves and tags | D-260: the release workflow's body or attachment, with its gate test; `Unreleased` moved to `1.0.0-rc.2`, naming that change and why 1.0.0-rc.1 has no release | Version 1.0.0-rc.2's packages on the tag's release, marked as a pre-release |
 | 4 | Release 1.0.0-rc.4 | implementer, lead approves and tags | Round H14 merged; `Unreleased` moved to `1.0.0-rc.4` | Version 1.0.0-rc.4's packages on the tag's release, marked as a pre-release |
+| 5 | Release 1.0.0-rc.5 | implementer, lead approves and tags | Round H15 merged; `Unreleased` moved to `1.0.0-rc.5` | Version 1.0.0-rc.5's packages on the tag's release, marked as a pre-release |
 
 The final 1.0.0 comes on the owner's word (D-232).
 

@@ -20960,6 +20960,37 @@ reader could tell apart.
 
 ---
 
+## D-263 — The legal clock's instants are written in UTC
+
+**Date:** 2026-11-05 · **Status:** accepted · **Amends:** PRIV-RIGHT-002
+
+**TL;DR.** The legal clock counts days in `privacy.calendar.timezone`, and every instant
+it computes (a request's decision deadline, its warning, the start and end of a working
+day) is the same instant expressed in UTC before anything holds or writes it. Found by a
+host after `1.0.0-rc.4`: with its calendar in `Africa/Cairo`, every privacy request, in
+the app and out of band, failed with 500, because the working calendar built its instants
+with the zone's offset and PostgreSQL's driver writes only offset 0 to a
+`timestamp with time zone`. The tests ran with a UTC calendar, where the two agree.
+
+- **The rule.** The zone decides which day an instant falls on and where a day begins and
+  ends; the instant is then held in UTC. A deadline read back is the same instant the
+  clock computed, whatever the zone.
+- **The proof** runs on PostgreSQL with a calendar whose zone is not UTC and has a
+  daylight saving change in the year, so no offset is assumed fixed.
+- **What stays.** The days counted, the working days and holidays, the deadline at the end
+  of the sixth working day in the zone, and every alert's timing.
+- **The release.** A fix with no public surface change, shipped as `1.0.0-rc.5`.
+
+*Rejected:*
+- **Writing the zone's offset** by changing the column or the driver's setting: the column
+  holds instants, and every other instant the library writes is UTC.
+
+**Propagated to:**
+- `04` PRIV-RIGHT-002 (criterion 6);
+- `implementation-plan.md` (round H15 and release step 5).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
