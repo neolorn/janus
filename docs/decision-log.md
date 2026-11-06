@@ -21520,6 +21520,11 @@ good.
   (the bootstrap and start checks of LIB-HOST-001 are unchanged).
 - **What stays.** `configure` stays for protected keys only; nothing else of the route's
   answers changes.
+- **Amended 2026-11-06 (round H19, Q1): protected keys read too.** A protected key the
+  deployment names that was never written (`hosting.crossborderbasis` on a deployment
+  hosted in Egypt) also answers `GET` with `value` null, not 500. Its write is unchanged:
+  `PUT` refuses it with `config.key.protected` before any read, and `configure` writes it
+  (OPS-CFG-004). Reading A of the round's question.
 - **Phase H19's criteria.** On PostgreSQL, a deployment bootstrapped without
   `service.name` reads it as null, sets it with a reason and an audit entry, and an
   authenticator app's enrolment then carries the name in its address.
@@ -21531,7 +21536,7 @@ good.
   keys (OPS-CFG-004).
 
 **Propagated to:**
-- `06` OPS-CFG-008 (a never-written key);
+- `06` OPS-CFG-008 (a never-written key, runtime or protected);
 - `09` `GET|PUT /admin/config/{key}` (`value` null before the first write);
 - `implementation-plan.md` (round H19).
 
