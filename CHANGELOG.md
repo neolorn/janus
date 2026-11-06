@@ -16,6 +16,10 @@ against the public contract of LIB-API-001.
   with `value` null, and its first value is written as any change of the key is: as a
   loosening, with its reason and an audit entry. The start check of a key the
   deployment is required to name is unchanged.
+- A protected key the deployment names that was never written, such as
+  `hosting.crossborderbasis` on a deployment hosted in Egypt, answered
+  `GET /admin/config/{key}` with 500 `system.fault`. It now reads with `value` null.
+  `PUT` still refuses it with `config.key.protected`; `configure` writes it.
 
 ## [1.0.0-rc.8] - 2026-11-06
 

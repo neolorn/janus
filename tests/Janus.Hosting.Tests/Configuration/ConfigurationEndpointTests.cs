@@ -287,6 +287,39 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-008, OPS-CFG-004 (D-277 as amended): <c>hosting.crossborderbasis</c>, a
+    /// protected key the deployment names and never wrote, as on a deployment hosted in
+    /// Egypt, reads 200 with <c>value</c> and <c>default</c> null; its <c>PUT</c> is still
+    /// refused 422 <c>config.key.protected</c>, and the key stays unwritten.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_008_AProtectedKeyTheDeploymentNamesReadsNullAndIsStillNotWrittenAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationRead,
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        Answer unwritten = await administrator.SendAsync("GET", "/admin/config/hosting.crossborderbasis");
+        Answer changed = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/hosting.crossborderbasis",
+            ("value", "contract"),
+            ("reason", "the basis the deployment hosts outside on"));
+        Answer read = await administrator.SendAsync("GET", "/admin/config/hosting.crossborderbasis");
+
+        Assert.Equal(StatusCodes.Status200OK, unwritten.Status);
+        Assert.Equal(JsonValueKind.Null, unwritten.Json().GetProperty("value").ValueKind);
+        Assert.Equal(JsonValueKind.Null, unwritten.Json().GetProperty("default").ValueKind);
+        Assert.True(unwritten.Json().GetProperty("protected").GetBoolean());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, changed.Status);
+        Assert.Equal(ErrorCodes.ConfigurationKeyProtected.ToString(), changed.Text("code"));
+        Assert.Equal(JsonValueKind.Null, read.Json().GetProperty("value").ValueKind);
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
     /// OPS-CFG-008, OPS-CFG-002 AC5 (D-277): the first value of a key the deployment
     /// names is judged as any change of it is, a loosening, so <c>config:manage</c> alone
     /// is refused it, and the key stays unwritten.

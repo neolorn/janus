@@ -414,21 +414,12 @@ internal sealed class ConfigurationAdministration(
         return RefusalAsync(family.For(parameter), loosening, reason, challenge, context, cancellationToken);
     }
 
-    /// <summary>
-    /// Whether a read of a setting found a runtime key the deployment names that holds no
-    /// stored value: a state the configuration routes answer with no value, which a first
-    /// value then changes, and not a fault.
-    /// </summary>
-    /// <typeparam name="TValue">The type of the setting's value.</typeparam>
-    /// <param name="setting">The setting read.</param>
-    /// <param name="read">What the read answered.</param>
-    /// <returns>Whether the key was never written.</returns>
-    /// <remarks>
-    /// Implements OPS-CFG-008 (D-277). Every key the deployment names has no direction,
-    /// so any change of it loosens (D-079b), its first value included. The library's own
-    /// reads of such a key are not judged here, and fail as LIB-HOST-001 gives.
-    /// </remarks>
-    internal static bool Unwritten<TValue>(Setting<TValue> setting, Result<TValue> read) =>
+    // OPS-CFG-008 (D-277): a runtime key the deployment names that holds no stored value
+    // takes its first value as a change, not a fault. Every key the deployment names has
+    // no direction, so any change of it loosens (D-079b), its first value included. A
+    // protected key is refused before this is asked (OPS-CFG-004), and the library's own
+    // reads of such a key fail as LIB-HOST-001 gives.
+    private static bool Unwritten<TValue>(Setting<TValue> setting, Result<TValue> read) =>
         setting is { IsRequired: true, Scope: SettingScope.Runtime }
         && read.Match(_ => false, error => error.Code == ErrorCodes.StartupDeclarationMissing);
 
