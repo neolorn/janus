@@ -656,6 +656,12 @@ registered to run after a commit (a send's immediate attempt), where the fault i
 logged, the row is left to the publisher and the operation answers what it committed
 (CONV-DESIGN-003, CONV-ERR-003, D-186).
 
+**A key the deployment names, never written (D-277).** A runtime key the deployment
+names (LIB-HOST-001) that holds no stored value is not a value that does not read: the
+configuration routes SHALL answer it with `value` null and SHALL write its first value as
+any change is written, under its type, direction and audit rules. Where the library's
+own code requires such a key, its read still fails as LIB-HOST-001 gives.
+
 **The named restriction set is runtime configuration** (`restrictions`,
 AUTH-ABUSE-004), edited through `GET/PUT/DELETE /admin/restrictions/{name}` exactly as
 the public-holiday list is (D-142): the change applies to the next send with no
