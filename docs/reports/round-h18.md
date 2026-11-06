@@ -91,6 +91,22 @@ amendment), 8f6bb74d**
 
 **D-275**: changes no code, as the round's documents say. Nothing built.
 
+**Section 4, step 8: the release commit, ac093f30 `chore: release 1.0.0-rc.8`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.8] - 2026-11-06`, holding the two
+  lines under `Added`, and Unreleased is left empty.
+- The public surface: `Janus.Core`'s 28 unshipped lines (`AuthorizationDeclaration`'s
+  and the builder's `AdmitsWhoMay`, `IGrants.OwnAsync` and `OwnGrant`) move into its
+  shipped file, each at its place in the file's order; every unshipped file is left
+  holding its header alone.
+- The two lists are not drawn again (CONV-VCS-005, D-262). The leaked-password list of
+  run 41814221201 and the Public Suffix List at version 2026-10-31_14-17-28_UTC were
+  both drawn on 2026-11-04, within 90 days before the release commit. `NOTICE` keeps
+  both dates.
+- No migration note: a release candidate opens no major version.
+- Criterion verified otherwise: the release gate over `origin/main..HEAD` says the notes
+  of 1.0.0-rc.8, 1217 characters, are the release's body.
+
 ## 2. Items not implemented
 
 None.
@@ -142,6 +158,7 @@ or a step-up gate stops that permission.
 - The pipeline's runs on 5ed1a337, before the answers, were green. On 67898e24 the
   contract tests failed: `CONV_DESIGN_002_AC3` found `IGrants.OwnAsync` reading grants
   before any gate, as an operation on the caller's own records does and the test had
-  not been told. Fixed in 3f554e87.
+  not been told. Fixed in 3f554e87. The runs on c2926c22, with both answers in, were
+  green before the release commit.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
