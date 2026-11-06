@@ -1,1 +1,4 @@
 #nullable enable
+Janus.Core.AuthorizationDeclaration.AdmitsWhoMay.get -> System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!>!
+Janus.Core.AuthorizationDeclaration.AdmitsWhoMay.init -> void
+Janus.Core.AuthorizationDeclarationBuilder.AdmitsWhoMay(string! permission, string! asked) -> Janus.Core.AuthorizationDeclarationBuilder!

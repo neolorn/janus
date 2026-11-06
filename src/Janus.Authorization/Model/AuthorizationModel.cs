@@ -93,6 +93,7 @@ internal sealed class AuthorizationModel
     private readonly Dictionary<ResourceType, ResourceTypeDeclaration> _types;
     private readonly IReadOnlyList<DefinedRole> _declaredRoles;
     private readonly Dictionary<string, HashSet<Permission>> _jobs;
+    private readonly Dictionary<Permission, IReadOnlyList<Permission>> _admitting;
 
     private AuthorizationModel(
         Dictionary<ResourceType, ResourceTypeDeclaration> types,
@@ -106,7 +107,8 @@ internal sealed class AuthorizationModel
         IReadOnlyList<string> sensitiveCategories,
         DeclaredProcessing processing,
         IReadOnlyList<DefinedRole> declaredRoles,
-        Dictionary<string, HashSet<Permission>> jobs)
+        Dictionary<string, HashSet<Permission>> jobs,
+        Dictionary<Permission, IReadOnlyList<Permission>> admitting)
     {
         _types = types;
         _entities = entities;
@@ -126,6 +128,7 @@ internal sealed class AuthorizationModel
         _processing = processing;
         _declaredRoles = declaredRoles;
         _jobs = jobs;
+        _admitting = admitting;
     }
 
     /// <summary>
@@ -200,6 +203,7 @@ internal sealed class AuthorizationModel
         CheckFloors(declaration, processing);
         CheckBindings(declaration);
         CheckJobs(declaration);
+        Dictionary<Permission, IReadOnlyList<Permission>> admitting = Admissions(declaration);
 
         return new AuthorizationModel(
             types,
@@ -216,7 +220,8 @@ internal sealed class AuthorizationModel
             declaration.Jobs.ToDictionary(
                 job => job.Name,
                 job => new HashSet<Permission>(job.Permissions),
-                StringComparer.Ordinal));
+                StringComparer.Ordinal),
+            admitting);
     }
 
     /// <summary>
@@ -251,6 +256,18 @@ internal sealed class AuthorizationModel
     /// derivation is refused as its host permissions are.
     /// </remarks>
     public bool DeclaresJob(string job) => _jobs.ContainsKey(job);
+
+    /// <summary>
+    /// The host permissions declared to admit the question of who may exercise the
+    /// permission asked, in the order declared; none where no declaration names it.
+    /// </summary>
+    /// <param name="asked">The permission the question is about.</param>
+    /// <returns>The permissions whose holders may ask it.</returns>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-007 (D-276).
+    /// </remarks>
+    public IReadOnlyList<Permission> AdmittingWhoMay(Permission asked) =>
+        _admitting.TryGetValue(asked, out IReadOnlyList<Permission>? admitting) ? admitting : [];
 
     /// <summary>
     /// The export operations: every permission the host declares whose action is
@@ -1079,6 +1096,63 @@ internal sealed class AuthorizationModel
                     "the library's permission " + permission + " is bound to a purpose");
             }
         }
+    }
+
+    // AUTHZ-GATE-007, LIB-HOST-001 (D-276): holding one host permission may admit the
+    // question of who may exercise another; both are the host's own and declared, since
+    // the library's carry their own admissions, and a pair is declared once. What is kept
+    // is, for each permission asked, the permissions admitting it in the order declared.
+    private static Dictionary<Permission, IReadOnlyList<Permission>> Admissions(AuthorizationDeclaration declaration)
+    {
+        var declared = new HashSet<Permission>(declaration.Permissions);
+        var admitting = new Dictionary<Permission, List<Permission>>();
+
+        foreach ((Permission permission, IReadOnlyList<Permission> admitted) in declaration.AdmitsWhoMay)
+        {
+            string at = "binding." + permission;
+
+            foreach (Permission asked in admitted.Prepend(permission))
+            {
+                if (Core.Permissions.All.Contains(asked))
+                {
+                    throw Invalid(
+                        at,
+                        "admitsWhoMay",
+                        "the library's permission " + asked + " is named where the question of who may is admitted");
+                }
+
+                if (!declared.Contains(asked))
+                {
+                    throw Invalid(
+                        at,
+                        "admitsWhoMay",
+                        "the permission " + asked + ", named where the question of who may is admitted, is not declared");
+                }
+            }
+
+            foreach (Permission asked in admitted)
+            {
+                if (!admitting.TryGetValue(asked, out List<Permission>? holders))
+                {
+                    holders = [];
+                    admitting.Add(asked, holders);
+                }
+
+                if (holders.Contains(permission))
+                {
+                    throw Invalid(
+                        at,
+                        "admitsWhoMay",
+                        "the permission " + permission + " is declared twice to admit the question of who may " + asked);
+                }
+
+                holders.Add(permission);
+            }
+        }
+
+        return admitting.ToDictionary(
+            entry => entry.Key,
+            entry => (IReadOnlyList<Permission>)[.. entry.Value]);
     }
 
     // IDN-PRIN-001, OPS-ALERT-006 (D-202, D-206, D-218): a job exercises the host's own

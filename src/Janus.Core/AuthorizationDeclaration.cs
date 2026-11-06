@@ -65,4 +65,17 @@ public sealed record AuthorizationDeclaration(
     IReadOnlyDictionary<string, TimeSpan> RetentionFloors,
     IReadOnlyList<CookieDeclaration> Cookies,
     IReadOnlyList<RoleDeclaration> Roles,
-    IReadOnlyList<JobDeclaration> Jobs);
+    IReadOnlyList<JobDeclaration> Jobs)
+{
+    /// <summary>
+    /// The host permissions whose holders may ask who may exercise another of the host's,
+    /// each with the permissions it admits that question for, in the order declared; a
+    /// pair declared twice is kept twice, so the model refuses it as the deployment
+    /// starts.
+    /// </summary>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-007 and LIB-HOST-001 (D-276).
+    /// </remarks>
+    public IReadOnlyDictionary<Permission, IReadOnlyList<Permission>> AdmitsWhoMay { get; init; } =
+        new Dictionary<Permission, IReadOnlyList<Permission>>();
+}

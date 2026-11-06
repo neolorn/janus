@@ -172,6 +172,48 @@ public sealed class RefusalRecordTests(HostFixture host) : IClassFixture<HostFix
         }
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-007 AC6, <c>09</c> <c>GET /admin/access/admitted</c> (D-276): a caller
+    /// holding no <c>grant:read</c> and holding across the organization a host permission
+    /// declared to admit the question for <c>document:read</c> is answered 200 who may read
+    /// a record of it; asking for another permission is refused 403 <c>authz.denied</c>,
+    /// its body carrying the refusal record the trail holds.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_AC6_TheQuestionADeclaredPermissionAdmitsIsAnsweredOverTheEndpointAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Callers callers = await CallersAsync();
+        RoleName reporting = await callers.Deployment.RoleAsync([HostPermissions.Report], cancellationToken);
+
+        await callers.Deployment.GrantAsync(
+            GrantSubject.Of(callers.Caller), reporting, null, false, null, null, cancellationToken);
+
+        await using ServedRequests served = await ServedRequests.StartMountedAsync(
+            host,
+            _ => Task.CompletedTask,
+            cancellationToken);
+
+        string cookie = await SignedInAsync(served, callers.Caller, Deployment.Noon - TimeSpan.FromMinutes(1));
+        string asked = "?type=document&id=" + callers.Record.Id + "&permission=";
+
+        Answer answered = await served.SendAsync("/admin/access/admitted", asked + HostPermissions.Read, cookie);
+        Answer refused = await served.SendAsync("/admin/access/admitted", asked + HostPermissions.Edit, cookie);
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.Equal(
+            [callers.Caller.Value],
+            [.. answered.Json().GetProperty("subjects").EnumerateArray().Select(subject => subject.GetGuid())]);
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Equal(
+            1,
+            await RecordedAsync(
+                refused.Json().GetProperty("details").GetProperty("correlation").GetGuid(),
+                callers.Caller));
+    }
+
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 

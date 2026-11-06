@@ -8,6 +8,17 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+### Added
+
+- `AuthorizationDeclarationBuilder.AdmitsWhoMay(permission, asked)` declares that holding
+  one of your permissions in an organization lets a person ask
+  `IAccessGate.WhoMayAsync` (and `GET /admin/access/admitted`) who may exercise `asked`
+  there, without `grant:read`. The permission held is judged as any check judges it, so
+  a deny, an expiry, a restriction or a step-up gate bound to it keeps the question
+  refused, and every other permission stays refused. Naming a permission you do not
+  declare or one of the library's, or declaring a pair twice, fails startup with
+  `model.startup.declarationinvalid`.
+
 ## [1.0.0-rc.7] - 2026-11-06
 
 ### Changed

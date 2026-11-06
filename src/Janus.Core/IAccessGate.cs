@@ -302,8 +302,10 @@ public interface IAccessGate
     /// organization, those its organization-wide grants admit. None where the
     /// permission's purpose asks a consent the record's data subject has not given.
     /// Evaluation stops at <c>authz.reverselookup.budget</c>, and what it did not reach
-    /// is named. Or <c>authz.denied</c> for a person without <c>grant:read</c> in the
-    /// organization the record belongs to, for a job whose declaration does not name the
+    /// is named. Or <c>authz.denied</c> for a person holding neither <c>grant:read</c> nor
+    /// a host permission declared to admit the permission asked
+    /// (<see cref="AuthorizationDeclarationBuilder.AdmitsWhoMay"/>) in the organization the
+    /// record belongs to, for a job whose declaration does not name the
     /// permission or the organization, for a job's context asked while a request is
     /// served, and for a record the registry does not hold;
     /// <c>authz.derivation.sourcesmissing</c> where a derivation the host's rows decide
@@ -313,9 +315,11 @@ public interface IAccessGate
     /// one, with no refusal recorded.
     /// </returns>
     /// <remarks>
-    /// AUTHZ-GATE-007 (D-218, D-219): a step-up is a session's and not an account's, so
-    /// none is judged; nothing is recorded or counted for the accounts judged, only a
-    /// refusal of the one asking.
+    /// AUTHZ-GATE-007 (D-218, D-219, D-276): a step-up is a session's and not an account's,
+    /// so none is judged for the accounts judged; nothing is recorded or counted for them,
+    /// only a refusal of the one asking. A host permission admitting the question is
+    /// judged as the single check judges it, a deny, an expiry, a restriction and a
+    /// step-up gate bound to it applying.
     /// </remarks>
     ValueTask<Result<AdmittedAccounts>> WhoMayAsync(
         AccessContext context,
