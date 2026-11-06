@@ -2371,11 +2371,10 @@ The live grants the caller's own account holds in its own name in the organizati
 oldest first (`03` AUTHZ-GRANT-003, D-274). It needs the caller's live session and no
 permission; the account is the one the session is effective for. A grant reaching the
 account through a group is the group's and is not listed. A restricted account is
-admitted (IDN-ACCT-007). Its library call is `IGrants.HeldAsync` naming the caller's own
-account. Nothing is recorded.
+admitted (IDN-ACCT-007). Its library call is `IGrants.OwnAsync`. Nothing is recorded.
 
-**200**: `[ { id, kind, subjectType, subjectId, resourceType, resourceId, role, deny,
-expiresAt, grantedBy, grantedAt, reason } ]`, as `GET /admin/grants` answers it; none
+**200**: `[ { id, kind, resourceType, resourceId, role, deny, expiresAt, grantedAt } ]`,
+the fields of `OwnGrant`, never who granted a grant or why (D-274's amendment); none
 where the account holds none there, an organization the deployment does not hold
 included
 **400**: `api.request.malformed` naming `organization` where it is absent or not an

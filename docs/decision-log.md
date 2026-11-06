@@ -21371,6 +21371,22 @@ which D-269 forbids.
 - `09` section 6 (`GET /account/grants`) and `GET /admin/grants` (the self-read beside it);
 - `implementation-plan.md` (round H18).
 
+**Amendment (2026-11-06, round H18's question 1): the self-read answers what the export
+answers, not more.** The subject export carries of each grant the account holds its
+identifier, organization, role, kind, deny, resource, `grantedAt`, `expiresAt` and
+`revokedAt`, and never who granted it or why, which are about the person who acted (`04`
+PRIV-RIGHT-003). The self-read is therefore its own operation,
+`IGrants.OwnAsync(AccessContext context, OrganizationId organization, CancellationToken
+cancellationToken)`, answering `OwnGrant(GrantId Id, GrantKind Kind, RoleName Role,
+ResourceReference On, bool Deny, DateTimeOffset? ExpiresAt, DateTimeOffset GrantedAt)` for
+each live grant the account holds in its own name there, oldest first, under the rules
+above (no permission, the effective user, a restricted account admitted, nothing recorded
+or counted). `HeldAsync` is unchanged: it needs `grant:read` for every holder, the
+caller's own account included. `GET /account/grants` answers `OwnGrant`'s fields.
+*Rejected:* the whole `HeldGrant` (it tells a person more than the export does);
+`HeldGrant`'s granter and reason made nullable (it changes what every `grant:read` reader
+receives).
+
 ---
 
 ## D-275 — Whether a person still has access is their membership's, kept from its event
@@ -21466,6 +21482,20 @@ D-206 question 15), so the host read the grants relation, which D-269 forbids.
 - `09` `GET /admin/access/admitted` (the admission);
 - `10` section 1 (`model.startup.declarationinvalid`, the binding);
 - `implementation-plan.md` (round H18).
+
+**Amendment (2026-11-06, round H18's question 2 and its rule-resolution).**
+- **A held permission stopped short of admitting answers as its own check would.** Where
+  no permission admits the question, and a declared admitting permission is held there
+  but stopped only by a step-up gate bound to it, or only by a restriction, the answer is
+  what the single check of that permission answers (the gate's step-up, or
+  `authz.restricted`), and no refusal is recorded, as the single check records none for
+  either. Otherwise `grant:read`'s check answers and its refusal is recorded, as built.
+  Nothing is answered of who may until a permission admits. *Rejected:* a flat
+  `authz.denied` in every case, which leaves a person who holds the permission no way to
+  learn that a step-up would admit them, where the capability page already tells them.
+- **The rule-resolution is accepted.** `AuthorizationDeclaration.AdmitsWhoMay`, the pairs
+  as the declaration carries them to the model, is public, an init property empty by
+  default (D-273), and part of this decision.
 
 ---
 

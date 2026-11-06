@@ -152,11 +152,14 @@ where it is a group, whoever acted (`10` section 5.24, D-206).
 
 **A person's own grants (D-274).** The live grants a user or group holds in its own name
 in an organization are read under `grant:read` there (`IGrants.HeldAsync`,
-`GET /admin/grants`), save that a person SHALL be answered the live grants their own
-account holds in its own name, in any organization, with no permission: the holder is
-the user the context is effective for (`AccessContext.Effective`), as the export takes
-it (`04` PRIV-RIGHT-003). The answer is the same `HeldGrant` records, oldest first; a
-grant reaching the person through a group stays the group's, read under `grant:read`.
+`GET /admin/grants`), the caller's own account included. A person SHALL be answered the
+live grants their own account holds in its own name, in any organization, with no
+permission, through `IGrants.OwnAsync`: the holder is the user the context is effective
+for (`AccessContext.Effective`), as the export takes it (`04` PRIV-RIGHT-003). The
+answer is `OwnGrant` records, oldest first, carrying what the export carries of a grant
+(its identifier, kind, role, resource, deny, `grantedAt` and `expiresAt`) and never who
+granted it or why; a grant reaching the person through a group stays the group's, read
+under `grant:read`.
 A restricted account is admitted (IDN-ACCT-007). Nothing is recorded, and nothing counts
 toward the read volume (OPS-ALERT-005). The route is `GET /account/grants` (`09`
 section 6).
@@ -196,7 +199,7 @@ migration across every query later.
 9. A person without `grant:read` is answered their own account's live grants in an
    organization, and neither an expired nor a revoked one; asking for another account's
    or a group's grants without `grant:read` is refused `authz.denied`; a restricted
-   account is answered its own (D-274).
+   account is answered its own; none of it names who granted a grant or why (D-274).
 
 ---
 
@@ -1427,8 +1430,11 @@ person holding `grant:read` in the organization the record belongs to; by a pers
 holding there a host permission the model declares to admit the permission asked
 (`AuthorizationDeclarationBuilder.AdmitsWhoMay(permission, asked)`, `07` LIB-HOST-001,
 D-276), judged as the single check judges it on that organization, a deny, an expiry, a
-restriction and a step-up gate bound to it applying as for any check; or by a host's
-declared job whose declaration names the permission, on its organization's records and
+restriction and a step-up gate bound to it applying as for any check, so that where no
+permission admits and such a permission is stopped only by its step-up gate or only by a
+restriction, the answer is what its single check answers, with no refusal recorded; or
+by a host's declared job whose declaration names the permission, on its organization's
+records and
 on its organization (`01` IDN-PRIN-001). A job's context is refused while a request is
 served, whatever it would read (D-202, D-206); a record the deployment holds no
 registration for is refused as AUTHZ-DERIVE-007 refuses it, and a permission or type the
@@ -1458,7 +1464,9 @@ misses denies and derived access.
 6. With `AdmitsWhoMay(p, q)` declared, a person holding `p` across an organization and
    no `grant:read` is answered who may `q` there, on the organization and on one of its
    records; asking for any other permission, holding `p` under a deny, or holding it
-   only in another organization, is refused `authz.denied` and the refusal recorded; a
+   only in another organization, is refused `authz.denied` and the refusal recorded;
+   holding `p` stopped only by its step-up gate is answered that step-up, and only by a
+   restriction `authz.restricted`, neither recorded; a
    declaration naming a permission not declared or a library-owned one, or a pair
    declared twice, fails startup with `model.startup.declarationinvalid`,
    `details.declaration` `binding.<p>`, `details.field` `admitsWhoMay` (D-276).
