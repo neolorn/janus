@@ -2,13 +2,18 @@
 
 ## 1. Items implemented
 
-**`06` OPS-CFG-008 and `09` `GET|PUT /admin/config/{key}` (D-277), 28659b39**
+**`06` OPS-CFG-008 and `09` `GET|PUT /admin/config/{key}` (D-277 and its amendment),
+28659b39 and 53754fd7**
 
-- `ConfigurationAdministration.Unwritten`: a read of a runtime key the deployment names
-  (LIB-HOST-001) that answered `model.startup.declarationmissing` is the key never
-  written, a state and not a fault. It is the one definition both routes read.
-- `GET /admin/config/{key}` (`SettingReading`): such a key answers 200 with `value`
-  null and `default` null, its `protected` and `direction` as for any read.
+- `GET /admin/config/{key}` (`SettingReading`): a key the deployment names
+  (LIB-HOST-001), runtime or protected, whose read answered
+  `model.startup.declarationmissing` is the key never written, a state and not a fault.
+  It answers 200 with `value` null and `default` null, its `protected` and `direction`
+  as for any read. The protected case is the amendment's (53754fd7).
+- The write's condition is its own (`ConfigurationAdministration.Unwritten`, private):
+  a runtime key the deployment names alone. A protected key is refused
+  `config.key.protected` before any read, as OPS-CFG-004 gives, and `configure` writes
+  it.
 - `PUT /admin/config/{key}` (`ConfigurationAdministration.ChangeAsync` and
   `AllowedAsync`): the first value is written under the key's type, constraints and
   audit rules. Every key the deployment names has no direction, so any change of it
@@ -36,9 +41,14 @@
   - `ConfigurationEndpointTests.OPS_CFG_008_TheFirstValueOfAKeyTheDeploymentNamesIsALooseningAsync`:
     `config:manage` alone is refused 403 `authz.denied`, and the key stays unwritten;
   - with the change taken out, all three fail;
+  - `ConfigurationEndpointTests.OPS_CFG_008_AProtectedKeyTheDeploymentNamesReadsNullAndIsStillNotWrittenAsync`
+    (53754fd7): over HTTP, `hosting.crossborderbasis`, never written, reads 200 with
+    `value` and `default` null and `protected` true; its `PUT` is still refused 422
+    `config.key.protected`, and it stays unwritten;
   - `StartupValidationTests.LIB_HOST_001_AC2_ScreeningAgainstTheContextWithoutTheServiceNameIsRefusedAsync`,
     unchanged, still passes: the start check is the same.
-- `CHANGELOG.md`: one line under Unreleased, `Fixed`.
+- `CHANGELOG.md`: two lines under Unreleased, `Fixed`: the runtime key's read and first
+  write, and the protected key's read.
 
 ## 2. Items not implemented
 
@@ -50,31 +60,25 @@ None.
 
 ## 4. Open questions
 
-**Q1 (Tier 2).** A protected key the deployment names, never written, still answers
+**Q1 (Tier 2).** A protected key the deployment names, never written, still answered
 `GET /admin/config/{key}` with 500 `system.fault`.
 
-- D-277 and OPS-CFG-008 as amended name a runtime key. `hosting.crossborderbasis` is a
-  protected key the deployment names only where it hosts outside Egypt
-  (`Settings.ThrowIfIncomplete`), so a deployment hosted inside never writes it, and its
-  read through the route fails on `model.startup.declarationmissing`, as `service.name`'s
-  did. A `PUT` of it is refused `config.key.protected` before any read, as OPS-CFG-004
-  gives, so only the read is at issue.
-- Built: the rule for runtime keys alone, as the decision is written. Nothing is parked.
-- Reading A: the route answers such a protected key as it now answers a runtime one,
-  `value` null. Smallest fix: drop the scope from `ConfigurationAdministration.Unwritten`
-  for the read, and keep `PUT` refusing it as protected.
-- Reading B: it stays as it is, the read of a protected key never written being out of
-  the route's scope. Smallest fix: none.
+- `hosting.crossborderbasis` is named only where the deployment hosts outside Egypt, so
+  one hosted inside never writes it; D-277 named runtime keys alone.
+- Readings asked: A, the read answers it `value` null and `PUT` keeps refusing it; B,
+  it stays as it is.
+- Answered: D-277's amendment (8237bf5f), reading A. Built (section 1, 53754fd7).
 
 ## 5. Gate result
 
 - Fast checks on every commit: green. These are the build with warnings as errors, the
   analysers, `dotnet format --verify-no-changes`, and the unit tests of the projects
   changed.
-- Checks before the push: green. Every unit test passes (5225 in eleven projects), every
+- Checks before the push: green. Every unit test passes (5226 in eleven projects), every
   contract test passes (214), and the commit-message, changelog, release, truth-table
   change, acceptance-criterion test name and forbidden-marker gates pass over
   `origin/main..HEAD`. The full-history secret scan finds nothing. `NamedKeyTests` and
   `StartupValidationTests` were run here against PostgreSQL.
+- The pipeline's runs on fc310753, before the answer, were green.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
