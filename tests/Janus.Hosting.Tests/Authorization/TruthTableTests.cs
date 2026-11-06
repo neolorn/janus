@@ -493,9 +493,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // document:read, held across the organization admits it there as grant:read does,
     // decided as the single check decides it; asked for another permission, held under a
     // deny there, or held only in another organization, it does not, and grant:read's
-    // refusal there is the one recorded. A declared job naming the permission asked is
-    // admitted outside a request and refused while one is served (AUTHZ-GATE-007 AC3,
-    // AC6, AUTHZ-CONCEAL-004, D-202, D-206, D-276).
+    // refusal there is the one recorded. Held by a restricted account, or held as
+    // document:publish, which also admits it and is bound to a step-up gate the asking
+    // context has not met, it is answered as its own check answers, recording nothing. A
+    // declared job naming the permission asked is admitted outside a request and refused
+    // while one is served (AUTHZ-GATE-007 AC3, AC6, AUTHZ-CONCEAL-004, D-202, D-206,
+    // D-276).
     private static readonly (string Scenario, Decided Decided)[] Askers =
     [
         ("a holder of a permission admitting the question, asking it of a record", Decided.Allowed),
@@ -505,6 +508,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         (
             "a holder of a permission admitting the question in another organization alone, asking it of a record",
             Decided.Denied),
+        ("a restricted holder of a permission admitting the question, asking it of a record", Decided.Restricted),
+        (
+            "a holder of a permission admitting the question whose step-up gate no factor it holds meets, asking it of a record",
+            Decided.StepUpUnavailable),
         ("a declared job naming the permission asked, asking it of a record", Decided.Allowed),
         ("a declared job naming the permission asked, asking it of a record while a request is served", Decided.Denied),
     ];
@@ -1464,8 +1471,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// <summary>
     /// AUTHZ-GATE-007 AC3, AC6 (D-276): every case of the askers' table is answered the way
     /// the table says, an admitted question naming the account holding the permission
-    /// asked across the organization, and a person's refusal recorded once, naming
-    /// <c>grant:read</c> in the organization asked of.
+    /// asked across the organization, a person's denial recorded once, naming
+    /// <c>grant:read</c> in the organization asked of, and a restriction or a step-up
+    /// answered with nothing recorded.
     /// </summary>
     /// <param name="scenario">The case.</param>
     /// <param name="decided">What it decides.</param>
@@ -1513,7 +1521,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
         Assert.Equal(decided is Decided.Denied ? 1 : 0, await GrantRefusalsAsync(context, organization));
 
-        if (outcome.Match<Error?>(_ => null, error => error) is Error refusal)
+        if (outcome.Match<Error?>(_ => null, error => error) is Error refusal && refusal.Code == ErrorCodes.Denied)
         {
             await using AsyncServiceScope reading = host.Services.CreateAsyncScope();
 
@@ -2858,7 +2866,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         var deployment = new Deployment(host);
 
         RoleName reading = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
-        RoleName reporting = await deployment.RoleAsync([HostPermissions.Report], cancellationToken);
+        RoleName reporting = await deployment.RoleAsync(
+            [scenario.Contains("step-up gate", StringComparison.Ordinal) ? HostPermissions.Publish : HostPermissions.Report],
+            cancellationToken);
         SubjectId holder = await deployment.AccountAsync(cancellationToken);
         SubjectId caller = await deployment.AccountAsync(cancellationToken);
         ResourceReference workspace = Reference(Workspace);
@@ -2899,6 +2909,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         if (scenario.Contains("under a deny there", StringComparison.Ordinal))
         {
             await deployment.GrantAsync(GrantSubject.Of(caller), reporting, null, true, null, null, cancellationToken);
+        }
+
+        if (scenario.StartsWith("a restricted holder", StringComparison.Ordinal))
+        {
+            await deployment.RestrictAsync(caller, cancellationToken);
         }
 
         return (

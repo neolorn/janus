@@ -292,9 +292,10 @@ public sealed class HostFixture : IAsyncLifetime
             .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
             .ServesPurpose(HostPermissions.Recommend.ToString(), "recommendations")
             .ServesPurpose(HostPermissions.Retain.ToString(), "keeping the books")
-            // AUTHZ-GATE-007 AC6 (D-276): a host permission whose holders may ask who may
-            // read the host's records.
+            // AUTHZ-GATE-007 AC6 (D-276): host permissions whose holders may ask who may
+            // read the host's records, one of them bound to a step-up gate.
             .AdmitsWhoMay(HostPermissions.Report.ToString(), HostPermissions.Read.ToString())
+            .AdmitsWhoMay(HostPermissions.Publish.ToString(), HostPermissions.Read.ToString())
             // IDN-PRIN-001 AC6 (D-208): the job exercises a permission bound to a
             // consent-based purpose, which the gate admits on the record's data subject's
             // consent alone, two of the library's reads (IDN-READ-004 AC3, D-218, D-219) and

@@ -13,11 +13,12 @@ against the public contract of LIB-API-001.
 - `AuthorizationDeclarationBuilder.AdmitsWhoMay(permission, asked)` declares that holding
   one of your permissions in an organization lets a person ask
   `IAccessGate.WhoMayAsync` (and `GET /admin/access/admitted`) who may exercise `asked`
-  there, without `grant:read`. The permission held is judged as any check judges it, so
-  a deny, an expiry, a restriction or a step-up gate bound to it keeps the question
-  refused, and every other permission stays refused. Naming a permission you do not
-  declare or one of the library's, or declaring a pair twice, fails startup with
-  `model.startup.declarationinvalid`.
+  there, without `grant:read`. The permission held is judged as any check judges it: a
+  deny or an expiry keeps the question refused, and where only a step-up gate bound to
+  it, or only a restriction, stops it, the question is answered that step-up or
+  `authz.restricted`, with no refusal recorded. Every other permission stays refused.
+  Naming a permission you do not declare or one of the library's, or declaring a pair
+  twice, fails startup with `model.startup.declarationinvalid`.
 - `IGrants.OwnAsync` and `GET /account/grants?organization={id}` answer a person the live
   grants their own account holds in its own name in an organization, oldest first, with
   no permission, a restricted account included. Each grant is an `OwnGrant`, carrying
