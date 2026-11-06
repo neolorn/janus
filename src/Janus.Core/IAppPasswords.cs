@@ -23,6 +23,8 @@ namespace Janus.Core;
 /// refused creation with <c>authz.restricted</c> (IDN-ACCT-007). A creation from the
 /// break-glass session, or a session another application opened from it, is refused
 /// with <c>authz.denied</c> before anything is read (OPS-BOOT-002).
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IAppPasswords
 {

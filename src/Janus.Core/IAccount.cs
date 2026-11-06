@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// Implements LIB-API-005, REG-ACCT-001, REG-PROF-001, REG-PREF-001, REG-IDENT-009 and
 /// IDN-ATTR-008. A field a policy has turned off is neither accepted nor returned, so
 /// the shape of the answer follows the deployment and never the caller.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IAccount
 {

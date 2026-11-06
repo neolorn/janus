@@ -11,6 +11,8 @@ namespace Janus.Core;
 /// Publishing answers for itself: an operation that publishes inside its transaction
 /// returns the failure rather than committing a change no consumer was told of, and
 /// the publisher leaves an undelivered event for its next attempt.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IEvents
 {

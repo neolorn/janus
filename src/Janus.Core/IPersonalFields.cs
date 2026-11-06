@@ -18,6 +18,8 @@ namespace Janus.Core;
 /// cleared when the use returns, which is synchronous, so no key outlives the call.
 /// Erasing the subject's key makes every value written through this unreadable, in the
 /// host's tables as in the library's.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IPersonalFields
 {

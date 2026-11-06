@@ -874,6 +874,41 @@ names no organization the deployment holds is answered 404
 
 ---
 
+### 2.6 Conditions: the boundary of a later vocabulary
+
+**Nothing in this section is built.** It fixes the shape a condition takes when a host
+first needs one (`00` section 7.3, D-267), so that no part of the public surface is shaped
+meanwhile in a way a condition could not keep (D-272). It states no requirement a build
+meets today, and no test carries it until a decision builds the first condition.
+
+- **A condition narrows; it never confers.** A condition is attached to what confers
+  access, a grant or a role's permission, and admits only where it holds; access comes
+  from a grant, stored or derived, never from a condition alone (D-043).
+- **A closed vocabulary the library owns.** A condition is built from comparisons the
+  library defines, renders both ways from one definition (AUTHZ-PRIN-001,
+  AUTHZ-GATE-002) and writes into the serialized model (AUTHZ-MODEL-005). A host's own
+  code, a delegate, an expression over its types or a SQL text, is never a condition.
+- **Attributes are declared in the model.** A record's attribute is declared on its
+  resource type with a selector over the host's row, which the LINQ rendering composes,
+  and the column the SQL fragment names. The subject's, the action's and the
+  environment's attributes are values the library holds or reads from the request, never
+  host code.
+- **Arguments are data; values are parameters.** A condition's arguments (a limit, a
+  status) are data, held on the grant or declared in the model; every value either
+  rendering compares is a parameter, never text in the SQL (AUTHZ-GATE-002 criterion 3).
+- **Asked with the host's rows.** A type whose permissions may carry a condition over its
+  records' attributes is asked through the gate's members that take the host's sources,
+  as a type a derivation reaches is (AUTHZ-DERIVE-001); a member without them refuses it
+  before anything is read, as a fault, with a code named when the vocabulary is built.
+- **What a page cannot judge is a residual.** A condition over a value only the action
+  carries answers on a capability page as a residual of `10` section 5.20
+  (AUTHZ-GATE-005, D-270).
+- **Every rule takes it as it takes a grant.** Deny precedence (AUTHZ-GRANT-002),
+  organization scoping (section 2.5), the explanation (AUTHZ-GATE-004), the audit trail
+  and the truth table (AUTHZ-TEST-001).
+
+---
+
 ## 3. The model builder
 
 ### 3.1 Form
@@ -1214,6 +1249,13 @@ explanation.
 **Values (D-153).** `requires` carries members of the closed set in `10` section 5.20:
 `stepup` · `reauthenticate` · `restricted` · `consent` · `accountstate`.
 
+**An empty `requires` keeps its promise (D-270).** Whatever the page can judge, it judges
+as the action's check would; what it cannot judge, because only the action carries it (a
+value the person is about to enter, a state the action sets, section 2.6), it answers
+as a residual of `10` section 5.20, never as a bare capability. So a capability with an
+empty `requires` still succeeds (criterion 2). The set may grow in a minor version; a
+frontend treats a residual it does not know as not permitted (`18` FE-CAP-002).
+
 **Values (D-160).** The `stepup` residual comes from the **gate bound to the action**,
 not from the permission string: the model builder binds a host-declared action to a
 step-up gate name (`10` section 5a or a host-declared gate), and the library-owned
@@ -1248,7 +1290,8 @@ each derivation confers allows is read from the model and mapped in memory; no r
 and no permission costs a further query, and no grant is read through the library's own
 connection.
 
-*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202, D-206, D-207, D-209*
+*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202, D-206, D-207, D-209,
+D-270*
 
 The frontend must never infer permissions from role names; that is how a button
 appears while the endpoint refuses. Computing them per row in separate calls
@@ -1693,11 +1736,24 @@ AUTHZ-SCOPE-001 (`08` CONV-DESIGN-007) is part of that seam: `AccessGate` implem
 deciding each permission as the single check decides it, so the implementation is still
 replaced in one place (D-208).
 
-*Source: D-015, D-125, D-208*
+**The contract relations are inputs (D-269).** `identity.ancestry`,
+`identity.effective_grants` and `identity.consented_resources`, and the records a host
+maps them through (`AncestryEntry`, `EffectiveGrant`, `ConsentedResource`,
+AUTHZ-GATE-002), are inputs to the gate's renderings. A row of them is not a permission:
+a row of `effective_grants` carries a deny flag, an expiry and a revocation the renderings
+apply at the instant asked, and reaches a record only through an `ancestry` entry in its
+organization (AUTHZ-SCOPE-001). A permission is asked of them only through the gate, the
+check, the list filter, the SQL fragment a hand-written query composes or the capability
+page; no host query, and no library code outside the renderings, states a permission rule
+of its own over them. What a row confers is the library's to decide, and a later version
+may narrow it (`07` LIB-API-001).
+
+*Source: D-015, D-125, D-208, D-269*
 
 **Acceptance criteria**
 1. Replacing the implementation requires changes in one place.
-2. No call site constructs a permission query directly.
+2. No call site constructs a permission query directly, over the host's rows or over the
+   contract relations (D-269).
 
 **Migration trigger**, recorded rather than left to judgment: when permission queries
 are a top-three slow query and the optimisation ladder (AUTHZ-DERIVE-006) is

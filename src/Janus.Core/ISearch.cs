@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// records, either held there or in the administrative organization; it writes no audit
 /// row, counts its results toward the caller's read volume, and is held to
 /// <c>search.perminute</c> searches a minute.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface ISearch
 {

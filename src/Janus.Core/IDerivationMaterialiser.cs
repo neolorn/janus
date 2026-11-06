@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// the drift check runs, and what it changes there is drift. A host's declared job calls
 /// it outside a request only, on a record of the organization it acts for
 /// (IDN-PRIN-001, D-208, D-209).
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IDerivationMaterialiser
 {

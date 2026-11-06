@@ -13,6 +13,8 @@ namespace Janus.Core;
 /// Implements LIB-API-005, AUTH-ABUSE-004, OPS-CFG-002 and chapter 09 section 8. Every
 /// edit and every grant is a step-up action; a loosening also needs a reason and
 /// raises a Normal alert, and a grant always needs a reason.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IRestrictionSet
 {

@@ -12,6 +12,8 @@ namespace Janus.Core;
 /// Implements LIB-API-005, PRIV-CONS-005, PRIV-CONS-006, PRIV-CONS-007 and chapter 09
 /// sections 7 and 8a. A version follows the governing text: correcting a translation
 /// changes nothing about what was shown as authoritative, so it makes no new version.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface ILegalDocuments
 {

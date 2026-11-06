@@ -12,6 +12,8 @@ namespace Janus.Core;
 /// <remarks>
 /// Implements LIB-API-005 and chapter 21. Each is asked of the access gate, and a
 /// refusal keeps nothing, so each may be called inside the host's unit of work.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IPersonRecords
 {

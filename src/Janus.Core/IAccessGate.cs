@@ -26,6 +26,8 @@ namespace Janus.Core;
 /// takes one, is the calling code's fault: it raises
 /// <see cref="InvalidOperationException"/> before anything is read or recorded
 /// (AUTHZ-PRIN-003 AC1, CONV-ERR-001 AC3).
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IAccessGate
 {

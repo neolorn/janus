@@ -12,6 +12,8 @@ namespace Janus.Core;
 /// Implements AUTH-STEP-001, AUTH-STEP-002a, LIB-SEAM-001 and CONV-LAYOUT-001. The
 /// twin of <see cref="IAccessGate"/>: that one answers whether the principal may,
 /// this one whether the session has proved recently enough that it is them.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IStepUpGate
 {

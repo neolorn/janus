@@ -107,11 +107,11 @@ candidate may change or remove any of them (LIB-VER-001, D-232).
 |---|---|
 | **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, the encrypted fields, the column naming a type's data subject (`ResourceTypeDeclarationBuilder<T>.Subject`, `03` AUTHZ-MODEL-003, D-257) and the capabilities of a type, roles, the roles a deployment starts with, the step-up gate and the purpose bound to an action, **derivations**, the host's jobs and cookies (`Capabilities`, `Role`, `Job`, `Cookie`, D-202, D-203, D-204); and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
 | **Permission filter shape** | The expression form and the SQL fragment form |
-| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` and `AppPasswordId` among them, and the value types they take (CONV-DESIGN-004), `RestrictionName` and `DocumentName` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the unit of work every area writes through (`IUnitOfWork`, whose `BeginAsync` answers whether it opened the outermost level, with `AfterCommit`, the registration of work to run after the outermost commit; CONV-DESIGN-003) and event publication (`IEvents`, CONV-DESIGN-002), which no host implements, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements; the request's access a host endpoint reads (`IRequestAccess`, `RequestAccess`, `17` BFF-HOST-001), and the seams a host's own work joins, `IResources`, `ICallbackReferences`, the field cipher of a host's own fields (`IPersonalFields`, `SubjectFields`, PRIV-RIGHT-005a) and the collection of a person record (`IRecordCollection`, `RecordCollection`, `CollectedRecord`, `21` REC-COL-002) and the reach of a record access session (`IRecordAccess`, `21` REC-ACC-003) (D-202, D-203, D-221, D-261) |
+| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` and `AppPasswordId` among them, and the value types they take (CONV-DESIGN-004), `RestrictionName` and `DocumentName` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the unit of work every area writes through (`IUnitOfWork`, whose `BeginAsync` answers whether it opened the outermost level, with `AfterCommit`, the registration of work to run after the outermost commit; CONV-DESIGN-003) and event publication (`IEvents`, CONV-DESIGN-002), which no host implements, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and a host may implement, registering its own in place of the shipped adapter (CONV-DESIGN-007 criterion 5); the request's access a host endpoint reads (`IRequestAccess`, `RequestAccess`, `17` BFF-HOST-001), and the seams a host's own work joins, `IResources`, `ICallbackReferences`, the field cipher of a host's own fields (`IPersonalFields`, `SubjectFields`, PRIV-RIGHT-005a) and the collection of a person record (`IRecordCollection`, `RecordCollection`, `CollectedRecord`, `21` REC-COL-002) and the reach of a record access session (`IRecordAccess`, `21` REC-ACC-003) (D-202, D-203, D-221, D-261). No host implements an interface of this row save the mail server's: a host calls them, and a member the library adds to one is an additive change. A capability added to the mail server's contract comes as an interface of its own beside it (D-268) |
 | **Extension contracts** | The interfaces a host implements or replaces for the library to call: the export contributors (`IExportContributor`, PRIV-RIGHT-003, D-203); `INotificationHandler`, whose `SendAsync` answers `Result`, with `SendRequest` (the admitted message: its kind, channel, destination, subject, languages, values and the `SendReference` it is carried under, and none of the restrictions' inputs, INT-SMS-006), `IAlertHandler`, which takes each raised alert (OPS-ALERT-003), `SendDestination` and `SendReference` (with `TryParse`, since the store reads a reference back from its row), and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
 | **Emitted events** | Lifecycle event contracts, including the identifier, restriction and device events of D-146 (`IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`, `SendingRestrictionChanged`, `SendingRestrictionGranted`, `DeviceVerified`; `10` section 5b), each delivered to every registered `IEventConsumer<TEvent>` from a row written in the emitting transaction, retried under `outbox.retry.*`, and on exhaustion failed with `degradation`; publication is not replaceable (CONV-DESIGN-002). And the host registrations that answer for them: `ISubjectEventSubscriber`, naming the resource types it covers (`Covers`), and `IPurposeHandler`, named (`Name`) and naming the purposes it handles (`Purposes`), to which each `ConsentChanged` and `ObjectionChanged` of those purposes is delivered through the outbox (`ConsentChangedAsync`, `ObjectionChangedAsync`), confirmed by its success and on exhaustion failed with `erasure-delivery-exhausted` as a subject event's delivery is (PRIV-RIGHT-001a, D-203) |
 | **Database schema** | All library-owned tables |
-| **Ancestry closure table** | Structure and semantics of `identity.ancestry`, `identity.effective_grants` and `identity.consented_resources` |
+| **Ancestry closure table** | Structure of `identity.ancestry`, `identity.effective_grants` and `identity.consented_resources`: their names, columns and types, which a host's context maps; each row an input to the gate's renderings, what it confers being the library's to decide (D-269) |
 | **Error codes** | Machine-readable codes, their meanings and the status each answers |
 | **Audit actions and permissions** | The audit actions and the permissions `10` lists; each is an identifier, stable as a code is (CONV-NAME-003) |
 | **Testing package** | The public types of `Janus.Testing` (LIB-TEST-003, D-204) |
@@ -122,10 +122,14 @@ candidate may change or remove any of them (LIB-VER-001, D-232).
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
 *Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176, D-183, D-186,
-D-187, D-188, D-202, D-203, D-204, D-206, D-207, D-232, D-257*
+D-187, D-188, D-202, D-203, D-204, D-206, D-207, D-232, D-257, D-268, D-269*
 
-The ancestry closure is public because hand-written SQL will query it. From the first
-final release on, it cannot be restructured without a major version.
+The ancestry closure is public because the LINQ rendering reads it from the host's own
+context and hand-written SQL composes the SQL fragment over it. A row of it is an input to
+the gate's renderings, never a permission: a host's query states no permission rule of
+its own over these relations, and asks one only through the gate (`03` AUTHZ-SEAM-001,
+D-269). From the first final release on, it cannot be restructured without a major
+version; a column may be added, and when a row confers may narrow, in a minor version.
 
 **Acceptance criteria**
 1. Each surface is documented with its stability guarantee.
@@ -633,7 +637,7 @@ versions.
 **LIB-TEST-001** — The library SHALL ship a conformance suite a host can run against
 its own configuration, as the `Janus.Conformance` package (`08` CONV-LAYOUT-001).
 
-*Source: P-003, AUTHZ-TEST-001, D-149, D-166, D-172, D-187, D-188, D-189*
+*Source: P-003, AUTHZ-TEST-001, D-149, D-166, D-172, D-187, D-188, D-189, D-271*
 
 The suite answers a report whose findings each carry the check and a `10` section 1 code
 with structured data; it writes no sentence (CONV-CONTENT-001).
@@ -649,6 +653,16 @@ same named HTTP client. No client is registered for the suite. The suite reaches
 probes through a contract in `Janus.Core`, an operation called in process only
 (LIB-API-005), that answers the findings; no contract hands a secret to the suite or to
 the host (D-172).
+
+**Later families of cases (D-271).** The host implements `IConformanceRows<TResource>`,
+so its members stay as they are. A later family of cases that needs the host to write
+what those members cannot (a record's attribute values for a condition, `03` section 2.6)
+comes with an interface of its own, which the host implements beside it, and a suite
+member that takes that interface, both additions; a host that does not hand it over is
+not asked that family's cases, and a table holding such a case without it is refused
+before anything is written, as a step-up case without a deployment factory is
+(criterion 2). Running the SQL fragment or the capability page in a host's own table
+would come the same way.
 
 **Acceptance criteria**
 1. The suite verifies every entity the host's context maps has a registered policy as

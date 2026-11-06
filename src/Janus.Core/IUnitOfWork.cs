@@ -15,6 +15,8 @@ namespace Janus.Core;
 /// both tools see the same uncommitted writes. Opening and committing name no failure
 /// code: a caller that returns a result passes a failure up, and one that returns none
 /// throws it as a fault naming its code (D-171).
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IUnitOfWork : IAsyncDisposable
 {

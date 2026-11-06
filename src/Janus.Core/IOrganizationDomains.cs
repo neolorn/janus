@@ -16,6 +16,8 @@ namespace Janus.Core;
 /// a domain and verifying one admit more addresses, so each is a loosening and also
 /// asks <c>system:administer</c>. Removing one stops new sign-ins with addresses in it
 /// and raises <c>domain-removed</c>.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IOrganizationDomains
 {

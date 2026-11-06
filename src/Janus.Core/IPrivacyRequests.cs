@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// and 8a. Erasure is not submitted here: a signed-in subject exercises it with
 /// account deletion, and an erasure that arrives by letter or support mail is entered
 /// by an authorised human who has confirmed the requester is the subject.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IPrivacyRequests
 {

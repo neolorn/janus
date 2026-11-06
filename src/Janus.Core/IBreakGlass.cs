@@ -13,6 +13,8 @@ namespace Janus.Core;
 /// opens the browser's session, which is the boundary's own work, so it is not here.
 /// Each operation checks what the route checks, so a host calling in process meets the
 /// same refusals.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IBreakGlass
 {

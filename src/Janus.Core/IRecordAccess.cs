@@ -16,6 +16,8 @@ namespace Janus.Core;
 /// that request is served. It reads the reach at that moment and changes nothing: a host
 /// that changes something on the strength of the reach asks again inside its change, and
 /// answers a subject outside the reach exactly as one that does not exist.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IRecordAccess
 {

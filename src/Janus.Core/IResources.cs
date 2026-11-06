@@ -15,6 +15,8 @@ namespace Janus.Core;
 /// calls in the transaction the call runs in, which is the unit of work the host has
 /// already opened where it opened one. A record is placed only where the declaration
 /// says its type is contained, and only in a container of its own organization.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IResources
 {

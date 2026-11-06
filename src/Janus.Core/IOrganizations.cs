@@ -15,6 +15,8 @@ namespace Janus.Core;
 /// step-up action: the request suspends the organization, so no grant of it confers
 /// anything, and ends every session of its members in the same transaction. A change of
 /// policy is the <c>policy:change</c> step-up action.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IOrganizations
 {

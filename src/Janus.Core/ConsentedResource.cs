@@ -17,6 +17,9 @@ namespace Janus.Core;
 /// data subject holds one live consent a purpose, so a record and a purpose name one
 /// row. The columns are plain values rather than the library's own types, because what
 /// maps this row is the host's provider and not the library's (D-159).
+/// A row is an input to the gate's renderings, not a permission: a permission is asked
+/// only through the gate, and what a row confers is the library's to decide, which a
+/// later version may narrow (AUTHZ-SEAM-001, D-269).
 /// </remarks>
 public sealed record ConsentedResource(
     string ResourceType,

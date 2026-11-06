@@ -14,6 +14,8 @@ namespace Janus.Core.Configuration;
 /// category the host declared, read with its floor as the default. The named
 /// restriction set is not one of them: it has its own operations and its own
 /// permission.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IConfigurationAdministration
 {

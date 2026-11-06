@@ -10,6 +10,8 @@ namespace Janus.Core;
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, PRIV-BREACH-002 and chapter 09 section 8a.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IAuditTrail
 {

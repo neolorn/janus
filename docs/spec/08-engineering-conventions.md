@@ -1173,7 +1173,14 @@ for DTOs and events, `readonly record struct` for identifiers and small values,
 `IReadOnlyList<T>` and `IReadOnlyDictionary<K, V>` on every public or internal contract.
 Collections SHALL never be exposed as mutable types.
 
-*Source: D-149*
+**A member added to a public record (D-273).** From the first final release on, a member
+added to a public record (a declaration, an explanation, a contract row, an event, a
+truth-table case) is an `init` property whose default keeps the record's meaning without
+it: never a new positional parameter, and never `required`. A positional parameter is
+removed, renamed or reordered only in a major version (`07` LIB-VER-001). The public
+surface files and the release gate already fail a changed constructor (LIB-TEST-002).
+
+*Source: D-149, D-273*
 
 **Acceptance criteria**
 1. No contract member exposes `List<T>`, `Dictionary<K, V>` or an array, except

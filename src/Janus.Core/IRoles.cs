@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// reason; a change to a role that carries <c>system:administer</c>, before or after,
 /// also needs that permission. Every change is audited with what the role was and what
 /// it became.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IRoles
 {

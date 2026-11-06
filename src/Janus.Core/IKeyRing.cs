@@ -12,6 +12,8 @@ namespace Janus.Core;
 /// exposes nothing the host does not already hold. The ring is filled in steps, the mail
 /// server's key last; a read of a key before the step that reads it is done, or after
 /// the ring is cleared when the application stops or a command ends, is a fault.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IKeyRing
 {

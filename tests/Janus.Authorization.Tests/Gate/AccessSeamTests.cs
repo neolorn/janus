@@ -41,27 +41,58 @@ public sealed class AccessSeamTests
     }
 
     /// <summary>
-    /// AUTHZ-SEAM-001 AC2: nothing outside the gate builds a permission query, so no
-    /// call site can come to ask a question the gate would answer differently.
+    /// AUTHZ-SEAM-001 AC2 (D-269): nothing outside the gate builds a permission query, over
+    /// the host's rows or over the contract relations. Across every source project of the
+    /// library and the sample host, no file names <c>identity.ancestry</c>,
+    /// <c>identity.effective_grants</c> or <c>identity.consented_resources</c>, or reads the
+    /// <see cref="AncestryEntry"/>, <see cref="EffectiveGrant"/> or
+    /// <see cref="ConsentedResource"/> sets, save where the gate renders, the relations are
+    /// kept, mapped or counted as the library's own, or the sets are handed to the gate.
     /// </summary>
     [Fact]
     public void AUTHZ_SEAM_001_AC2_NoCallSiteBuildsAPermissionQuery()
     {
-        foreach (string file in Sources())
-        {
-            if (string.Equals(
-                Path.GetFileName(Path.GetDirectoryName(file)),
-                "Gate",
-                StringComparison.Ordinal))
-            {
-                continue;
-            }
+        string[] read =
+        [
+            .. Tree("src")
+                .Concat(Tree(Path.Combine("samples", "HostSample")))
+                .Where(file => !Generated(file) && ReadsAContractRelation(Placed(file), File.ReadAllText(file))),
+        ];
 
-            string text = File.ReadAllText(file);
+        string[] ruled =
+        [
+            .. Sources().Where(file =>
+                !string.Equals(Path.GetFileName(Path.GetDirectoryName(file)), "Gate", StringComparison.Ordinal)
+                && File.ReadAllText(file).Contains(nameof(PermissionRule), StringComparison.Ordinal)),
+        ];
 
-            Assert.DoesNotContain(nameof(PermissionRule), text, StringComparison.Ordinal);
-            Assert.DoesNotContain("identity.effective_grants", text, StringComparison.Ordinal);
-        }
+        Assert.Empty(read);
+        Assert.Empty(ruled);
+    }
+
+    /// <summary>
+    /// AUTHZ-SEAM-001 AC2 (D-269): the check finds a source outside those places that reads
+    /// one of the relations, by its name in SQL, by the record its set is mapped through,
+    /// or through a set the sample host maps and reads outside what it hands the gate.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_SEAM_001_AC2_AReadOutsideThosePlacesIsFound()
+    {
+        Assert.True(ReadsAContractRelation(
+            "src/Janus.Identity/Accounts/Holders.cs",
+            "SELECT 1 FROM identity.effective_grants AS held WHERE held.subject_id = @subject"));
+        Assert.True(ReadsAContractRelation(
+            "src/Janus.Privacy/Consents/Readers.cs",
+            "context.Set<ConsentedResource>().Any(row => row.Purpose == purpose)"));
+        Assert.True(ReadsAContractRelation(
+            "samples/HostSample/WorkshopEndpoints.cs",
+            "bool held = await context.Grants.AnyAsync(grant => grant.SubjectId == person);"));
+        Assert.True(ReadsAContractRelation(
+            "samples/HostSample/WorkshopContext.cs",
+            "public DbSet<EffectiveGrant> Grants => Set<EffectiveGrant>();\nint count = Grants.Count();"));
+        Assert.False(ReadsAContractRelation(
+            "src/Janus.Authorization/Gate/PermissionRule.cs",
+            "FROM identity.effective_grants AS grant"));
     }
 
     /// <summary>
@@ -272,6 +303,71 @@ public sealed class AccessSeamTests
             .Select(Relative)
             .Order(StringComparer.Ordinal),
     ];
+
+    // AUTHZ-SEAM-001 AC2 (D-269): where a contract relation may be named or its set read,
+    // each a file or a folder, with what it does there.
+    private static readonly (string Place, string Why)[] Kept =
+    [
+        ("src/Janus.Authorization/Gate/", "the gate renders the rule over them"),
+        ("src/Janus.Core/AncestryEntry.cs", "the record the closure is mapped through"),
+        ("src/Janus.Core/EffectiveGrant.cs", "the record the view is mapped through"),
+        ("src/Janus.Core/ConsentedResource.cs", "the record the view is mapped through"),
+        ("src/Janus.Core/FilterSources.cs", "the sets as the host hands them to the gate"),
+        ("src/Janus.Storage/Migrations/", "the relations kept as the library's own"),
+        ("src/Janus.Storage/Authorization/", "the closure kept with the registrations"),
+        ("src/Janus.Hosting/AuthorizationTables.cs", "the relations mapped into the host's context"),
+        ("src/Janus.Hosting/Authorization/RelationshipSources.cs", "the host's rows read for the gate"),
+        ("src/Janus.Hosting/DeclarationCoverage.cs", "the relations counted as policed (AUTHZ-GATE-001 AC3)"),
+        ("src/Janus.Conformance/ConformanceSuite.cs", "the relations counted as policed (AUTHZ-GATE-001 AC3)"),
+        ("samples/HostSample/WorkshopContext.cs", "the sample host maps the sets and hands them to the gate"),
+    ];
+
+    // A contract relation by its name in SQL, or the record a host maps it through.
+    private static readonly Regex Relation = new(
+        "identity\\.(ancestry|effective_grants|consented_resources)\\b|\\b(AncestryEntry|EffectiveGrant|ConsentedResource)\\b",
+        RegexOptions.None,
+        TimeSpan.FromSeconds(1));
+
+    // A set of the host's context a contract relation is mapped through, and its name.
+    private static readonly Regex MappedSet = new(
+        "DbSet<(?:AncestryEntry|EffectiveGrant|ConsentedResource)>\\s+(\\w+)",
+        RegexOptions.None,
+        TimeSpan.FromSeconds(1));
+
+    // The names the sample host gives the sets it maps the contract relations through.
+    private static readonly Lazy<string[]> SampleSets = new(() =>
+    [
+        .. Tree(Path.Combine("samples", "HostSample"))
+            .Where(file => !Generated(file))
+            .SelectMany(file => MappedSet.Matches(File.ReadAllText(file)))
+            .Select(match => match.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal),
+    ]);
+
+    // Whether a source reads a contract relation outside the places that may: by its name
+    // or its record anywhere else, or, in the sample host, through a set it maps, read
+    // anywhere but where it is declared and handed to the gate.
+    private static bool ReadsAContractRelation(string place, string text)
+    {
+        if (!Kept.Any(kept => place.StartsWith(kept.Place, StringComparison.Ordinal)) && Relation.IsMatch(text))
+        {
+            return true;
+        }
+
+        return place.StartsWith("samples/", StringComparison.Ordinal)
+            && text.Split('\n').Any(line =>
+                !MappedSet.IsMatch(line)
+                && !line.Contains("new FilterSources<", StringComparison.Ordinal)
+                && SampleSets.Value.Any(set => Regex.IsMatch(line, "\\b" + set + "\\b", RegexOptions.None, TimeSpan.FromSeconds(1))));
+    }
+
+    // What the build writes under a project's bin and obj folders, which nobody authored.
+    private static bool Generated(string file) =>
+        Placed(file).Split('/').Any(part => part is "bin" or "obj");
+
+    // A file's place in the repository, its folders joined by a forward slash.
+    private static string Placed(string file) =>
+        Path.GetRelativePath(Root(), file).Replace(Path.DirectorySeparatorChar, '/');
 
     // One identity compared with another, written as the comparison would be.
     private static string Compared(string identity) => identity + "\\s*[!=]=\\s*";

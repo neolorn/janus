@@ -25,6 +25,8 @@ namespace Janus.Core;
 /// beyond that reach is answered as an account no person bears, and each account a
 /// person reads counts toward their read volume. A read is not audited. Setting another
 /// person's preferences is IDN-READ-003's too, and is audited as every change is.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IAccounts
 {

@@ -16,9 +16,12 @@ namespace Janus.Core;
 /// <remarks>
 /// Implements AUTHZ-INHERIT-002 and LIB-API-001. The closure is public contract and
 /// cannot be restructured without a major version: a host maps it into its own context
-/// with <c>MapAuthorizationTables</c> and queries it from hand-written SQL. The columns
-/// are plain values rather than the library's own types, because what maps this row is
-/// the host's provider and not the library's (D-159).
+/// with <c>MapAuthorizationTables</c>, and hand-written SQL reaches it through the gate's
+/// SQL fragment. The columns are plain values rather than the library's own types,
+/// because what maps this row is the host's provider and not the library's (D-159).
+/// A row is an input to the gate's renderings, not a permission: a permission is asked
+/// only through the gate, and what a row confers is the library's to decide, which a
+/// later version may narrow (AUTHZ-SEAM-001, D-269).
 /// </remarks>
 public sealed record AncestryEntry(
     string ResourceType,

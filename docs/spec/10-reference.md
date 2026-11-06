@@ -971,7 +971,10 @@ but for proof last reached before the session's last downgrade; otherwise `stepu
 `restricted` (AUTHZ-GATE-006) · `consent` (PRIV-SENS-002, PRIV-CONS-007) ·
 `accountstate`.
 
-*Source: AUTHZ-GATE-005, D-153, D-183, D-191*
+The set may gain a member in a minor version; a frontend treats a member it does not know
+as not permitted (FE-CAP-002, D-270).
+
+*Source: AUTHZ-GATE-005, D-153, D-183, D-191, D-270*
 
 ### 5.21 Consent and objection mechanism
 

@@ -13,6 +13,8 @@ namespace Janus.Core;
 /// calendar day in <c>privacy.calendar.timezone</c>, and compared with that person's own
 /// daily mean over <c>exfiltration.readvolume.baselinewindow</c>, never with a fixed
 /// number; work done by a system principal is nobody's reading and is not counted.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IReadVolume
 {
