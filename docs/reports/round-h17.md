@@ -55,10 +55,23 @@
   and D-271.
 - No behaviour changes. The public surface files are unchanged.
 
+**Section 4, step 7: the release commit, 642b51a7 `chore: release 1.0.0-rc.7`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.7] - 2026-11-06`, holding the four
+  lines under `Changed`, and Unreleased is left empty.
+- The public surface: no `PublicAPI.Unshipped.txt` holds a line, so nothing moved into
+  the shipped files.
+- The two lists are not drawn again (CONV-VCS-005, D-262). The leaked-password list of
+  run 41814221201 and the Public Suffix List at version 2026-10-31_14-17-28_UTC were
+  both drawn on 2026-11-04, within 90 days before the release commit. `NOTICE` keeps
+  both dates.
+- No migration note: a release candidate opens no major version.
+- Criterion verified otherwise: the release gate over `origin/main..HEAD` says the notes
+  of 1.0.0-rc.7, 1347 characters, are the release's body.
+
 ## 2. Items not implemented
 
-- The release commit of section 4, step 7: it waits on the lead's word after the
-  review.
+None.
 
 ## 3. Resolved by rule
 
