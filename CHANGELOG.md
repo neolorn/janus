@@ -8,6 +8,15 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+### Fixed
+
+- A runtime key the deployment names that was never written, such as `service.name` on
+  a deployment bootstrapped without it, answered both `GET` and `PUT
+  /admin/config/{key}` with 500 `system.fault`, so it could never be set. It now reads
+  with `value` null, and its first value is written as any change of the key is: as a
+  loosening, with its reason and an audit entry. The start check of a key the
+  deployment is required to name is unchanged.
+
 ## [1.0.0-rc.8] - 2026-11-06
 
 ### Added

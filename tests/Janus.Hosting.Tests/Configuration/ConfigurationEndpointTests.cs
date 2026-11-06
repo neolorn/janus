@@ -244,6 +244,73 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-008, 09 <c>GET|PUT /admin/config/{key}</c> (D-277): <c>service.name</c>, a
+    /// runtime key the deployment names and never wrote, reads 200 with <c>value</c> and
+    /// <c>default</c> null; its first value is put in force as a loosening, with its reason
+    /// written down and nothing before it; it then reads as that value, and an
+    /// authenticator app's enrolment begun afterwards carries it in its address.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_008_AKeyTheDeploymentNamesReadsNullAndTakesItsFirstValueOverTheRouteAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationRead,
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        Answer unwritten = await administrator.SendAsync("GET", "/admin/config/service.name");
+        Answer changed = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/service.name",
+            ("value", "Example Bank"),
+            ("reason", "the name the authenticator apps show"));
+        Answer written = await administrator.SendAsync("GET", "/admin/config/service.name");
+        Answer begun = await administrator.SendAsync("POST", "/account/factors/totp/begin", ("label", "This phone"));
+
+        Assert.Equal(StatusCodes.Status200OK, unwritten.Status);
+        Assert.Equal(JsonValueKind.Null, unwritten.Json().GetProperty("value").ValueKind);
+        Assert.Equal(JsonValueKind.Null, unwritten.Json().GetProperty("default").ValueKind);
+        Assert.False(unwritten.Json().GetProperty("protected").GetBoolean());
+        Assert.Equal("any-change", unwritten.Text("direction"));
+        Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
+        Assert.Equal("Example Bank", written.Text("value"));
+        Assert.Equal(JsonValueKind.Null, written.Json().GetProperty("default").ValueKind);
+
+        ConfigurationChange change = Assert.Single(_deployment.Changes.Written);
+
+        Assert.Equal(
+            (Settings.ServiceName.Key, (string?)null, "Example Bank", true, "the name the authenticator apps show"),
+            (change.Key, change.Before, change.After, change.Loosening, change.Reason));
+        Assert.Equal(StatusCodes.Status200OK, begun.Status);
+        Assert.StartsWith("otpauth://totp/Example%20Bank:", begun.Text("uri"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// OPS-CFG-008, OPS-CFG-002 AC5 (D-277): the first value of a key the deployment
+    /// names is judged as any change of it is, a loosening, so <c>config:manage</c> alone
+    /// is refused it, and the key stays unwritten.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_008_TheFirstValueOfAKeyTheDeploymentNamesIsALooseningAsync()
+    {
+        Browser administrator = await AuthorisedAsync(Permissions.ConfigurationRead, Permissions.ConfigurationManage);
+
+        Answer changed = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/service.name",
+            ("value", "Example Bank"),
+            ("reason", "the name the authenticator apps show"));
+        Answer read = await administrator.SendAsync("GET", "/admin/config/service.name");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, changed.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), changed.Text("code"));
+        Assert.Equal(JsonValueKind.Null, read.Json().GetProperty("value").ValueKind);
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
     /// OPS-CFG-006 AC1: the owner of an organization, a member of it holding every
     /// permission the library ships there and nothing in the administrative
     /// organization, is refused a loosening, and nothing changes.
