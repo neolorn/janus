@@ -8,6 +8,8 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.7] - 2026-11-06
+
 ### Changed
 
 - The interfaces of the operations contract, `IAccessGate` and `IStepUpGate` among them,
