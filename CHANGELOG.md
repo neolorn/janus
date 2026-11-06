@@ -8,6 +8,8 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.8] - 2026-11-06
+
 ### Added
 
 - `AuthorizationDeclarationBuilder.AdmitsWhoMay(permission, asked)` declares that holding
