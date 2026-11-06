@@ -1060,10 +1060,14 @@ internal sealed class AccessGate(
             admissible.Unevaluated));
     }
 
-    // AUTHZ-GATE-007, IDN-PRIN-001 (D-218): a person asks under grant:read in the
-    // organization the record belongs to, refused as the view of who can access it
-    // refuses (AUTHZ-DERIVE-007); a job asks for a permission its declaration names, in
-    // its own organization, outside a request, refused as its check on the record is.
+    // AUTHZ-GATE-007, IDN-PRIN-001 (D-218, D-276): a person asks under grant:read in the
+    // organization the record belongs to, or under a host permission declared to admit
+    // the permission asked, each decided there as the single check decides it, recording
+    // nothing; where none admits, a declared permission stopped only by its step-up gate
+    // or a restriction answers that, and otherwise grant:read's check answers, so its
+    // refusal is the one recorded, as the view of who can access a record refuses
+    // (AUTHZ-DERIVE-007). A job asks for a permission its declaration names, in its own
+    // organization, outside a request, refused as its check on the record is.
     private async ValueTask<Error?> AskerRefusedAsync(
         AccessContext context,
         Permission permission,
@@ -1081,9 +1085,58 @@ internal sealed class AccessGate(
                 : await JobRefusalAsync(context, permission, type, organization, cancellationToken).ConfigureAwait(false);
         }
 
-        return (await RequireAsync(context, Permissions.GrantRead, organization, cancellationToken).ConfigureAwait(false))
+        if (await RestrictedPersonAsync(context, Permissions.GrantRead, cancellationToken).ConfigureAwait(false))
+        {
+            return Error.From(ErrorCodes.Restricted);
+        }
+
+        OrganizationDecision reading = await DecidedOnAsync(context, Permissions.GrantRead, organization, cancellationToken)
+            .ConfigureAwait(false);
+        Error? stopped = null;
+
+        if (!reading.Admits)
+        {
+            foreach (Permission admitting in model.AdmittingWhoMay(permission))
+            {
+                bool restricted = await RestrictedPersonAsync(context, admitting, cancellationToken)
+                    .ConfigureAwait(false);
+                OrganizationDecision held = await DecidedOnAsync(context, admitting, organization, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (held.Admits && !restricted)
+                {
+                    return (await AnsweredAsync(context, admitting, organization, held, cancellationToken)
+                            .ConfigureAwait(false))
+                        .Match(() => (Error?)null, error => error);
+                }
+
+                stopped ??= Stopped(admitting, held, restricted);
+            }
+        }
+
+        // D-276: a permission held but stopped only by its step-up gate, or only by a
+        // restriction, answers as its own check would, recording nothing, where nothing
+        // else admits.
+        if (!reading.Conferred && stopped is Error unmet)
+        {
+            return unmet;
+        }
+
+        return (await AnsweredAsync(context, Permissions.GrantRead, organization, reading, cancellationToken)
+                .ConfigureAwait(false))
             .Match(() => (Error?)null, error => error);
     }
+
+    // AUTHZ-GATE-007 (D-276): what the single check of a permission held there answers
+    // where one thing alone stops it: a restriction over a permission that would admit,
+    // or a step-up gate it is bound to over one no consent stops, an organization-wide
+    // check naming no data subject to consent. Anything else is nothing to answer.
+    private Error? Stopped(Permission admitting, OrganizationDecision held, bool restricted) =>
+        restricted
+            ? held.Admits ? Error.From(ErrorCodes.Restricted) : null
+            : held is { Conferred: true, Outstanding: Error unmet } && ConsentOf(admitting) is null
+                ? unmet
+                : null;
 
     // AUTHZ-SCOPE-001, AUTHZ-CONCEAL-002 AC3: a record the registry does not hold, or an
     // identifier that names no organization, belongs to none, so the asker is refused as

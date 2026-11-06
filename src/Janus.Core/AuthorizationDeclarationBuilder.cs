@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using Janus.Core.Configuration;
 
@@ -28,6 +29,7 @@ public sealed class AuthorizationDeclarationBuilder
     private readonly List<RecipientDeclaration> _recipients = [];
     private readonly Dictionary<Permission, string> _stepUpGates = [];
     private readonly Dictionary<Permission, string> _actionPurposes = [];
+    private readonly Dictionary<Permission, List<Permission>> _admitsWhoMay = [];
     private readonly Dictionary<string, TimeSpan> _retentionFloors = new(StringComparer.Ordinal);
     private readonly List<CookieDeclaration> _cookies = [];
     private readonly List<RoleDeclaration> _roles = [];
@@ -203,6 +205,36 @@ public sealed class AuthorizationDeclarationBuilder
                 "The permission " + parsed + " is bound to a purpose twice.",
                 nameof(permission));
         }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Declares that holding one of the host's permissions in an organization admits
+    /// asking the gate there who may exercise another of the host's, as holding
+    /// <c>grant:read</c> admits the question for every permission.
+    /// </summary>
+    /// <param name="permission">The permission held, as <c>resource:action</c>.</param>
+    /// <param name="asked">The permission it admits the question for, as <c>resource:action</c>.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">A permission is not well-formed.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-007 and LIB-HOST-001 (D-276). A permission may admit several,
+    /// each its own declaration. One naming a permission the model does not declare or a
+    /// library-owned one, or a pair declared twice, is refused as the deployment starts.
+    /// </remarks>
+    public AuthorizationDeclarationBuilder AdmitsWhoMay(string permission, string asked)
+    {
+        var holding = Core.Permission.Parse(permission);
+        var admitted = Core.Permission.Parse(asked);
+
+        if (!_admitsWhoMay.TryGetValue(holding, out List<Permission>? admitting))
+        {
+            admitting = [];
+            _admitsWhoMay.Add(holding, admitting);
+        }
+
+        admitting.Add(admitted);
 
         return this;
     }
@@ -468,5 +500,10 @@ public sealed class AuthorizationDeclarationBuilder
             new Dictionary<string, TimeSpan>(_retentionFloors, StringComparer.Ordinal),
             [.. _cookies],
             [.. _roles],
-            [.. _jobs]);
+            [.. _jobs])
+        {
+            AdmitsWhoMay = _admitsWhoMay.ToDictionary(
+                admitting => admitting.Key,
+                admitting => (IReadOnlyList<Permission>)[.. admitting.Value]),
+        };
 }

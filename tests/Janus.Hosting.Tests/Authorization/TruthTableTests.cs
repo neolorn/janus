@@ -487,6 +487,35 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Decided.Denied),
     ];
 
+    // The question of who may read the host's records, asked by a person holding no
+    // grant:read in the case's organization, of a record of it or of the organization
+    // itself: document:report, which the host declares to admit the question for
+    // document:read, held across the organization admits it there as grant:read does,
+    // decided as the single check decides it; asked for another permission, held under a
+    // deny there, or held only in another organization, it does not, and grant:read's
+    // refusal there is the one recorded. Held by a restricted account, or held as
+    // document:publish, which also admits it and is bound to a step-up gate the asking
+    // context has not met, it is answered as its own check answers, recording nothing. A
+    // declared job naming the permission asked is admitted outside a request and refused
+    // while one is served (AUTHZ-GATE-007 AC3, AC6, AUTHZ-CONCEAL-004, D-202, D-206,
+    // D-276).
+    private static readonly (string Scenario, Decided Decided)[] Askers =
+    [
+        ("a holder of a permission admitting the question, asking it of a record", Decided.Allowed),
+        ("a holder of a permission admitting the question, asking it of the organization", Decided.Allowed),
+        ("a holder of a permission admitting the question, asking it for another permission", Decided.Denied),
+        ("a holder of a permission admitting the question under a deny there, asking it of a record", Decided.Denied),
+        (
+            "a holder of a permission admitting the question in another organization alone, asking it of a record",
+            Decided.Denied),
+        ("a restricted holder of a permission admitting the question, asking it of a record", Decided.Restricted),
+        (
+            "a holder of a permission admitting the question whose step-up gate no factor it holds meets, asking it of a record",
+            Decided.StepUpUnavailable),
+        ("a declared job naming the permission asked, asking it of a record", Decided.Allowed),
+        ("a declared job naming the permission asked, asking it of a record while a request is served", Decided.Denied),
+    ];
+
     // A read naming an organization other than the administrative organization, asked
     // through the read admission under organization:read: the permission held in the
     // organization the path names or in the administrative organization admits it,
@@ -596,6 +625,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The admissions' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> AdmissionCases => Read(Admissions);
+
+    /// <summary>
+    /// The askers' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> AskerCases => Read(Askers);
 
     /// <summary>
     /// The organization reads' table as the run reads it.
@@ -1432,6 +1466,72 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         (Case written, ResourceReference asked) = await WriteAdmissionAsync(scenario);
 
         Assert.Equal(decided, await AdmittedAsync(written, asked));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007 AC3, AC6 (D-276): every case of the askers' table is answered the way
+    /// the table says, an admitted question naming the account holding the permission
+    /// asked across the organization, a person's denial recorded once, naming
+    /// <c>grant:read</c> in the organization asked of, and a restriction or a step-up
+    /// answered with nothing recorded.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(AskerCases))]
+    public async Task AUTHZ_GATE_007_AC6_EveryAskerCaseIsAnsweredTheWayTheTableSaysAsync(
+        string scenario,
+        Decided decided)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        (AccessContext context, Permission permission, ResourceReference asked, SubjectId holder, OrganizationId organization) =
+            await AskingAsync(scenario);
+        Result<AdmittedAccounts>? answered = null;
+
+        async Task AnsweredAsync(IServiceProvider asking) =>
+            answered = await asking.GetRequiredService<IAccessGate>()
+                .WhoMayAsync(context, permission, asked, cancellationToken);
+
+        if (scenario.EndsWith("while a request is served", StringComparison.Ordinal))
+        {
+            await using ServedRequests served = await ServedRequests.StartAsync(
+                host,
+                async request => await AnsweredAsync(request.RequestServices),
+                cancellationToken);
+
+            _ = await served.SendAsync(ServedRequests.Browser);
+        }
+        else
+        {
+            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+            await AnsweredAsync(scope.ServiceProvider);
+        }
+
+        Result<AdmittedAccounts> outcome = Assert.NotNull(answered);
+        Assert.Equal(decided, outcome.Match(_ => Decided.Allowed, Refused));
+
+        outcome.Switch(admitted => Assert.Contains(holder, admitted.Subjects), _ => { });
+
+        if (context.Acting is null)
+        {
+            return;
+        }
+
+        Assert.Equal(decided is Decided.Denied ? 1 : 0, await GrantRefusalsAsync(context, organization));
+
+        if (outcome.Match<Error?>(_ => null, error => error) is Error refusal && refusal.Code == ErrorCodes.Denied)
+        {
+            await using AsyncServiceScope reading = host.Services.CreateAsyncScope();
+
+            DeniedAccess? recorded = await reading.ServiceProvider.GetRequiredService<IAccessAudit>().FindAsync(
+                new AuditRecordId(refusal.Details["correlation"].GetGuid()),
+                cancellationToken);
+
+            Assert.Equal(Permissions.GrantRead, recorded?.Permission);
+            Assert.Equal(organization, recorded?.Organization);
+        }
     }
 
     /// <summary>
@@ -2753,6 +2853,75 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             default:
                 throw new InvalidOperationException("The admissions' table holds a case nothing writes.");
         }
+    }
+
+    // AUTHZ-GATE-007 (D-276): an account holding document:read across the case's
+    // organization, a record of it, and who asks who may read what the case names: a
+    // member holding document:report as the case says and no grant:read, or the declared
+    // job acting for the organization.
+    private async Task<(AccessContext Context, Permission Permission, ResourceReference Asked, SubjectId Holder, OrganizationId Organization)>
+        AskingAsync(string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName reading = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        RoleName reporting = await deployment.RoleAsync(
+            [scenario.Contains("step-up gate", StringComparison.Ordinal) ? HostPermissions.Publish : HostPermissions.Report],
+            cancellationToken);
+        SubjectId holder = await deployment.AccountAsync(cancellationToken);
+        SubjectId caller = await deployment.AccountAsync(cancellationToken);
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.MemberAsync(holder, deployment.Organization, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(holder), reading, null, false, null, null, cancellationToken);
+        await deployment.MemberAsync(caller, deployment.Organization, cancellationToken);
+
+        if (scenario.StartsWith("a declared job", StringComparison.Ordinal))
+        {
+            return (
+                AccessContext.Of(SystemPrincipal.ForOrganization(
+                    HostFixture.Digest,
+                    "the nightly digest",
+                    deployment.Organization)),
+                HostPermissions.Read,
+                record,
+                holder,
+                deployment.Organization);
+        }
+
+        if (scenario.Contains("in another organization alone", StringComparison.Ordinal))
+        {
+            var other = new Deployment(host);
+            RoleName elsewhere = await other.BeginAsync([HostPermissions.Report], cancellationToken);
+
+            await other.MemberAsync(caller, other.Organization, cancellationToken);
+            await other.GrantAsync(GrantSubject.Of(caller), elsewhere, null, false, null, null, cancellationToken);
+        }
+        else
+        {
+            await deployment.GrantAsync(GrantSubject.Of(caller), reporting, null, false, null, null, cancellationToken);
+        }
+
+        if (scenario.Contains("under a deny there", StringComparison.Ordinal))
+        {
+            await deployment.GrantAsync(GrantSubject.Of(caller), reporting, null, true, null, null, cancellationToken);
+        }
+
+        if (scenario.StartsWith("a restricted holder", StringComparison.Ordinal))
+        {
+            await deployment.RestrictAsync(caller, cancellationToken);
+        }
+
+        return (
+            AccessContext.Of(caller),
+            scenario.EndsWith("for another permission", StringComparison.Ordinal) ? HostPermissions.Edit : HostPermissions.Read,
+            scenario.EndsWith("of the organization", StringComparison.Ordinal) ? Whole(deployment.Organization) : record,
+            holder,
+            deployment.Organization);
     }
 
     private static ResourceReference Whole(OrganizationId organization) =>

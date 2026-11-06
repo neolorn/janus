@@ -337,6 +337,29 @@ internal sealed class GrantService(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<OwnGrant>>> OwnAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // AUTHZ-GRANT-003 (D-274): the account read is the one the context is effective
+        // for, as the export takes it; a principal has no account of its own to read.
+        if (context.Effective is not SubjectId own)
+        {
+            return Result.Failure<IReadOnlyList<OwnGrant>>(Error.From(ErrorCodes.Denied));
+        }
+
+        IReadOnlyList<Grant> held = await grants
+            .HeldByAsync([GrantSubject.Of(own)], organization, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success<IReadOnlyList<OwnGrant>>(
+            [.. held.OrderBy(grant => grant.GrantedAt).Select(Owned)]);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<AssignableRole>>> AssignableAsync(
         AccessContext context,
         OrganizationId organization,
@@ -387,14 +410,28 @@ internal sealed class GrantService(
         grant.Kind,
         grant.Subject,
         grant.Role,
-        grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
-            ? new ResourceReference(type, id)
-            : new ResourceReference(OrganizationWide, ResourceId.Parse(grant.Organization.ToString())),
+        On(grant),
         grant.Deny,
         grant.ExpiresAt,
         grant.GrantedBy,
         grant.GrantedAt,
         grant.Reason);
+
+    // PRIV-RIGHT-003 (D-274): what the export carries of a grant, and not who wrote it
+    // or why.
+    private static OwnGrant Owned(Grant grant) => new(
+        grant.Id,
+        grant.Kind,
+        grant.Role,
+        On(grant),
+        grant.Deny,
+        grant.ExpiresAt,
+        grant.GrantedAt);
+
+    private static ResourceReference On(Grant grant) =>
+        grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
+            ? new ResourceReference(type, id)
+            : new ResourceReference(OrganizationWide, ResourceId.Parse(grant.Organization.ToString()));
 
     // API-CONV-002: a free-text field is 1 to 1024 characters after trimming. A blank
     // reason is the refusal 10 names for a grant; one past the limit is a request the

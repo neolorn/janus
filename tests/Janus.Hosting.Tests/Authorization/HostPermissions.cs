@@ -45,4 +45,10 @@ internal static class HostPermissions
     /// Reading one of the host's records of the type that discloses.
     /// </summary>
     public static Permission ReadNote { get; } = Permission.Parse("note:read");
+
+    /// <summary>
+    /// Reporting on the host's records, whose holders the host admits to ask who may read
+    /// them (AUTHZ-GATE-007, D-276).
+    /// </summary>
+    public static Permission Report { get; } = Permission.Parse("document:report");
 }

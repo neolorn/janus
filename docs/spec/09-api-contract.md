@@ -2365,6 +2365,25 @@ names it; each revocation and removal carries the member and that reason. Emits
 
 ---
 
+### `GET /account/grants?organization={id}`
+
+The live grants the caller's own account holds in its own name in the organization,
+oldest first (`03` AUTHZ-GRANT-003, D-274). It needs the caller's live session and no
+permission; the account is the one the session is effective for. A grant reaching the
+account through a group is the group's and is not listed. A restricted account is
+admitted (IDN-ACCT-007). Its library call is `IGrants.OwnAsync`. Nothing is recorded.
+
+**200**: `[ { id, kind, resourceType, resourceId, role, deny, expiresAt, grantedAt } ]`,
+the fields of `OwnGrant`, never who granted a grant or why (D-274's amendment); none
+where the account holds none there, an organization the deployment does not hold
+included
+**400**: `api.request.malformed` naming `organization` where it is absent or not an
+organization's identifier
+
+*Source: AUTHZ-GRANT-003, D-274*
+
+---
+
 ## 7. Privacy
 
 ### `GET /privacy/consents`
@@ -2762,7 +2781,8 @@ D-237)
 
 The live grants the user or group holds in its own name in the organization, oldest
 first; a grant reaching a user through a group is read under the group. Asked under
-`grant:read` in that organization.
+`grant:read` in that organization; a person reads their own account's through
+`GET /account/grants` with no permission (D-274).
 
 **200**: `[ { id, kind, subjectType, subjectId, resourceType, resourceId, role, deny,
 expiresAt, grantedBy, grantedAt, reason } ]`; an organization-wide grant reads as
@@ -3280,7 +3300,7 @@ the reach, a `deleted` one, and a subject no account bears are answered **404**
 | `GET /admin/accounts/{subject}/standing?organization={id}` | `consent:read`: **200** `{ kind, state, consents, objections }`, each consent as `GET /privacy/consents` and each objection as `GET /privacy/objections` answer them; `{subject}` names an account or a person record, as for the contact read (D-221) · **404** as above |
 | `GET /admin/accounts/{subject}/sessions` | `session:revoke-account` in the administrative organization: **200** the account's live sessions as `GET /account/sessions` lists them, none marked current · **404** `identity.account.notfound` where no account bears the subject |
 | `PUT /admin/accounts/{subject}/preferences` | `account:manage` in the administrative organization: `{ language, timeZone, declared, reason }`, the set replaced as `PUT /account/preferences` replaces it, an administrator-only preference admitted; no step-up. **204** · **404** `identity.account.notfound` where no account bears the subject · **422** as `PUT /account/preferences` answers, save `identity.preference.administratoronly`. Recorded as `identity.preferences.changed` with the reason |
-| `GET /admin/access/admitted?type={type}&id={id}&permission={permission}` | `grant:read` in the organization the record belongs to (AUTHZ-GATE-007): **200** `{ subjects, partial, unevaluated }`, the accounts the single check would admit for the permission on the record; with `type` `organization` and its identifier, those its organization-wide grants admit · **403** `authz.denied` for a record the deployment holds no registration for, as `GET /admin/access` refuses it (AUTHZ-DERIVE-007) |
+| `GET /admin/access/admitted?type={type}&id={id}&permission={permission}` | `grant:read` in the organization the record belongs to, or there a host permission the model declares to admit `permission` (`AdmitsWhoMay`, D-276) (AUTHZ-GATE-007): **200** `{ subjects, partial, unevaluated }`, the accounts the single check would admit for the permission on the record; with `type` `organization` and its identifier, those its organization-wide grants admit · **403** `authz.denied` for a caller holding neither, and for a record the deployment holds no registration for, as `GET /admin/access` refuses it (AUTHZ-DERIVE-007) |
 
 A person's read of an account, a contact, a standing or a member counts toward their read
 volume (OPS-ALERT-005). A read is not audited; its refusal is recorded as every refusal

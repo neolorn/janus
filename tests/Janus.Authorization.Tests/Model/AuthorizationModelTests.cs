@@ -785,6 +785,65 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-GATE-007 AC6 (D-276): a host permission declared to admit the question of who
+    /// may exercise another of the host's builds, and the model names it among those
+    /// admitting the permission asked, each of several declarations its own.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GATE_007_AC6_APermissionDeclaredToAdmitTheQuestionOfWhoMayBuilds()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared()
+            .Permission("article:report")
+            .AdmitsWhoMay("article:report", "article:read")
+            .AdmitsWhoMay("article:report", "article:edit")
+            .AdmitsWhoMay("article:edit", "article:read")
+            .Build());
+
+        Assert.Equal(
+            [Permission.Parse("article:report"), Permission.Parse("article:edit")],
+            model.AdmittingWhoMay(Permission.Parse("article:read")));
+        Assert.Equal([Permission.Parse("article:report")], model.AdmittingWhoMay(Permission.Parse("article:edit")));
+        Assert.Empty(model.AdmittingWhoMay(Permission.Parse("article:report")));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007 AC6 (D-276): a declaration admitting the question of who may that
+    /// names a permission the model does not declare or a library-owned one, on either
+    /// side, or a pair declared twice, stops the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming <c>binding.&lt;permission&gt;</c>
+    /// and <c>admitsWhoMay</c>.
+    /// </summary>
+    /// <param name="permission">The permission held.</param>
+    /// <param name="asked">The permission it admits the question for.</param>
+    /// <param name="twice">Whether the pair is declared a second time.</param>
+    [Theory]
+    [InlineData("article:archive", "article:read", false)]
+    [InlineData("article:edit", "article:archive", false)]
+    [InlineData("grant:read", "article:read", false)]
+    [InlineData("article:edit", "membership:read", false)]
+    [InlineData("article:edit", "article:read", true)]
+    public void AUTHZ_GATE_007_AC6_ADeclarationAdmittingTheQuestionOfWhoMayOutsideItsRuleFailsStartup(
+        string permission,
+        string asked,
+        bool twice)
+    {
+        AuthorizationDeclarationBuilder declared = HostDomain.Declared().AdmitsWhoMay(permission, asked);
+
+        if (twice)
+        {
+            declared.AdmitsWhoMay(permission, asked);
+        }
+
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(declared.Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal<string>(["declaration", "field"], refused.Failure!.Details.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("binding." + permission, refused.Failure.Details["declaration"].GetString());
+        Assert.Equal("admitsWhoMay", refused.Failure.Details["field"].GetString());
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC1: each condition the chapter lists produces its own named
     /// error, identifying the declaration that has to change.
     /// </summary>

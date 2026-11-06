@@ -30,6 +30,7 @@ namespace Janus.Hosting.Accounts;
 [JsonSerializable(typeof(System.Collections.Generic.IReadOnlyList<AppPasswordView>))]
 [JsonSerializable(typeof(System.Collections.Generic.IReadOnlyList<CredentialView>))]
 [JsonSerializable(typeof(System.Collections.Generic.IReadOnlyList<SessionView>))]
+[JsonSerializable(typeof(System.Collections.Generic.IReadOnlyList<OwnGrantView>))]
 [JsonSerializable(typeof(HeldAccountView))]
 [JsonSerializable(typeof(ContactView))]
 [JsonSerializable(typeof(FindAccountRequest))]

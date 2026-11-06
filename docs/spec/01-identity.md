@@ -1692,7 +1692,17 @@ invitation as `MemberSummary` does (`10` section 5b). The endpoints are
 `GET /admin/organizations/{id}/members/{subject}` and
 `GET /admin/organizations/{id}/invitations` (`09` section 8a).
 
-*Source: D-218*
+**A person's standing in a host's own rules (D-275).** Whether a person still has access
+to an organization is their membership's: ending it revokes every allow grant the
+account holds there (IDN-MEM-001). A host whose rule turns on it, asked in a request by
+someone who holds no `membership:read`, keeps the fact itself from `MembershipChanged`
+(`began`, `ended`; `10` section 5b), which the library writes in the transaction that
+begins or ends the membership, and reads its own record; it never reads the grants
+relation for it (`03` AUTHZ-SEAM-001, D-269). A member who brings their own end forward
+is answered by that call (D-240). Whether a person may do a thing at hand is the gate's
+(AUTHZ-GATE-007), not a membership's.
+
+*Source: D-218, D-275*
 
 **Acceptance criteria**
 1. A member who joined through an invitation is listed with that invitation, and

@@ -21329,6 +21329,176 @@ only in a major version. The sixth point of the plan's list before the final 1.0
 
 ---
 
+## D-274 — A person reads the grants they hold themselves
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** AUTHZ-GRANT-003
+
+**TL;DR.** `IGrants.HeldAsync` answers a person the live grants their own account holds
+in its own name, in any organization, with no permission: the holder named is the user
+the context is effective for (`AccessContext.Effective`, as the export takes it). Asking
+for anyone else's grants, a group's included, still needs `grant:read` in the
+organization. The route is `GET /account/grants?organization={id}`, under the account's
+own live session. Found by the first host: a staff application shows a person their own
+roles and when each ends, and today it can only ask under `grant:read`, which would let
+every member read every other member's grants, so it read the grants relation itself,
+which D-269 forbids.
+
+- **Why no permission.** The account's own export already carries every grant naming it,
+  live, expired or revoked (PRIV-RIGHT-003), and the capability page already answers
+  what it may do. Reading its own live grants discloses nothing it cannot already read,
+  in a form a host can show without assembling an export, which is counted against
+  `privacy.export.ratelimit` and needs the account's reachable assurance (D-141).
+- **What it answers.** The same `HeldGrant` records `GET /admin/grants` answers for the
+  user, oldest first. Where the export carries less of a grant than `HeldGrant` does,
+  that is the implementer's question, not a reason to answer more.
+- **Who.** The effective identity, so a support session acting as a person (AUTHZ-IMP-001)
+  reads what that person would. A restricted account is admitted, since it only reads
+  (IDN-ACCT-007). Nothing is recorded, as no read is (IDN-READ-004), and nothing counts
+  toward the read volume, which counts the records a gate-filtered query or an export
+  returns (OPS-ALERT-005).
+- **A group's grants.** A grant reaching the person through a group stays the group's,
+  read under `grant:read`: the capability page already answers what it confers, and a
+  group's grant list names its other members' access.
+
+*Rejected:*
+- **`grant:read` for every member:** each member would read every other member's grants.
+- **The host reading the grants relation:** D-269.
+- **The capability page alone:** it answers permissions, not the roles that carry them or
+  when each grant ends, which is what a person is shown.
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-003 (a paragraph, criterion 9);
+- `09` section 6 (`GET /account/grants`) and `GET /admin/grants` (the self-read beside it);
+- `implementation-plan.md` (round H18).
+
+**Amendment (2026-11-06, round H18's question 1): the self-read answers what the export
+answers, not more.** The subject export carries of each grant the account holds its
+identifier, organization, role, kind, deny, resource, `grantedAt`, `expiresAt` and
+`revokedAt`, and never who granted it or why, which are about the person who acted (`04`
+PRIV-RIGHT-003). The self-read is therefore its own operation,
+`IGrants.OwnAsync(AccessContext context, OrganizationId organization, CancellationToken
+cancellationToken)`, answering `OwnGrant(GrantId Id, GrantKind Kind, RoleName Role,
+ResourceReference On, bool Deny, DateTimeOffset? ExpiresAt, DateTimeOffset GrantedAt)` for
+each live grant the account holds in its own name there, oldest first, under the rules
+above (no permission, the effective user, a restricted account admitted, nothing recorded
+or counted). `HeldAsync` is unchanged: it needs `grant:read` for every holder, the
+caller's own account included. `GET /account/grants` answers `OwnGrant`'s fields.
+*Rejected:* the whole `HeldGrant` (it tells a person more than the export does);
+`HeldGrant`'s granter and reason made nullable (it changes what every `grant:read` reader
+receives).
+
+---
+
+## D-275 — Whether a person still has access is their membership's, kept from its event
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** nothing (IDN-READ-002 gains a
+paragraph)
+
+**TL;DR.** A host that needs to know, in a request, whether a person still has access to
+an organization (to hand a departed manager's reviews to someone else, or to let a
+leaver's work be handed over) asks about the membership, not the grants: ending a
+membership revokes every allow grant the account holds there (IDN-MEM-001). Where the
+person asking holds no `membership:read`, the host keeps the fact itself from
+`MembershipChanged` (`began`, `ended`), which the library writes to the outbox in the
+transaction that makes it true (`10` section 5b), as its own record of the person's
+standing. Nothing in the library changes.
+
+- **Why the event.** It is the library's contract for exactly this: the host learns once,
+  exactly when, that a membership began or ended, and holds it as its own data. It is a
+  fact about a person's standing, not a copy of who holds a role, so AUTHZ-GATE-007's
+  warning against a host's own copy of role holders does not reach it: no deny,
+  derivation or expiry decides a membership.
+- **A member's own end.** A member who brings their own end forward
+  (`POST /account/memberships/{organization}/end`, D-240) is answered by that call: its
+  success is the end.
+- **A member stripped of every grant** but still a member stays a member. A host that
+  must tell such a person apart asks the gate whether they may do the thing at hand
+  (AUTHZ-GATE-007, D-276), not whether they hold anything.
+
+*Rejected:*
+- **Any member reading whether a fellow member is still one, with no permission:** the
+  library serves organizations whose members must not learn of each other (a customer
+  organization, for one), and a host's own staff directory is the host's to show.
+- **A narrower permission for a member's standing:** a host would give it to nearly
+  every member to answer this one question, which is `membership:read` in all but name.
+- **Reading the grants relation:** D-269.
+
+**Propagated to:**
+- `01` IDN-READ-002 (a paragraph);
+- `10` section 5b (`MembershipChanged`'s consumers);
+- `implementation-plan.md` (round H18).
+
+---
+
+## D-276 — A host permission may admit the question of who holds another
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** AUTHZ-GATE-007, LIB-HOST-001
+
+**TL;DR.** A host may declare that holding one of its permissions admits asking the gate
+who may exercise one other of its permissions:
+`AuthorizationDeclarationBuilder.AdmitsWhoMay(permission, asked)`. A person holding
+`permission` in an organization is then answered `IAccessGate.WhoMayAsync` for `asked`
+there, on the organization and on its records, as a holder of `grant:read` is, and for
+no other permission. Found by the first host: a sales manager's monthly report counts
+the orders of the team members whose roles take orders, a host rule; the manager holds
+no `grant:read`, and a job's context is refused while a request is served (D-202 rule 7,
+D-206 question 15), so the host read the grants relation, which D-269 forbids.
+
+- **The rule.** `permission` and `asked` are host permissions the model declares, never
+  library-owned ones, and a pair is declared once; a permission may admit several, each
+  its own declaration. `permission` is judged as the single check judges it on the
+  organization the record belongs to, or on the organization asked: a deny, an expiry, a
+  restriction and a step-up gate bound to it apply as for any check (AUTHZ-GATE-005).
+  `WhoMayAsync` is admitted for a person holding `grant:read` there, for a person holding
+  a permission declared to admit `asked` there, and for a declared job naming `asked`;
+  anything else is refused `authz.denied` and recorded as today. The answer, its budget
+  and what it records are AUTHZ-GATE-007's, unchanged. A declaration naming a permission
+  not declared or a library-owned one, or a pair declared twice, fails startup with
+  `model.startup.declarationinvalid`, `details.declaration` `binding.<permission>`,
+  `details.field` `admitsWhoMay`.
+- **Why a declaration and not a permission over permissions.** The model has no resource
+  type for a permission, and a declared pair says exactly what a host means (holders of
+  this may learn who may do that) with the gate judging it, so the gate stays the one
+  policy point (AUTHZ-SEAM-001) and the model holds the rule where it can be read.
+- **Why D-206 stands.** Every permission evaluated while a person is served stays that
+  person's: the question is asked in their own name, refused and recorded as theirs.
+  Admitting a job's context inside a request for reading questions would let a request
+  learn what its person may not, which is the case D-202 rule 7 exists to refuse, reads
+  included.
+- **What it discloses.** Which accounts may exercise `asked` across the organization, no
+  grant, role, granter or reason. A host declares a pair only where its holders may know
+  that.
+
+*Rejected:*
+- **`grant:read` for the roles that need an answer:** every grant in the organization,
+  with its granter and reason, for one question about one permission.
+- **A job's context admitted inside a request for reading questions:** D-206 above.
+- **The host keeping its own copy from a job's `WhoMayAsync`:** stale between refreshes,
+  and a second place that decides who may, which AUTHZ-GATE-007 tells a host not to keep.
+
+**Propagated to:**
+- `03` AUTHZ-GATE-007 (the admission, criterion 6);
+- `07` LIB-HOST-001 (the roles row, the binding);
+- `09` `GET /admin/access/admitted` (the admission);
+- `10` section 1 (`model.startup.declarationinvalid`, the binding);
+- `implementation-plan.md` (round H18).
+
+**Amendment (2026-11-06, round H18's question 2 and its rule-resolution).**
+- **A held permission stopped short of admitting answers as its own check would.** Where
+  no permission admits the question, and a declared admitting permission is held there
+  but stopped only by a step-up gate bound to it, or only by a restriction, the answer is
+  what the single check of that permission answers (the gate's step-up, or
+  `authz.restricted`), and no refusal is recorded, as the single check records none for
+  either. Otherwise `grant:read`'s check answers and its refusal is recorded, as built.
+  Nothing is answered of who may until a permission admits. *Rejected:* a flat
+  `authz.denied` in every case, which leaves a person who holds the permission no way to
+  learn that a step-up would admit them, where the capability page already tells them.
+- **The rule-resolution is accepted.** `AuthorizationDeclaration.AdmitsWhoMay`, the pairs
+  as the declaration carries them to the model, is public, an init property empty by
+  default (D-273), and part of this decision.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21612,6 +21782,9 @@ only in a major version. The sixth point of the plan's list before the final 1.0
 | A later family of truth-table cases comes with its own host interface | D-271 |
 | The boundary of a later condition vocabulary, not built | D-272 |
 | A member added to a public record is an init property | D-273 |
+| A person reads the grants they hold themselves | D-274 |
+| Whether a person still has access is their membership's, kept from its event | D-275 |
+| A host permission may admit the question of who holds another | D-276 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

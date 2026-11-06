@@ -150,7 +150,21 @@ the reason `AUTHZ-INHERIT-002`, as `authz.grant.revoked` (D-203). Each of these 
 records names the grant's holder as its subject where the holder is an account, and none
 where it is a group, whoever acted (`10` section 5.24, D-206).
 
-*Source: D-015, D-166, D-187, D-197, D-203, D-206, D-207, D-208, D-237, D-239*
+**A person's own grants (D-274).** The live grants a user or group holds in its own name
+in an organization are read under `grant:read` there (`IGrants.HeldAsync`,
+`GET /admin/grants`), the caller's own account included. A person SHALL be answered the
+live grants their own account holds in its own name, in any organization, with no
+permission, through `IGrants.OwnAsync`: the holder is the user the context is effective
+for (`AccessContext.Effective`), as the export takes it (`04` PRIV-RIGHT-003). The
+answer is `OwnGrant` records, oldest first, carrying what the export carries of a grant
+(its identifier, kind, role, resource, deny, `grantedAt` and `expiresAt`) and never who
+granted it or why; a grant reaching the person through a group stays the group's, read
+under `grant:read`.
+A restricted account is admitted (IDN-ACCT-007). Nothing is recorded, and nothing counts
+toward the read volume (OPS-ALERT-005). The route is `GET /account/grants` (`09`
+section 6).
+
+*Source: D-015, D-166, D-187, D-197, D-203, D-206, D-207, D-208, D-237, D-239, D-274*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
 migration across every query later.
@@ -182,6 +196,10 @@ migration across every query later.
    role it names with no end; a `grantEndsAt` not later than the invitation's expiry,
    or one on an invitation naming no such role, is refused 400 `api.request.malformed`
    naming `grantEndsAt` (D-239).
+9. A person without `grant:read` is answered their own account's live grants in an
+   organization, and neither an expired nor a revoked one; asking for another account's
+   or a group's grants without `grant:read` is refused `authz.denied`; a restricted
+   account is answered its own; none of it names who granted a grant or why (D-274).
 
 ---
 
@@ -1408,18 +1426,26 @@ no account is admitted and `subjects` is empty, as every reader would be refused
 step-up is a session's, not an account's, and is not judged. Live derivations are
 evaluated within `authz.reverselookup.budget`; past it `partial` is true and
 `unevaluated` names the relationships not evaluated (AUTHZ-DERIVE-007). It is asked by a
-person holding `grant:read` in the organization the record belongs to, or by a host's
-declared job whose declaration names the permission, on its organization's records and
-on its organization (`01` IDN-PRIN-001); a record the deployment holds no registration
-for is refused as AUTHZ-DERIVE-007 refuses it, and a permission or type the model does
-not declare, or an organization's identifier that is not one, with
+person holding `grant:read` in the organization the record belongs to; by a person
+holding there a host permission the model declares to admit the permission asked
+(`AuthorizationDeclarationBuilder.AdmitsWhoMay(permission, asked)`, `07` LIB-HOST-001,
+D-276), judged as the single check judges it on that organization, a deny, an expiry, a
+restriction and a step-up gate bound to it applying as for any check, so that where no
+permission admits and such a permission is stopped only by its step-up gate or only by a
+restriction, the answer is what its single check answers, with no refusal recorded; or
+by a host's declared job whose declaration names the permission, on its organization's
+records and
+on its organization (`01` IDN-PRIN-001). A job's context is refused while a request is
+served, whatever it would read (D-202, D-206); a record the deployment holds no
+registration for is refused as AUTHZ-DERIVE-007 refuses it, and a permission or type the
+model does not declare, or an organization's identifier that is not one, with
 `api.request.malformed` naming `permission`, `type` or `id`, writing no refusal record,
 as the view of who can access a record answers an unreadable one (D-219). The endpoint
 is `GET /admin/access/admitted` (`09` section 8a). A host that tells the people who may
 act on a record asks this, rather than keeping its own copy of who holds a role, which
 misses denies and derived access.
 
-*Source: D-218, D-219*
+*Source: D-218, D-219, D-276*
 
 **Acceptance criteria**
 1. Accounts holding the permission through a group, through a container's grant and
@@ -1435,6 +1461,15 @@ misses denies and derived access.
 5. A permission or type the model does not declare, and an organization's identifier
    that is not one, are refused `api.request.malformed` naming it, writing no refusal
    record (D-219).
+6. With `AdmitsWhoMay(p, q)` declared, a person holding `p` across an organization and
+   no `grant:read` is answered who may `q` there, on the organization and on one of its
+   records; asking for any other permission, holding `p` under a deny, or holding it
+   only in another organization, is refused `authz.denied` and the refusal recorded;
+   holding `p` stopped only by its step-up gate is answered that step-up, and only by a
+   restriction `authz.restricted`, neither recorded; a
+   declaration naming a permission not declared or a library-owned one, or a pair
+   declared twice, fails startup with `model.startup.declarationinvalid`,
+   `details.declaration` `binding.<p>`, `details.field` `admitsWhoMay` (D-276).
 
 ---
 
