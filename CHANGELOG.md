@@ -8,6 +8,8 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.9] - 2026-11-06
+
 ### Fixed
 
 - A runtime key the deployment names that was never written, such as `service.name` on
