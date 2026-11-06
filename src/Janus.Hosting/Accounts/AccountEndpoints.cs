@@ -18,10 +18,10 @@ namespace Janus.Hosting.Accounts;
 /// </summary>
 /// <remarks>
 /// Implements CONV-DESIGN-006, API-CONV-001, REG-ACCT-001, REG-PROF-001,
-/// REG-PREF-001, REG-IDENT-002 to REG-IDENT-009, IDN-ATTR-008, REG-INV-001 and
-/// REG-INV-002. Who is asking is what the session resolution stage established and
-/// nothing an endpoint reads from the request; an endpoint that finds nobody there
-/// refuses rather than guessing.
+/// REG-PREF-001, REG-IDENT-002 to REG-IDENT-009, IDN-ATTR-008, REG-INV-001,
+/// REG-INV-002 and AUTHZ-GRANT-003. Who is asking is what the session resolution stage
+/// established and nothing an endpoint reads from the request; an endpoint that finds
+/// nobody there refuses rather than guessing.
 /// </remarks>
 internal static class AccountEndpoints
 {
@@ -169,6 +169,11 @@ internal static class AccountEndpoints
         _ = SessionRequired.On(group.MapDelete("/sessions/{id}", EndSessionAsync))
             .Declares(EndpointDeclaration.Answering(ErrorCodes.ResourceNotFound).Binding<SessionId>("id"))
             .Produces(StatusCodes.Status204NoContent);
+
+        // AUTHZ-GRANT-003 (D-274): the caller's own live grants, with no permission.
+        _ = SessionRequired.On(group.MapGet("/grants", ListGrantsAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("organization"))
+            .Produces<IReadOnlyList<OwnGrantView>>();
 
         _ = SessionRequired.On(group.MapPost("/deactivate", DeactivateAsync))
             .Declares(EndpointDeclaration
@@ -930,6 +935,25 @@ internal static class AccountEndpoints
             held => TypedResults.Json<IReadOnlyList<SessionView>>(
                 [.. held.Select(SessionView.Of)],
                 AccountJson.Default.IReadOnlyListSessionView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> ListGrantsAsync(
+        IGrants grants,
+        RequestSession browser,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(grants);
+
+        return Answers.Of(
+            await grants
+                .OwnAsync(Asking(browser), organization, cancellationToken)
+                .ConfigureAwait(false),
+            held => TypedResults.Json<IReadOnlyList<OwnGrantView>>(
+                [.. held.Select(OwnGrantView.Of)],
+                AccountJson.Default.IReadOnlyListOwnGrantView,
                 contentType: null,
                 StatusCodes.Status200OK));
     }

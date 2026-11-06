@@ -1047,6 +1047,70 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-003 AC9, <c>09</c> <c>GET /account/grants</c> (D-274): a caller holding no
+    /// <c>grant:read</c> is answered 200 the live grants their own account holds in the
+    /// organization, oldest first, with the members of <c>OwnGrant</c> alone and never who
+    /// granted one or why; their own grants read through <c>GET /admin/grants</c> are
+    /// refused 403; an organization holding none answers none, and an absent one is
+    /// malformed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC9_ACallersOwnGrantsAreAnsweredWithoutWhoGrantedThemOrWhyAsync()
+    {
+        Browser person = await Flow.SignedInAsync(_deployment);
+        SubjectId own = _deployment.Directory.Created[^1].Subject;
+        DateTimeOffset first = _deployment.Clock.GetUtcNow();
+        Grant onRecord = await OwnedAsync(own, Document, deny: false, expiresAt: first.AddDays(30));
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
+        Grant wide = await OwnedAsync(own, on: null, deny: true, expiresAt: null);
+        Grant revoked = await OwnedAsync(own, Document, deny: false, expiresAt: null);
+
+        _ = revoked.Revoke(own, _deployment.Clock.GetUtcNow(), "No longer needed.");
+        await _deployment.AccessGrants.RecordAsync(revoked, CancellationToken.None);
+        _ = await OwnedAsync(own, Document, deny: false, expiresAt: _deployment.Clock.GetUtcNow().AddMinutes(1));
+        _ = await GrantedAsync(
+            (await AuthorisedAsync(Branch, Permissions.GrantManage)).Browser,
+            "document",
+            "d-1");
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        Answer read = await person.SendAsync("GET", "/account/grants?organization=" + Branch);
+        Answer elsewhere = await person.SendAsync("GET", "/account/grants?organization=" + Administration);
+        Answer unnamed = await person.SendAsync("GET", "/account/grants");
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+
+        JsonElement[] held = [.. read.Json().EnumerateArray()];
+
+        Assert.Equal([onRecord.Id.ToString(), wide.Id.ToString()], held.Select(grant => grant.GetProperty("id").GetString()));
+        Assert.All(
+            held,
+            grant => Assert.Equal(
+                ["deny", "expiresAt", "grantedAt", "id", "kind", "resourceId", "resourceType", "role"],
+                grant.EnumerateObject().Select(member => member.Name).Order(StringComparer.Ordinal)));
+        Assert.Equal("stored", held[0].GetProperty("kind").GetString());
+        Assert.Equal("document", held[0].GetProperty("resourceType").GetString());
+        Assert.Equal("d-1", held[0].GetProperty("resourceId").GetString());
+        Assert.Equal(Reader.ToString(), held[0].GetProperty("role").GetString());
+        Assert.False(held[0].GetProperty("deny").GetBoolean());
+        Assert.Equal(first.AddDays(30), held[0].GetProperty("expiresAt").GetDateTimeOffset());
+        Assert.Equal(first, held[0].GetProperty("grantedAt").GetDateTimeOffset());
+        Assert.Equal("organization", held[1].GetProperty("resourceType").GetString());
+        Assert.Equal(Branch.ToString(), held[1].GetProperty("resourceId").GetString());
+        Assert.True(held[1].GetProperty("deny").GetBoolean());
+        Assert.Equal(StatusCodes.Status200OK, elsewhere.Status);
+        Assert.Equal(0, elsewhere.Json().GetArrayLength());
+        Assert.Equal("organization", Member(unnamed));
+        Denied(await person.SendAsync(
+            "GET",
+            "/admin/grants?organization=" + Branch + "&subjectType=user&subjectId=" + own));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-003 AC3: a group's grants are read under the group, and a grant a
     /// materialisation wrote is read with its kind, which tells apart the one no
     /// revocation names.
@@ -1336,6 +1400,30 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         await _deployment.AccessGrants.CreateAsync(materialised, CancellationToken.None);
 
         return materialised;
+    }
+
+    // A grant of the reading role the account holds in its own name in the branch, written
+    // now by somebody else.
+    private async Task<Grant> OwnedAsync(SubjectId holder, ResourceReference? on, bool deny, DateTimeOffset? expiresAt)
+    {
+        Grant owned = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                GrantSubject.Of(holder),
+                Reader,
+                Branch,
+                on,
+                deny,
+                GrantKind.Stored,
+                expiresAt,
+                new SubjectId(Holder),
+                _deployment.Clock.GetUtcNow(),
+                "Needs it.")
+            .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(owned, CancellationToken.None);
+
+        return owned;
     }
 
     private async Task<(Browser Browser, SubjectId Subject)> AuthorisedAsync(

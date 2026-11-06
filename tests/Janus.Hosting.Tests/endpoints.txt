@@ -210,6 +210,20 @@ POST /account/factors/totp/confirm
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   409 auth.factor.passwordrequired
+GET /account/grants
+  200
+    application/json
+      [].id: Guid
+      [].kind: GrantKind
+      [].resourceType: string
+      [].resourceId: string
+      [].role: string
+      [].deny: boolean
+      [].expiresAt: DateTimeOffset?
+      [].grantedAt: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
 POST /account/identifiers
   request application/json
     kind: IdentifierKind

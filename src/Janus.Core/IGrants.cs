@@ -72,12 +72,35 @@ public interface IGrants
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The grants, or <c>authz.denied</c> where the caller does not hold
-    /// <c>grant:read</c> in the organization.
+    /// <c>grant:read</c> in the organization, the caller's own account included.
     /// </returns>
     ValueTask<Result<IReadOnlyList<HeldGrant>>> HeldAsync(
         AccessContext context,
         OrganizationId organization,
         GrantSubject holder,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The live grants the asking person's own account holds in its own name within an
+    /// organization, oldest first, with no permission; a grant reaching the account
+    /// through a group it belongs to is the group's.
+    /// </summary>
+    /// <param name="context">Who is asking: the account read is the one it is effective for.</param>
+    /// <param name="organization">The organization the grants are scoped to.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The grants, none where the account holds none there, an organization the
+    /// deployment does not hold included; or <c>authz.denied</c> where no person asks.
+    /// </returns>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-003 criterion 9 (D-274). Each grant carries what the
+    /// subject export carries of it, never who granted it or why. A restricted account is
+    /// answered, since it only reads (IDN-ACCT-007); nothing is recorded, and nothing
+    /// counts toward the read volume (OPS-ALERT-005).
+    /// </remarks>
+    ValueTask<Result<IReadOnlyList<OwnGrant>>> OwnAsync(
+        AccessContext context,
+        OrganizationId organization,
         CancellationToken cancellationToken);
 
     /// <summary>

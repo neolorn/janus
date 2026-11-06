@@ -18,6 +18,12 @@ against the public contract of LIB-API-001.
   refused, and every other permission stays refused. Naming a permission you do not
   declare or one of the library's, or declaring a pair twice, fails startup with
   `model.startup.declarationinvalid`.
+- `IGrants.OwnAsync` and `GET /account/grants?organization={id}` answer a person the live
+  grants their own account holds in its own name in an organization, oldest first, with
+  no permission, a restricted account included. Each grant is an `OwnGrant`, carrying
+  what the person's data export carries of it and never who granted it or why. Nothing
+  is recorded. Reading anyone's grants through `IGrants.HeldAsync` still needs
+  `grant:read`, the caller's own included.
 
 ## [1.0.0-rc.7] - 2026-11-06
 
