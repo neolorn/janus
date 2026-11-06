@@ -21499,6 +21499,49 @@ D-206 question 15), so the host read the grants relation, which D-269 forbids.
 
 ---
 
+## D-277 — A key the deployment names reads and writes before it is first set
+
+**Date:** 2026-11-06 · **Status:** accepted · **Amends:** OPS-CFG-008, `09` `GET|PUT /admin/config/{key}`
+
+**TL;DR.** A runtime key the deployment names (LIB-HOST-001), such as `service.name`,
+that was never written answers `GET /admin/config/{key}` with `value` null and `default`
+null, and `PUT` writes it as it writes any key. Found by the first host: a deployment
+bootstrapped without `service.name` could never be given one, since both routes answered
+500 `system.fault`. The settings reading and the configuration administration read the
+current value first and failed on `model.startup.declarationmissing`, so the key that
+names the issuer of every authenticator app's address (`AUTH-FACT-005`) stayed empty for
+good.
+
+- **The rule.** For a key the deployment names, "never written" is a state the routes
+  answer, not a fault. `GET` answers `value: null`; `PUT` writes the first value under the
+  key's own type, direction and audit rules (OPS-CFG-005, OPS-CFG-008), its reason
+  recorded; the change's direction is judged as for any change of the key. A read of
+  the key by the library's own code where it is required still fails as it does today
+  (the bootstrap and start checks of LIB-HOST-001 are unchanged).
+- **What stays.** `configure` stays for protected keys only; nothing else of the route's
+  answers changes.
+- **Amended 2026-11-06 (round H19, Q1): protected keys read too.** A protected key the
+  deployment names that was never written (`hosting.crossborderbasis` on a deployment
+  hosted in Egypt) also answers `GET` with `value` null, not 500. Its write is unchanged:
+  `PUT` refuses it with `config.key.protected` before any read, and `configure` writes it
+  (OPS-CFG-004). Reading A of the round's question.
+- **Phase H19's criteria.** On PostgreSQL, a deployment bootstrapped without
+  `service.name` reads it as null, sets it with a reason and an audit entry, and an
+  authenticator app's enrolment then carries the name in its address.
+
+*Rejected:*
+- **Making `service.name` required at bootstrap:** a host may enable no authenticator
+  app, and the defect is any never-written key, not this one.
+- **Setting it through `configure`:** it is a runtime key; `configure` is for protected
+  keys (OPS-CFG-004).
+
+**Propagated to:**
+- `06` OPS-CFG-008 (a never-written key, runtime or protected);
+- `09` `GET|PUT /admin/config/{key}` (`value` null before the first write);
+- `implementation-plan.md` (round H19).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21785,6 +21828,7 @@ D-206 question 15), so the host read the grants relation, which D-269 forbids.
 | A person reads the grants they hold themselves | D-274 |
 | Whether a person still has access is their membership's, kept from its event | D-275 |
 | A host permission may admit the question of who holds another | D-276 |
+| A key the deployment names reads and writes before it is first set | D-277 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

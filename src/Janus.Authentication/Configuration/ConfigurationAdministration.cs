@@ -95,10 +95,9 @@ internal sealed class ConfigurationAdministration(
 
         await writes.HoldAsync(setting.Key, cancellationToken).ConfigureAwait(false);
 
-        TValue before = (await configuration
-                .ReadAsync(setting, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(one => one, error => Held<TValue>(error, ref failure));
+        Result<TValue> inForce = await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false);
+        bool unwritten = Unwritten(setting, inForce);
+        TValue before = unwritten ? default! : inForce.Match(one => one, error => Held<TValue>(error, ref failure));
 
         if (failure is not null)
         {
@@ -107,7 +106,7 @@ internal sealed class ConfigurationAdministration(
             return Result.Failure(failure);
         }
 
-        bool loosening = Loosens(setting, before, value);
+        bool loosening = unwritten || Loosens(setting, before, value);
 
         if (await RefusalAsync(setting.Key, loosening, reason, challenge, context, cancellationToken)
                 .ConfigureAwait(false) is Error refused)
@@ -117,10 +116,14 @@ internal sealed class ConfigurationAdministration(
             return Result.Failure(refused);
         }
 
-        _ = (await writes
-                .WriteAsync(setting, value, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(one => one, error => Held<TValue>(error, ref failure));
+        // The write answers what was in force before it, which for a key never written is
+        // the same state the read above found.
+        Result<TValue> replaced = await writes.WriteAsync(setting, value, cancellationToken).ConfigureAwait(false);
+
+        if (!Unwritten(setting, replaced))
+        {
+            _ = replaced.Match(one => one, error => Held<TValue>(error, ref failure));
+        }
 
         if (failure is not null)
         {
@@ -172,7 +175,7 @@ internal sealed class ConfigurationAdministration(
             .ChangedAsync(
                 new ConfigurationChange(
                     setting.Key,
-                    setting.Write(before),
+                    unwritten ? null : setting.Write(before),
                     setting.Write(value),
                     loosening,
                     reason?.Trim(),
@@ -356,17 +359,18 @@ internal sealed class ConfigurationAdministration(
 
         Error? failure = null;
 
-        TValue before = (await configuration
-                .ReadAsync(setting, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(one => one, error => Held<TValue>(error, ref failure));
+        Result<TValue> inForce = await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false);
+        bool unwritten = Unwritten(setting, inForce);
+        TValue before = unwritten ? default! : inForce.Match(one => one, error => Held<TValue>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure(failure);
         }
 
-        return await RefusalAsync(setting.Key, Loosens(setting, before, value), reason, challenge, context, cancellationToken)
+        bool loosening = unwritten || Loosens(setting, before, value);
+
+        return await RefusalAsync(setting.Key, loosening, reason, challenge, context, cancellationToken)
                 .ConfigureAwait(false) is Error refused
             ? Result.Failure(refused)
             : Result.Success();
@@ -409,6 +413,15 @@ internal sealed class ConfigurationAdministration(
 
         return RefusalAsync(family.For(parameter), loosening, reason, challenge, context, cancellationToken);
     }
+
+    // OPS-CFG-008 (D-277): a runtime key the deployment names that holds no stored value
+    // takes its first value as a change, not a fault. Every key the deployment names has
+    // no direction, so any change of it loosens (D-079b), its first value included. A
+    // protected key is refused before this is asked (OPS-CFG-004), and the library's own
+    // reads of such a key fail as LIB-HOST-001 gives.
+    private static bool Unwritten<TValue>(Setting<TValue> setting, Result<TValue> read) =>
+        setting is { IsRequired: true, Scope: SettingScope.Runtime }
+        && read.Match(_ => false, error => error.Code == ErrorCodes.StartupDeclarationMissing);
 
     // Chapter 10 section 4.1a classifies each field of the system policy on its own, as
     // it does an organization's, so a policy that only asks more is a tightening.

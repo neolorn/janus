@@ -2986,7 +2986,9 @@ Distinct from the automatic downgrade that follows a policy tightening.
 `value` and `default` are written in the key's own JSON type: a duration, text or enum
 member as a string in the form `10` section 4 writes it, a boolean, a number, a list or
 set as an array, a policy as its object. `default` is null for a key the deployment
-names (LIB-HOST-001). `direction` is `increase` · `decrease` · `any-change`: which way a
+names (LIB-HOST-001), and `value` is null for such a key never written, runtime or
+protected; `PUT` then writes a runtime one as any key, and a protected one stays
+`configure`'s (OPS-CFG-008, D-277). `direction` is `increase` · `decrease` · `any-change`: which way a
 change to the key loosens (`10` section 4, Direction). A `value` of another JSON type is
 refused with `config.value.notallowed`.
 `PUT` sets it:
