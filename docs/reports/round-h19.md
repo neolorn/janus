@@ -50,6 +50,20 @@
 - `CHANGELOG.md`: two lines under Unreleased, `Fixed`: the runtime key's read and first
   write, and the protected key's read.
 
+**Section 4, step 9: the release commit, 9d5293c4 `chore: release 1.0.0-rc.9`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.9] - 2026-11-06`, holding the two
+  lines under `Fixed`, and Unreleased is left empty.
+- The public surface: the round added no public member, so no `PublicAPI.Unshipped.txt`
+  holds a line and nothing moved into the shipped files.
+- The two lists are not drawn again (CONV-VCS-005, D-262). The leaked-password list of
+  run 41814221201 and the Public Suffix List at version 2026-10-31_14-17-28_UTC were
+  both drawn on 2026-11-04, within 90 days before the release commit. `NOTICE` keeps
+  both dates.
+- No migration note: a release candidate opens no major version.
+- Criterion verified otherwise: the release gate over `origin/main..HEAD` says the notes
+  of 1.0.0-rc.9, 771 characters, are the release's body.
+
 ## 2. Items not implemented
 
 None.
@@ -79,6 +93,7 @@ None.
   change, acceptance-criterion test name and forbidden-marker gates pass over
   `origin/main..HEAD`. The full-history secret scan finds nothing. `NamedKeyTests` and
   `StartupValidationTests` were run here against PostgreSQL.
-- The pipeline's runs on fc310753, before the answer, were green.
+- The pipeline's runs on fc310753, before the answer, were green, and so were those
+  on fe89734d, with reading A in, before the release commit.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
