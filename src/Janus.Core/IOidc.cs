@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// here: the request shapes, the codes, the tokens, the signatures and the refusals
 /// are the server's, and what the library holds of a session while a token is minted
 /// is not an operation a host calls, so it is not on this contract either.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IOidc
 {

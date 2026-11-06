@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// secret from the registry at each request and keeps nothing, so nothing here carries
 /// or receives a secret. The operation is called in process only and meets no gate:
 /// the suite is run by the host, and the probes read no record of a person.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IProviderProbes
 {

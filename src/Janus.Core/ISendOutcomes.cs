@@ -9,6 +9,8 @@ namespace Janus.Core;
 /// <remarks>
 /// Implements INT-SMS-005 (D-225). A report takes no access context and meets no gate: it
 /// can only make a person less restricted, and marks nothing verified.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface ISendOutcomes
 {

@@ -16,6 +16,8 @@ namespace Janus.Core;
 /// the session is what a caller is judged on (BFF-CSRF-005b): the one access context
 /// taken here is that of a browser signed in already, which is refused. Nothing accepts
 /// a return destination at any step.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IRegistration
 {

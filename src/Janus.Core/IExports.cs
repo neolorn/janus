@@ -11,6 +11,8 @@ namespace Janus.Core;
 /// Implements LIB-API-005, PRIV-RIGHT-003 (D-203) and chapter 09 section 7. Access and
 /// portability are the same assembly in two arrangements, so nothing here decides
 /// which of the two rights is being exercised.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IExports
 {

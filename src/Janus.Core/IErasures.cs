@@ -15,6 +15,8 @@ namespace Janus.Core;
 /// (D-203). Every operation is the <c>privacyrequest:manage</c> permission's; the
 /// completion also asks the caller's session for <c>erasure:complete</c> and is
 /// recorded.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IErasures
 {

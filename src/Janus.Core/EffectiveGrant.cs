@@ -25,6 +25,9 @@ namespace Janus.Core;
 /// answer and no sweep is involved. The columns are plain values rather than the
 /// library's own types, because what maps this row is the host's provider and not the
 /// library's (D-159).
+/// A row is an input to the gate's renderings, not a permission: a permission is asked
+/// only through the gate, and what a row confers is the library's to decide, which a
+/// later version may narrow (AUTHZ-SEAM-001, D-269).
 /// </remarks>
 public sealed record EffectiveGrant(
     Guid GrantId,

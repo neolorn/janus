@@ -14,6 +14,10 @@ namespace Janus.Conformance;
 /// host's, so the host writes its own rows for the records a case needs, writes the
 /// facts its derivations follow from, and hands over, from its own context, the rows
 /// the filter is applied to.
+/// A host implements this interface, so its members do not change: a later family of cases
+/// that needs the host to write something they cannot comes with an interface of its own,
+/// which the host implements beside this one, and a suite member that takes it. A host
+/// that does not hand it over is not asked that family's cases (LIB-TEST-001, D-271).
 /// </remarks>
 public interface IConformanceRows<TResource>
     where TResource : class

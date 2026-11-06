@@ -11,6 +11,8 @@ namespace Janus.Core;
 /// Implements LIB-API-005, IDN-LIFE-003, PRIV-MINOR-002 and chapter 09 section 8a. The
 /// takedown borrows the deletion timer and nothing else: the subject is sent no notice
 /// and holds no link, and the only way back is the reversal inside the window.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface ITakedowns
 {

@@ -12,6 +12,8 @@ namespace Janus.Core;
 /// Implements BFF-MACH-003, INT-GEN-003 and LIB-API-005. A reference is 128 random
 /// bits in base64url, kept by its hash, so a copy of the database yields none a
 /// callback could be forged with.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface ICallbackReferences
 {

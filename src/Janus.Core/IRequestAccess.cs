@@ -10,6 +10,8 @@ namespace Janus.Core;
 /// context and session the library's own endpoints pass for the same request. A host
 /// endpoint keeps neither past the request it read them for, so a break-glass session's
 /// reason never reaches later work.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IRequestAccess
 {

@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// <see cref="IMailServer"/> itself, so a deployment never shows a mail server in one
 /// place and none in another. A change of the key takes effect at the next start. A read
 /// before the start made the choice is a fault. No host implements it.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IMailServerInUse
 {

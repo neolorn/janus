@@ -13,6 +13,8 @@ namespace Janus.Core;
 /// AUTH-RECOV-005 and AUTH-RECOV-007. Recovery reaches the password and never a
 /// second factor: what it may do about a lost factor is report it, and the notified
 /// window is what stands between a stolen mailbox and an account.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IRecovery
 {

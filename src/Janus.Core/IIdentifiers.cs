@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// not proved enough; setting the primary and the backup setting are neither. The undo
 /// and the abandon are link-borne: a hostile change leaves the account no session that
 /// could reach them, so each takes the token its message carried and nothing else.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IIdentifiers
 {

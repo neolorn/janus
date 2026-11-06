@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// step-up actions; a grant or revocation of a role carrying
 /// <c>system:administer</c> also needs that permission in the administrative
 /// organization, and every one records who, when and why.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IGrants
 {

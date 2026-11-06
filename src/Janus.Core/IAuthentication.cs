@@ -15,6 +15,8 @@ namespace Janus.Core;
 /// step-up, which is the one operation a principal already exists for. Every answer
 /// is the same for an identifier that resolves to an account and one that resolves to
 /// nothing (AUTH-ABUSE-003).
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IAuthentication
 {

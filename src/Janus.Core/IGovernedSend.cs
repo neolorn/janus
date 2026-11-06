@@ -13,6 +13,8 @@ namespace Janus.Core;
 /// its unit of work: the send decides in it and begins none of its own, so a refusal
 /// changes nothing and the caller goes on or rolls back as its operation requires. An
 /// operation that rolls back sends nothing.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IGovernedSend
 {

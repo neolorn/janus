@@ -15,6 +15,8 @@ namespace Janus.Core;
 /// REG-INV-001, REG-MAIL-001, REG-MAIL-003 and chapter 09 section 8a. An invitation is
 /// a time-boxed, single-use link; issuing one is the <c>invitation:issue</c> step-up
 /// action, and roles it attaches also need <c>grant:manage</c> in the organization.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IInvitations
 {

@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// <c>grant:manage</c> step-up action, since it confers or takes away what the group
 /// holds; where the group holds a role carrying <c>system:administer</c>, directly or
 /// through a group it belongs to, the change also needs that permission.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IGroups
 {

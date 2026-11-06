@@ -8,6 +8,26 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+### Changed
+
+- The interfaces of the operations contract, `IAccessGate` and `IStepUpGate` among them,
+  are the library's to implement: a host calls them and implements none, so a later
+  version may add a member to one without breaking a host. `IMailServer` stays a
+  contract a host may implement, and a capability later asked of a mail server comes as
+  an interface of its own beside it.
+- `identity.ancestry`, `identity.effective_grants` and `identity.consented_resources`,
+  with `AncestryEntry`, `EffectiveGrant` and `ConsentedResource`, are inputs to the
+  gate's renderings and not permissions. Ask a permission only through the gate (the
+  check, the list filter, the SQL fragment or the capability page). Their names, columns
+  and types stay stable, but what a row confers is the library's to decide, and a later
+  version may narrow it.
+- A capability whose `requires` is empty still always succeeds. A later version may add
+  a residual to the set a capability's `requires` names; a frontend treats a residual it
+  does not know as not permitted, hiding or disabling the control.
+- `IConformanceRows<TResource>` keeps its members. A later family of truth-table cases
+  that needs a host to write something more comes with an interface of its own, which a
+  host implements beside it; a host that does not is not asked those cases.
+
 ## [1.0.0-rc.6] - 2026-11-05
 
 ### Fixed

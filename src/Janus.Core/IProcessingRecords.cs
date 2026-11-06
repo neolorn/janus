@@ -12,6 +12,8 @@ namespace Janus.Core;
 /// Implements PRIV-PRIN-002, PRIV-ROPA-001 and LIB-API-005. There is no stored
 /// inventory of processing activities: adding a purpose to the declaration changes
 /// the next generated register and nothing else is edited.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IProcessingRecords
 {

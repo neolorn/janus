@@ -15,6 +15,8 @@ namespace Janus.Core;
 /// collection session the browser of the request being served holds, so it is called
 /// while that request is served and inside the host's unit of work, and a refusal
 /// writes nothing and keeps nothing.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 [SuppressMessage(
     "Naming",

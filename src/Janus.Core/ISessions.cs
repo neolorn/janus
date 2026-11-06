@@ -12,6 +12,8 @@ namespace Janus.Core;
 /// AUTH-SESS-013 and IDN-READ-003. Ending the
 /// record a session stands on ends everything derived from it, so signing out is not
 /// undone by moving to another application.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface ISessions
 {

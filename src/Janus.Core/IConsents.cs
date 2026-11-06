@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// are the same shape and the same number of steps, and none of the four waits on a
 /// human. Implements IDN-READ-003 and IDN-READ-004 for the standing a host reads of
 /// another person, asked in an organization and reaching the people tied to it.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IConsents
 {

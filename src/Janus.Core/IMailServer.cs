@@ -18,6 +18,10 @@ namespace Janus.Core;
 /// notification handler (INT-SMS-006). The app-password calls name the mailbox the library
 /// holds for the acting account and act on the account that carries its identifier,
 /// found as a push finds it, never on one a request names (D-226).
+/// A host may implement this contract, registering its own mail server in place of the
+/// shipped adapter, so its members do not change: a capability the library later asks of a
+/// mail server comes as an interface of its own beside it, which a host's mail server
+/// implements where it offers it (D-268).
 /// </remarks>
 public interface IMailServer
 {

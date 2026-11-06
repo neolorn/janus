@@ -14,6 +14,8 @@ namespace Janus.Core;
 /// Removing a credential the person no longer holds is not here: that is a loss report
 /// (<see cref="IRecovery.ReportLossAsync"/>), which asks for no gate because the
 /// person has lost what the gate would ask them for.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface ICredentials
 {

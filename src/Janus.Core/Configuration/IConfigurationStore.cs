@@ -16,6 +16,8 @@ namespace Janus.Core.Configuration;
 /// deployment never wrote reads as its default; a stored value the key does not
 /// admit, which a tightened floor can leave behind, is a fault: the read throws,
 /// naming the key and never the stored text, and no default stands in for it.
+/// No host implements this interface: a host calls it, and a member the library adds to
+/// it is an additive change (D-268).
 /// </remarks>
 public interface IConfigurationStore
 {
