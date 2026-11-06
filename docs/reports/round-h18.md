@@ -83,7 +83,10 @@ amendment), 8f6bb74d**
     the caller's own grants through `GET /admin/grants`;
   - `EndpointContractTests.LIB_API_001_AC2_TheEndpointsAreTheContract` and
     `SessionRequirementTests.BFF_STEP_001_TheEndpointsThatNeedASessionAreTheOnesListed`
-    with the new route.
+    with the new route;
+  - `PublicSurfaceTests.CONV_DESIGN_002_AC3_EveryOperationMeetsTheGateBeforeItReadsOrWrites`
+    names `IGrants.OwnAsync` among the operations on the caller's own records, whose
+    gate step is asking whose account is asking (3f554e87).
 - `CHANGELOG.md`: one line under Unreleased, `Added`.
 
 **D-275**: changes no code, as the round's documents say. Nothing built.
@@ -129,12 +132,16 @@ or a step-up gate stops that permission.
 - Fast checks on every commit: green. These are the build with warnings as errors, the
   analysers, `dotnet format --verify-no-changes`, and the unit tests of the projects
   changed.
-- Checks before the push: green. Every unit test passes (5223 in eleven projects), and
+- Checks before the push: green. Every unit test passes (5223 in eleven projects), every
+  contract test passes (214), and
   the commit-message, changelog, release, truth-table change, acceptance-criterion test
   name and forbidden-marker gates pass over `origin/main..HEAD`. The full-history secret
   scan finds nothing. The truth table, `OwnGrantsTests`, `ReverseLookupTests`,
   `StartupValidationTests`, `ExportOperationsTests` and `RefusalRecordTests` were run
   here against PostgreSQL.
-- The pipeline's runs on 5ed1a337, before the answers, were green.
+- The pipeline's runs on 5ed1a337, before the answers, were green. On 67898e24 the
+  contract tests failed: `CONV_DESIGN_002_AC3` found `IGrants.OwnAsync` reading grants
+  before any gate, as an operation on the caller's own records does and the test had
+  not been told. Fixed in 3f554e87.
 - Gate of record: the pipeline's run on this report's commit, whose identifier and
   result the round's last message gives.
