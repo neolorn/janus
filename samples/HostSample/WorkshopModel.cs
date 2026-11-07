@@ -148,7 +148,7 @@ internal static class WorkshopModel
                 Permissions.MembershipRead.ToString(),
                 Permissions.GrantManage.ToString(),
                 Permissions.GrantRead.ToString())
-            .Includes(WorkshopRoles.Technician)
+            .Includes(WorkshopRoles.Technician, [ReadRepair.ToString(), ReadFitting.ToString()])
             .Role(
                 WorkshopRoles.Technician,
                 OpenWorkshop.ToString(),
