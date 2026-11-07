@@ -50,7 +50,9 @@ against the public contract of LIB-API-001.
   names a parent domain, the authentication application keeps the cookie
   `identity-signed-in` on it while an auth session lives, written at sign-in and removed
   at sign-out or when a check finds no auth session, and a check from a browser
-  carrying no such cookie returns at once as a guest, with no round trip.
+  carrying no such cookie returns at once as a guest, with no round trip. While the key
+  names a domain, the privacy notice's cookie list carries `identity-signed-in` at
+  `session.default.absolute`, and a host may not declare a cookie of that name.
 
 ## [1.0.0-rc.9] - 2026-11-06
 

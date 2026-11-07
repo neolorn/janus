@@ -303,6 +303,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     [InlineData("host-theme", "advertising", false, "purpose")]
     [InlineData("__Host-identity-session", null, false, "name")]
     [InlineData("__Host-identity-device", null, false, "name")]
+    [InlineData("identity-signed-in", null, false, "name")]
     [InlineData("host theme", null, false, "name")]
     [InlineData("host;theme", null, false, "name")]
     [InlineData("", null, false, "name")]
@@ -403,6 +404,52 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         {
             await WriteAsync(
                 "DELETE FROM identity.legal_document_versions WHERE document = 'privacy-notice';",
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a AC4, BFF-SESS-006 (D-279): with <c>session.hint.domain</c> set over
+    /// a notice version that does not list the signed-in hint, the start raises
+    /// <c>degradation</c> under <c>notice.cookies</c>, naming the hint as added.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_006a_AC4_TheHintKeySetOverANoticeWithoutTheHintRaisesADegradationAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await NoticedAsync(cancellationToken);
+
+        try
+        {
+            IReadOnlyList<(string?, string?, string?, string?)> before = await StaleAsync();
+
+            await WriteAsync(
+                "INSERT INTO identity.settings (key, value) VALUES ('" + Settings.SessionSignedInDomain.Key
+                    + "', 'example.test') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;",
+                cancellationToken);
+
+            using (IHost hinted = new HostBuilder()
+                .ConfigureServices(services => Declared(services))
+                .Build())
+            {
+                await hinted.StartAsync(cancellationToken);
+                await hinted.StopAsync(cancellationToken);
+            }
+
+            Assert.Equal(
+                [.. before, ("degradation", "[\"identity-signed-in\"]", "[]", "[]")],
+                await StaleAsync());
+        }
+        finally
+        {
+            await WriteAsync(
+                "DELETE FROM identity.legal_document_versions WHERE document = 'privacy-notice';"
+                    + " DELETE FROM identity.settings WHERE key = '" + Settings.SessionSignedInDomain.Key + "';"
+                    + " DELETE FROM identity.events WHERE kind = 'AlertRaised'"
+                    + " AND payload->>'Scope' = 'notice.cookies'"
+                    + " AND payload->'Details'->>'added' = '[\"identity-signed-in\"]';",
                 cancellationToken);
         }
     }

@@ -21,7 +21,7 @@ public sealed class DeploymentCookiesTests
     private readonly ConfigurationInMemory _configuration = new();
 
     /// <summary>
-    /// PRIV-CONS-006a AC1, BFF-SESS-002 (D-203): the five cookies the library sets are
+    /// PRIV-CONS-006a AC1, BFF-SESS-002 (D-203): the five cookies the library always sets are
     /// listed at the longest each lasts, the session and CSRF cookies at
     /// <c>session.default.absolute</c>, the pre-authentication cookie ending with the
     /// browser's session, the trusted-device and remembered-browser cookies at their own
@@ -59,6 +59,33 @@ public sealed class DeploymentCookiesTests
     }
 
     /// <summary>
+    /// PRIV-CONS-006a, BFF-SESS-002 (D-279): the signed-in hint is listed while
+    /// <c>session.hint.domain</c> names a domain, strictly necessary, unreadable by a third
+    /// party and at <c>session.default.absolute</c>, the longest an auth session lasts, and
+    /// is not listed while the key names none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_006a_TheSignedInHintIsListedWhileTheKeyNamesADomainAsync()
+    {
+        var cookies = new DeploymentCookies(_configuration, new AuthorizationDeclarationBuilder().Build());
+
+        _configuration.Set(Settings.SessionDefaultAbsolute, TimeSpan.FromDays(180));
+
+        IReadOnlyList<NoticeCookie> unset = await ListedAsync(cookies);
+
+        _configuration.Set(Settings.SessionSignedInDomain, "example.test");
+
+        IReadOnlyList<NoticeCookie> set = await ListedAsync(cookies);
+
+        Assert.DoesNotContain(unset, cookie => cookie.Name == "identity-signed-in");
+        Assert.Equal(
+            new NoticeCookie("identity-signed-in", null, TimeSpan.FromDays(180), false),
+            Assert.Single(set, cookie => cookie.Name == "identity-signed-in"));
+        Assert.Equal(unset.Count + 1, set.Count);
+    }
+
+    /// <summary>
     /// PRIV-CONS-006a (D-203): a deployment that changed none of the three keys lists its
     /// cookies at the keys' defaults, and one declaring no cookie lists the library's
     /// five alone.
@@ -83,4 +110,8 @@ public sealed class DeploymentCookiesTests
             ],
             listed.Select(cookie => cookie.Lifetime));
     }
+
+    private static async Task<IReadOnlyList<NoticeCookie>> ListedAsync(DeploymentCookies cookies) =>
+        (await cookies.ReadAsync(TestContext.Current.CancellationToken))
+            .Match(listed => listed, error => throw new InvalidOperationException(error.Code.ToString()));
 }

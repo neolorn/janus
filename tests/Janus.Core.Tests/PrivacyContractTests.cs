@@ -91,12 +91,13 @@ public sealed class PrivacyContractTests
     }
 
     /// <summary>
-    /// PRIV-CONS-006a, BFF-SESS-002: the library sets five cookies, every one of them
-    /// strictly necessary to the service; a cookie the host sets is declared, and one
-    /// that is not necessary names the consent-based purpose it serves (D-203).
+    /// PRIV-CONS-006a, BFF-SESS-002: the library sets six cookies, every one of them
+    /// strictly necessary to the service, the signed-in hint among them where the
+    /// deployment keeps one (D-279); a cookie the host sets is declared, and one that is
+    /// not necessary names the consent-based purpose it serves (D-203).
     /// </summary>
     [Fact]
-    public void PRIV_CONS_006a_TheLibrarySetsOnlyTheFiveNecessaryCookies() =>
+    public void PRIV_CONS_006a_TheLibrarySetsOnlyItsSixNecessaryCookies() =>
         Assert.Equal(
             [
                 "__Host-identity-browser",
@@ -104,6 +105,7 @@ public sealed class PrivacyContractTests
                 "__Host-identity-device",
                 "__Host-identity-preauth",
                 "__Host-identity-session",
+                "identity-signed-in",
             ],
             Cookies());
 
@@ -120,9 +122,19 @@ public sealed class PrivacyContractTests
             .Order(StringComparer.Ordinal),
     ];
 
+    // A name with the prefix, wherever it is written, and the one cookie that carries a
+    // Domain and so no prefix, which is named where its constant is (BFF-SESS-006).
     private static IEnumerable<string> Named(string line)
     {
         const string opening = "\"__Host-";
+        const string unprefixed = "public const string Cookie = \"";
+
+        if (line.IndexOf(unprefixed, StringComparison.Ordinal) is int named and >= 0)
+        {
+            int start = named + unprefixed.Length;
+
+            yield return line[start..line.IndexOf('"', start)];
+        }
 
         for (int at = line.IndexOf(opening, StringComparison.Ordinal); at >= 0;
             at = line.IndexOf(opening, at + 1, StringComparison.Ordinal))

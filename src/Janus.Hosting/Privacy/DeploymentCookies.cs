@@ -17,13 +17,16 @@ namespace Janus.Hosting.Privacy;
 /// <param name="configuration">Where the lifetimes of the library's cookies are read.</param>
 /// <param name="declaration">The cookies the host declared.</param>
 /// <remarks>
-/// Implements PRIV-CONS-006a and BFF-SESS-002 (D-203). The library sets no cookie but
-/// the five BFF-SESS-002 names, so a host cookie under one of those names would be
-/// listed twice and set over the library's. Each library cookie is listed at the
-/// longest it lasts: the session and CSRF cookies at <c>session.default.absolute</c>,
-/// the pre-authentication cookie ending with the browser's session, the trusted-device
-/// cookie at <c>factor.trusteddevice.lifetime</c> and the remembered-browser cookie at
-/// <c>device.verification.lifetime</c>; no third party reads any of them.
+/// Implements PRIV-CONS-006a and BFF-SESS-002 (D-203, D-279). The library sets no cookie
+/// but the six BFF-SESS-002 names, so a host cookie under one of those names would be
+/// listed twice and set over the library's, whether or not the deployment sets the
+/// signed-in hint. Each library cookie is listed at the longest it lasts: the session and
+/// CSRF cookies at <c>session.default.absolute</c>, the pre-authentication cookie ending
+/// with the browser's session, the trusted-device cookie at
+/// <c>factor.trusteddevice.lifetime</c>, the remembered-browser cookie at
+/// <c>device.verification.lifetime</c>, and the signed-in hint, only while
+/// <c>session.hint.domain</c> names a domain, at <c>session.default.absolute</c>, the
+/// longest an auth session lasts; no third party reads any of them.
 /// </remarks>
 internal sealed class DeploymentCookies(IConfigurationStore configuration, AuthorizationDeclaration declaration)
     : IDeploymentCookies
@@ -38,6 +41,7 @@ internal sealed class DeploymentCookies(IConfigurationStore configuration, Autho
         BrowserCookies.Csrf,
         BrowserCookies.Device,
         BrowserCookies.Browser,
+        SignedInHint.Cookie,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
@@ -63,16 +67,23 @@ internal sealed class DeploymentCookies(IConfigurationStore configuration, Autho
             .ReadAsync(Settings.DeviceVerificationLifetime, cancellationToken)
             .ConfigureAwait(false);
 
+        // BFF-SESS-006 (D-279): the hint is set only while the key names a domain, read as
+        // the hint itself reads it, so the list names it exactly when it is set.
+        bool hinted = (await configuration
+                .ReadAsync(Settings.SessionSignedInDomain, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(domain => domain.Length > 0, _ => false);
+
         return session.Match(
             absolute => device.Match(
                 trusted => browser.Match(
-                    remembered => Result.Success(Listed(absolute, trusted, remembered)),
+                    remembered => Result.Success(Listed(absolute, trusted, remembered, hinted)),
                     Result.Failure<IReadOnlyList<NoticeCookie>>),
                 Result.Failure<IReadOnlyList<NoticeCookie>>),
             Result.Failure<IReadOnlyList<NoticeCookie>>);
     }
 
-    private IReadOnlyList<NoticeCookie> Listed(TimeSpan absolute, TimeSpan trusted, TimeSpan remembered) =>
+    private IReadOnlyList<NoticeCookie> Listed(TimeSpan absolute, TimeSpan trusted, TimeSpan remembered, bool hinted) =>
     [
         .. new[]
         {
@@ -82,6 +93,7 @@ internal sealed class DeploymentCookies(IConfigurationStore configuration, Autho
             new NoticeCookie(BrowserCookies.Device, Purpose: null, trusted, ThirdParty: false),
             new NoticeCookie(BrowserCookies.Browser, Purpose: null, remembered, ThirdParty: false),
         }
+            .Concat(hinted ? [new NoticeCookie(SignedInHint.Cookie, Purpose: null, absolute, ThirdParty: false)] : [])
             .Concat(declaration.Cookies.Select(cookie =>
                 new NoticeCookie(cookie.Name, cookie.Purpose, cookie.Lifetime, cookie.ThirdPartyReadable)))
             .OrderBy(cookie => cookie.Name, StringComparer.Ordinal),
