@@ -2834,8 +2834,8 @@ after, are ones the actor may give or hand out (AUTHZ-GRANT-005).
 
 `GET /admin/roles`: **200**
 `[ { name, permissions, handsOut, grantsMustEnd, includes: [ { role, enabled, leftOut: { permissions, handsOut } } ], effective: { permissions: [ { name, from } ], handsOut: [ { name, from } ] } } ]`,
-`from` being `own` or the roles an entry came through, nearest first; also open to
-`roleinclusion:manage` (AUTHZ-GRANT-006, D-278).
+`from` an array of the roles an entry came through, nearest first, empty for the role's
+own, each entry listed once (AUTHZ-GRANT-006); also open to `roleinclusion:manage` (D-278).
 `POST /admin/roles`
 `{ "name": "...", "permissions": [ "..." ], "handsOut": [ "..." ], "grantsMustEnd": false, "reason": "..." }`,
 `handsOut` optional and none where absent, `grantsMustEnd` optional and `false` where

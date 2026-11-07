@@ -21590,6 +21590,43 @@ must include another", is met; separation of duties stays deferred.
   inherited, so a request for approval reaches duty holders only.
 - **What stays.** AUTHZ-GRANT-005's self rule as written; `authz.handout.byholding`,
   judged on effective permissions.
+- **Amended 2026-11-07 (round H20, Q1): the public surface.** Readings as the round
+  proposed, save two names.
+  - Declaration: `AuthorizationDeclarationBuilder.Includes(string role,
+    IReadOnlyList<string>? leftOutPermissions = null, IReadOnlyList<string>? leftOutHandsOut =
+    null)` adds an inclusion to the role declared last, as `.GrantsMustEnd()` does, and
+    throws `InvalidOperationException` with no role before it. Two named lists, not one
+    list told apart by a colon, so a host reads what it leaves out. Carried on
+    `RoleDeclaration` as the init property `Includes`, of the new record
+    `RoleInclusionDeclaration(string Role, IReadOnlyList<string> LeftOutPermissions,
+    IReadOnlyList<string> LeftOutHandsOut)`, kept as written so a bad name fails startup
+    naming `role.<name>`. `.NotInherited()` marks the permission declared last with
+    `.Permission(...)` and throws with none before it; carried as
+    `AuthorizationDeclaration.NotInherited`, an init property of `IReadOnlyList<Permission>`.
+  - Administration: `IRoles.IncludeAsync(AccessContext, SessionId, RoleName role,
+    RoleInclusion inclusion, string reason, CancellationToken)` returning `Result<bool>`,
+    true where it created the inclusion (201) and false where it set one (204), and
+    `IRoles.RemoveInclusionAsync(AccessContext, SessionId, RoleName role, RoleName included,
+    string reason, CancellationToken)` returning `Result`; not "Exclude", which would read
+    as what an inclusion leaves out. The new record `RoleInclusion(RoleName Included, bool
+    Enabled, IReadOnlyList<Permission> LeftOutPermissions, IReadOnlyList<RoleName>
+    LeftOutHandsOut)`.
+  - The read: `DefinedRole` gains the init properties `Includes`
+    (`IReadOnlyList<RoleInclusion>`) and `Effective` (the new record
+    `EffectiveRole(IReadOnlyList<EffectiveEntry<Permission>> Permissions,
+    IReadOnlyList<EffectiveEntry<RoleName>> HandsOut)`), which `DefineAsync` ignores on
+    input; the new record `EffectiveEntry<T>(T Name, IReadOnlyList<RoleName> From)`, `From`
+    empty for the role's own. Over HTTP `from` is that list: an array of role names, nearest
+    first, empty for the role's own.
+  - The explanation: `ExplainedGrant` gains the init property `IncludedThrough`
+    (`IReadOnlyList<RoleName>`), empty for a role's own permission. It has no HTTP form.
+  - Events: an inclusion made, changed or removed raises `RoleChanged` with `change`
+    `changed` for the including role, since what that role carries changed; a host that
+    caches what roles carry learns of it as of any role change.
+- **Amended 2026-11-07 (round H20, Q2): one entry per permission.** An effective entry is
+  listed once. Its source is `own` where the role carries it itself; otherwise the shortest
+  path of inclusions it comes through, and among paths of one length the first by the
+  ordinal order of the role names along it. Reading A of the round's question.
 - **Round H20's criteria.** On PostgreSQL, a holder of a role including another, two
   levels deep, is admitted to what the lower roles carry save an action not inherited and
   what an inclusion leaves out; a change to the lowest role reaches them at the next

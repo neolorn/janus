@@ -434,9 +434,13 @@ AC2, AUTHZ-CACHE-001).
   removed (`authz.role.inuse`).
 - **Reading.** A role's read shows its inclusions with their states and what they leave
   out, and its effective permissions and `handsOut`, each with its source: `own`, or the
-  path of inclusions it came through, nearest first (`09` `/admin/roles`).
-- **Declared inclusions.** A declared role MAY name its inclusions (`.Includes(role,
-  leftOut)`, LIB-HOST-001). Each pair the deployment has not yet seeded is seeded at a
+  path of inclusions it came through, nearest first (`09` `/admin/roles`). Each permission
+  and each role of the `handsOut` is listed once: `own` where the role carries it itself,
+  otherwise the shortest path, and among paths of one length the first by the ordinal
+  order of the role names along it. A change to an inclusion raises `RoleChanged`
+  (`changed`) for the including role.
+- **Declared inclusions.** A declared role MAY name its inclusions (`.Includes(role, leftOutPermissions,
+  leftOutHandsOut)`, LIB-HOST-001). Each pair the deployment has not yet seeded is seeded at a
   start, under the start step and principal that seed declared roles (AUTHZ-GRANT-004),
   and a later change or removal by an administrator stands. A declared inclusion naming a
   role neither declared nor of `10` section 3, making a loop, or breaking the rule on
