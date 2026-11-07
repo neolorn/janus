@@ -385,7 +385,7 @@ public sealed class SignOnTests
         await using var deployment = new Deployment();
 
         await RegisteredAsync(deployment);
-        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+        await HintedAsync(deployment);
 
         var arriving = new Browser(deployment);
         Answer returned = await arriving.SendAsync("GET", Start + "&check=true");
@@ -410,7 +410,7 @@ public sealed class SignOnTests
         await using var deployment = new Deployment();
 
         await RegisteredAsync(deployment);
-        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+        await HintedAsync(deployment);
 
         Browser holder = await HolderAsync(deployment);
         var arriving = new Browser(deployment);
@@ -440,7 +440,7 @@ public sealed class SignOnTests
         await using var deployment = new Deployment();
 
         await RegisteredAsync(deployment);
-        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+        await HintedAsync(deployment);
 
         var arriving = new Browser(deployment);
         var left = new Browser(deployment);
@@ -471,7 +471,7 @@ public sealed class SignOnTests
         await using var deployment = new Deployment();
 
         Flow.Prepare(deployment);
-        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+        await HintedAsync(deployment);
 
         Browser holder = await Flow.SecuredAsync(deployment);
         Answer completed = await holder.SendAsync(
@@ -514,6 +514,40 @@ public sealed class SignOnTests
         Assert.False(written);
         Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
         Assert.DoesNotContain(ended.SetCookie, header => header.StartsWith(Hint + "=", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 (D-279, amended 2026-11-08): <c>session.hint.domain</c> is read at the
+    /// start, so a key set since the start writes no hint and leaves a check asking the
+    /// authentication application; once a start reads it, a sign-out removes the hint and
+    /// a check carrying none answers at once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_TheHintKeyTakesEffectAtTheNextStartAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+        await deployment.HintDomain.ReadAsync(deployment.Configuration, TestContext.Current.CancellationToken);
+        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+
+        Browser holder = await HolderAsync(deployment);
+        bool written = holder.Cookies.ContainsKey(Hint);
+        Answer asked = await new Browser(deployment).SendAsync("GET", Start + "&check=true");
+        int pushed = deployment.Provider.Carried.Count;
+
+        await deployment.HintDomain.ReadAsync(deployment.Configuration, TestContext.Current.CancellationToken);
+
+        Answer ended = await holder.SendAsync("POST", "/auth/logout");
+        Answer answered = await new Browser(deployment).SendAsync("GET", Start + "&check=true");
+
+        Assert.False(written);
+        Assert.Equal(1, pushed);
+        Assert.NotEqual(Page, Where(asked));
+        Assert.Contains(ended.SetCookie, header => header.StartsWith(Hint + "=;", StringComparison.Ordinal));
+        Assert.Equal(Page, Where(answered));
+        Assert.Equal(pushed, deployment.Provider.Carried.Count);
     }
 
     /// <summary>
@@ -2156,6 +2190,14 @@ public sealed class SignOnTests
         Flow.Prepare(deployment);
 
         return await Flow.SignedInAsync(deployment);
+    }
+
+    // BFF-SESS-006 (D-279): the key set, and read as the next start reads it.
+    private static async Task HintedAsync(Deployment deployment)
+    {
+        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+
+        await deployment.HintDomain.ReadAsync(deployment.Configuration, TestContext.Current.CancellationToken);
     }
 
     private static async Task RegisteredAsync(Deployment deployment) =>

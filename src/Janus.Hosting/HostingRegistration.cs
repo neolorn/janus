@@ -161,7 +161,8 @@ public static class HostingRegistration
         // BFF-OWN-001: the browser boundary is the library's, so what issues a cookie
         // and what validates a token are registered here and not left to the host.
         services.AddSingleton(new BrowserSessionCookies(application));
-        services.AddScoped<SignedInHint>();
+        services.AddSingleton<SignedInHintDomain>();
+        services.AddSingleton<SignedInHint>();
         services.AddScoped<Concealment>();
         services.AddScoped<ErrorTranslation>();
         services.AddScoped<MalformedRequest>();

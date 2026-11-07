@@ -593,8 +593,8 @@ public sealed class BrowserProfileTests : IDisposable
     /// given less, and none is taken out of a stage by it. The one stage that
     /// reads a key is the flood limit of stage 4, which reads its two limits and nothing
     /// else (BFF-ORDER-001), runs before the token is checked and either refuses the
-    /// request or hands it on to every stage after it. The signed-in hint reads the domain
-    /// it is kept on and is no stage (BFF-SESS-006, D-279).
+    /// request or hands it on to every stage after it. The signed-in hint's domain is read
+    /// once, at the start, and is no stage (BFF-SESS-006, D-279).
     /// </summary>
     [Fact]
     public void AUTH_SESS_007_AC2_NoEndpointCanOptOut()
@@ -616,7 +616,7 @@ public sealed class BrowserProfileTests : IDisposable
         Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);
 
         Assert.Equal(
-            ["FetchRateLimiting.cs", "SignedInHint.cs", "SourceRateLimiting.cs"],
+            ["FetchRateLimiting.cs", "SignedInHintDomain.cs", "SourceRateLimiting.cs"],
             Reading("IConfigurationStore", "Settings."));
         Assert.Equal(
             ["Settings.AbuseSourceRateLimit", "Settings.AbuseSourceSiteLimit"],
@@ -1434,7 +1434,8 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<TimeProvider>(_clock);
         services.AddSingleton(_randomness);
         services.AddSingleton(new BrowserSessionCookies(ApplicationKind.Public));
-        services.AddScoped<SignedInHint>();
+        services.AddSingleton<SignedInHintDomain>();
+        services.AddSingleton<SignedInHint>();
         services.AddSingleton<ILocationResolver, LocationResolverInMemory>();
         services.AddScoped<PolicyResolution>();
         services.AddSingleton<IAdministrativeOrganization>(new AdministrativeOrganizationInMemory());

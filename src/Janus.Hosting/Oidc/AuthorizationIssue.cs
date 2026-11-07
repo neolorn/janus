@@ -182,7 +182,7 @@ internal sealed class AuthorizationIssue(
         // behind, so the next check from this browser answers at once.
         if (silent && context.Transaction.GetHttpRequest() is HttpRequest asked)
         {
-            await hint.ClearedAsync(asked.HttpContext.Response, cancellationToken).ConfigureAwait(false);
+            hint.Clear(asked.HttpContext.Response);
         }
 
         // `login_required` answers a silent request and nothing else: it is what

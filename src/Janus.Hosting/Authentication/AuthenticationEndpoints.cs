@@ -591,7 +591,7 @@ internal static class AuthenticationEndpoints
         cookies.Clear(context.Response);
 
         // BFF-SESS-006 (D-279): the auth session ended by sign-out takes its hint with it.
-        await hint.ClearedAsync(context.Response, cancellationToken).ConfigureAwait(false);
+        hint.Clear(context.Response);
 
         return Nothing;
     }
@@ -770,10 +770,7 @@ internal static class AuthenticationEndpoints
 
             // BFF-SESS-006 (D-279): the signed-in hint stands beside the auth session
             // just created, on the parent domain the deployment names.
-            await context.RequestServices
-                .GetRequiredService<SignedInHint>()
-                .WrittenAsync(context.Response, issued, cancellationToken)
-                .ConfigureAwait(false);
+            context.RequestServices.GetRequiredService<SignedInHint>().Write(context.Response, issued);
         }
 
         DateTimeOffset now = time.GetUtcNow();

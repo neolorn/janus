@@ -52,7 +52,9 @@ against the public contract of LIB-API-001.
   at sign-out or when a check finds no auth session, and a check from a browser
   carrying no such cookie returns at once as a guest, with no round trip. While the key
   names a domain, the privacy notice's cookie list carries `identity-signed-in` at
-  `session.default.absolute`, and a host may not declare a cookie of that name.
+  `session.default.absolute`, and a host may not declare a cookie of that name. The key
+  is read at the start, so a change through `configure` takes effect at the next start,
+  which raises a privacy notice that does not list the hint.
 
 ## [1.0.0-rc.9] - 2026-11-06
 

@@ -251,9 +251,9 @@ public sealed class BrowserCookieTests : IDisposable
     /// BFF-SESS-002 AC2: no configuration key weakens an attribute, there being no
     /// key read anywhere the attributes are decided. The files of the boundary that read
     /// a key are the flood limit of stage 4 and the limit on fetches of the provider's
-    /// documents (D-241), neither of which writes a cookie, and the signed-in hint, which
-    /// reads only the parent domain BFF-SESS-006 keeps it on (D-279) and fixes every other
-    /// attribute.
+    /// documents (D-241), neither of which writes a cookie, and the domain of the signed-in
+    /// hint, read at the start, which is the one attribute BFF-SESS-006 takes from a key
+    /// (D-279); the hint itself reads no key and fixes every other attribute.
     /// </summary>
     [Fact]
     public void BFF_SESS_002_AC2_NoConfigurationKeyWeakensAnAttribute()
@@ -261,7 +261,7 @@ public sealed class BrowserCookieTests : IDisposable
         string hint = Repository.Source("SignedInHint");
 
         Assert.Equal(
-            ["FetchRateLimiting.cs", "SignedInHint.cs", "SourceRateLimiting.cs"],
+            ["FetchRateLimiting.cs", "SignedInHintDomain.cs", "SourceRateLimiting.cs"],
             Repository
                 .Sources()
                 .Where(file => File.ReadLines(file).Any(line =>
@@ -273,7 +273,9 @@ public sealed class BrowserCookieTests : IDisposable
         Assert.DoesNotContain("Cookie", Repository.Source("SourceRateLimiting"), StringComparison.Ordinal);
         Assert.Equal(
             ["Settings.SessionSignedInDomain"],
-            System.Text.RegularExpressions.Regex.Matches(hint, @"Settings\.\w+").Select(read => read.Value));
+            System.Text.RegularExpressions.Regex
+                .Matches(Repository.Source("SignedInHintDomain"), @"Settings\.\w+")
+                .Select(read => read.Value));
         Assert.All(
             ["Secure = true,", "HttpOnly = true,", "SameSite = SameSiteMode.Lax,"],
             fixedAttribute => Assert.Contains(fixedAttribute, hint, StringComparison.Ordinal));

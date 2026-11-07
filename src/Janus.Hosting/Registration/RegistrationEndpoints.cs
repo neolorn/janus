@@ -498,10 +498,8 @@ internal static class RegistrationEndpoints
 
         // BFF-SESS-006 (D-279): the signed-in hint stands beside the auth session the
         // registration just created.
-        await context.RequestServices
-            .GetRequiredService<SignedInHint>()
-            .WrittenAsync(context.Response, completed.Session, cancellationToken)
-            .ConfigureAwait(false);
+        context.RequestServices.GetRequiredService<SignedInHint>().Write(context.Response, completed.Session);
+
         cookies.Remembered(
             context.Response,
             completed.Browser,

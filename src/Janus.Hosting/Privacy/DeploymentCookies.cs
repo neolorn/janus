@@ -16,6 +16,7 @@ namespace Janus.Hosting.Privacy;
 /// </summary>
 /// <param name="configuration">Where the lifetimes of the library's cookies are read.</param>
 /// <param name="declaration">The cookies the host declared.</param>
+/// <param name="hint">Which domain the start read the signed-in hint is kept on, where one is.</param>
 /// <remarks>
 /// Implements PRIV-CONS-006a and BFF-SESS-002 (D-203, D-279). The library sets no cookie
 /// but the six BFF-SESS-002 names, so a host cookie under one of those names would be
@@ -25,10 +26,14 @@ namespace Janus.Hosting.Privacy;
 /// with the browser's session, the trusted-device cookie at
 /// <c>factor.trusteddevice.lifetime</c>, the remembered-browser cookie at
 /// <c>device.verification.lifetime</c>, and the signed-in hint, only while
-/// <c>session.hint.domain</c> names a domain, at <c>session.default.absolute</c>, the
-/// longest an auth session lasts; no third party reads any of them.
+/// <c>session.hint.domain</c> named a domain at the start, at
+/// <c>session.default.absolute</c>, the longest an auth session lasts; no third party
+/// reads any of them.
 /// </remarks>
-internal sealed class DeploymentCookies(IConfigurationStore configuration, AuthorizationDeclaration declaration)
+internal sealed class DeploymentCookies(
+    IConfigurationStore configuration,
+    AuthorizationDeclaration declaration,
+    SignedInHintDomain hint)
     : IDeploymentCookies
 {
     /// <summary>
@@ -67,12 +72,10 @@ internal sealed class DeploymentCookies(IConfigurationStore configuration, Autho
             .ReadAsync(Settings.DeviceVerificationLifetime, cancellationToken)
             .ConfigureAwait(false);
 
-        // BFF-SESS-006 (D-279): the hint is set only while the key names a domain, read as
-        // the hint itself reads it, so the list names it exactly when it is set.
-        bool hinted = (await configuration
-                .ReadAsync(Settings.SessionSignedInDomain, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(domain => domain.Length > 0, _ => false);
+        // BFF-SESS-006 (D-279): the hint is set only while the domain the start read is
+        // one, and the list answers to that same value, so it names the hint exactly when
+        // it is set.
+        bool hinted = hint.Domain is not null;
 
         return session.Match(
             absolute => device.Match(

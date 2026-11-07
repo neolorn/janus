@@ -167,7 +167,7 @@ internal sealed class SignOn(
         // it was going at once, with no push.
         if (check
             && !SignedInHint.Carried(context.Request)
-            && await hint.DomainAsync(cancellationToken).ConfigureAwait(false) is not null)
+            && hint.Domain is not null)
         {
             return Results.Redirect(destination);
         }

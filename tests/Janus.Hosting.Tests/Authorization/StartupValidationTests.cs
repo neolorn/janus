@@ -455,6 +455,101 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// BFF-SESS-006, PRIV-CONS-006a (D-279, amended 2026-11-08): a <c>configure</c> of
+    /// <c>session.hint.domain</c> changes neither the hint nor the cookie list of the
+    /// running deployment, and raises nothing; after a restart both follow the new value,
+    /// and the start's comparison raises the notice that does not list the hint.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_AConfigureOfTheHintKeyTakesEffectAtTheNextStartAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await NoticedAsync(cancellationToken);
+
+        try
+        {
+            IReadOnlyList<(string?, string?, string?, string?)> before;
+            (string? Domain, IReadOnlyList<NoticeCookie> Listed) running;
+            IReadOnlyList<(string?, string?, string?, string?)> unraised;
+
+            using (IHost deployment = new HostBuilder()
+                .ConfigureServices(services => Declared(services))
+                .Build())
+            {
+                await deployment.StartAsync(cancellationToken);
+
+                before = await StaleAsync();
+
+                await using (AsyncServiceScope scope = deployment.Services.CreateAsyncScope())
+                {
+                    (await ActivatorUtilities
+                            .CreateInstance<Janus.Authentication.Configuration.ProtectedConfiguration>(scope.ServiceProvider)
+                            .ChangeAsync(
+                                [new Janus.Authentication.Configuration.ProtectedSettingValue<string>(Settings.SessionSignedInDomain, "example.test")],
+                                "The workshop's applications share a parent domain.",
+                                cancellationToken))
+                        .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                }
+
+                running = await HintedAsync(deployment, cancellationToken);
+                unraised = await StaleAsync();
+
+                await deployment.StopAsync(cancellationToken);
+            }
+
+            (string? Domain, IReadOnlyList<NoticeCookie> Listed) restarted;
+
+            using (IHost deployment = new HostBuilder()
+                .ConfigureServices(services => Declared(services))
+                .Build())
+            {
+                await deployment.StartAsync(cancellationToken);
+
+                restarted = await HintedAsync(deployment, cancellationToken);
+
+                await deployment.StopAsync(cancellationToken);
+            }
+
+            Assert.Null(running.Domain);
+            Assert.DoesNotContain(running.Listed, cookie => cookie.Name == SignedInHint.Cookie);
+            Assert.Equal(before, unraised);
+            Assert.Equal("example.test", restarted.Domain);
+            Assert.Contains(restarted.Listed, cookie => cookie.Name == SignedInHint.Cookie);
+            Assert.Equal(
+                [.. before, ("degradation", "[\"identity-signed-in\"]", "[]", "[]")],
+                await StaleAsync());
+        }
+        finally
+        {
+            await WriteAsync(
+                "DELETE FROM identity.legal_document_versions WHERE document = 'privacy-notice';"
+                    + " DELETE FROM identity.settings WHERE key = '" + Settings.SessionSignedInDomain.Key + "';"
+                    + " DELETE FROM identity.events WHERE kind = 'AlertRaised'"
+                    + " AND payload->>'Scope' = 'notice.cookies'"
+                    + " AND payload->'Details'->>'added' = '[\"identity-signed-in\"]';",
+                cancellationToken);
+        }
+    }
+
+    // BFF-SESS-006 (D-279): the domain the hint is written on, and the cookies the
+    // deployment lists, as the running deployment answers them.
+    private static async Task<(string? Domain, IReadOnlyList<NoticeCookie> Listed)> HintedAsync(
+        IHost deployment,
+        CancellationToken cancellationToken)
+    {
+        await using AsyncServiceScope scope = deployment.Services.CreateAsyncScope();
+
+        IReadOnlyList<NoticeCookie> listed = (await scope.ServiceProvider
+                .GetRequiredService<Janus.Privacy.Documents.IDeploymentCookies>()
+                .ReadAsync(cancellationToken))
+            .Match(cookies => cookies, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        return (scope.ServiceProvider.GetRequiredService<SignedInHint>().Domain, listed);
+    }
+
+    /// <summary>
     /// INT-SMS-003 AC1, D-203: a purpose handler's name fills the <c>outstanding</c>
     /// place as a subscriber's does, so one registered under a name outside the rule
     /// stops the deployment as it starts, naming it and its member; one inside the rule

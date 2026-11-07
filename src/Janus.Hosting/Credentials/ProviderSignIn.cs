@@ -758,7 +758,7 @@ internal sealed class ProviderSignIn(
 
             // BFF-SESS-006 (D-279): the signed-in hint stands beside the auth session
             // just created.
-            await hint.WrittenAsync(context.Response, issued, cancellationToken).ConfigureAwait(false);
+            hint.Write(context.Response, issued);
 
             // AUTH-SESS-012 (D-226): the authorization the browser had waiting goes to
             // the record, where GET /auth/session finds it for the page landed on.

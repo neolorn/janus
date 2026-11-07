@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Janus.Hosting.Privacy;
 using Janus.Privacy.Tests;
 using Xunit;
@@ -19,6 +20,8 @@ namespace Janus.Hosting.Tests.Privacy;
 public sealed class DeploymentCookiesTests
 {
     private readonly ConfigurationInMemory _configuration = new();
+
+    private readonly SignedInHintDomain _hint = new();
 
     /// <summary>
     /// PRIV-CONS-006a AC1, BFF-SESS-002 (D-203): the five cookies the library always sets are
@@ -41,7 +44,7 @@ public sealed class DeploymentCookiesTests
             .Cookie("host-tab", lifetime: null, thirdPartyReadable: false, purpose: null)
             .Build();
 
-        IReadOnlyList<NoticeCookie> listed = (await new DeploymentCookies(_configuration, declaration)
+        IReadOnlyList<NoticeCookie> listed = (await new DeploymentCookies(_configuration, declaration, _hint)
                 .ReadAsync(TestContext.Current.CancellationToken))
             .Match(cookies => cookies, error => throw new InvalidOperationException(error.Code.ToString()));
 
@@ -60,25 +63,32 @@ public sealed class DeploymentCookiesTests
 
     /// <summary>
     /// PRIV-CONS-006a, BFF-SESS-002 (D-279): the signed-in hint is listed while
-    /// <c>session.hint.domain</c> names a domain, strictly necessary, unreadable by a third
-    /// party and at <c>session.default.absolute</c>, the longest an auth session lasts, and
-    /// is not listed while the key names none.
+    /// <c>session.hint.domain</c> named a domain at the start, strictly necessary,
+    /// unreadable by a third party and at <c>session.default.absolute</c>, the longest an
+    /// auth session lasts; the key set since the start leaves the list as it was until a
+    /// start reads it again.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_CONS_006a_TheSignedInHintIsListedWhileTheKeyNamesADomainAsync()
+    public async Task PRIV_CONS_006a_TheSignedInHintIsListedWhileTheStartReadADomainAsync()
     {
-        var cookies = new DeploymentCookies(_configuration, new AuthorizationDeclarationBuilder().Build());
+        var cookies = new DeploymentCookies(_configuration, new AuthorizationDeclarationBuilder().Build(), _hint);
 
         _configuration.Set(Settings.SessionDefaultAbsolute, TimeSpan.FromDays(180));
+        await _hint.ReadAsync(_configuration, TestContext.Current.CancellationToken);
 
         IReadOnlyList<NoticeCookie> unset = await ListedAsync(cookies);
 
         _configuration.Set(Settings.SessionSignedInDomain, "example.test");
 
+        IReadOnlyList<NoticeCookie> unstarted = await ListedAsync(cookies);
+
+        await _hint.ReadAsync(_configuration, TestContext.Current.CancellationToken);
+
         IReadOnlyList<NoticeCookie> set = await ListedAsync(cookies);
 
         Assert.DoesNotContain(unset, cookie => cookie.Name == "identity-signed-in");
+        Assert.Equal(unset, unstarted);
         Assert.Equal(
             new NoticeCookie("identity-signed-in", null, TimeSpan.FromDays(180), false),
             Assert.Single(set, cookie => cookie.Name == "identity-signed-in"));
@@ -96,7 +106,8 @@ public sealed class DeploymentCookiesTests
     {
         IReadOnlyList<NoticeCookie> listed = (await new DeploymentCookies(
                     _configuration,
-                    new AuthorizationDeclarationBuilder().Build())
+                    new AuthorizationDeclarationBuilder().Build(),
+                    _hint)
                 .ReadAsync(TestContext.Current.CancellationToken))
             .Match(cookies => cookies, error => throw new InvalidOperationException(error.Code.ToString()));
 

@@ -110,7 +110,7 @@ internal static class BreakGlassEndpoints
         cookies.ClearFirstContact(context.Response);
 
         // BFF-SESS-006 (D-279): the signed-in hint stands beside the session opened.
-        await hint.WrittenAsync(context.Response, issued, cancellationToken).ConfigureAwait(false);
+        hint.Write(context.Response, issued);
 
         return TypedResults.Json(
             new BreakGlassOpenedView(
