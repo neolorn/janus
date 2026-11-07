@@ -34,6 +34,7 @@ public sealed class AuthorizationDeclarationBuilder
     private readonly List<CookieDeclaration> _cookies = [];
     private readonly List<RoleDeclaration> _roles = [];
     private readonly List<JobDeclaration> _jobs = [];
+    private readonly List<Permission> _notInherited = [];
 
     /// <summary>
     /// Declares one of the host's kinds of thing.
@@ -136,6 +137,29 @@ public sealed class AuthorizationDeclarationBuilder
         if (reading)
         {
             _readingActions.Add(parsed.Action);
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Makes the permission declared last a duty, which no inclusion of one role in
+    /// another passes on: work routed to whoever holds it, such as being asked to approve.
+    /// A role that names it directly still admits it.
+    /// </summary>
+    /// <returns>This builder.</returns>
+    /// <exception cref="InvalidOperationException">No permission is declared before it.</exception>
+    /// <remarks>Implements AUTHZ-GRANT-006 and LIB-HOST-001 (D-278).</remarks>
+    public AuthorizationDeclarationBuilder NotInherited()
+    {
+        if (_permissions.Count is 0)
+        {
+            throw new InvalidOperationException("No permission is declared for it to be not inherited.");
+        }
+
+        if (!_notInherited.Contains(_permissions[^1]))
+        {
+            _notInherited.Add(_permissions[^1]);
         }
 
         return this;
@@ -444,6 +468,56 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Makes the role declared last include another: a grant of it admits what the
+    /// included role carries and lets its holders hand out what that role hands out,
+    /// save the actions not inherited and what the inclusion leaves out.
+    /// </summary>
+    /// <param name="role">
+    /// The role included, one the host declares or one chapter 10 section 3 seeds.
+    /// </param>
+    /// <param name="leftOutPermissions">
+    /// The permissions the inclusion does not pass on, each as <c>resource:action</c>;
+    /// none where absent.
+    /// </param>
+    /// <param name="leftOutHandsOut">
+    /// The roles of the included role's <c>handsOut</c> the inclusion does not pass on;
+    /// none where absent.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The role is absent.</exception>
+    /// <exception cref="InvalidOperationException">No role is declared before it.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-006 and LIB-HOST-001 (D-278). Each inclusion is seeded once at
+    /// a start, and from then on is the administrators' to change. One naming a role
+    /// neither declared nor seeded by bootstrap, making a loop, or including a role whose
+    /// grants must end in one whose grants need not end is refused as the deployment
+    /// starts.
+    /// </remarks>
+    public AuthorizationDeclarationBuilder Includes(
+        string role,
+        IReadOnlyList<string>? leftOutPermissions = null,
+        IReadOnlyList<string>? leftOutHandsOut = null)
+    {
+        ArgumentNullException.ThrowIfNull(role);
+
+        if (_roles.Count is 0)
+        {
+            throw new InvalidOperationException("No role is declared for it to include another.");
+        }
+
+        _roles[^1] = _roles[^1] with
+        {
+            Includes =
+            [
+                .. _roles[^1].Includes,
+                new RoleInclusionDeclaration(role, [.. leftOutPermissions ?? []], [.. leftOutHandsOut ?? []]),
+            ],
+        };
+
+        return this;
+    }
+
+    /// <summary>
     /// Declares one of the host's background jobs. Its principal is
     /// <see cref="SystemPrincipal.ForOrganization"/> naming it, which acts for one
     /// organization.
@@ -505,5 +579,6 @@ public sealed class AuthorizationDeclarationBuilder
             AdmitsWhoMay = _admitsWhoMay.ToDictionary(
                 admitting => admitting.Key,
                 admitting => (IReadOnlyList<Permission>)[.. admitting.Value]),
+            NotInherited = [.. _notInherited],
         };
 }

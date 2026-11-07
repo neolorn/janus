@@ -28,4 +28,11 @@ public sealed record RoleDeclaration(
     string Name,
     IReadOnlyList<Permission> Permissions,
     IReadOnlyList<string> HandsOut,
-    bool GrantsMustEnd = false);
+    bool GrantsMustEnd = false)
+{
+    /// <summary>
+    /// The roles it includes, each seeded once at a start (AUTHZ-GRANT-006, D-278), none
+    /// where empty.
+    /// </summary>
+    public IReadOnlyList<RoleInclusionDeclaration> Includes { get; init; } = [];
+}

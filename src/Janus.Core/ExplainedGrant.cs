@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Janus.Core;
 
@@ -26,4 +27,11 @@ public sealed record ExplainedGrant(
     Guid SubjectId,
     RoleName Role,
     bool Deny,
-    ResourceReference? InheritedFrom);
+    ResourceReference? InheritedFrom)
+{
+    /// <summary>
+    /// The roles the permission came through from the grant's role, nearest first, and none
+    /// where the role carries it itself (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public IReadOnlyList<RoleName> IncludedThrough { get; init; } = [];
+}

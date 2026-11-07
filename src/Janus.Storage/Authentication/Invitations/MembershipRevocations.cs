@@ -74,7 +74,7 @@ internal sealed class MembershipRevocations(
                 .Distinct()
                 .OrderBy(name => name.ToString(), StringComparer.Ordinal))
             {
-                Role read = await roles.FindAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
+                Role read = await roles.EffectiveAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
 
                 touched.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut], read.GrantsMustEnd));
             }

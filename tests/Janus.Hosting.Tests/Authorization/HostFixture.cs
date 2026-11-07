@@ -211,6 +211,15 @@ public sealed class HostFixture : IAsyncLifetime
         ring.StartingAsync(CancellationToken.None).GetAwaiter().GetResult();
         ring.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
 
+        // AUTHZ-GRANT-006 (D-278): the start step writes the actions the host declares not
+        // inherited, which the view every decision reads passes on through no inclusion.
+        deployed.GetServices<IHostedService>()
+            .OfType<DeclaredRoleStartService>()
+            .Single()
+            .StartAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
         return deployed;
     }
 
@@ -289,6 +298,9 @@ public sealed class HostFixture : IAsyncLifetime
             .Permission(HostPermissions.Export.ToString())
             .Permission(HostPermissions.Retain.ToString())
             .Permission(HostPermissions.Report.ToString())
+            // AUTHZ-GRANT-006 AC2 (D-278): a duty no inclusion passes on.
+            .Permission(HostPermissions.Approve.ToString())
+            .NotInherited()
             .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
             .ServesPurpose(HostPermissions.Recommend.ToString(), "recommendations")
             .ServesPurpose(HostPermissions.Retain.ToString(), "keeping the books")

@@ -548,6 +548,18 @@ public static class AuditActions
     public static AuditAction RoleDefined { get; } = AuditAction.Parse("authz.role.defined");
 
     /// <summary>
+    /// A role's inclusion of another was made or changed.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-006, D-278.</remarks>
+    public static AuditAction RoleIncluded { get; } = AuditAction.Parse("authz.role.included");
+
+    /// <summary>
+    /// A role's inclusion of another was removed.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-006, D-278.</remarks>
+    public static AuditAction RoleInclusionRemoved { get; } = AuditAction.Parse("authz.role.inclusionremoved");
+
+    /// <summary>
     /// A role nothing named was removed.
     /// </summary>
     /// <remarks>Implements AUTHZ-GRANT-004 and OPS-CFG-007.</remarks>

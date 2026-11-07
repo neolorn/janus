@@ -20,6 +20,16 @@ internal interface IRoleStore
     ValueTask<Role?> FindAsync(RoleName name, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one role as a grant of it admits: its effective permissions and
+    /// <c>handsOut</c>, through its inclusions, as the view a grant is read through
+    /// follows them (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    /// <param name="name">Which role.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The role so read, or nothing where no such row exists.</returns>
+    ValueTask<Role?> EffectiveAsync(RoleName name, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads one role under a lock on its row held until the operation's transaction
     /// ends, so a definition, a removal or a grant decided on what it allows cannot race
     /// another (CONV-DESIGN-003).

@@ -1739,6 +1739,14 @@ GET /admin/roles
       [].permissions[]: string
       [].handsOut[]: string
       [].grantsMustEnd: boolean
+      [].includes[].role: string
+      [].includes[].enabled: boolean
+      [].includes[].leftOut.permissions[]: string
+      [].includes[].leftOut.handsOut[]: string
+      [].effective.permissions[].name: string
+      [].effective.permissions[].from[]: string
+      [].effective.handsOut[].name: string
+      [].effective.handsOut[].from[]: string
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
 POST /admin/roles
@@ -1753,6 +1761,7 @@ POST /admin/roles
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
+  409 authz.role.inclusionmustend
   422 authz.grant.unresolved
 DELETE /admin/roles/{name}
   request application/json
@@ -1763,6 +1772,27 @@ DELETE /admin/roles/{name}
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
   404 authz.role.notfound
   409 authz.role.inuse
+DELETE /admin/roles/{name}/inclusions/{included}
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
+  404 authz.role.notfound
+PUT /admin/roles/{name}/inclusions/{included}
+  request application/json
+    enabled: boolean?
+    leftOut.permissions[]: string
+    leftOut.handsOut[]: string
+    reason: string
+  201
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
+  404 authz.role.notfound
+  409 authz.role.inclusionloop authz.role.inclusionmustend
 GET /admin/ropa
   200
     application/json

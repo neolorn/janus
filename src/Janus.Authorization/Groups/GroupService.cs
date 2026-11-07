@@ -604,11 +604,11 @@ internal sealed class GroupService(
         return false;
     }
 
-    // AUTHZ-GRANT-005 (D-212): a change of members hands out every role the group
-    // reaches, each at the scope of the grant reaching it. Adding the actor, or a group
-    // holding it, widens the actor's own access whatever the group reaches, and so does
-    // removing either from a group that reaches a deny. A role nobody can read hands
-    // out what it is named.
+    // AUTHZ-GRANT-005 (D-212, D-278): a change of members hands out every role the group
+    // reaches, each at the scope of the grant reaching it and judged on what it carries
+    // through its inclusions. Adding the actor, or a group holding it, widens the
+    // actor's own access whatever the group reaches, and so does removing either from a
+    // group that reaches a deny. A role nobody can read hands out what it is named.
     private async ValueTask<Error?> HandOutRefusedAsync(
         AccessContext context,
         Group group,
@@ -630,7 +630,7 @@ internal sealed class GroupService(
                 .Distinct()
                 .OrderBy(name => name.ToString(), StringComparer.Ordinal))
             {
-                Role read = await roles.FindAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
+                Role read = await roles.EffectiveAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
 
                 handed.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut], read.GrantsMustEnd));
             }

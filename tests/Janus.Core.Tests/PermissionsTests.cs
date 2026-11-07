@@ -38,6 +38,7 @@ public sealed class PermissionsTests
         "restriction:edit",
         "restriction:grant",
         "role:manage",
+        "roleinclusion:manage",
         "ropa:read",
         "session:revoke",
         "session:revoke-account",

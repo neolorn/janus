@@ -29,6 +29,11 @@ internal sealed class RoleAuditInMemory : IRoleAudit
     /// </summary>
     public List<(DefinedRole After, SystemPrincipal Principal)> Principals { get; } = [];
 
+    /// <summary>
+    /// Every change to an inclusion recorded, oldest first.
+    /// </summary>
+    public List<InclusionChange> Inclusions { get; } = [];
+
     /// <inheritdoc/>
     public ValueTask DefinedAsync(
         DefinedRole? before,
@@ -80,6 +85,94 @@ internal sealed class RoleAuditInMemory : IRoleAudit
         return ValueTask.CompletedTask;
     }
 
+
+    /// <inheritdoc/>
+    public ValueTask IncludedAsync(
+        RoleName role,
+        RoleInclusion? before,
+        RoleInclusion after,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(after);
+
+        Inclusions.Add(new InclusionChange(AuditActions.RoleIncluded, role, after.Included, before, after, reason, actor, at));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask IncludedAsync(
+        RoleName role,
+        RoleInclusion after,
+        SystemPrincipal principal,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(after);
+        ArgumentNullException.ThrowIfNull(principal);
+
+        Inclusions.Add(new InclusionChange(
+            AuditActions.RoleIncluded,
+            role,
+            after.Included,
+            Before: null,
+            after,
+            principal.Reason,
+            Actor: null,
+            at));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask InclusionRemovedAsync(
+        RoleName role,
+        RoleInclusion before,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        Inclusions.Add(new InclusionChange(
+            AuditActions.RoleInclusionRemoved,
+            role,
+            before.Included,
+            before,
+            After: null,
+            reason,
+            actor,
+            at));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// One change to an inclusion as it was written down.
+    /// </summary>
+    /// <param name="Action">Whether the inclusion was made or changed, or removed.</param>
+    /// <param name="Role">The including role.</param>
+    /// <param name="Included">The role included.</param>
+    /// <param name="Before">The inclusion as it stood, or nothing where it was new.</param>
+    /// <param name="After">The inclusion as it stands, or nothing where it was removed.</param>
+    /// <param name="Reason">Why.</param>
+    /// <param name="Actor">Who, or nothing where a system principal made it.</param>
+    /// <param name="At">When.</param>
+    internal sealed record InclusionChange(
+        AuditAction Action,
+        RoleName Role,
+        RoleName Included,
+        RoleInclusion? Before,
+        RoleInclusion? After,
+        string Reason,
+        SubjectId? Actor,
+        DateTimeOffset At);
     /// <summary>
     /// One change as it was written down.
     /// </summary>

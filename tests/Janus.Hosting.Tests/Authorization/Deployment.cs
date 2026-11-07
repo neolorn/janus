@@ -722,6 +722,40 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Makes a role include another, as an administrator's inclusion leaves its row
+    /// (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    /// <param name="role">The including role.</param>
+    /// <param name="included">The role it includes.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <param name="enabled">Whether the inclusion admits.</param>
+    /// <param name="leftOut">The permissions it does not pass on, none where absent.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task IncludesAsync(
+        RoleName role,
+        RoleName included,
+        CancellationToken cancellationToken,
+        bool enabled = true,
+        IReadOnlyList<Permission>? leftOut = null)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO identity.role_inclusions (role, included, enabled, left_out_permissions)
+            VALUES (@role, @included, @enabled, @leftOut);
+            """,
+            new
+            {
+                role = role.ToString(),
+                included = included.ToString(),
+                enabled,
+                leftOut = (leftOut ?? []).Select(permission => permission.ToString()).ToArray(),
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
     /// Writes the grant a materialised derivation keeps for a subject.
     /// </summary>
     /// <param name="subject">Who holds it.</param>

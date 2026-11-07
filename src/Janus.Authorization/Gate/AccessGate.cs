@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Model;
 using Janus.Authorization.Resources;
+using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,12 +37,13 @@ namespace Janus.Authorization.Gate;
 /// <param name="administrative">Which organization a support role resolves a refusal in.</param>
 /// <param name="suspensions">Whether an organization a job acts for has its deletion requested or is erased.</param>
 /// <param name="configuration">Whether a role is handed out by holding what it carries.</param>
+/// <param name="graphs">Which inclusions a permission came through, for the explanation that names them.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
 /// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-GATE-007, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-001,
-/// AUTHZ-CONCEAL-004, AUTHZ-DERIVE-007, AUTHZ-GRANT-005, PRIV-SENS-002, PRIV-SENS-002a,
-/// OPS-ALERT-006, IDN-PRIN-001 and LIB-SEAM-001.
+/// AUTHZ-CONCEAL-004, AUTHZ-DERIVE-007, AUTHZ-GRANT-005, AUTHZ-GRANT-006, PRIV-SENS-002,
+/// PRIV-SENS-002a, OPS-ALERT-006, IDN-PRIN-001 and LIB-SEAM-001.
 /// A check and a filter are the one rule rendered two ways, so neither can come to
 /// answer what the other would refuse. Every path that cannot resolve what it needs
 /// denies.
@@ -64,6 +66,7 @@ internal sealed class AccessGate(
     IAdministrativeOrganization administrative,
     IOrganizationSuspensions suspensions,
     IConfigurationStore configuration,
+    RoleGraphs graphs,
     TimeProvider time)
     : IAccessGate, ISettingsChangeGate, IUnscopedRefusal, IGrantAdmission, IHandOutAdmission, IOrganizationReadAdmission
 {
@@ -893,7 +896,7 @@ internal sealed class AccessGate(
         return Result.Success(Explanation(
             Asking(context),
             permission,
-            Deciding(decided, resource)));
+            await ThroughAsync(Deciding(decided, resource), permission, cancellationToken).ConfigureAwait(false)));
     }
 
     /// <inheritdoc/>
@@ -937,7 +940,8 @@ internal sealed class AccessGate(
         return Result.Success(Explanation(
             Asking(context),
             permission,
-            Deciding(decided, resource) ?? derivedGrant));
+            await ThroughAsync(Deciding(decided, resource) ?? derivedGrant, permission, cancellationToken)
+                .ConfigureAwait(false)));
     }
 
     /// <inheritdoc/>
@@ -2114,6 +2118,22 @@ internal sealed class AccessGate(
             permission,
             principal,
             grant);
+
+    // AUTHZ-GATE-004, AUTHZ-GRANT-006 (D-278): the explanation names the inclusions the
+    // permission came through from the deciding grant's role, nearest first, as what the
+    // role carries is worked out now; none where the role carries it itself.
+    private async ValueTask<ExplainedGrant?> ThroughAsync(
+        ExplainedGrant? grant,
+        Permission permission,
+        CancellationToken cancellationToken) =>
+        grant is null
+            ? null
+            : grant with
+            {
+                IncludedThrough = (await graphs.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    .Permissions(grant.Role)
+                    .GetValueOrDefault(permission) ?? [],
+            };
 
     // The stored grant that decided an evaluation, as an explanation and the refusal it
     // records both name it.

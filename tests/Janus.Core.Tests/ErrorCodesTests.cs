@@ -84,6 +84,8 @@ public sealed class ErrorCodesTests
         "authz.resource.inuse",
         "authz.resource.notfound",
         "authz.restricted",
+        "authz.role.inclusionloop",
+        "authz.role.inclusionmustend",
         "authz.role.inuse",
         "authz.role.notassignable",
         "authz.role.notfound",

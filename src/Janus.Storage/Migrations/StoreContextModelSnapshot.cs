@@ -3112,6 +3112,43 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authorization.Roles.RoleInclusionRecord", b =>
+            {
+                b.Property<string>("Role")
+                    .HasColumnType("text")
+                    .HasColumnName("role");
+
+                b.Property<string>("Included")
+                    .HasColumnType("text")
+                    .HasColumnName("included");
+
+                b.Property<bool>("Enabled")
+                    .HasColumnType("boolean")
+                    .HasColumnName("enabled");
+
+                b.PrimitiveCollection<string[]>("LeftOutHandsOut")
+                    .IsRequired()
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("text[]")
+                    .HasColumnName("left_out_hands_out")
+                    .HasDefaultValueSql("'{}'");
+
+                b.PrimitiveCollection<string[]>("LeftOutPermissions")
+                    .IsRequired()
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("text[]")
+                    .HasColumnName("left_out_permissions")
+                    .HasDefaultValueSql("'{}'");
+
+                b.HasKey("Role", "Included")
+                    .HasName("pk_role_inclusions");
+
+                b.HasIndex("Included")
+                    .HasDatabaseName("ix_role_inclusions_included");
+
+                b.ToTable("role_inclusions", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authorization.Roles.RolePermissionRecord", b =>
             {
                 b.Property<string>("Role")
@@ -3153,6 +3190,22 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("roles", "identity");
             });
 
+        modelBuilder.Entity("Janus.Storage.Authorization.Roles.SeededRoleInclusionRecord", b =>
+            {
+                b.Property<string>("Role")
+                    .HasColumnType("text")
+                    .HasColumnName("role");
+
+                b.Property<string>("Included")
+                    .HasColumnType("text")
+                    .HasColumnName("included");
+
+                b.HasKey("Role", "Included")
+                    .HasName("pk_seeded_role_inclusions");
+
+                b.ToTable("seeded_role_inclusions", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authorization.Roles.SeededRoleRecord", b =>
             {
                 b.Property<string>("Name")
@@ -3163,6 +3216,18 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasName("pk_seeded_roles");
 
                 b.ToTable("seeded_roles", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Roles.UninheritedPermissionRecord", b =>
+            {
+                b.Property<string>("Permission")
+                    .HasColumnType("text")
+                    .HasColumnName("permission");
+
+                b.HasKey("Permission")
+                    .HasName("pk_uninherited_permissions");
+
+                b.ToTable("uninherited_permissions", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Accounts.AccountRecord", b =>
@@ -5146,6 +5211,23 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .OnDelete(DeleteBehavior.Restrict)
                     .IsRequired()
                     .HasConstraintName("fk_resources_organization");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Roles.RoleInclusionRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authorization.Roles.RoleRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Included")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_role_inclusions_included");
+
+                b.HasOne("Janus.Storage.Authorization.Roles.RoleRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Role")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_role_inclusions_role");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Roles.RolePermissionRecord", b =>

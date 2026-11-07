@@ -548,6 +548,13 @@ public static class Settings
         new("authz.handout.byholding", SettingScope.Runtime, false);
 
     /// <summary>
+    /// Whether roles' inclusions of other roles admit at all; off, each role admits its
+    /// own permissions and hands out its own roles alone (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public static FlagSetting AuthzRoleInclusionEnabled { get; } =
+        new("authz.roleinclusion.enabled", SettingScope.Runtime, true);
+
+    /// <summary>
     /// How often every materialised derivation is re-evaluated against the host's own
     /// relation, a difference corrected and the degradation condition raised.
     /// </summary>
@@ -1055,6 +1062,7 @@ public static class Settings
         MaintenanceExpiryWarningLead,
         AuthzReverseLookupBudget,
         AuthzHandoutByHolding,
+        AuthzRoleInclusionEnabled,
         DerivationMaterialisedDriftCheck,
         OrganizationDeletionGrace,
         TakedownGrace,

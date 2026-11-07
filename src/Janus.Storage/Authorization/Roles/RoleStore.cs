@@ -46,6 +46,44 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Role?> EffectiveAsync(RoleName name, CancellationToken cancellationToken)
+    {
+        RoleRecord? role = await context.Roles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(row => row.Name == name, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (role is null)
+        {
+            return null;
+        }
+
+        string named = name.ToString();
+
+        // AUTHZ-GRANT-006 (D-278): the views are the one statement of what an inclusion
+        // passes on, read here as every decision reads them.
+        List<string> permissions = await context.Database
+            .SqlQuery<string>(
+                $"SELECT permission AS \"Value\" FROM identity.role_effective_permissions WHERE role = {named}")
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        List<string> handsOut = await context.Database
+            .SqlQuery<string>(
+                $"SELECT name AS \"Value\" FROM identity.role_effective_hands_out WHERE role = {named}")
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // A name a view answers was a permission or a role name when it was written, so it
+        // reads as one.
+        return Role.Of(
+            name,
+            permissions.Select(Permission.Parse),
+            handsOut.Select(RoleName.Parse),
+            role.GrantsMustEnd);
+    }
+
+    /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">No transaction is open.</exception>
     public async ValueTask<Role?> FindForUpdateAsync(RoleName name, CancellationToken cancellationToken)
     {

@@ -1112,6 +1112,21 @@ public static class ErrorCodes
     public static ErrorCode RoleInUse { get; } = ErrorCode.Parse("authz.role.inuse");
 
     /// <summary>
+    /// The inclusion would make a role include itself, at any depth. Include a role that
+    /// does not include this one, at any depth, or remove the inclusion that closes the loop.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-006, D-278, chapter 10 section 1.3.</remarks>
+    public static ErrorCode RoleInclusionLoop { get; } = ErrorCode.Parse("authz.role.inclusionloop");
+
+    /// <summary>
+    /// A role whose grants must end would be included by a role whose grants need not
+    /// end, by a new inclusion or by turning <c>grantsMustEnd</c> on. Make the including
+    /// role's grants end too, or include a role whose grants need not end.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-006, D-237, D-278, chapter 10 section 1.3.</remarks>
+    public static ErrorCode RoleInclusionMustEnd { get; } = ErrorCode.Parse("authz.role.inclusionmustend");
+
+    /// <summary>
     /// The role named in the path is not one the deployment holds. Name a role that
     /// exists.
     /// </summary>

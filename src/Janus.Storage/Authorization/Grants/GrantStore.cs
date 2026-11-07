@@ -295,14 +295,22 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
         CancellationToken cancellationToken)
     {
         // IDN-ORG-003 AC1, entry 196: what the view confers, which leaves out a
-        // suspended organization's grants and a role that allows nothing.
+        // suspended organization's grants and a role that allows nothing, its inclusions
+        // followed as the view follows them (AUTHZ-GRANT-006).
+        HashSet<string> allowing =
+        [
+            .. await context.Database
+                .SqlQuery<string>($"SELECT DISTINCT role AS \"Value\" FROM identity.role_effective_permissions")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false),
+        ];
+
         IQueryable<GrantRecord> live = context.Grants
             .Where(row => row.Organization == organization
                 && row.RevokedAt == null
                 && (row.ExpiresAt == null || row.ExpiresAt > at)
                 && context.Organizations.Any(held => held.Id == row.Organization
-                    && held.DeletionRequestedAt == null)
-                && context.RolePermissions.Any(allowed => allowed.Role == row.Role));
+                    && held.DeletionRequestedAt == null));
 
         // OPS-DB-003 AC2: the organization-wide grants and the grants on the record's
         // ancestors are read as two halves, which share no row. Joined by an OR, the
@@ -318,7 +326,7 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return [.. records.Select(Read)];
+        return [.. records.Where(row => allowing.Contains(row.Role.ToString())).Select(Read)];
     }
 
     private static IEnumerable<Guid> Values(IReadOnlyList<GrantSubject> holders, SubjectType type) =>

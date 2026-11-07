@@ -1,46 +1,31 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Invitations;
+using Janus.Authorization.Roles;
 using Janus.Core;
-using Janus.Storage.Authorization.Roles;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Invitations;
 
 /// <summary>
-/// The roles an invitation names, read from the <c>roles</c> and
-/// <c>role_permissions</c> tables.
+/// The roles an invitation names, read as a grant of each admits: through the
+/// authorization area's store, with what each carries and hands out through its
+/// inclusions.
 /// </summary>
 /// <param name="context">The context the operation reads through.</param>
+/// <param name="roles">Where the roles are read.</param>
 /// <remarks>
-/// Implements REG-INV-001, AUTHZ-GRANT-004 and CONV-LAYOUT-001. The rows are the
-/// authorization area's; this reads them and writes nothing.
+/// Implements REG-INV-001, AUTHZ-GRANT-004, AUTHZ-GRANT-006 and CONV-LAYOUT-001. The rows
+/// are the authorization area's; this reads them and writes nothing.
 /// </remarks>
-internal sealed class RoleCatalogue(StoreContext context) : IRoleCatalogue
+internal sealed class RoleCatalogue(StoreContext context, IRoleStore roles) : IRoleCatalogue
 {
     /// <inheritdoc/>
-    public async ValueTask<DefinedRole?> FindAsync(RoleName name, CancellationToken cancellationToken)
-    {
-        RoleRecord? role = await context.Roles
-            .AsNoTracking()
-            .SingleOrDefaultAsync(row => row.Name == name, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (role is null)
-        {
-            return null;
-        }
-
-        List<Permission> permissions = await context.RolePermissions
-            .Where(row => row.Role == name)
-            .Select(row => row.Permission)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        return new DefinedRole(name, permissions, [.. role.HandsOut.Select(RoleName.Parse)], role.GrantsMustEnd);
-    }
+    public async ValueTask<DefinedRole?> FindAsync(RoleName name, CancellationToken cancellationToken) =>
+        await roles.EffectiveAsync(name, cancellationToken).ConfigureAwait(false) is Role role
+            ? new DefinedRole(name, [.. role.Permissions], [.. role.HandsOut], role.GrantsMustEnd)
+            : null;
 
     /// <inheritdoc/>
     /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>

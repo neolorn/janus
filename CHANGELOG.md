@@ -8,6 +8,34 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+### Added
+
+- A role may include other roles. A grant of the including role admits what the
+  included roles carry, at any depth, worked out at each request and never copied into
+  the role, so a change to an included role reaches every holder above it at once. An
+  inclusion may leave out permissions and roles of the `handsOut`, may be switched off on
+  its own, and every inclusion is switched off together by the runtime key
+  `authz.roleinclusion.enabled`; `system:administer` never passes through one. What a
+  role carries and hands out is judged through its inclusions wherever it is granted,
+  handed out or explained, and `ExplainedGrant.IncludedThrough` names the inclusions a
+  permission came through.
+- `AuthorizationDeclarationBuilder.Includes(role, leftOutPermissions, leftOutHandsOut)`
+  declares a role's inclusions, each seeded once at a start, and `.NotInherited()` marks
+  the host action declared before it as a duty no inclusion passes on. A declared
+  inclusion that makes a loop, names a role that will not exist or includes a role whose
+  grants must end in one whose grants need not end stops the deployment.
+- `PUT|DELETE /admin/roles/{name}/inclusions/{included}` and
+  `IRoles.IncludeAsync`/`IRoles.RemoveInclusionAsync` make, set and remove an inclusion
+  under the new permission `roleinclusion:manage`, with a reason, the `grant:manage`
+  step-up, the caller's reach and an audit record (`authz.role.included`,
+  `authz.role.inclusionremoved`); a loop is refused with `authz.role.inclusionloop`, and
+  a role whose grants must end included by one whose grants need not end, by an inclusion
+  or by turning `grantsMustEnd` on, with `authz.role.inclusionmustend`.
+- `GET /admin/roles` answers each role's inclusions and what it carries and hands out
+  through them, each entry with the roles it came through, and is also open to
+  `roleinclusion:manage`. The bootstrap `system-administrator` role, an existing
+  deployment's included, gains `roleinclusion:manage`.
+
 ## [1.0.0-rc.9] - 2026-11-06
 
 ### Fixed

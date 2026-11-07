@@ -723,6 +723,54 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-006 AC10 (D-278): the first start makes each declared inclusion,
+    /// recorded <c>authz.role.included</c> under the start principal
+    /// <c>role-declaration</c> and announced as a change to the including role, keeps the
+    /// pair as seeded, and writes the host's actions declared not inherited; an inclusion
+    /// an administrator removed afterwards is not made again at the next start.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_006_AC10_ADeclaredInclusionIsSeededOnceAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string suffix = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4));
+        string lead = "lead-" + suffix;
+        string writer = "writer-" + suffix;
+        RoleDeclaration[] roles =
+        [
+            new(writer, [HostPermissions.Read, HostPermissions.Edit], []),
+            new(lead, [], [])
+            {
+                Includes = [new RoleInclusionDeclaration(writer, [HostPermissions.Edit.ToString()], [])],
+            },
+        ];
+
+        using (IHost first = Deployed(roles: roles))
+        {
+            await first.StartAsync(cancellationToken);
+            await first.StopAsync(cancellationToken);
+        }
+
+        Assert.Equal(["document:edit"], await InclusionsOfAsync(lead, writer));
+        Assert.Equal(1, await InclusionsRecordedAsync(lead));
+        Assert.Equal(1, await ChangesAnnouncedAsync(lead));
+        Assert.Contains(HostPermissions.Approve.ToString(), await UninheritedAsync());
+
+        await WriteAsync($"DELETE FROM identity.role_inclusions WHERE role = '{lead}';", cancellationToken);
+
+        using (IHost second = Deployed(roles: roles))
+        {
+            await second.StartAsync(cancellationToken);
+            await second.StopAsync(cancellationToken);
+        }
+
+        Assert.Null(await InclusionsOfAsync(lead, writer));
+        Assert.Equal(1, await InclusionsRecordedAsync(lead));
+        Assert.Equal(1, await ChangesAnnouncedAsync(lead));
+    }
+
+    /// <summary>
     /// LIB-HOST-001, REG-PM-001: the frontend's pages are a declaration with no
     /// default, so a deployment that registered none is stopped as it starts rather
     /// than answering a password manager as a site that offers neither page.
@@ -2541,6 +2589,57 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         return await connection.ExecuteScalarAsync<int>(
             "SELECT count(*)::int FROM identity.seeded_roles WHERE name LIKE '%-' || @suffix",
             new { suffix });
+    }
+
+    // AUTHZ-GRANT-006 (D-278): what an inclusion leaves out, or nothing where the role
+    // does not include the other.
+    private async Task<IReadOnlyList<string>?> InclusionsOfAsync(string role, string included)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        string[]? leftOut = await connection.ExecuteScalarAsync<string[]?>(
+            "SELECT left_out_permissions FROM identity.role_inclusions WHERE role = @role AND included = @included",
+            new { role, included });
+
+        return leftOut;
+    }
+
+    // Chapter 10 section 5.24 (D-278): the inclusions the start made of one role, under
+    // its principal.
+    private async Task<int> InclusionsRecordedAsync(string role)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.role.included'
+              AND details ->> 'role' = @role
+              AND jsonb_typeof(details -> 'before') = 'null'
+              AND principal = 'role-declaration'
+            """,
+            new { role });
+    }
+
+    // Chapter 10 section 5b (D-278): the changes the start announced of one role.
+    private async Task<int> ChangesAnnouncedAsync(string role)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'RoleChanged' AND payload->>'Role' = @role AND payload->>'Change' = 'changed'
+            """,
+            new { role });
+    }
+
+    // AUTHZ-GRANT-006 (D-278): the host's actions the last start declared not inherited.
+    private async Task<IReadOnlyList<string>> UninheritedAsync()
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return [.. await connection.QueryAsync<string>("SELECT permission FROM identity.uninherited_permissions")];
     }
 
     // A written policy with the gate of the retired alerting:destinations added, as a

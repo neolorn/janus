@@ -24,6 +24,25 @@ internal sealed class RolesInMemory : IRoleStore
         ValueTask.FromResult(_roles.TryGetValue(name, out Role? role) ? role : null);
 
     /// <summary>
+    /// The inclusions the roles' effective permissions are worked out through.
+    /// </summary>
+    public RoleInclusionsInMemory Inclusions { get; } = new();
+
+    /// <inheritdoc/>
+    public ValueTask<Role?> EffectiveAsync(RoleName name, CancellationToken cancellationToken)
+    {
+        if (!_roles.TryGetValue(name, out Role? role))
+        {
+            return ValueTask.FromResult<Role?>(null);
+        }
+
+        var graph = RoleGraph.Of(_roles.Values, Inclusions.Held, Inclusions.Uninherited, enabled: true);
+
+        return ValueTask.FromResult<Role?>(
+            Role.Of(name, graph.Permissions(name).Keys, graph.HandsOut(name).Keys, role.GrantsMustEnd));
+    }
+
+    /// <summary>
     /// What another transaction committed on a role while this one waited for its lock,
     /// applied as the lock is taken.
     /// </summary>

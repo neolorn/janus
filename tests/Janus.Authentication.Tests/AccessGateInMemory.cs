@@ -330,12 +330,18 @@ internal sealed class AccessGateInMemory : IAccessGate
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resources);
+        ArgumentNullException.ThrowIfNull(permissions);
 
+        // BFF-CAP-002 (D-211): an organization's capabilities are what its
+        // organization-wide check admits, recording nothing; a record's are none here.
         return ValueTask.FromResult(Result.Success<IReadOnlyList<Capability>>(
         [
             .. resources.Select(resource => new Capability(
                 resource,
-                new HashSet<Permission>(),
+                type.ToString() == "organization"
+                    && OrganizationId.TryParse(resource.ToString(), provider: null, out OrganizationId organization)
+                        ? permissions.Where(permission => Admits(context, permission, organization)).ToHashSet()
+                        : [],
                 new Dictionary<Permission, IReadOnlySet<CapabilityResidual>>())),
         ]));
     }

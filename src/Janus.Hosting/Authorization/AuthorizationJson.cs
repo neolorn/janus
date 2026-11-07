@@ -28,6 +28,7 @@ namespace Janus.Hosting.Authorization;
 [JsonSerializable(typeof(IReadOnlyList<GroupView>))]
 [JsonSerializable(typeof(MemberBody))]
 [JsonSerializable(typeof(RoleBody))]
+[JsonSerializable(typeof(RoleInclusionBody))]
 [JsonSerializable(typeof(RoleRemovalBody))]
 [JsonSerializable(typeof(RoleView))]
 [JsonSerializable(typeof(IReadOnlyList<RoleView>))]

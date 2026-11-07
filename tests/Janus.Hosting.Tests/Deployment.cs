@@ -1396,6 +1396,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleReferences>(
             new Janus.Hosting.Tests.Authorization.RoleReferencesInMemory(AccessGrants, Invitations, Roles));
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleStore>(Roles);
+        _ = services.AddSingleton<Janus.Authorization.Roles.IRoleInclusionStore>(Roles.Inclusions);
+        _ = services.AddScoped<Janus.Authorization.Roles.RoleGraphs>();
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupStore>(Groups);
         _ = services.AddSingleton<Janus.Authorization.Resources.IResourceStore>(Resources);
         _ = services.AddSingleton(Janus.Authorization.Model.AuthorizationModel.Of(

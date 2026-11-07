@@ -284,10 +284,10 @@ internal sealed class PermissionRule
 
     /// <summary>
     /// The roles the principal may hand out by what it holds: every role named in the
-    /// <c>handsOut</c> of a role it holds through a live allow grant in the organization,
-    /// across the organization or, for a change scoped to a record, on the record or a
-    /// container above it, where no live deny of that role to the principal covers the
-    /// change.
+    /// effective <c>handsOut</c> of a role it holds through a live allow grant in the
+    /// organization, across the organization or, for a change scoped to a record, on the
+    /// record or a container above it, where no live deny of that role to the principal
+    /// covers the change.
     /// </summary>
     /// <param name="organization">The organization the change is made in.</param>
     /// <param name="resource">The record the change is scoped to, or nothing for the whole organization.</param>
@@ -300,7 +300,9 @@ internal sealed class PermissionRule
     /// defeats its permissions (AUTHZ-GRANT-002), where the deny covers the change: across
     /// the organization, or on the change's record or a container above it. A grant of an
     /// organization whose deletion was requested confers nothing, as the view the gate
-    /// reads holds (IDN-ORG-003).
+    /// reads holds (IDN-ORG-003). A role's list is its effective one, through its
+    /// inclusions, as the view of what each role hands out follows them (AUTHZ-GRANT-006,
+    /// D-278).
     /// In the administrative organization nothing is held by an account with no current
     /// membership of it (IDN-LIFE-009a).
     /// </remarks>
@@ -334,9 +336,8 @@ internal sealed class PermissionRule
                 $"""
                 SELECT DISTINCT {Prefix}handed.name
                 FROM identity.grants AS {Prefix}grant
-                JOIN identity.roles AS {Prefix}role ON {Prefix}role.name = {Prefix}grant.role
                 JOIN identity.organizations AS {Prefix}scope ON {Prefix}scope.id = {Prefix}grant.organization
-                CROSS JOIN LATERAL unnest({Prefix}role.hands_out) AS {Prefix}handed(name)
+                JOIN identity.role_effective_hands_out AS {Prefix}handed ON {Prefix}handed.role = {Prefix}grant.role
                 WHERE NOT {Prefix}grant.deny
                   AND {Prefix}scope.deletion_requested_at IS NULL
                   AND {HeldCovering(Prefix + "grant", resource)}
