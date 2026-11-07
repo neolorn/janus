@@ -18,7 +18,9 @@ against the public contract of LIB-API-001.
   `authz.roleinclusion.enabled`; `system:administer` never passes through one. What a
   role carries and hands out is judged through its inclusions wherever it is granted,
   handed out or explained, and `ExplainedGrant.IncludedThrough` names the inclusions a
-  permission came through.
+  permission came through. A grant, and the roles offered as assignable, judge the role
+  given as though its inclusions were on whatever the key reads, so switching the key on
+  never hands a holder what its giver could not give.
 - `AuthorizationDeclarationBuilder.Includes(role, leftOutPermissions, leftOutHandsOut)`
   declares a role's inclusions, each seeded once at a start, and `.NotInherited()` marks
   the host action declared before it as a duty no inclusion passes on. A declared

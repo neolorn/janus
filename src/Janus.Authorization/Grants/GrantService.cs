@@ -393,8 +393,9 @@ internal sealed class GrantService(
         }
 
         // AUTHZ-GRANT-006 (D-278): each role is judged on what it carries through its
-        // inclusions, as a grant of it would be.
-        RoleGraph graph = await graphs.ReadAsync(cancellationToken).ConfigureAwait(false);
+        // inclusions as though they were on, as a grant of it is, so none is offered that
+        // switching the key on would carry past the caller's reach.
+        RoleGraph graph = await graphs.ReadFollowingAsync(cancellationToken).ConfigureAwait(false);
         IReadOnlyList<Role> defined = [.. graph.Roles];
         IReadOnlyList<DefinedRole> assignable = await handOut
             .AssignableAsync(context, organization, [.. defined.Select(graph.Judged)], cancellationToken)
@@ -531,8 +532,10 @@ internal sealed class GrantService(
                 .ConfigureAwait(false);
 
     // AUTHZ-GRANT-005 (D-212, D-278): a grant, allow or deny, hands its role out at its
-    // scope, judged on what the role carries through its inclusions, and an allow widens
-    // its holder's access.
+    // scope, judged on what the role carries through its inclusions as though they were
+    // on, whatever authz.roleinclusion.enabled reads, so switching the key on later hands
+    // its holder nothing its giver was not judged able to give; an allow widens its
+    // holder's access. What the giver may hand out is read as the key reads.
     private async ValueTask<Error?> HandOutRefusedAsync(
         AccessContext context,
         OrganizationId organization,
@@ -542,12 +545,18 @@ internal sealed class GrantService(
         bool widens,
         CancellationToken cancellationToken)
     {
-        Role effective = await roles.EffectiveAsync(role.Name, cancellationToken).ConfigureAwait(false) ?? role;
+        RoleGraph graph = await graphs.ReadFollowingAsync(cancellationToken).ConfigureAwait(false);
+        DefinedRole judged = graph.Judged(graph.Find(role.Name) ?? role);
 
         return (await handOut
                 .AdmitAsync(
                     context,
-                    new HandOut(Permissions.GrantManage, organization, on, [Defined(effective)], widens ? [holder] : []),
+                    new HandOut(
+                        Permissions.GrantManage,
+                        organization,
+                        on,
+                        [new DefinedRole(judged.Name, judged.Permissions, judged.HandsOut)],
+                        widens ? [holder] : []),
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error);
@@ -575,9 +584,6 @@ internal sealed class GrantService(
         grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
             ? new ResourceReference(type, id)
             : null;
-
-    private static DefinedRole Defined(Role role) =>
-        new(role.Name, [.. role.Permissions], [.. role.HandsOut]);
 
     private async ValueTask<Result<GrantId>> WrittenAsync(
         AccessContext context,

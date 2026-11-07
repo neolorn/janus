@@ -175,6 +175,60 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-006 (D-278, amended 2026-11-08): the role a grant gives is judged on what
+    /// it carries through its inclusions as though they were on, whatever
+    /// <c>authz.roleinclusion.enabled</c> reads; a giver whose grants admit an including
+    /// role's own permissions but not the included role's is refused the grant and is not
+    /// offered the role, with the key off and with it on, while a role carrying only what
+    /// the giver holds is granted and offered.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_006_AGrantIsJudgedAsThoughInclusionsWereOnAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case held = await CaseAsync();
+        Deployment deployment = held.Deployment;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        RoleName included = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        RoleName including = await deployment.RoleAsync([HostPermissions.Edit], cancellationToken);
+        RoleName editing = await deployment.RoleAsync([HostPermissions.Edit], cancellationToken);
+        RoleName holding = await deployment.RoleAsync([HostPermissions.Edit], cancellationToken);
+
+        await deployment.IncludesAsync(including, included, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(held.Actor), holding, null, false, null, null, cancellationToken);
+        await ByHoldingAsync(true);
+
+        try
+        {
+            await InclusionsOnAsync(false);
+
+            Result<GrantId> refusedOff = await GrantedAsync(held, GrantSubject.Of(account), including);
+            IReadOnlyList<RoleName> offeredOff = await AssignableAsync(held);
+            Result<GrantId> grantedOff = await GrantedAsync(held, GrantSubject.Of(account), editing);
+
+            await InclusionsOnAsync(true);
+
+            Result<GrantId> refusedOn = await GrantedAsync(held, GrantSubject.Of(account), including);
+            IReadOnlyList<RoleName> offeredOn = await AssignableAsync(held);
+
+            Assert.Equal(ErrorCodes.RoleNotAssignable, Code(refusedOff));
+            Assert.Equal(ErrorCodes.RoleNotAssignable, Code(refusedOn));
+            Assert.DoesNotContain(including, offeredOff);
+            Assert.DoesNotContain(including, offeredOn);
+            Assert.Null(Code(grantedOff));
+            Assert.Contains(editing, offeredOff);
+            Assert.Contains(editing, offeredOn);
+            Assert.Equal(1, await LiveGrantsAsync(account));
+        }
+        finally
+        {
+            await InclusionsOnAsync(true);
+            await ByHoldingAsync(false);
+        }
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-005 AC3: an allow grant to oneself, one to a group one belongs to
     /// through nesting and the revocation of a deny on oneself are each refused
     /// <c>authz.grant.self</c>, though the actor may hand the role out; revoking one's own
@@ -685,6 +739,32 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
                 : "DELETE FROM identity.settings WHERE key = @key;",
             new { key = Settings.AuthzHandoutByHolding.Key.ToString(), value = Settings.AuthzHandoutByHolding.Write(true) },
             cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // AUTHZ-GRANT-006 (D-278): the key switching inclusions on and off, written where the
+    // configuration store reads it; on is its default, which no row gives.
+    private async Task InclusionsOnAsync(bool on)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            on
+                ? "DELETE FROM identity.settings WHERE key = @key;"
+                : "INSERT INTO identity.settings (key, value) VALUES (@key, @value) ON CONFLICT (key) DO UPDATE SET value = excluded.value;",
+            new { key = Settings.AuthzRoleInclusionEnabled.Key.ToString(), value = Settings.AuthzRoleInclusionEnabled.Write(false) },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // AUTHZ-GRANT-005 (D-247): the roles the case's actor is offered as assignable.
+    private async Task<IReadOnlyList<RoleName>> AssignableAsync(Case held)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IGrants>().AssignableAsync(
+                AccessContext.Of(held.Actor),
+                held.Deployment.Organization,
+                TestContext.Current.CancellationToken))
+            .Match<IReadOnlyList<RoleName>>(read => [.. read.Select(role => role.Name)], error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     // One case's deployment, its actor and the role the actor's managing role hands out.
