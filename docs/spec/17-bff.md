@@ -354,7 +354,8 @@ does not push again: the browser goes to the stored return address with no per-a
 session and nothing added to its address, and is not refused. A public page uses it to
 recognise a person signed in at another application without sending a guest to sign in;
 a route that needs a session keeps the sign-on below. Where the protected key
-`session.hint.domain` (`10` section 4.1) names a domain, the authentication application
+`session.hint.domain` (`10` section 4.1, read at the start, so a change takes effect at
+the next start) names a domain, the authentication application
 keeps the cookie `identity-signed-in` on it while an auth session lives: value `1`, `Domain`
 the key's value, `Secure`, `HttpOnly`, `SameSite=Lax`, no `Max-Age` beyond the auth
 session's absolute lifetime, written when an auth session is created and removed when it

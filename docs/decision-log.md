@@ -21713,6 +21713,16 @@ once and guests pay no round trip.
   key is set. Criteria: the list carries the hint with the key set and not without it;
   setting the key over a notice without the hint raises the degradation; a host cookie of
   that name fails startup.
+- **Amended 2026-11-08 (round H20, Q7).** `session.hint.domain` is read once, at the
+  start, as `integration.mailserver.endpoint` is: it is protected, so it changes only
+  through `configure`, which cannot read the host's declared cookies to compare the notice.
+  A change therefore takes effect at the next start, and that start's notice comparison
+  raises the hint where the notice does not list it, so no window exists in which the
+  hint is set and the difference not raised. The hint and the deployment's cookie list
+  both use the value read at the start. It joins `06` OPS-CFG-004's list, as `10` section
+  4.8 already has it (D-152). Criteria: a `configure` of the key changes neither the hint
+  nor the cookie list before a restart; after it, both follow the new value and the
+  comparison raises a notice without the hint.
 - **Round H20's criteria (added).** A check-only sign-on with no auth session returns the
   browser as a guest with no session; with one, it returns it signed in; with the key set
   and no hint it answers at once without a push.
