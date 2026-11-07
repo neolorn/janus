@@ -163,14 +163,14 @@ question 3), a922d813**
 
 - `identity-signed-in` is the library's sixth cookie name: a host declaring a cookie of
   that name fails startup, whether or not the key is set.
-- `DeploymentCookies` lists it while `session.hint.domain` names a domain, read when the
-  list is read, as the hint itself reads the key: strictly necessary, no third party, at
-  `session.default.absolute`. That is the longest an auth session lasts and the value
-  the session cookie is listed at; `session.aal2.absolute` (ceiling 24 hours) and
-  `breakglass.session.lifetime` (ceiling 12 hours) are shorter at their defaults.
+- `DeploymentCookies` lists it while the domain the start read is one (8446adb3 below):
+  strictly necessary, no third party, at `session.default.absolute`. That is the longest
+  an auth session lasts and the value the session cookie is listed at;
+  `session.aal2.absolute` (ceiling 24 hours) and `breakglass.session.lifetime` (ceiling
+  12 hours) are shorter at their defaults.
 - A start with the key set over a notice version without the hint raises `degradation`
   under `notice.cookies`, naming it as added (the start's comparison, D-203).
-- Tests: `DeploymentCookiesTests.PRIV_CONS_006a_TheSignedInHintIsListedWhileTheKeyNamesADomainAsync`;
+- Tests: `DeploymentCookiesTests.PRIV_CONS_006a_TheSignedInHintIsListedWhileTheStartReadADomainAsync`;
   on PostgreSQL,
   `StartupValidationTests.PRIV_CONS_006a_AC4_TheHintKeySetOverANoticeWithoutTheHintRaisesADegradationAsync`
   and `PRIV_CONS_006a_AC3_ACookieDeclaredOutsideItsRuleIsRefusedAsync` with
@@ -178,10 +178,28 @@ question 3), a922d813**
   (renamed from `...TheFiveNecessaryCookies`).
 - `CHANGELOG.md`: the D-279 line brought up to date.
 
+**`17` BFF-SESS-006, `06` OPS-CFG-004, `10` section 4.1 (D-279 as amended 2026-11-08,
+question 7), 8446adb3**
+
+- `session.hint.domain` is read once, at the start, before the start's notice
+  comparison (`NoticeCookiesStartService`), into `SignedInHintDomain`; the hint and
+  `DeploymentCookies` both answer to that value, so a `configure` takes effect at the next
+  start, whose comparison raises a notice without the hint. A key that cannot be read at
+  the start is a fault, as the mail server's endpoint is.
+- Tests: on PostgreSQL,
+  `StartupValidationTests.BFF_SESS_006_AConfigureOfTheHintKeyTakesEffectAtTheNextStartAsync`
+  (a `configure` through `ProtectedConfiguration` changes neither the hint's domain nor the
+  list of the running deployment and raises nothing; after a restart both follow and the
+  comparison raises the hint as added);
+  `SignOnTests.BFF_SESS_006_TheHintKeyTakesEffectAtTheNextStartAsync` (the key set since
+  the start writes no hint and a check still pushes; after a start reads it, the sign-out
+  removes the hint and a check without one answers at once). The sign-on tests that set
+  the key read it as a start does.
+- `CHANGELOG.md`: the D-279 line brought up to date.
+
 ## 2. Items not implemented
 
-- Comparing a change of `session.hint.domain` with the current notice inside the change:
-  parked on question 7.
+None.
 
 ## 3. Resolved by rule
 
@@ -252,9 +270,9 @@ question 3), a922d813**
    every cookie the deployment sets. `17` BFF-SESS-006 now has the authentication
    application set `identity-signed-in`. Answered by D-279's amendment of 2026-11-08
    (bc66f90f): the hint is the library's sixth cookie and the notice lists it while the
-   key names a domain. Built, save the comparison of question 7.
+   key names a domain. Built.
 7. **D-279 as amended 2026-11-08, comparing a change of `session.hint.domain` with the
-   notice (Tier 2; parks that comparison).** The amendment compares "a change of
+   notice (Tier 2; parked that comparison).** The amendment compared "a change of
    `session.hint.domain`" with the notice "as a change of a cookie's lifetime key is",
    which `ConfigurationService` does inside `PUT /admin/config/{key}`. The key is
    protected, so that route refuses it with `configuration.key.protected` before any
@@ -270,7 +288,9 @@ question 3), a922d813**
    compares the notice itself, which needs a port that answers the host's declared cookies
    outside the host; (c) leave it as built, raised at the next start.
    Also a document defect: `06` OPS-CFG-004 says its list and `10` section 4.8 are the same
-   list (D-152), and `session.hint.domain` is on section 4.8 but not in `06`'s list.
+   list (D-152), and `session.hint.domain` was on section 4.8 but not in `06`'s list.
+   Answered by D-279's amendment for Q7 (9f5cb286): reading (a), and the key joins `06`'s
+   list. Built.
 
 ## 5. Gate result
 
@@ -279,7 +299,7 @@ question 3), a922d813**
 - Before the push: every unit and contract test, the commit-message gate and the
   full-history secret scan: green. On PostgreSQL, run here for the round's criteria:
   `RoleInclusionTests`, the truth table, the two seeding tests,
-  `PreAuthenticationStoreTests`, `ComplianceStoreTests`, the `PRIV_CONS_006a` tests of
+  `PreAuthenticationStoreTests`, `ComplianceStoreTests`, every test of
   `StartupValidationTests`: green.
 - The pipeline's pull-request run on 84749860 failed the schema contract
   (`LIB_API_001_AC2`) and two sample-host tests
