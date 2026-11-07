@@ -423,7 +423,9 @@ AC2, AUTHZ-CACHE-001).
   refused with 409 `authz.role.inclusionloop`. A role whose grants must end
   (`grantsMustEnd`, D-237) included by a role whose grants need not end is refused with
   409 `authz.role.inclusionmustend`, and so is turning a role's `grantsMustEnd` on while a
-  role whose grants need not end includes it.
+  role whose grants need not end includes it, or off while it includes a role whose grants
+  must end. Reach is judged as though `authz.roleinclusion.enabled` were on, whatever it
+  reads. The records of processing report each role's effective permissions.
 - **Administration.** A change to an inclusion is under `roleinclusion:manage` in the
   administrative organization, carries a `reason` (API-CONV-002), is the `grant:manage`
   step-up action (`10` section 5a), stays within the actor's reach (what it adds or takes

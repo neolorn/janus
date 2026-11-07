@@ -1095,7 +1095,7 @@ answers **302** to the provider's `/oidc/authorize` carrying `client_id` and
 which is followed only as a path of this application (API-REDIR-001, D-198). With
 `check=true` the sign-on only checks (BFF-SESS-006, D-279): at the return `login_required`
 answers **302** to the stored return address with no session set, and a start that finds
-`session.hint.domain` set and no `janus-signed-in` cookie answers **302** to `returnTo` at
+`session.hint.domain` set and no `identity-signed-in` cookie answers **302** to `returnTo` at
 once, as a guest. `check` is `true` or absent; any other value is **400**
 `api.request.malformed` naming `check`.
 `GET /auth/signon/return` answers **302** to the stored return address with the session
@@ -2889,7 +2889,8 @@ reserved account holds; `auth.stepup.required` (`grant:manage`)
 **409**: `authz.role.inuse` for a `DELETE` of a role a grant (live, expired or revoked),
 a declared derivation, a standing invitation, another role's `handsOut` or an inclusion
 names; `authz.role.inclusionmustend` where `grantsMustEnd` turns on for a role that a role
-whose grants need not end includes (D-278)
+whose grants need not end includes, or off for a role that includes a role whose grants
+must end (D-278)
 **422**: `authz.grant.unresolved` (`details.member` `handsOut`) where `handsOut` names a
 role the deployment does not hold
 

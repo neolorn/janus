@@ -156,7 +156,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `authz.resource.inuse` **(new)** | A registration is removed while a record is registered inside it (`IResources.RemoveAsync`); its contents are removed first; 409 | AUTHZ-INHERIT-002, D-203 |
 | `authz.role.notfound` | A role named in the path (`DELETE /admin/roles/{name}`) is not one the deployment holds; a role a body names that the deployment does not hold is `authz.grant.unresolved` (422); 404 | AUTHZ-GRANT-004, D-166 |
 | `authz.role.inclusionloop` **(new)** | The inclusion would make a role include itself, at any depth, or a declared one would; 409 | AUTHZ-GRANT-006, D-278 |
-| `authz.role.inclusionmustend` **(new)** | A role whose grants must end would be included by a role whose grants need not end, by a new inclusion or by turning `grantsMustEnd` on; 409 | AUTHZ-GRANT-006, D-237, D-278 |
+| `authz.role.inclusionmustend` **(new)** | A role whose grants must end would be included by a role whose grants need not end, by a new inclusion, by turning `grantsMustEnd` on for an included role, or by turning it off for a role that includes one whose grants must end; 409 | AUTHZ-GRANT-006, D-237, D-278 |
 | `authz.group.cycle` **(new)** | Adding the member would make a group contain itself; 409 | AUTHZ-GROUP-001, D-106, D-166 |
 | `authz.group.inuse` | The group holds a member, belongs to a group, or was given a grant (live, expired or revoked), so it is not removed; 409 | AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, D-166 |
 | `authz.policy.unregistered` **(new)** | Entity has no registered policy: a fault, not a denial, answered as `system.fault` (500). The conformance suite reports such an entity under this code with `details.entity` | AUTHZ-GATE-001, LIB-TEST-001, D-166 |
@@ -380,7 +380,7 @@ is a loosening, which OPS-CFG-002 audits (D-107).
 | `session.default.inactivity` | 90 days, refreshed by use | R, ceiling 365 d | AUTH-SESS-005, D-123 — the system policy |
 | `session.default.absolute` | 365 days | R, ceiling 365 d | AUTH-SESS-005, D-130 — the definite overall timeout NIST §2.1.3 requires; its ceiling, counted from a signing key's replacement, is how long that key's public key is kept (AUTH-KEY-001, D-181) |
 | `session.stepup.recency` | 15 minutes | R | AUTH-STEP-001, D-107 |
-| `session.hint.domain` | none | **P** | BFF-SESS-006, D-279: the parent domain the authentication application writes the `janus-signed-in` hint to while an auth session lives; none, no hint is written and every check-only sign-on asks the authentication application |
+| `session.hint.domain` | none | **P** | BFF-SESS-006, D-279: the parent domain the authentication application writes the `identity-signed-in` hint to while an auth session lives; none, no hint is written and every check-only sign-on asks the authentication application |
 | `policy.default` | the policy object of §4.1a with its system defaults | R, each field classified per §4.1a | AUTH-PRIN-002, D-116, D-143 — the **system** policy, for principals with no membership. Replaces `login.policy.default`, `stepup.policy.default`, `stepup.shape.<action>` / `stepup.gate.<action>` |
 | `policy.<organization>` | `{"grammaticalGender": true}` (every other field inherits `policy.default`) | R, one key per organization identifier, created as `{"grammaticalGender": true}` when the organization is, so every organization starts with the field on (§4.1a, D-236); an override stored before then that lacks the field has it set to `true` by a migration, one that states it kept as it is (`06` OPS-MIG-001, D-239) | AUTH-PRIN-002, D-116, D-143, D-236, D-239 — written by `PUT /admin/organizations/{id}/policy`; the administrative organization's is set at bootstrap (§4.1a). Replaces `login.policy.<organization>`, `stepup.policy.<organization>` |
 | `privacy.export.ratelimit` | 3 per `P1D` | R, integer exports per account in the 24 hours ending now, sliding; an export is counted once every export contributor has answered, under a lock on the subject with the window counted again (D-166 X3), and one a contributor failed is not counted; past it 429 `auth.throttled` with `Retry-After` and `details.retryAt`, the instant the oldest counted export leaves the window | D-086, D-107, API-CONV-003, D-166, D-203 |
@@ -612,6 +612,7 @@ redeployment. Every change is recorded and alerted (OPS-ALERT-001).
 | `stepup.enforcement.<organization>` | *Retired by D-166. Step-up enforcement has no switch; the emergency route past step-up is the break-glass session (AUTH-STEP-004, OPS-CFG-004).* |
 | `webauthn.rpid` | OPS-CFG-004 |
 | `token.signing.algorithm` | OPS-CFG-004; value and rationale in §4.9 (D-147) |
+| `session.hint.domain` | BFF-SESS-006, D-279; its default and meaning in §4.1 |
 | `token.signature.verification` | *Retired by D-166. Token signatures are always verified; no switch exists (OPS-CFG-004).* |
 | `privacy.calendar.timezone` | OPS-CFG-004; a legal clock that moves at runtime is a clock nobody can audit (D-153) |
 | `legal.governinglanguage` | PRIV-CONS-005, D-146 (protected for a different reason: the language a document binds in is not a runtime toggle) |

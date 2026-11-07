@@ -21627,6 +21627,14 @@ must include another", is met; separation of duties stays deferred.
   listed once. Its source is `own` where the role carries it itself; otherwise the shortest
   path of inclusions it comes through, and among paths of one length the first by the
   ordinal order of the role names along it. Reading A of the round's question.
+- **Amended 2026-11-07 (round H20, Q3 to Q5).** Turning `grantsMustEnd` off on a role that
+  includes a role whose grants must end is refused with `authz.role.inclusionmustend`, as
+  turning it on for an included one is: either would leave an open-ended grant carrying
+  what was meant to end. A change to an inclusion is judged for reach as though
+  `authz.roleinclusion.enabled` were on, whatever it reads, since switching the key on
+  later would otherwise hand out what nobody was judged able to give (reading A, as
+  built). The records of processing report each role's effective permissions
+  (`IRegisterRoles.AllowedAsync`), since that is what a holder may do (reading A).
 - **Round H20's criteria.** On PostgreSQL, a holder of a role including another, two
   levels deep, is admitted to what the lower roles carry save an action not inherited and
   what an inclusion leaves out; a change to the lowest role reaches them at the next
@@ -21688,6 +21696,10 @@ once and guests pay no round trip.
   stays on the authentication application's own host.
 - **What the host does.** Starts a check-only sign-on once per browser session on a public
   page, and never on a route that needs a session, which keeps today's sign-on.
+- **Amended 2026-11-07 (round H20, Q1 and Q2).** The hint cookie is `identity-signed-in`, not
+  `janus-signed-in`: `08` CONV-NAME-001 (D-163) keeps the product's name out of cookies and
+  names `identity` as their prefix. `session.hint.domain` is protected, so it is on `10`
+  section 4.8's list as well as in section 4.1.
 - **Round H20's criteria (added).** A check-only sign-on with no auth session returns the
   browser as a guest with no session; with one, it returns it signed in; with the key set
   and no hint it answers at once without a push.
