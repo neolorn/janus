@@ -155,6 +155,8 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `authz.role.inuse` | A grant (live, expired or revoked), a declared derivation or a standing invitation names the role, so it is not removed; its permissions can be changed instead; 409 | AUTHZ-GRANT-004, AUTHZ-GRANT-003 AC3, AUTHZ-DERIVE-001, REG-INV-001, D-166 |
 | `authz.resource.inuse` **(new)** | A registration is removed while a record is registered inside it (`IResources.RemoveAsync`); its contents are removed first; 409 | AUTHZ-INHERIT-002, D-203 |
 | `authz.role.notfound` | A role named in the path (`DELETE /admin/roles/{name}`) is not one the deployment holds; a role a body names that the deployment does not hold is `authz.grant.unresolved` (422); 404 | AUTHZ-GRANT-004, D-166 |
+| `authz.role.inclusionloop` **(new)** | The inclusion would make a role include itself, at any depth, or a declared one would; 409 | AUTHZ-GRANT-006, D-278 |
+| `authz.role.inclusionmustend` **(new)** | A role whose grants must end would be included by a role whose grants need not end, by a new inclusion or by turning `grantsMustEnd` on; 409 | AUTHZ-GRANT-006, D-237, D-278 |
 | `authz.group.cycle` **(new)** | Adding the member would make a group contain itself; 409 | AUTHZ-GROUP-001, D-106, D-166 |
 | `authz.group.inuse` | The group holds a member, belongs to a group, or was given a grant (live, expired or revoked), so it is not removed; 409 | AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, D-166 |
 | `authz.policy.unregistered` **(new)** | Entity has no registered policy: a fault, not a denial, answered as `system.fault` (500). The conformance suite reports such an entity under this code with `details.entity` | AUTHZ-GATE-001, LIB-TEST-001, D-166 |
@@ -253,6 +255,7 @@ IDN-READ-004 names, `record:read` and `record:erase`, and no other (D-218, D-221
 | `grant:read` | Viewing grants (`GET /admin/grants`), the "who can access this?" view, and which accounts may exercise a permission (`GET /admin/access/admitted`, AUTHZ-GATE-007, D-218) |
 | `grant:manage` | Creating and revoking grants, and reading the roles its holder may give (D-247); asked in the organization the grant is scoped to, and for a grant in an organization other than the administrative organization also met by `system:administer` held in the administrative organization, save for an invitation's roles, which need `grant:manage` held in the invitation's own organization (AUTHZ-SCOPE-001, D-207) |
 | `role:manage` | Reading, creating and changing roles, in the administrative organization |
+| `roleinclusion:manage` | Making, changing, switching and removing a role's inclusions of other roles, and reading roles, in the administrative organization (AUTHZ-GRANT-006, D-278) |
 | `group:manage` | Creating groups, nesting them, and changing their members (D-106); asked in the organization the group belongs to (AUTHZ-SCOPE-001) |
 | `organization:manage` | Organization lifecycle, policy, and deletion cancellation; asked in the administrative organization, whatever organization the request names |
 | `membership:manage` | Adding and removing members; issuing and revoking invitations, bound or open (IDN-LIFE-009a, REG-INV-001) |
@@ -528,6 +531,7 @@ is the empty list.
 |---|---|---|---|
 | `authz.reverselookup.budget` | 2 seconds | R | AUTHZ-SEAM-001, R-A09, D-125 — the migration trigger's measurable bound |
 | `authz.handout.byholding` | `false` | R, boolean; turning it on is loosening | AUTHZ-GRANT-005, D-212: whether an actor whose grants admit every permission a role carries may hand the role out with no role of theirs listing it (Kubernetes' rule); off, only a role whose `handsOut` names it, or `system:administer` in the administrative organization, does; on, it counts stored grants and materialised derivations, never a live one (D-216) |
+| `authz.roleinclusion.enabled` | `true` | R, boolean; turning it on is loosening | AUTHZ-GRANT-006, D-278: whether roles' inclusions admit at all; off, each role admits its own permissions and hands out its own `handsOut` alone, and its inclusions stay stored |
 | `derivation.materialised.driftcheck` | `P1D` | R, duration; lengthening is loosening | AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-161, D-166: how often the drift check re-evaluates every materialised derivation, over the relationship sources the host declares for every declared derivation (LIB-HOST-001), corrects drift and raises `degradation` naming the derivation; it runs as the system principal `derivation-driftcheck` (section 5.29), and a grant it writes records the nil subject as granter with the reason `AUTHZ-DERIVE-005`; each grant it writes or takes back is recorded as `authz.grant.materialised` or `authz.grant.retracted` (section 5.24, D-187) |
 
 ### 4.6 Organizations and lifecycle
@@ -1102,6 +1106,8 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `authz.group.removed` | security | A group nothing named was removed; `details.group`, `details.name`, `details.reason` | AUTHZ-GROUP-001 |
 | `authz.role.defined` | security | A role was created, or its permissions, its `handsOut` or its `grantsMustEnd` changed; `details.role`, `details.before` and `details.after`, each the permissions, the `handsOut` and `grantsMustEnd` (D-237) (`before` empty for a role bootstrap or the role declaration defines), `details.reason` (`AUTHZ-GRANT-004` for one the role declaration defines, principal `role-declaration`); no organization | AUTHZ-GRANT-004, AUTHZ-GRANT-005, OPS-CFG-007, OPS-BOOT-001, D-204, D-212, D-237 |
 | `authz.role.removed` | security | A role nothing named was removed; `details.after` is null | AUTHZ-GRANT-004 |
+| `authz.role.included` | security | An inclusion was made or changed (`enabled`, `leftOut`); `details.role`, `details.included`, `details.before` and `details.after` | AUTHZ-GRANT-006, D-278 |
+| `authz.role.inclusionremoved` | security | An inclusion was removed; `details.role`, `details.included`, `details.before`, and `details.after` null | AUTHZ-GRANT-006, D-278 |
 | `identity.account.deactivated` | routine | The owner deactivated the account | IDN-LIFE-013 |
 | `identity.account.reactivated` | routine; security where an administrator acted | A suspended account was stood back up: by its owner from a deactivation, or by an administrator from an administrator's suspension (the administrator acting, the account the `subject`) | IDN-LIFE-013 |
 | `identity.account.suspended` | security | An administrator suspended an account, or took over the suspension of one its owner deactivated; the administrator acting, the account the `subject`; no organization | IDN-LIFE-013, AUTH-SESS-010 |

@@ -21542,6 +21542,84 @@ good.
 
 ---
 
+## D-278 — A role may include other roles: abilities pass up, duties stay
+
+**Date:** 2026-11-07 · **Status:** accepted · **Amends:** AUTHZ-GRANT-004, AUTHZ-GRANT-005, LIB-HOST-001, `09` `/admin/roles`, `10` sections 1.3, 2.1, 4.5a and 5.24 · **Takes up:** D-267's roles composed of roles
+
+**TL;DR.** A role may include other roles. A grant of the including role admits its
+holder to what the included roles carry and lets them hand out what those roles hand
+out, at any depth, worked out at admission and never copied in; save the actions the
+host declares not inherited (duties: work routed to whoever holds them, such as being
+asked to approve) and what an inclusion leaves out. Found by the first host: its Owner
+and General Manager carry copied "everything" lists, which miss what the roles below
+them gain later, and "the General Manager may do what the HR Manager does" could only be
+said by copying. D-267's trigger for roles composed of roles, "a host rule that a role
+must include another", is met; separation of duties stays deferred.
+
+- **The rule.** An inclusion names the including role, the included role, whether it is
+  on, and what it leaves out (permissions, and roles of the `handsOut`). A role's
+  effective permissions are its own and, through each inclusion that is on, the included
+  role's effective permissions, save those not inherited and those left out; its
+  effective `handsOut` likewise, giving being an ability. A grant, allow or deny, stored
+  or derived, acts on the role's effective permissions. Nothing is copied: a change to an
+  included role or an inclusion reaches every holder above at the next request.
+- **Abilities and duties.** A host action declared `.NotInherited()` never passes through
+  an inclusion; a holder of a role that names it directly keeps it. Library-owned
+  permissions pass, save `system:administer`, which a role carries only by naming it
+  (OPS-CFG-007).
+- **Off and on.** The runtime key `authz.roleinclusion.enabled` switches every inclusion,
+  and each inclusion has its own `enabled`. Inclusions are stored apart from a role's
+  permissions and `handsOut`, so switching changes neither and switching back restores
+  what an inclusion gave.
+- **Refused.** A loop at any depth (`authz.role.inclusionloop`). A role whose grants must
+  end included by one whose grants need not end, and turning `grantsMustEnd` on for a
+  role such a one includes (`authz.role.inclusionmustend`): an open-ended grant would
+  otherwise carry what was meant to end (D-237).
+- **Administration.** `roleinclusion:manage`, apart from `role:manage`, so a deployment
+  can give deciding what a role includes to fewer people than changing a role. A change
+  carries a reason, is the `grant:manage` step-up action, stays within the actor's
+  reach judged on the effective sets before and after (AUTHZ-GRANT-005), and is recorded
+  with the inclusion before and after. A role an inclusion names is not removed.
+- **Reading.** A role's read shows its inclusions and its effective permissions and
+  `handsOut`, each with its source: `own`, or the path of inclusions it came through.
+- **Declared inclusions.** `.Includes(role, leftOut)` on a declared role, each pair seeded
+  once at a start as declared roles are; a later change or removal by an administrator
+  stands.
+- **The gate.** The explanation names the inclusion path; who may exercise a permission
+  (AUTHZ-GATE-007) is answered through inclusions and never through an action not
+  inherited, so a request for approval reaches duty holders only.
+- **What stays.** AUTHZ-GRANT-005's self rule as written; `authz.handout.byholding`,
+  judged on effective permissions.
+- **Round H20's criteria.** On PostgreSQL, a holder of a role including another, two
+  levels deep, is admitted to what the lower roles carry save an action not inherited and
+  what an inclusion leaves out; a change to the lowest role reaches them at the next
+  request; the key off admits own permissions alone and on restores the rest; loops and
+  must-end breaches are refused.
+
+*Rejected:*
+- **Copying the included role's permissions in when the inclusion is made:** misses later
+  changes, the defect found.
+- **Inheriting duties too:** every request for approval would reach everyone above the
+  duty's holder, and asking for approval would mean nothing to one who may give directly.
+- **One parent per role (a tree):** the host needs a role to include several (General
+  Manager includes every other position) and to be included by several; a graph with
+  loops refused does both.
+- **Groups:** a group gathers holders, not roles; it cannot say what a role carries.
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-004 (a role an inclusion names stays), AUTHZ-GRANT-005 (judged on
+  effective sets), AUTHZ-GRANT-006 (new);
+- `07` LIB-HOST-001 (the Roles row: `.Includes`, `.NotInherited()`);
+- `09` `GET|POST|DELETE /admin/roles` (the read, `inclusionmustend`, `inuse`) and
+  `PUT|DELETE /admin/roles/{name}/inclusions/{included}` (new);
+- `10` section 1.3 (`authz.role.inclusionloop`, `authz.role.inclusionmustend`), section 2.1
+  (`roleinclusion:manage`), section 4.5a (`authz.roleinclusion.enabled`), section 5.24
+  (`authz.role.included`, `authz.role.inclusionremoved`);
+- `00` and this log's deferred tables (roles composed of roles taken up);
+- `implementation-plan.md` (round H20, release 1.0.0-rc.10).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21829,6 +21907,7 @@ good.
 | Whether a person still has access is their membership's, kept from its event | D-275 |
 | A host permission may admit the question of who holds another | D-276 |
 | A key the deployment names reads and writes before it is first set | D-277 |
+| A role may include other roles: abilities pass up, duties stay | D-278 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
@@ -21877,6 +21956,6 @@ Per P-003 — nothing deferred silently.
 | Paid geocoding provider (D-061) | If customers demonstrably struggle with the address form |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
 | Round R: a report feed of people data and a bulk import (D-258) | A report that names people or reads their contacts in bulk, a live feed to a spreadsheet or business-intelligence tool, or a bulk import of accounts, members or person records |
-| Full role-based access: roles composed of roles, static and dynamic separation of duties (D-267) | A host rule that a role must include another, or that one person may not hold or exercise two duties together |
+| Full role-based access: static and dynamic separation of duties (D-267; roles composed of roles taken up by D-278) | A host rule that one person may not hold or exercise two duties together |
 | Full attribute-based access: conditions over the subject's, the resource's, the action's and the environment's attributes, in a closed vocabulary the library owns, rendered for both the single check and the list filter (D-267; its boundary, D-272) | A host rule that depends on a value: an amount limit, a record's status, a time, a network or the sign-in's strength |
 | Authorization for a host's GraphQL API: field and type permissions, many decisions in one pass, each record judged in its own organization (D-267) | A host serving a GraphQL API |
