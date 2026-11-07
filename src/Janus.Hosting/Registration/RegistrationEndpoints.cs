@@ -495,6 +495,13 @@ internal static class RegistrationEndpoints
 
         cookies.Write(context.Response, completed.Session);
         cookies.ClearFirstContact(context.Response);
+
+        // BFF-SESS-006 (D-279): the signed-in hint stands beside the auth session the
+        // registration just created.
+        await context.RequestServices
+            .GetRequiredService<SignedInHint>()
+            .WrittenAsync(context.Response, completed.Session, cancellationToken)
+            .ConfigureAwait(false);
         cookies.Remembered(
             context.Response,
             completed.Browser,

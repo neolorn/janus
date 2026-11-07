@@ -1494,6 +1494,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IAppPasswords, Janus.Authentication.Mailboxes.AppPasswords>();
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
+        _ = services.AddScoped<SignedInHint>();
         _ = services.AddScoped<SynchronizerTokens>();
         _ = services.AddScoped<ConcealedRefusals>();
         _ = services.AddScoped<Concealment>();

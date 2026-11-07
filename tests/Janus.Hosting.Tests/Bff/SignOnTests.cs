@@ -47,6 +47,11 @@ public sealed class SignOnTests
 
     private const string Forged = "forged";
 
+    // BFF-SESS-006 (D-279): the signed-in hint, and the parent domain it is kept on.
+    private const string Hint = "identity-signed-in";
+
+    private const string Parent = "example.test";
+
     // What every category the library logs under begins with.
     private static readonly string Library = typeof(Result).Namespace!.Split('.')[0] + ".";
 
@@ -366,6 +371,149 @@ public sealed class SignOnTests
         Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
         Assert.Equal("check", refused.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Empty(deployment.Provider.Carried);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 (D-279): with <c>session.hint.domain</c> set, a check from a browser
+    /// carrying no hint returns it where it was going at once, as a guest, with nothing
+    /// pushed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_ACheckWithTheHintKeySetAndNoHintAnswersAtOnceAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+
+        var arriving = new Browser(deployment);
+        Answer returned = await arriving.SendAsync("GET", Start + "&check=true");
+
+        Assert.Equal(StatusCodes.Status302Found, returned.Status);
+        Assert.Equal(Page, Where(returned));
+        Assert.Empty(deployment.Provider.Carried);
+        Assert.Equal(
+            StatusCodes.Status401Unauthorized,
+            (await arriving.SendAsync("GET", "/auth/session")).Status);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 (D-279): with the key set, a check from a browser carrying the hint
+    /// asks the authentication application, which finds the person's auth session and
+    /// returns them signed in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_ACheckCarryingTheHintReturnsThePersonSignedInAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+
+        arriving.Hold(Hint, holder.Cookies[Hint]);
+
+        Answer forwarded = await arriving.SendAsync("GET", Start + "&check=true");
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+        Answer established = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Assert.Equal("none", Parameter(deployment.Provider.Carried[0], "prompt"));
+        Assert.Equal(StatusCodes.Status302Found, established.Status);
+        Assert.Equal(Page, Where(established));
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await arriving.SendAsync("GET", "/auth/session")).Status);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 (D-279): a check whose silent request finds no auth session removes
+    /// the hint left behind, so the next check from that browser answers at once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_ACheckFindingNoAuthSessionRemovesAHintLeftBehindAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+
+        var arriving = new Browser(deployment);
+        var left = new Browser(deployment);
+
+        arriving.Hold(Hint, "1");
+        left.Hold(Hint, "1");
+
+        Answer forwarded = await arriving.SendAsync("GET", Start + "&check=true");
+        Answer refused = await left.SendAsync("GET", Local(Where(forwarded)));
+        string removed = Assert.Single(refused.SetCookie, header => header.StartsWith(Hint + "=", StringComparison.Ordinal));
+
+        Assert.Equal("login_required", Parameter(Where(refused), "error"));
+        Assert.StartsWith(Hint + "=;", removed, StringComparison.Ordinal);
+        Assert.Contains("domain=" + Parent, removed, StringComparison.OrdinalIgnoreCase);
+        Assert.False(left.Cookies.ContainsKey(Hint));
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 (D-279): with the key set, the auth session a sign-in creates carries
+    /// the hint, value <c>1</c>, on the parent domain the key names, secure, kept from
+    /// script, sent on a top-level navigation and ending when the auth session does; the
+    /// sign-out that ends the auth session removes it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_AnAuthSessionCarriesTheHintUntilItsSignOutAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Flow.Prepare(deployment);
+        deployment.Configuration.Set(Settings.SessionSignedInDomain, Parent);
+
+        Browser holder = await Flow.SecuredAsync(deployment);
+        Answer completed = await holder.SendAsync(
+            "POST",
+            "/register/terms",
+            Flow.TermsVersion(deployment),
+            Flow.NoticeVersion(deployment));
+
+        Flow.Carried(deployment);
+
+        Answer ended = await holder.SendAsync("POST", "/auth/logout");
+        string written = Assert.Single(completed.SetCookie, header => header.StartsWith(Hint + "=", StringComparison.Ordinal));
+        string removed = Assert.Single(ended.SetCookie, header => header.StartsWith(Hint + "=", StringComparison.Ordinal));
+
+        Assert.Equal(StatusCodes.Status201Created, completed.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
+        Assert.StartsWith(Hint + "=1;", written, StringComparison.Ordinal);
+        Assert.All(
+            ["domain=" + Parent, "secure", "httponly", "samesite=lax", "expires="],
+            attribute => Assert.Contains(attribute, written, StringComparison.OrdinalIgnoreCase));
+        Assert.StartsWith(Hint + "=;", removed, StringComparison.Ordinal);
+        Assert.Contains("domain=" + Parent, removed, StringComparison.OrdinalIgnoreCase);
+        Assert.False(holder.Cookies.ContainsKey(Hint));
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 (D-279): without the key no hint is written, and a check asks the
+    /// authentication application as before.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_WithoutTheHintKeyNoHintIsWrittenAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser holder = await HolderAsync(deployment);
+        bool written = holder.Cookies.ContainsKey(Hint);
+        Answer ended = await holder.SendAsync("POST", "/auth/logout");
+
+        Assert.False(written);
+        Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
+        Assert.DoesNotContain(ended.SetCookie, header => header.StartsWith(Hint + "=", StringComparison.Ordinal));
     }
 
     /// <summary>

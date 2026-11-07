@@ -35,6 +35,7 @@ namespace Janus.Hosting.Bff;
 /// <param name="sessions">What derives the per-application session from the record.</param>
 /// <param name="oidc">Where the keys a token is judged against are read.</param>
 /// <param name="cookies">Where the session's two values are written.</param>
+/// <param name="hint">Whether a check from a browser carrying no signed-in hint asks at all.</param>
 /// <param name="browser">What the request arrived carrying.</param>
 /// <param name="channel">Where the back-channel request is made from.</param>
 /// <param name="randomness">What the state and the proof key are drawn from.</param>
@@ -81,6 +82,7 @@ internal sealed class SignOn(
     SessionService sessions,
     IOidc oidc,
     BrowserSessionCookies cookies,
+    SignedInHint hint,
     RequestSession browser,
     IHttpClientFactory channel,
     RandomNumberGenerator randomness,
@@ -156,6 +158,16 @@ internal sealed class SignOn(
         // BFF-SESS-006 AC1: a browser that already holds one here has nothing to
         // establish, so the flow is not started and it goes where it was going.
         if (browser.Live is not null)
+        {
+            return Results.Redirect(destination);
+        }
+
+        // BFF-SESS-006 (D-279): where the deployment keeps the signed-in hint, a check
+        // from a browser carrying none has nobody to recognise, so the guest goes where
+        // it was going at once, with no push.
+        if (check
+            && !SignedInHint.Carried(context.Request)
+            && await hint.DomainAsync(cancellationToken).ConfigureAwait(false) is not null)
         {
             return Results.Redirect(destination);
         }

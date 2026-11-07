@@ -43,8 +43,11 @@ against the public contract of LIB-API-001.
   no session at the authentication application, the browser is returned where it was
   going as a guest instead of being sent to sign in. A public page uses it to recognise a
   person signed in at another application. `check` is `true` or absent; any other value
-  is refused 400 `api.request.malformed`. The protected key `session.hint.domain` is
-  recognised; no signed-in hint is written yet.
+  is refused 400 `api.request.malformed`. Where the protected key `session.hint.domain`
+  names a parent domain, the authentication application keeps the cookie
+  `identity-signed-in` on it while an auth session lives, written at sign-in and removed
+  at sign-out or when a check finds no auth session, and a check from a browser
+  carrying no such cookie returns at once as a guest, with no round trip.
 
 ## [1.0.0-rc.9] - 2026-11-06
 
