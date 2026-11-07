@@ -105,15 +105,14 @@ Roles row); `09` `/admin/roles` and `PUT|DELETE /admin/roles/{name}/inclusions/{
 - `CHANGELOG.md`: one line under Unreleased, `Added`.
 
 **`17` BFF-SESS-006, `02` AUTH-SESS-012, `09` `GET /auth/signon` (D-279, the check only),
-551cafe5**
+c9d0c32c**
 
 - `GET /auth/signon?check=true`: the start pushes with `prompt=none`, the attempt keeps
   that it only checks (`signon_check`, migration `AddSignOnChecks`), and at the return
   `login_required` sends the browser to the stored return address with no session and
   nothing added; every other answer is as before. `check` other than `true` is 400
   naming `check`.
-- `session.hint.domain` is in the catalogue as `10` section 4.1 gives it; nothing reads
-  it yet (section 4, question 1).
+- `session.hint.domain` is in the catalogue as `10` section 4.1 gives it.
 - Tests: `SignOnTests.BFF_SESS_006_ACheckWithNoAuthSessionReturnsAGuestAsAGuestAsync`,
   `BFF_SESS_006_ACheckWithAnAuthSessionReturnsThePersonSignedInAsync`,
   `BFF_SESS_006_ACheckOtherThanTrueIsRefusedAsync`;
@@ -122,14 +121,43 @@ Roles row); `09` `/admin/roles` and `PUT|DELETE /admin/roles/{name}/inclusions/{
   check-only sign-on at its second application.
 - `CHANGELOG.md`: one line under Unreleased, `Added`.
 
+**`17` BFF-SESS-006, `09` `GET /auth/signon`, `10` section 4.1 (D-279 as amended, the
+signed-in hint), 43d6a6e6**
+
+- Where `session.hint.domain` names a domain, the cookie `identity-signed-in` (value `1`,
+  `Domain` the key's value, `Secure`, `HttpOnly`, `SameSite=Lax`, expiring with the auth
+  session) is written wherever an auth session is created: a sign-in, a provider sign-in,
+  a registration's completion and a break-glass presentation. A sign-out removes it, and
+  so does a silent authorization request that finds no auth session. A check-only start
+  that finds the key set and no hint returns the browser to `returnTo` at once, with no
+  push. Without the key nothing is written and every check asks.
+- Tests: `SignOnTests.BFF_SESS_006_ACheckWithTheHintKeySetAndNoHintAnswersAtOnceAsync`,
+  `BFF_SESS_006_ACheckCarryingTheHintReturnsThePersonSignedInAsync`,
+  `BFF_SESS_006_ACheckFindingNoAuthSessionRemovesAHintLeftBehindAsync`,
+  `BFF_SESS_006_AnAuthSessionCarriesTheHintUntilItsSignOutAsync` (every attribute),
+  `BFF_SESS_006_WithoutTheHintKeyNoHintIsWrittenAsync`.
+- `CHANGELOG.md`: the D-279 line brought up to date.
+
+**`03` AUTHZ-GRANT-006, `09` `POST /admin/roles`, `10` section 1.3 (D-278 as amended,
+question 3), a922d813**
+
+- `POST /admin/roles` refuses turning `grantsMustEnd` off for a role that includes a role
+  whose grants must end (409 `authz.role.inclusionmustend`), judged again under the locks.
+- Tests: `RoleInclusionEndpointTests.AUTHZ_GRANT_006_AC6_TurningMustEndOffOverAnIncludedMustEndRoleIsRefusedAsync`.
+- `CHANGELOG.md`: the inclusion line brought up to date.
+
+**`04` PRIV-ROPA-001, `03` AUTHZ-GRANT-006 (D-278 as amended, question 5), dacc30c9**
+
+- `IRegisterRoles.AllowedAsync` reports each role's effective permissions, through its
+  inclusions, as the view every decision reads gives them.
+- Tests: on PostgreSQL,
+  `ComplianceStoreTests.PRIV_ROPA_001_ARoleIsReportedWithItsEffectivePermissionsAsync`.
+- `CHANGELOG.md`: one line under Unreleased, `Added`.
+
 ## 2. Items not implemented
 
-- D-279's signed-in hint: writing `janus-signed-in` when an auth session is created,
-  removing it at sign-out and where a silent request finds no auth session, and a
-  check-only start answering at once without it. Parked on question 1. The round's
-  criterion "with the hint key set and no hint answers without a push" is not met.
-- Turning `grantsMustEnd` off on a role that includes a role whose grants must end:
-  parked on question 3; nothing refuses it.
+- The privacy notice's listing of `identity-signed-in` (`04` PRIV-CONS-006a): parked on
+  question 6; `DeploymentCookies` lists the five cookies of BFF-SESS-002.
 
 ## 3. Resolved by rule
 
@@ -166,44 +194,49 @@ Roles row); `09` `/admin/roles` and `PUT|DELETE /admin/roles/{name}/inclusions/{
    (`PasswordProhibitionTests.AUTH_PASS_006_AC2_NoApiAcceptsASecurityQuestionOrAnswer`
    failed on `SessionHintDomain`); the key itself is spelled as `10` spells it, and the
    `configure` command takes it as `--session.hint.domain`.
+9. The hint is written beside every auth session the authentication application creates,
+   the break-glass session included, and removed by every silent request answered
+   `login_required`, a session record that no longer answers included. `17` BFF-SESS-006
+   governs: "written when an auth session is created", and "a check that finds no auth
+   session removes a hint left behind".
+10. `BrowserCookieTests.BFF_SESS_002_AC2_NoConfigurationKeyWeakensAnAttribute` and
+    `BrowserProfileTests.AUTH_SESS_007_AC2_NoEndpointCanOptOut` list the files of the
+    boundary that read a key; both now name `SignedInHint.cs`, and the first also holds
+    that it reads `session.hint.domain` alone and fixes `Secure`, `HttpOnly` and
+    `SameSite=Lax`. `17` BFF-SESS-006 (D-279) governs: the hint's `Domain` is the key's
+    value, and no attribute of the session cookie becomes configurable.
 
 ## 4. Open questions
 
-1. **D-279, the hint cookie's name (Tier 3; parks the hint).** `17` BFF-SESS-006 and the
-   decision name the cookie `janus-signed-in`. `08` CONV-NAME-001 (D-163) says the product
-   name appears in no cookie, and that where a prefix keeps the library's artefacts apart
-   from a host's, the prefix is `identity`; its criterion 2 is a source scan that fails on
-   the name (`ProductNameTests.CONV_NAME_001_AC2_...`, which failed on it).
-2. **D-279, `10` section 4.8 (a document defect; the pipeline is red until it is
-   settled).** Section 4.1 marks `session.hint.domain` P; section 4.8, the OPS-CFG-004 list,
-   does not name it. `SettingsCatalogueTests.OPS_CFG_004_AKeyMarkedProtectedIsOnTheOneList`
-   and `OPS_CFG_001_AC1_ARedeployScopedKeyIsOnTheOpsCfg004List` read both sections and fail
-   on the documents alone. The smallest fix is the key's row in section 4.8.
-3. **D-278, turning `grantsMustEnd` off on an including role (Tier 2; parks it).**
-   AUTHZ-GRANT-006 refuses "a role whose grants must end ... included by a role whose
-   grants need not end", which turning the includer's `grantsMustEnd` off produces; `09`
-   and `10` name only an inclusion and turning `grantsMustEnd` on. Readings: (a) refuse it
-   with `authz.role.inclusionmustend` (one condition in `EndingRefused`); (b) allow it, the
-   rule binding the two changes named.
+1. **D-279, the hint cookie's name (Tier 3; parked the hint).** `17` BFF-SESS-006 and the
+   decision named the cookie `janus-signed-in`, against `08` CONV-NAME-001 (D-163).
+   Answered by D-279's amendment (84749860): the cookie is `identity-signed-in`. Built.
+2. **D-279, `10` section 4.8 (a document defect).** `session.hint.domain` was marked P in
+   section 4.1 and missing from section 4.8, which failed two contract tests. Answered by
+   D-279's amendment (84749860): the key is on section 4.8's list. The tests pass.
+3. **D-278, turning `grantsMustEnd` off on an including role (Tier 2; parked it).**
+   Answered by D-278's amendment (84749860): reading (a), refused with
+   `authz.role.inclusionmustend`. Built.
 4. **D-278, the reach of an inclusion change while `authz.roleinclusion.enabled` is off
-   (Tier 2; built the stricter reading).** Judged on the effective sets as the key makes
-   them, a change made while the key is off adds and takes away nothing and so meets no
-   reach; turning the key on then admits it. What is built judges the change as though
-   the key were on, so a change made while it is off reaches no further than one made
-   while it is on. Readings: (a) as built; (b) as the key reads, with a one-line change
-   (`ReadAsync` in place of `ReadFollowingAsync` in `RoleService`).
-5. **D-278, the records of processing (Tier 2; nothing changed).** PRIV-ROPA-001's
-   `IRegisterRoles.AllowedAsync` reports what each role allows from its own permissions.
-   A grant of an including role admits more. Readings: (a) report effective permissions
-   (the register reads `RoleGraphs`); (b) keep each role's own.
+   (Tier 2).** Answered by D-278's amendment (84749860): reading (a), judged as though the
+   key were on, as built. Nothing changed.
+5. **D-278, the records of processing (Tier 2).** Answered by D-278's amendment
+   (84749860): reading (a), effective permissions. Built.
+6. **D-279, the hint against the cookie roster and the privacy notice (Tier 3; parks the
+   notice's listing of the hint).** `17` BFF-SESS-002's values name five cookies and say
+   "The library sets no other cookie", and `04` PRIV-CONS-006a has the privacy notice list
+   every cookie the deployment sets. `17` BFF-SESS-006 now has the authentication
+   application set `identity-signed-in`. `DeploymentCookies` lists the five, so the
+   notice does not list the hint where `session.hint.domain` is set. The hint is built as
+   the lead's message directs; the notice is unchanged.
 
 ## 5. Gate result
 
 - Fast checks on every commit: build with warnings as errors, analysers,
   `dotnet format --verify-no-changes`, the unit tests of the changed projects: green.
-- Before the push: every unit and contract test, save the two of question 2, which fail on
-  the documents; the commit-message gate and the full-history secret scan: green. On
-  PostgreSQL, run here for the round's criteria: `RoleInclusionTests`, the truth table, the
-  two seeding tests, `PreAuthenticationStoreTests`: green.
+- Before the push: every unit and contract test, the commit-message gate and the
+  full-history secret scan: green. On PostgreSQL, run here for the round's criteria:
+  `RoleInclusionTests`, the truth table, the two seeding tests,
+  `PreAuthenticationStoreTests`, `ComplianceStoreTests`: green.
 - The gate of record is the pipeline's run on this report's commit, named in the message
   to the lead.
