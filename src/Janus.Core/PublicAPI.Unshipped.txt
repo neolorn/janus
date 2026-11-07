@@ -98,3 +98,4 @@ override Janus.Core.HeldRole.GetHashCode() -> int
 override Janus.Core.HeldRole.ToString() -> string!
 static Janus.Core.HeldRole.operator !=(Janus.Core.HeldRole? left, Janus.Core.HeldRole? right) -> bool
 static Janus.Core.HeldRole.operator ==(Janus.Core.HeldRole? left, Janus.Core.HeldRole? right) -> bool
+static Janus.Core.Configuration.Settings.SessionSignedInDomain.get -> Janus.Core.Configuration.TextSetting!

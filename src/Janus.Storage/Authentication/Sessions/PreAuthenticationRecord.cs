@@ -65,4 +65,10 @@ internal sealed class PreAuthenticationRecord
     /// going to.
     /// </summary>
     public string? SignOnReturn { get; set; }
+
+    /// <summary>
+    /// The <c>signon_check</c> column: whether the sign-on only checks, returning the
+    /// browser as a guest where the person holds no auth session (D-279).
+    /// </summary>
+    public bool SignOnCheck { get; set; }
 }

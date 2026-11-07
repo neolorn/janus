@@ -36,7 +36,7 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
         var state = OpaqueToken.Of("the-state-it-was-sent-out-with");
         const string verifier = "a-verifier-of-at-least-forty-three-characters-long";
 
-        await CarriedAsync(secret, new SignOnAttempt(state.Fingerprint(), verifier, "/account"));
+        await CarriedAsync(secret, new SignOnAttempt(state.Fingerprint(), verifier, "/account", CheckOnly: true));
 
         await using StoreContext reading = database.Context();
 
@@ -46,6 +46,7 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
 
         Assert.Equal(verifier, attempt.Verifier);
         Assert.Equal("/account", attempt.ReturnTo);
+        Assert.True(attempt.CheckOnly);
         Assert.Equal(state.Fingerprint(), attempt.StateFingerprint);
 
         await using NpgsqlConnection connection = await database.OpenAsync();
@@ -70,7 +71,7 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
 
         await CarriedAsync(
             secret,
-            new SignOnAttempt(state.Fingerprint(), "a-verifier-long-enough-to-be-one", "/"));
+            new SignOnAttempt(state.Fingerprint(), "a-verifier-long-enough-to-be-one", "/", CheckOnly: false));
 
         await using (StoreContext forgetting = database.Context())
         {

@@ -130,6 +130,7 @@ session.aal2.absolute duration R ceiling=P1D
 session.aal2.inactivity duration R ceiling=PT12H
 session.default.absolute duration R ceiling=P365D
 session.default.inactivity duration R ceiling=P365D
+session.hint.domain text P
 session.stepup.recency duration R
 sweep.interval duration R ceiling=PT15M
 takedown.grace duration R floor=P7D

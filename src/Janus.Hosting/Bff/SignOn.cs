@@ -127,12 +127,17 @@ internal sealed class SignOn(
     /// </summary>
     /// <param name="context">The request.</param>
     /// <param name="returnTo">Where on this application the browser was going.</param>
+    /// <param name="check">
+    /// Whether the sign-on only checks, returning a guest as a guest rather than asking
+    /// them to sign in (D-279).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The forwarding, or the refusal.</returns>
     /// <exception cref="ArgumentNullException">The request is absent.</exception>
     public async Task<IResult> StartAsync(
         HttpContext context,
         string? returnTo,
+        bool check,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -155,7 +160,7 @@ internal sealed class SignOn(
             return Results.Redirect(destination);
         }
 
-        return await ForwardAsync(context, destination, silent: true, cancellationToken)
+        return await ForwardAsync(context, destination, silent: true, check, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -214,11 +219,15 @@ internal sealed class SignOn(
 
         // AUTH-SESS-012 AC3: `login_required` answers the silent attempt and nothing
         // else, so the second attempt asks the provider to sign the person in and the
-        // provider forwards them rather than refusing again.
+        // provider forwards them rather than refusing again; a sign-on that only checks
+        // returns the browser where it was going, as a guest, with nothing added to its
+        // address (BFF-SESS-006, D-279).
         if (string.Equals(error, SignInRequired, StringComparison.Ordinal))
         {
-            return await ForwardAsync(context, attempt.ReturnTo, silent: false, cancellationToken)
-                .ConfigureAwait(false);
+            return attempt.CheckOnly
+                ? Results.Redirect(attempt.ReturnTo)
+                : await ForwardAsync(context, attempt.ReturnTo, silent: false, check: false, cancellationToken)
+                    .ConfigureAwait(false);
         }
 
         // BFF-ERR-001 AC5, chapter 09: the provider's own failure is a fault and no
@@ -284,6 +293,7 @@ internal sealed class SignOn(
         HttpContext context,
         string returnTo,
         bool silent,
+        bool check,
         CancellationToken cancellationToken)
     {
         if (await clients.FindAsync(client.ClientId, cancellationToken).ConfigureAwait(false)
@@ -309,7 +319,7 @@ internal sealed class SignOn(
         await contacts
             .CarryAsync(
                 contact,
-                new SignOnAttempt(state.Fingerprint(), verifier, returnTo),
+                new SignOnAttempt(state.Fingerprint(), verifier, returnTo, check),
                 cancellationToken)
             .ConfigureAwait(false);
 

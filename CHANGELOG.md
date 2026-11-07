@@ -39,6 +39,12 @@ against the public contract of LIB-API-001.
   permission and recording nothing, the roles a person's own account holds through its
   live allow grants in the organization, each with what it carries and hands out through
   its inclusions and the roles that may give it (`HeldRole`).
+- `GET /auth/signon?check=true` starts a sign-on that only checks: where the person holds
+  no session at the authentication application, the browser is returned where it was
+  going as a guest instead of being sent to sign in. A public page uses it to recognise a
+  person signed in at another application. `check` is `true` or absent; any other value
+  is refused 400 `api.request.malformed`. The protected key `session.hint.domain` is
+  recognised; no signed-in hint is written yet.
 
 ## [1.0.0-rc.9] - 2026-11-06
 

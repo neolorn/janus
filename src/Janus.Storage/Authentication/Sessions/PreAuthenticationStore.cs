@@ -113,7 +113,7 @@ internal sealed class PreAuthenticationStore(
         }
     }
 
-    // BFF-SESS-006: the three columns are written together, so a row either carries a
+    // BFF-SESS-006: the four columns are written together, so a row either carries a
     // whole sign-on or carries none, and the proof key goes down wrapped.
     private async ValueTask WriteAsync(
         PreAuthenticationRecord record,
@@ -125,6 +125,7 @@ internal sealed class PreAuthenticationStore(
             record.SignOnState = null;
             record.SignOnVerifier = null;
             record.SignOnReturn = null;
+            record.SignOnCheck = false;
 
             return;
         }
@@ -137,6 +138,7 @@ internal sealed class PreAuthenticationStore(
             record.SignOnState = attempt.StateFingerprint;
             record.SignOnVerifier = PersonalFieldCipher.Wrap(verifier, deploymentKey);
             record.SignOnReturn = attempt.ReturnTo;
+            record.SignOnCheck = attempt.CheckOnly;
         }
         finally
         {
@@ -163,7 +165,7 @@ internal sealed class PreAuthenticationStore(
         {
             verifier = PersonalFieldCipher.Unwrap(wrapped, deploymentKey);
 
-            return new SignOnAttempt(state, Encoding.ASCII.GetString(verifier), returnTo);
+            return new SignOnAttempt(state, Encoding.ASCII.GetString(verifier), returnTo, record.SignOnCheck);
         }
         finally
         {

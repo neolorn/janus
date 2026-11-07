@@ -39,6 +39,7 @@ configure
     --redirect.defaultclient optional setting
     --search.maxsubjects optional setting
     --search.memorychecks optional setting
+    --session.hint.domain optional setting
     --token.signing.algorithm optional setting
     --webauthn.algorithms optional setting
     --webauthn.origins optional setting

@@ -733,6 +733,7 @@ public sealed class ModelTests
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.record_access",
             "preauthentication_sessions.registration",
+            "preauthentication_sessions.signon_check",
             "preauthentication_sessions.signon_return",
             "preauthentication_sessions.signon_state",
             "preauthentication_sessions.signon_verifier",

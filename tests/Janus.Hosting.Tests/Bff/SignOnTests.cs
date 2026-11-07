@@ -297,6 +297,78 @@ public sealed class SignOnTests
     }
 
     /// <summary>
+    /// BFF-SESS-006, AUTH-SESS-012 (D-279): a sign-on that only checks, from a browser
+    /// whose person holds no auth session, is told <c>login_required</c> once and returns
+    /// the browser where it was going as a guest, with nothing added to its address and
+    /// no second push.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_ACheckWithNoAuthSessionReturnsAGuestAsAGuestAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start + "&check=true");
+        Answer refused = await new Browser(deployment).SendAsync("GET", Local(Where(forwarded)));
+        Answer returned = await arriving.SendAsync("GET", Local(Where(refused)));
+
+        Assert.Equal("login_required", Parameter(Where(refused), "error"));
+        Assert.Equal(StatusCodes.Status302Found, returned.Status);
+        Assert.Equal(Page, Where(returned));
+        Assert.Equal(["none"], deployment.Provider.Carried.Select(carried => Parameter(carried, "prompt")));
+        Assert.Equal(
+            StatusCodes.Status401Unauthorized,
+            (await arriving.SendAsync("GET", "/auth/session")).Status);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 (D-279): a sign-on that only checks, from a browser whose person holds
+    /// a live auth session, returns it signed in, as any sign-on does.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_ACheckWithAnAuthSessionReturnsThePersonSignedInAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start + "&check=true");
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+        Answer established = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Assert.Equal(StatusCodes.Status302Found, established.Status);
+        Assert.Equal(Page, Where(established));
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await arriving.SendAsync("GET", "/auth/session")).Status);
+    }
+
+    /// <summary>
+    /// Chapter 09 (D-279): <c>check</c> is <c>true</c> or absent, and any other value is
+    /// refused 400 naming it, with nothing pushed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_ACheckOtherThanTrueIsRefusedAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Answer refused = await new Browser(deployment).SendAsync("GET", Start + "&check=yes");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal("check", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(deployment.Provider.Carried);
+    }
+
+    /// <summary>
     /// BFF-SESS-006, API-REDIR-001 AC1: the destination the browser returns to is the
     /// one the registry holds, and a request naming another one changes nothing.
     /// </summary>

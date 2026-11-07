@@ -18,10 +18,18 @@ namespace Janus.Authentication.Sessions;
 /// The path on this application the browser was going to, which it is sent back to
 /// once the session exists.
 /// </param>
+/// <param name="CheckOnly">
+/// Whether the sign-on only checks: a person holding no auth session is returned as a
+/// guest rather than asked to sign in (BFF-SESS-006, D-279).
+/// </param>
 /// <remarks>
 /// Implements BFF-SESS-006 and BFF-CSRF-005a. A browser has at most one sign-on in
 /// flight, bound to the pre-authentication session it started from, so a code that
 /// comes back to a browser that started nothing is refused before anything is
 /// exchanged.
 /// </remarks>
-internal sealed record SignOnAttempt(byte[] StateFingerprint, [property: NeverLogged] string Verifier, string ReturnTo);
+internal sealed record SignOnAttempt(
+    byte[] StateFingerprint,
+    [property: NeverLogged] string Verifier,
+    string ReturnTo,
+    bool CheckOnly);

@@ -2059,6 +2059,7 @@ GET /auth/session
 GET /auth/signon
   302
     error auth.session.expired
+  400 api.request.malformed
   403 auth.session.csrfinvalid
 GET /auth/signon/return
   302

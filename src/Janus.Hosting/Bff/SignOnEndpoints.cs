@@ -33,7 +33,9 @@ internal static class SignOnEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = endpoints.MapGet(SignOn.StartPath, StartAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid).Carrying(ErrorCodes.SessionExpired))
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.RequestMalformed, ErrorCodes.SessionCsrfInvalid)
+                .Carrying(ErrorCodes.SessionExpired))
             .Produces(StatusCodes.Status302Found);
         _ = endpoints.MapGet(SignOn.ReturnPath, ReturnAsync)
             .Declares(EndpointDeclaration.Answering().Carrying(ErrorCodes.SessionExpired, ErrorCodes.SessionCsrfInvalid))
@@ -42,15 +44,23 @@ internal static class SignOnEndpoints
         return endpoints;
     }
 
-    private static Task<IResult> StartAsync(
+    // 09 (D-279): `check` is `true` or absent, and any other value names the member the
+    // request cannot be read at.
+    private static async Task<IResult> StartAsync(
         SignOn signOn,
         HttpContext context,
         string? returnTo,
+        string? check,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(signOn);
 
-        return signOn.StartAsync(context, returnTo, cancellationToken);
+        if (check is not (null or "true"))
+        {
+            return Answers.Malformed("check");
+        }
+
+        return await signOn.StartAsync(context, returnTo, check is not null, cancellationToken).ConfigureAwait(false);
     }
 
     private static Task<IResult> ReturnAsync(

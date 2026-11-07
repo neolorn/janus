@@ -2381,6 +2381,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("registration");
 
+                b.Property<bool>("SignOnCheck")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false)
+                    .HasColumnName("signon_check");
+
                 b.Property<string>("SignOnReturn")
                     .HasColumnType("text")
                     .HasColumnName("signon_return");

@@ -23,7 +23,8 @@ public sealed class SettingWrittenFormTests
 {
     /// <summary>
     /// Every key of the catalogue writes its default and reads the same value back.
-    /// The keys whose default is no value at all, one derived at startup, one named only
+    /// The keys whose default is no value at all, one naming the domain a hint is kept
+    /// on only where a deployment keeps one, one derived at startup, one named only
     /// where the mail server adapter is used and one naming a registered client, are the
     /// only ones the round trip passes over.
     /// </summary>
@@ -42,6 +43,7 @@ public sealed class SettingWrittenFormTests
 
         Assert.Equal(
             [
+                "session.hint.domain",
                 "webauthn.rpid",
                 "integration.mailserver.endpoint",
                 "redirect.defaultclient",
