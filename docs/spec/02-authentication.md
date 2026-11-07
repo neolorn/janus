@@ -1371,7 +1371,8 @@ the **OIDC authorization code flow with PKCE**, with each browser application's 
 `/oidc/authorize` with the returned `request_uri` alone (AUTH-OIDC-006, BFF-SESS-006).
 The authentication application answers from its auth-session cookie: a one-time
 authorization code where a session exists, `login_required` where none does, in which
-case the BFF pushes again without `prompt=none` and the person signs in. The BFF
+case the BFF pushes again without `prompt=none` and the person signs in, save a sign-on that
+only checks, which returns the browser as a guest (BFF-SESS-006, D-279). The BFF
 exchanges the code **back-channel** on the machine profile (BFF-MACH-001) with its
 client secret and PKCE verifier, reads the `sid` claim that names the session record,
 creates its per-app session bound to that record, and discards the ID token. The per-app

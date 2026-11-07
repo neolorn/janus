@@ -21657,6 +21657,58 @@ must include another", is met; separation of duties stays deferred.
 
 ---
 
+## D-279 — A sign-on that only checks, and a hint that someone is signed in
+
+**Date:** 2026-11-07 · **Status:** accepted · **Amends:** AUTH-SESS-012, BFF-SESS-006, `09` `GET /auth/signon`, `10` section 4.1
+
+**TL;DR.** A BFF's sign-on can be started to check only: `GET /auth/signon?check=true`
+asks the authentication application with `prompt=none` as today, and where it answers
+`login_required` the browser goes back as a guest instead of to the sign-in page. Found by
+the first host: its public store must recognise a person signed in at another of its
+applications, and the sign-on's only behaviour (ask silently, then ask the person) would
+send every guest to a sign-in page, so the store never started it and a person signed in
+elsewhere stayed a guest there. A protected key, `session.hint.domain`, lets the
+authentication application keep a cookie on the deployment's parent domain saying only
+that someone on this browser is signed in, so a check from a browser without it answers at
+once and guests pay no round trip.
+
+- **The check.** With `check=true`, the start pushes with `prompt=none` as every start
+  does, and at the return `login_required` sends the browser to the stored return address
+  with no per-app session and nothing added to its address: no refusal, no second push.
+  Every other answer is as today.
+- **The hint.** Where `session.hint.domain` names a domain, the authentication application
+  writes `janus-signed-in` (value `1`, `Domain` the key's value, `Secure`, `HttpOnly`,
+  `SameSite=Lax`, no `Max-Age` beyond the auth session's absolute lifetime) when an auth
+  session is created, and removes it when the auth session ends by sign-out. A check-only
+  start that finds the key set and no hint sends the browser to `returnTo` at once, as a
+  guest. A check that finds no auth session removes a hint left behind. Without the key, no
+  hint is written and every check asks.
+- **Why the hint is safe.** It carries no identifier and grants nothing; it tells another
+  subdomain only that someone on this browser holds an auth session. The session cookie
+  stays on the authentication application's own host.
+- **What the host does.** Starts a check-only sign-on once per browser session on a public
+  page, and never on a route that needs a session, which keeps today's sign-on.
+- **Round H20's criteria (added).** A check-only sign-on with no auth session returns the
+  browser as a guest with no session; with one, it returns it signed in; with the key set
+  and no hint it answers at once without a push.
+
+*Rejected:*
+- **A hidden frame asking with `prompt=none`:** the auth-session cookie is `SameSite=Lax`,
+  sent on a top-level navigation only, and third-party frames are increasingly cut off.
+- **Sharing the session cookie on the parent domain:** every subdomain, mail included,
+  could read it.
+- **The host sending every guest through the full sign-on:** guests would land on a
+  sign-in page.
+
+**Propagated to:**
+- `02` AUTH-SESS-012 (the check's exception to "pushes again");
+- `17` BFF-SESS-006 (the check and the hint);
+- `09` `GET /auth/signon` (`check`);
+- `10` section 4.1 (`session.hint.domain`);
+- `implementation-plan.md` (round H20).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21945,6 +21997,7 @@ must include another", is met; separation of duties stays deferred.
 | A host permission may admit the question of who holds another | D-276 |
 | A key the deployment names reads and writes before it is first set | D-277 |
 | A role may include other roles: abilities pass up, duties stay | D-278 |
+| A sign-on that only checks, and a hint that someone is signed in | D-279 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

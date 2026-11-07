@@ -1092,7 +1092,12 @@ The browser profile's sign-on (BFF-SESS-006): both halves are the library's.
 `GET /auth/signon?returnTo=` pushes the authorization request to `POST /oidc/par` and
 answers **302** to the provider's `/oidc/authorize` carrying `client_id` and
 `request_uri` only; a browser already holding a per-app session is sent to `returnTo`,
-which is followed only as a path of this application (API-REDIR-001, D-198).
+which is followed only as a path of this application (API-REDIR-001, D-198). With
+`check=true` the sign-on only checks (BFF-SESS-006, D-279): at the return `login_required`
+answers **302** to the stored return address with no session set, and a start that finds
+`session.hint.domain` set and no `janus-signed-in` cookie answers **302** to `returnTo` at
+once, as a guest. `check` is `true` or absent; any other value is **400**
+`api.request.malformed` naming `check`.
 `GET /auth/signon/return` answers **302** to the stored return address with the session
 cookies set. A start from a browser with no pre-authentication session issues one
 (BFF-CSRF-005a). The sign-on is a navigation route (BFF-ERR-001): a refusal other than
