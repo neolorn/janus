@@ -288,7 +288,10 @@ opaque identifier in a cookie and nothing else.
 `__Host-identity-preauth` (BFF-CSRF-005a), `__Host-identity-csrf` (BFF-CSRF-006),
 `__Host-identity-device` (the trusted device, AUTH-FACT-015) and
 `__Host-identity-browser` (the new-device check, AUTH-FACT-016), one set per application
-origin; the `__Host-` prefix already scopes them. The library sets no other cookie. The
+origin; the `__Host-` prefix already scopes them. Where `session.hint.domain` names a
+domain it also sets `identity-signed-in` on that domain (BFF-SESS-006, D-279), one per
+deployment and without the prefix, since it carries a `Domain`. The library sets no other
+cookie. The
 pre-authentication cookie ends with the browser's session. The session cookie, and the
 CSRF cookie beside it, last until the session's absolute expiry where the session's
 policy requires `aal1`, so a customer stays signed in across a browser's restart as
@@ -299,7 +302,8 @@ again at a rotation follows the policy then in force. The trusted-device cookie 
 `factor.trusteddevice.lifetime` and the remembered-browser cookie
 `device.verification.lifetime`; no third party can read any of them. The privacy notice
 lists them so, the session and CSRF cookies at `session.default.absolute`, the longest
-they last (PRIV-CONS-006a, D-203). Whatever a cookie carries, the session record's own
+they last (PRIV-CONS-006a, D-203), and the hint only while the key names a domain, at
+the longest an auth session lasts. Whatever a cookie carries, the session record's own
 lifetimes decide whether it is honoured (AUTH-SESS-005).
 
 *Source: AUTH-SESS-003, D-053, D-166, D-203*

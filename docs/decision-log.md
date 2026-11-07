@@ -21700,6 +21700,19 @@ once and guests pay no round trip.
   `janus-signed-in`: `08` CONV-NAME-001 (D-163) keeps the product's name out of cookies and
   names `identity` as their prefix. `session.hint.domain` is protected, so it is on `10`
   section 4.8's list as well as in section 4.1.
+- **Amended 2026-11-08 (round H20, Q6).** The hint is the library's sixth cookie, set only
+  where `session.hint.domain` names a domain. `17` BFF-SESS-002's list and `04`
+  PRIV-CONS-006a name it. The deployment's cookie list (`IDeploymentCookies`) carries it
+  while the key names a domain, read when the list is read as the lifetimes are, so the
+  privacy notice lists it exactly when it is set: strictly necessary (it serves the sign-in
+  the person asked for and carries no identifier), unreadable by any third party, at the
+  longest an auth session lasts. A change of `session.hint.domain` is compared with the
+  current notice as a change of a cookie's lifetime key is (D-203), so a notice that no
+  longer lists what is set is raised with the change. A host declaring a cookie named
+  `identity-signed-in` fails startup as for the library's other names, whether or not the
+  key is set. Criteria: the list carries the hint with the key set and not without it;
+  setting the key over a notice without the hint raises the degradation; a host cookie of
+  that name fails startup.
 - **Round H20's criteria (added).** A check-only sign-on with no auth session returns the
   browser as a guest with no session; with one, it returns it signed in; with the key set
   and no hint it answers at once without a push.
