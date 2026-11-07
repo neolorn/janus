@@ -556,6 +556,48 @@ internal sealed class RoleService(
         return Result.Success();
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<HeldRole>>> OwnAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // AUTHZ-GRANT-006 (D-280): the account read is the one the context is effective
+        // for, as a person's own grants are read; a principal has no account of its own.
+        if (context.Effective is not SubjectId own)
+        {
+            return Result.Failure<IReadOnlyList<HeldRole>>(Error.From(ErrorCodes.Denied));
+        }
+
+        // D-274, D-280: the roles of the live allow grants in the account's own name, each
+        // once, oldest grant first; a role reaching it through a group is the group's.
+        IReadOnlyList<Grant> held = await grants
+            .HeldByAsync([GrantSubject.Of(own)], organization, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        RoleGraph graph = await graphs.ReadAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Success<IReadOnlyList<HeldRole>>(
+        [
+            .. held
+                .Where(grant => !grant.Deny)
+                .OrderBy(grant => grant.GrantedAt)
+                .Select(grant => grant.Role)
+                .Distinct()
+                .Where(role => graph.Find(role) is not null)
+                .Select(role => new HeldRole(
+                    role,
+                    graph.Effective(role),
+                    [
+                        .. graph.Roles
+                            .Where(giving => graph.HandsOut(giving.Name).ContainsKey(role))
+                            .Select(giving => giving.Name),
+                    ])),
+        ]);
+    }
+
     // Chapter 10 section 5b (D-218): the event is written in the transaction that makes
     // the change, naming the role and no subject, with the person who acted as the
     // context gives them.

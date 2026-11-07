@@ -640,6 +640,18 @@ POST /account/recoverycodes/exported
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied authz.restricted
   409 auth.factor.notenrolled
+GET /account/roles
+  200
+    application/json
+      [].name: string
+      [].effective.permissions[].name: string
+      [].effective.permissions[].from[]: string
+      [].effective.handsOut[].name: string
+      [].effective.handsOut[].from[]: string
+      [].givenBy[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
 PUT /account/secondstep/preferred
   request application/json
     method: Guid?

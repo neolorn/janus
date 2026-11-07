@@ -175,6 +175,12 @@ internal static class AccountEndpoints
             .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("organization"))
             .Produces<IReadOnlyList<OwnGrantView>>();
 
+        // AUTHZ-GRANT-006 (D-280): the roles the caller holds themselves, what each carries
+        // and which roles may give it, with no permission.
+        _ = SessionRequired.On(group.MapGet("/roles", ListRolesAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("organization"))
+            .Produces<IReadOnlyList<HeldRoleView>>();
+
         _ = SessionRequired.On(group.MapPost("/deactivate", DeactivateAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -954,6 +960,25 @@ internal static class AccountEndpoints
             held => TypedResults.Json<IReadOnlyList<OwnGrantView>>(
                 [.. held.Select(OwnGrantView.Of)],
                 AccountJson.Default.IReadOnlyListOwnGrantView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> ListRolesAsync(
+        IRoles roles,
+        RequestSession browser,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(roles);
+
+        return Answers.Of(
+            await roles
+                .OwnAsync(Asking(browser), organization, cancellationToken)
+                .ConfigureAwait(false),
+            held => TypedResults.Json<IReadOnlyList<HeldRoleView>>(
+                [.. held.Select(HeldRoleView.Of)],
+                AccountJson.Default.IReadOnlyListHeldRoleView,
                 contentType: null,
                 StatusCodes.Status200OK));
     }

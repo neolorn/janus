@@ -127,4 +127,27 @@ public interface IRoles
         RoleName included,
         string reason,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The roles the caller's own account holds in its own name in an organization,
+    /// through its live allow grants there, each once, oldest grant first.
+    /// </summary>
+    /// <param name="context">Who is asking, whose own account is read.</param>
+    /// <param name="organization">The organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Each role with what it carries and hands out through its inclusions and the roles
+    /// that may give it; none where the account holds none there, an organization the
+    /// deployment does not hold included; <c>authz.denied</c> for a context that is
+    /// effective for no account.
+    /// </returns>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-006 (D-280). It asks no permission and records nothing; a
+    /// restricted account is answered its own (IDN-ACCT-007). A role reaching the account
+    /// through a group is the group's and is not answered.
+    /// </remarks>
+    ValueTask<Result<IReadOnlyList<HeldRole>>> OwnAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken);
 }

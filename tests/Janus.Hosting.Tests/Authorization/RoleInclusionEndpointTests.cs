@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
 using Janus.Authorization.Tests.Roles;
 using Janus.Core;
@@ -21,6 +22,9 @@ namespace Janus.Hosting.Tests.Authorization;
 [Trait("kind", "unit")]
 public sealed class RoleInclusionEndpointTests : IAsyncLifetime
 {
+    private static readonly OrganizationId Branch =
+        new(Guid.Parse("44444444-4444-4444-8444-444444444444"));
+
     private static readonly OrganizationId Administration =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
@@ -243,6 +247,52 @@ public sealed class RoleInclusionEndpointTests : IAsyncLifetime
         Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
     }
 
+    /// <summary>
+    /// AUTHZ-GRANT-006, chapter 09 <c>GET /account/roles</c> (D-280): a person with no
+    /// permission reads the roles their own account holds through its live allow grants in
+    /// the organization, each with what it carries through its inclusions and its sources,
+    /// and the roles whose effective <c>handsOut</c> names it, through inclusions too; a
+    /// deny and a grant in another organization are not listed, and an absent organization
+    /// is malformed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_006_APersonReadsTheirOwnRolesWithWhatTheyCarryAsync()
+    {
+        Browser person = await Flow.SignedInAsync(_deployment);
+        SubjectId own = _deployment.Directory.Created[^1].Subject;
+        var chief = RoleName.Parse("chief");
+        var head = RoleName.Parse("head");
+
+        await _deployment.Roles.CreateAsync(Role.Of(chief, [], [Manager]), CancellationToken.None);
+        await _deployment.Roles.CreateAsync(Role.Of(head, []), CancellationToken.None);
+        await _deployment.Roles.Inclusions.CreateAsync(Manager, new RoleInclusion(Editor, Enabled: true, [], []), CancellationToken.None);
+        await _deployment.Roles.Inclusions.CreateAsync(head, new RoleInclusion(chief, Enabled: true, [], []), CancellationToken.None);
+        await HeldAsync(own, Manager, Branch, deny: false);
+        await HeldAsync(own, Reader, Branch, deny: true);
+        await HeldAsync(own, Editor, Administration, deny: false);
+
+        Answer read = await person.SendAsync("GET", "/account/roles?organization=" + Branch);
+        Answer unnamed = await person.SendAsync("GET", "/account/roles");
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+
+        JsonElement held = Assert.Single(read.Json().EnumerateArray());
+        JsonElement effective = held.GetProperty("effective");
+
+        Assert.Equal("manager", held.GetProperty("name").GetString());
+        Assert.Equal(
+            [("article:edit", "editor")],
+            effective.GetProperty("permissions").EnumerateArray()
+                .Select(entry => (Text(entry.GetProperty("name")), string.Join('/', entry.GetProperty("from").EnumerateArray().Select(Text)))));
+        Assert.Equal(
+            [("reader", "editor")],
+            effective.GetProperty("handsOut").EnumerateArray()
+                .Select(entry => (Text(entry.GetProperty("name")), string.Join('/', entry.GetProperty("from").EnumerateArray().Select(Text)))));
+        Assert.Equal(["chief", "head"], held.GetProperty("givenBy").EnumerateArray().Select(Text));
+        Assert.Equal("organization", Member(unnamed));
+    }
+
     private static string? Text(JsonElement element) => element.GetString();
 
     private static string Member(Answer answer)
@@ -278,6 +328,27 @@ public sealed class RoleInclusionEndpointTests : IAsyncLifetime
             "DELETE",
             "/admin/roles/" + role + "/inclusions/" + included,
             ("reason", "No longer needed."));
+
+    // A grant of the role to the account in the organization, standing.
+    private async Task HeldAsync(SubjectId holder, RoleName role, OrganizationId organization, bool deny)
+    {
+        Grant grant = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                GrantSubject.Of(holder),
+                role,
+                organization,
+                on: null,
+                deny,
+                GrantKind.Stored,
+                expiresAt: null,
+                holder,
+                _deployment.Clock.GetUtcNow(),
+                "Works in the branch.")
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(grant, CancellationToken.None);
+    }
 
     // An administrator holding the permissions in the administrative organization and,
     // unless a case leaves it short, reaching what the cases' roles carry and hand out.

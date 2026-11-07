@@ -81,3 +81,20 @@ static Janus.Core.RoleInclusion.operator !=(Janus.Core.RoleInclusion? left, Janu
 static Janus.Core.RoleInclusion.operator ==(Janus.Core.RoleInclusion? left, Janus.Core.RoleInclusion? right) -> bool
 static Janus.Core.RoleInclusionDeclaration.operator !=(Janus.Core.RoleInclusionDeclaration? left, Janus.Core.RoleInclusionDeclaration? right) -> bool
 static Janus.Core.RoleInclusionDeclaration.operator ==(Janus.Core.RoleInclusionDeclaration? left, Janus.Core.RoleInclusionDeclaration? right) -> bool
+Janus.Core.HeldRole
+Janus.Core.HeldRole.Effective.get -> Janus.Core.EffectiveRole!
+Janus.Core.HeldRole.Effective.init -> void
+Janus.Core.HeldRole.GivenBy.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
+Janus.Core.HeldRole.GivenBy.init -> void
+Janus.Core.HeldRole.HeldRole(Janus.Core.RoleName Name, Janus.Core.EffectiveRole! Effective, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! GivenBy) -> void
+Janus.Core.HeldRole.Name.get -> Janus.Core.RoleName
+Janus.Core.HeldRole.Name.init -> void
+Janus.Core.IRoles.OwnAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.HeldRole!>!>>
+Janus.Core.HeldRole.<Clone>$() -> Janus.Core.HeldRole!
+Janus.Core.HeldRole.Deconstruct(out Janus.Core.RoleName Name, out Janus.Core.EffectiveRole! Effective, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! GivenBy) -> void
+Janus.Core.HeldRole.Equals(Janus.Core.HeldRole? other) -> bool
+override Janus.Core.HeldRole.Equals(object? obj) -> bool
+override Janus.Core.HeldRole.GetHashCode() -> int
+override Janus.Core.HeldRole.ToString() -> string!
+static Janus.Core.HeldRole.operator !=(Janus.Core.HeldRole? left, Janus.Core.HeldRole? right) -> bool
+static Janus.Core.HeldRole.operator ==(Janus.Core.HeldRole? left, Janus.Core.HeldRole? right) -> bool

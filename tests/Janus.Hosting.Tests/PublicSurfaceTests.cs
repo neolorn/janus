@@ -180,9 +180,9 @@ public sealed class PublicSurfaceTests
     private const string ScopeResolution = "ScopeOfAsync";
 
     // CONV-DESIGN-002 AC3: the operations on the caller's own account, credentials,
-    // sessions, consent, requests, invitations, grants (D-274), the end set on its
-    // memberships (D-240) and the records attached to it (REC-ATT-002), and a
-    // colleague's photo, which the caller's membership and the colleague's govern
+    // sessions, consent, requests, invitations, grants (D-274) and roles (D-280), the
+    // end set on its memberships (D-240) and the records attached to it (REC-ATT-002),
+    // and a colleague's photo, which the caller's membership and the colleague's govern
     // (D-250). No permission governs them (AUTHZ-GATE-006, IDN-ACCT-007), so their gate
     // step is asking whose account is asking, and it is asked before any call is made.
     private static readonly string[] OwnOperations =
@@ -230,6 +230,7 @@ public sealed class PublicSurfaceTests
         nameof(IPersonRecords) + "." + nameof(IPersonRecords.WithdrawAttachedObjectionAsync),
         nameof(IPrivacyRequests) + "." + nameof(IPrivacyRequests.SubmitAsync),
         nameof(IRecovery) + "." + nameof(IRecovery.ReportLossAsync),
+        nameof(IRoles) + "." + nameof(IRoles.OwnAsync),
         nameof(ISessions) + "." + nameof(ISessions.EndAsync),
         nameof(ISessions) + "." + nameof(ISessions.EndEverywhereAsync),
         nameof(ISessions) + "." + nameof(ISessions.ListAsync),

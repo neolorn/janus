@@ -35,6 +35,10 @@ against the public contract of LIB-API-001.
   through them, each entry with the roles it came through, and is also open to
   `roleinclusion:manage`. The bootstrap `system-administrator` role, an existing
   deployment's included, gains `roleinclusion:manage`.
+- `GET /account/roles?organization={id}` and `IRoles.OwnAsync` answer, with no
+  permission and recording nothing, the roles a person's own account holds through its
+  live allow grants in the organization, each with what it carries and hands out through
+  its inclusions and the roles that may give it (`HeldRole`).
 
 ## [1.0.0-rc.9] - 2026-11-06
 
