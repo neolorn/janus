@@ -21709,6 +21709,41 @@ once and guests pay no round trip.
 
 ---
 
+## D-280 — A person reads what their own roles carry and who may change them
+
+**Date:** 2026-11-07 · **Status:** accepted · **Amends:** AUTHZ-GRANT-006, `09` (new `GET /account/roles`)
+
+**TL;DR.** `GET /account/roles?organization={id}` answers, with no permission, the roles the
+caller's own account holds through its live allow grants in the organization, each with
+its effective permissions and `handsOut` and their sources, as `/admin/roles` reads
+them, and `givenBy`: the roles whose effective `handsOut` names it. Found by the first
+host: every member of staff is to see their own position and roles, what each includes
+and who may change them, read-only; `GET /account/grants` (D-274) names the roles but not
+what they carry, and a role's definition is read only under `role:manage`.
+
+- **What is listed.** The roles of the grants `GET /account/grants` lists (in the account's
+  own name, allow, live), each once; a role reached through a group is the group's and is
+  not listed, as D-274 rules. `givenBy` names each role whose effective `handsOut` names
+  the held role, through inclusions too (AUTHZ-GRANT-006); it does not name
+  `system:administer`, which reaches every role by OPS-CFG-007.
+- **Its form.** The library call `IRoles.OwnAsync(AccessContext, OrganizationId,
+  CancellationToken)` returns `IReadOnlyList<HeldRole>`, the new record
+  `HeldRole(RoleName Name, EffectiveRole Effective, IReadOnlyList<RoleName> GivenBy)`, with
+  `EffectiveRole` as D-278's amendment gives it. Nothing is recorded; a restricted account
+  is admitted (IDN-ACCT-007), as for `GET /account/grants`.
+- **Why it is safe.** It shows a person only what their own roles let them do and which
+  roles may change them; nothing about another person.
+- **Round H20's criteria (added).** A member reads their own roles with effective
+  permissions, sources and `givenBy`, a role held through an inclusion's parent included
+  in its effective permissions, and nothing of a role held only through a group.
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-006 (Reading);
+- `09` `GET /account/roles` (new);
+- `implementation-plan.md` (round H20).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21998,6 +22033,7 @@ once and guests pay no round trip.
 | A key the deployment names reads and writes before it is first set | D-277 |
 | A role may include other roles: abilities pass up, duties stay | D-278 |
 | A sign-on that only checks, and a hint that someone is signed in | D-279 |
+| A person reads what their own roles carry and who may change them | D-280 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

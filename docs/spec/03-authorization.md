@@ -438,7 +438,9 @@ AC2, AUTHZ-CACHE-001).
   and each role of the `handsOut` is listed once: `own` where the role carries it itself,
   otherwise the shortest path, and among paths of one length the first by the ordinal
   order of the role names along it. A change to an inclusion raises `RoleChanged`
-  (`changed`) for the including role.
+  (`changed`) for the including role. A person reads the roles they hold themselves the
+  same way, with the roles that may give each, under no permission (`09` `GET
+  /account/roles`, D-280).
 - **Declared inclusions.** A declared role MAY name its inclusions (`.Includes(role, leftOutPermissions,
   leftOutHandsOut)`, LIB-HOST-001). Each pair the deployment has not yet seeded is seeded at a
   start, under the start step and principal that seed declared roles (AUTHZ-GRANT-004),

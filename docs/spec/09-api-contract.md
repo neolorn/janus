@@ -2389,6 +2389,26 @@ organization's identifier
 
 ---
 
+### `GET /account/roles?organization={id}`
+
+The roles the caller's own account holds in its own name in the organization, through the
+live allow grants `GET /account/grants` lists, each once, oldest grant first (`03`
+AUTHZ-GRANT-006, D-280). It needs the caller's live session and no permission; the account
+is the one the session is effective for. A role reaching the account through a group is
+the group's and is not listed. A restricted account is admitted (IDN-ACCT-007). Its
+library call is `IRoles.OwnAsync`. Nothing is recorded.
+
+**200**: `[ { name, effective: { permissions: [ { name, from } ], handsOut: [ { name, from } ] }, givenBy: [ "..." ] } ]`,
+`effective` as `GET /admin/roles` gives it, `givenBy` the roles whose effective
+`handsOut` names the role; none where the account holds none there, an organization the
+deployment does not hold included
+**400**: `api.request.malformed` naming `organization` where it is absent or not an
+organization's identifier
+
+*Source: AUTHZ-GRANT-006, D-274, D-280*
+
+---
+
 ## 7. Privacy
 
 ### `GET /privacy/consents`
