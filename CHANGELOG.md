@@ -29,8 +29,9 @@ against the public contract of LIB-API-001.
   under the new permission `roleinclusion:manage`, with a reason, the `grant:manage`
   step-up, the caller's reach and an audit record (`authz.role.included`,
   `authz.role.inclusionremoved`); a loop is refused with `authz.role.inclusionloop`, and
-  a role whose grants must end included by one whose grants need not end, by an inclusion
-  or by turning `grantsMustEnd` on, with `authz.role.inclusionmustend`.
+  a role whose grants must end included by one whose grants need not end, by an inclusion,
+  by turning `grantsMustEnd` on for an included role or off for one that includes a role
+  whose grants must end, with `authz.role.inclusionmustend`.
 - `GET /admin/roles` answers each role's inclusions and what it carries and hands out
   through them, each entry with the roles it came through, and is also open to
   `roleinclusion:manage`. The bootstrap `system-administrator` role, an existing

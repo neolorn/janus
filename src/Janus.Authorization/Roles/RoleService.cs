@@ -765,11 +765,15 @@ internal sealed class RoleService(
     }
 
     // AUTHZ-GRANT-006 (D-278): a role whose grants must end is never included by one whose
-    // grants need not end, so turning its grantsMustEnd on is refused while one does.
+    // grants need not end, so turning its grantsMustEnd on is refused while one does, and
+    // turning a role's off is refused while it includes one whose grants must end.
     private static Error? EndingRefused(RoleGraph graph, Role? held, Role defined) =>
-        defined.GrantsMustEnd
-        && held?.GrantsMustEnd != true
-        && graph.Including(defined.Name).Any(including => graph.Find(including) is { GrantsMustEnd: false })
+        (defined.GrantsMustEnd
+            && held?.GrantsMustEnd != true
+            && graph.Including(defined.Name).Any(including => graph.Find(including) is { GrantsMustEnd: false }))
+        || (!defined.GrantsMustEnd
+            && held?.GrantsMustEnd == true
+            && graph.InclusionsOf(defined.Name).Any(inclusion => graph.Find(inclusion.Included) is { GrantsMustEnd: true }))
             ? Error.From(ErrorCodes.RoleInclusionMustEnd)
             : null;
 

@@ -189,6 +189,41 @@ public sealed class RoleInclusionEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-006 AC6 (D-278, amended): turning <c>grantsMustEnd</c> off for a role
+    /// that includes a role whose grants must end is refused
+    /// <c>authz.role.inclusionmustend</c> and writes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_006_AC6_TurningMustEndOffOverAnIncludedMustEndRoleIsRefusedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleInclusionManage, Permissions.RoleManage);
+
+        Answer defined = await administrator.SendAsync(
+            "POST",
+            "/admin/roles",
+            ("name", "auditor"),
+            ("permissions", Reading),
+            ("grantsMustEnd", true),
+            ("reason", "Audits end."));
+
+        _ = await IncludedAsync(administrator, "auditor", "contractor");
+
+        Answer turned = await administrator.SendAsync(
+            "POST",
+            "/admin/roles",
+            ("name", "auditor"),
+            ("permissions", Reading),
+            ("grantsMustEnd", false),
+            ("reason", "Audits need not end."));
+
+        Assert.True(defined.Status is StatusCodes.Status200OK or StatusCodes.Status201Created);
+        Assert.Equal(StatusCodes.Status409Conflict, turned.Status);
+        Assert.Equal(ErrorCodes.RoleInclusionMustEnd.ToString(), turned.Text("code"));
+        Assert.True((await _deployment.Roles.FindAsync(RoleName.Parse("auditor"), CancellationToken.None))!.GrantsMustEnd);
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-006 AC7: a change without <c>roleinclusion:manage</c> in the
     /// administrative organization, without a reason, leaving out a permission the model
     /// does not declare or a member that is no role name, or beyond the caller's reach is
