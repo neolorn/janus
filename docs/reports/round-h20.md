@@ -82,13 +82,17 @@ Roles row); `09` `/admin/roles` and `PUT|DELETE /admin/roles/{name}/inclusions/{
     the materialised run and AUTHZ-GATE-007's naming of the account (344 cases pass on
     PostgreSQL);
   - `ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames` names the
-    three new tables; the endpoint and status contracts name the new routes and codes.
+    three new tables; the endpoint and status contracts name the new routes and codes;
+    `SchemaContractTests.LIB_API_001_AC2_TheLibraryOwnedSchemaIsTheContractAsync` names
+    the three tables, the two views and `preauthentication_sessions.signon_check`
+    (a003d68f).
 - `CHANGELOG.md`: four lines under Unreleased, `Added`.
 
-**`07` LIB-TEST-004: the sample host (D-278), 8f6be068**
+**`07` LIB-TEST-004: the sample host (D-278), 8f6be068, 9de1bcc5**
 
-- `workshop-manager` includes `technician`, and `repair:release` is declared
-  `.NotInherited()`, so a manager does not release a kite through the inclusion.
+- `workshop-manager` includes `technician`, leaving out `repair:read` and `fitting:read`,
+  so the first administrator, who holds it, opens workshops through it and reads no
+  repair; `repair:release` is declared `.NotInherited()`.
 
 **`03` AUTHZ-GRANT-006 (Reading) and `09` `GET /account/roles` (D-280), 0ec3d5d1**
 
@@ -238,5 +242,12 @@ question 3), a922d813**
   full-history secret scan: green. On PostgreSQL, run here for the round's criteria:
   `RoleInclusionTests`, the truth table, the two seeding tests,
   `PreAuthenticationStoreTests`, `ComplianceStoreTests`: green.
+- The pipeline's pull-request run on 84749860 failed the schema contract
+  (`LIB_API_001_AC2`) and two sample-host tests
+  (`LIB_TEST_003_AC1_ACustomerTheFirstAdministratorAndAStaffMemberEachCallTheWorkshopsOwnEndpointsAsync`,
+  `LIB_TEST_004_AJobReadsTheContactDetailsOfEveryoneWhoMayReadARepairAsync`), the
+  manager reading repairs through its inclusion, and the one on 52708d18 the sample host
+  again; fixed in 9de1bcc5 and a003d68f, and
+  both pass here.
 - The gate of record is the pipeline's run on this report's commit, named in the message
   to the lead.
