@@ -32,6 +32,8 @@ against the public contract of LIB-API-001.
   a role whose grants must end included by one whose grants need not end, by an inclusion,
   by turning `grantsMustEnd` on for an included role or off for one that includes a role
   whose grants must end, with `authz.role.inclusionmustend`.
+- The records of processing report each role with the permissions a holder of it
+  carries through its inclusions.
 - `GET /admin/roles` answers each role's inclusions and what it carries and hands out
   through them, each entry with the roles it came through, and is also open to
   `roleinclusion:manage`. The bootstrap `system-administrator` role, an existing
