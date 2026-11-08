@@ -21790,6 +21790,122 @@ what they carry, and a role's definition is read only under `role:manage`.
 
 ---
 
+## D-281 — The host may refuse removing someone's access
+
+**Date:** 2026-11-08 · **Status:** accepted · **Amends:** AUTHZ-GRANT-005, `07` (Extension contracts), `09` (`DELETE /admin/grants/{id}`, the membership end routes)
+
+**TL;DR.** A host may register one `IAccessRemovalCheck`, which Janus calls before it
+revokes an allow grant, ends a membership or takes a member out of a group, on every path
+that does so, inside the change's transaction and after its locks, so the check and the
+change cannot race. The check answers `Result`: a refusal carries a code the host names,
+which Janus returns as 409 with that code, writing nothing and recording the refusal. A
+check that throws or does not answer refuses with 503 `authz.removal.uncheckable`: it
+never fails open. Found by the first host: it keeps the company's last Owner and last
+General Manager and stops a person removing their own access on its own routes, but
+Janus's admin routes reach the same grants and memberships without its rules.
+
+- **What it is told.** `AccessRemoval`: the kind (`grantRevoked` · `membershipEnded` ·
+  `groupMemberRemoved`), the organization, the subject (an account or a group), the grant
+  and its role where one, the group where one, the actor's `AccessContext`, the reason,
+  and the path (`administration` · `library` · `scheduledEnd`). A membership's end is one
+  call naming the membership, with the grants and group places it reaches listed, not one
+  call per grant.
+- **Paths it covers.** `DELETE /admin/grants/{id}` and `IGrants`' revocation; ending a
+  membership now (`DELETE /admin/organizations/{id}/memberships/{subject}`, `IMemberships`)
+  and setting an end in advance (`PUT .../end`), judged when set; the job
+  `membership-ends` when it carries an end out, judged again then; taking a member out
+  of a group that reaches a grant. A refusal at a scheduled end keeps the membership,
+  leaves the end set, and raises the Urgent alert `access.removal.refused` naming the
+  code, so a person is told; the job tries again at its next pass.
+- **Paths it does not cover.** A grant reaching its `expiresAt`, set when it was given
+  under the giver's reach; an account's or an organization's erasure (PRIV-RIGHT-005,
+  IDN-ORG-003), which the law and the organization decide and no host rule may stop; a
+  deny grant's revocation, which widens access and AUTHZ-GRANT-005 alone judges; a
+  derivation's own writes.
+- **Its reads.** The check runs on the change's unit of work: the library reads it makes
+  (`IGrants`, `IMemberships`, `IRoles`) see the change's locked state, and it may take its
+  own advisory lock in that transaction. It writes nothing through the library.
+- **Its codes.** A host's code is its own (`company.last_owner`), never under a library
+  prefix (`api.`, `auth.`, `authz.`, `identity.`, `model.`, `privacy.`, `session.`,
+  `system.`); one that is answers 500 `system.fault` and is logged. `details` the check
+  returns pass through to the answer.
+- **Recorded.** `authz.access.removalrefused`, with the kind, the code and the path,
+  outcome `refused`; the change's own entry is not written.
+- **Order of refusals.** After the admission (AUTHZ-SCOPE-001), the step-up and
+  AUTHZ-GRANT-005's reach, so a caller who may not make the change learns nothing of the
+  host's rules.
+- **Amended 2026-11-08 (round H21, Q1 to Q7).**
+  - Q1: a host's code follows CONV-NAME-003 like every code (`company.lastowner`).
+  - Q2: the library prefixes are every first segment the catalogue of `10` section 3 uses,
+    read from it, plus `session.`; none is listed by hand.
+  - Q3: the admin routes pass the path through an internal overload; a host's own call is
+    `library`; the public interfaces do not change.
+  - Q4: no timeout: a check that throws refuses with 503; the request's cancellation, or
+    the job pass's, abandons the change.
+  - Q5: a member bringing their own end forward (D-240) is checked; a record's removal
+    through `IResources.RemoveAsync` and a group member's removal that reaches only deny
+    grants are not.
+  - Q6: the library, not the host, serialises removals: before calling the check it takes a
+    transaction-scoped advisory lock per organization the change touches, in the ordinal
+    order of their identifiers, so the check reads committed state and two concurrent
+    removals of the last two holders admit exactly one. The "its own advisory lock"
+    sentence above is withdrawn.
+  - Q7: the shape as read: `IAccessRemovalCheck.CheckAsync(AccessRemoval, CancellationToken)`
+    answering `Result`; `AccessRemoval(Kind, Organization, Subject, Grant, Role, Group,
+    Context, Reason, Path, Grants, Groups)` with `AccessRemovalKind`, `AccessRemovalPath`
+    and `RemovedGrant(Grant, Role, Organization)`; for the job the context is its principal
+    and the reason the one given when the end was set. At most one check is registered,
+    an optional host registration as `IMailServer` is (none: nothing checked); two fail
+    startup with `model.startup.declarationinvalid`, `details.key` `accessRemovalCheck`.
+    "`IMemberships`" above means `IInvitations.EndMembershipAsync`,
+    `SetMembershipEndAsync` and `CancelMembershipEndAsync`.
+- **Amended 2026-11-08 (round H21, Q8).** The alert is `access-removal-refused`, High, as
+  `10` section 5.23 spells and grades alerts; `AlertSeverity` gains nothing. `09` lists the
+  check's 409 and 503 on the group members route and on a member's own end too.
+- **Criteria.** On PostgreSQL, with a sample check refusing the last holder of a named
+  role: its revocation through `DELETE /admin/grants/{id}` and through `IGrants`, and the
+  membership end through the admin route and through `IMemberships`, are refused with the
+  host's code and nothing written; two concurrent revocations of the last two holders
+  admit exactly one; a throwing check answers 503 and writes nothing; a scheduled end
+  refused keeps the membership and raises the alert; an expiry and an erasure are not
+  checked; a host code under a library prefix answers 500.
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-005 (the host's check);
+- `07` section 1 (Extension contracts) and LIB-HOST-001 (the registration);
+- `09` `DELETE /admin/grants/{id}`, `DELETE /admin/organizations/{id}/memberships/{subject}` and its `/end` routes;
+- `10` the error codes (`authz.removal.uncheckable`), the audit actions (`authz.access.removalrefused`) and the alerts (`access.removal.refused`);
+- `implementation-plan.md` (round H21).
+
+---
+
+## D-282 — Whoever gives roles may read what roles carry
+
+**Date:** 2026-11-08 · **Status:** accepted · **Amends:** `09` (`GET /admin/roles`), AUTHZ-GRANT-006 (Reading)
+
+**TL;DR.** `GET /admin/roles` and `IRoles`' read admit a caller holding `grant:manage` in
+any organization, besides `role:manage` and `roleinclusion:manage`, read-only. Found by
+the first host: the people who give positions (its HR staff, who hold `grant:manage` and
+no role administration) are to see, under a position they give, what it includes, as the
+owner approved; a role's definition was read only under the two administration
+permissions.
+
+- **Why it is safe.** A role's definition names permissions and roles, not people; a
+  giver needs it to know what they give, and AUTHZ-GRANT-005 already judges every
+  hand-out against it. Changing roles stays under `role:manage` and
+  `roleinclusion:manage`.
+- **Recorded.** Not recorded, as the read under the other two is not.
+- **Criteria.** A holder of `grant:manage` alone reads every role with its inclusions,
+  effective sets and sources; a change by them is refused 403 as before; a caller with
+  none of the three is refused.
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-006 (Reading);
+- `09` `GET /admin/roles`;
+- `implementation-plan.md` (round H21).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |

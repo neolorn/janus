@@ -308,6 +308,19 @@ and after the change and it may hand out, by the rule above in the administrativ
 organization, every role the role's `handsOut` names after the change; so nobody widens
 a role, or their own list, beyond their own reach.
 
+**The host's check (D-281).** A host may register one `IAccessRemovalCheck` (`07` section
+1), which the library calls before it revokes an allow grant, ends a membership (now, when
+an end is set in advance, and when the job `membership-ends` carries it out) or takes a
+member out of a group that reaches a grant, on every path, inside the change's transaction
+after its locks and after the admission, the step-up and the reach above. A refusal
+answers 409 with the code the host names, never under a library prefix (a first segment
+the catalogue of `10` section 3 uses, or `session.`), serialised per organization by the
+library's own lock, writes nothing and is recorded as `authz.access.removalrefused`; a
+check that throws or does not answer refuses with 503 `authz.removal.uncheckable`. A
+grant's expiry, an erasure (PRIV-RIGHT-005, IDN-ORG-003), a deny's revocation and a
+derivation's writes are not checked. A refusal at a scheduled end keeps the membership,
+leaves the end set and raises `access.removal.refused` (`06` OPS-ALERT-001).
+
 Nobody gives themselves access, whatever they may hand out. These SHALL be refused with
 403 `authz.grant.self`, save to an actor holding `system:administer` in the
 administrative organization, which can already change any role it holds:
@@ -443,7 +456,9 @@ AC2, AUTHZ-CACHE-001).
   and each role of the `handsOut` is listed once: `own` where the role carries it itself,
   otherwise the shortest path, and among paths of one length the first by the ordinal
   order of the role names along it. A change to an inclusion raises `RoleChanged`
-  (`changed`) for the including role. A person reads the roles they hold themselves the
+  (`changed`) for the including role. A holder of `role:manage`, `roleinclusion:manage` or
+  `grant:manage` (in any organization) reads every role so, read-only (D-282). A person
+  reads the roles they hold themselves the
   same way, with the roles that may give each, under no permission (`09` `GET
   /account/roles`, D-280).
 - **Declared inclusions.** A declared role MAY name its inclusions (`.Includes(role, leftOutPermissions,

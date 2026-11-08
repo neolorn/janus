@@ -26,6 +26,7 @@ namespace Janus.Authorization.Groups;
 /// <param name="graphs">What each role a change of members hands out carries, as though inclusions were on.</param>
 /// <param name="emergency">Which account joins no group.</param>
 /// <param name="handOut">Whether the caller may hand out the roles a change of members reaches.</param>
+/// <param name="removals">What asks the host's check before a member leaves a group reaching an allow grant.</param>
 /// <param name="audit">Where every change is written down.</param>
 /// <param name="events">Where every change of members is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -49,6 +50,7 @@ internal sealed class GroupService(
     RoleGraphs graphs,
     IEmergencyAccount emergency,
     IHandOutAdmission handOut,
+    AccessRemovalGuard removals,
     IGroupAudit audit,
     IEvents events,
     IUnitOfWork work,
@@ -414,6 +416,10 @@ internal sealed class GroupService(
             return Result.Failure(since);
         }
 
+        // AUTHZ-GRANT-005 (D-281): the organization's removals are held before its groups,
+        // as every removal takes them, so two never wait on each other.
+        await removals.HoldAsync([found.Organization], cancellationToken).ConfigureAwait(false);
+
         // D-166 X3: what the group and the groups above it hold is judged with the
         // organization's groups held, as for an added member.
         await groups.HoldAsync(found.Organization, cancellationToken).ConfigureAwait(false);
@@ -439,6 +445,14 @@ internal sealed class GroupService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Success();
+        }
+
+        if (await RemovalRefusedAsync(context, held!, member, stated, cancellationToken).ConfigureAwait(false)
+            is Error kept)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(kept);
         }
 
         await groups.RemoveMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
@@ -672,6 +686,45 @@ internal sealed class GroupService(
                 time.GetUtcNow(),
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    // AUTHZ-GRANT-005 (D-281): the host's check of a member's removal, asked under the
+    // organization's groups and after the admission, the step-up and the reach, where the
+    // group reaches an allow grant; one reaching only denies widens access by the removal,
+    // so the host is not asked.
+    private async ValueTask<Error?> RemovalRefusedAsync(
+        AccessContext context,
+        Group group,
+        GrantSubject member,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        RemovedGrant[] taken =
+        [
+            .. (await ReachedAsync(group, cancellationToken).ConfigureAwait(false))
+                .Where(grant => !grant.Deny)
+                .Select(grant => new RemovedGrant(grant.Id, grant.Role, grant.Organization)),
+        ];
+
+        return taken.Length is 0
+            ? null
+            : await removals
+                .RefusedAsync(
+                    new AccessRemoval(
+                        AccessRemovalKind.GroupMemberRemoved,
+                        group.Organization,
+                        member,
+                        Grant: null,
+                        Role: null,
+                        group.Id,
+                        context,
+                        reason,
+                        removals.Path,
+                        taken,
+                        Groups: []),
+                    [],
+                    cancellationToken)
+                .ConfigureAwait(false);
     }
 
     // The record a grant is on, or nothing for the whole organization.

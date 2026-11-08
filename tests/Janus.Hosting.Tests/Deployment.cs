@@ -1417,6 +1417,12 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authorization.Gate.IGrantAdmission>(
             new Janus.Hosting.Tests.Authorization.GrantAdmissionInMemory(Gate));
         _ = services.AddSingleton<Janus.Authorization.Gate.IHandOutAdmission>(HandOuts);
+        _ = services.AddSingleton<Janus.Authorization.Grants.IRemovalLocks, Janus.Authorization.Tests.Grants.RemovalLocksInMemory>();
+        _ = services.AddScoped<Janus.Authorization.Grants.IRemovalPaths, Janus.Hosting.Authorization.RequestRemovalPaths>();
+        _ = services.AddScoped<Janus.Authorization.Grants.IRemovalCheck, Janus.Hosting.Authorization.HostRemovalCheck>();
+        _ = services.AddScoped<Janus.Authorization.Grants.AccessRemovalGuard>();
+        _ = services.AddScoped<Janus.Authorization.Grants.RemovalRefusals>();
+        _ = services.AddScoped<Janus.Authorization.Grants.RemovalRefusalRecording>();
         _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();
         _ = services.AddScoped<IRoles, Janus.Authorization.Roles.RoleService>();
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();

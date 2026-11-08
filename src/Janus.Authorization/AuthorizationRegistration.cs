@@ -7,6 +7,7 @@ using Janus.Authorization.Resources;
 using Janus.Authorization.Roles;
 using Janus.Core;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Janus.Authorization;
 
@@ -83,6 +84,13 @@ internal static class AuthorizationRegistration
         services.AddScoped<IGrantAdmission>(provider => provider.GetRequiredService<AccessGate>());
         services.AddScoped<IHandOutAdmission>(provider => provider.GetRequiredService<AccessGate>());
         services.AddScoped<IOrganizationReadAdmission>(provider => provider.GetRequiredService<AccessGate>());
+
+        // AUTHZ-GRANT-005 (D-281): the host's check of a removal of access, asked through one
+        // guard; the boundary says which way a change came, and anything else is the host's call.
+        services.TryAddScoped<IRemovalPaths, LibraryRemovalPaths>();
+        services.AddScoped<AccessRemovalGuard>();
+        services.AddScoped<RemovalRefusals>();
+        services.AddScoped<RemovalRefusalRecording>();
         services.AddScoped<IGrants, GrantService>();
         services.AddScoped<RoleGraphs>();
         services.AddScoped<IRoles, RoleService>();

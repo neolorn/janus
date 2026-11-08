@@ -108,6 +108,7 @@ public sealed class VocabularyContractTests
         "governing-text-missing",
         "search-capacity",
         "search-unsafe",
+        "access-removal-refused",
     ];
 
     /// <summary>

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
@@ -35,6 +36,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="events">Where the end, the corporate address removed and the new primary are announced.</param>
 /// <param name="configuration">Where the languages are read.</param>
 /// <param name="audit">Where the end is written down.</param>
+/// <param name="alerts">Where a scheduled end the host's check refused is raised.</param>
 /// <param name="work">The one transaction the end runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -57,6 +59,7 @@ internal sealed class MembershipEnd(
     IEvents events,
     IConfigurationStore configuration,
     IOrganizationAudit audit,
+    IAlertRaising alerts,
     IUnitOfWork work,
     TimeProvider time)
 {
@@ -211,6 +214,18 @@ internal sealed class MembershipEnd(
             return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
         }
 
+        // AUTHZ-GRANT-005 (D-281): the host's check is asked under the membership's lock,
+        // before anything the end reaches is revoked.
+        if (await revocations
+                .CheckedAsync(context, member, organization, standing.IsAdministrative, stated, path: null, cancellationToken)
+                .ConfigureAwait(false)
+            is Error kept)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(kept);
+        }
+
         // IDN-MEM-001 (D-213): in the transaction that ends the membership, recorded with
         // the end's reason and actor, and announced with it.
         IReadOnlyList<DomainEvent> revoked = await revocations
@@ -353,6 +368,18 @@ internal sealed class MembershipEnd(
                 ?? Error.From(ErrorCodes.MembershipNotFound));
         }
 
+        // AUTHZ-GRANT-005 (D-281): an end brought forward is a removal the host's check is
+        // asked about, as an end now is.
+        if (await revocations
+                .CheckedAsync(context, member, organization, standing.IsAdministrative, BroughtForward, path: null, cancellationToken)
+                .ConfigureAwait(false)
+            is Error kept)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(kept);
+        }
+
         // AUTHZ-GRANT-005 (D-240): the scheduler's hand-out lists were judged when the end
         // was set, so the revocations are the job's, unjudged, in the member's name.
         IReadOnlyList<DomainEvent> revoked = await revocations
@@ -443,7 +470,7 @@ internal sealed class MembershipEnd(
 
         foreach (MembershipEndDue due in await memberships.DueAsync(now, cancellationToken).ConfigureAwait(false))
         {
-            Result<int> done = await EndedAsync(principal, due, reserved, now, cancellationToken)
+            Result<int> done = await EndedAsync(context, principal, due, reserved, now, cancellationToken)
                 .ConfigureAwait(false);
 
             if (done.Match<Error?>(_ => null, error => error) is Error refusal)
@@ -630,6 +657,20 @@ internal sealed class MembershipEnd(
             return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
         }
 
+        // AUTHZ-GRANT-005 (D-281): an end set in advance is judged by the host's check
+        // when it is set, and again when the job carries it out; a cancellation removes
+        // nothing.
+        if (endsAt is not null
+            && await revocations
+                .CheckedAsync(context, member, organization, standing.IsAdministrative, stated, path: null, cancellationToken)
+                .ConfigureAwait(false)
+            is Error kept)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(kept);
+        }
+
         await audit
             .MembershipEndSetAsync(
                 organization,
@@ -662,6 +703,7 @@ internal sealed class MembershipEnd(
                 nameof(context));
 
     private async ValueTask<Result<int>> EndedAsync(
+        AccessContext context,
         SystemPrincipal principal,
         MembershipEndDue due,
         SubjectId? reserved,
@@ -695,6 +737,26 @@ internal sealed class MembershipEnd(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Success(0);
+        }
+
+        // AUTHZ-GRANT-005 (D-281): the host's check is asked again when the end is carried
+        // out; a refusal keeps the membership and leaves the end set, so the next pass
+        // asks again, and a person is told.
+        if (await revocations
+                .CheckedAsync(
+                    context,
+                    ended.Member,
+                    ended.Organization,
+                    standing.IsAdministrative,
+                    ended.Reason,
+                    AccessRemovalPath.ScheduledEnd,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            is Error kept)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return await KeptAsync(ended, kept, now, cancellationToken).ConfigureAwait(false);
         }
 
         IReadOnlyList<DomainEvent> revoked = await revocations
@@ -764,6 +826,45 @@ internal sealed class MembershipEnd(
         }
 
         return Result.Success(1);
+    }
+
+    // OPS-ALERT-001, 10 section 5.23 (D-281): a scheduled end the host's check refused
+    // raises access-removal-refused, naming the code and the membership, in a unit of
+    // work of its own, the end's being rolled back.
+    private async ValueTask<Result<int>> KeptAsync(
+        MembershipEndDue ended,
+        Error kept,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<int>(notBegun);
+        }
+
+        if ((await alerts
+                .RaiseAsync(
+                    Alerts.Of(
+                        AlertCondition.AccessRemovalRefused,
+                        ended.Membership.ToString(),
+                        now,
+                        new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                        {
+                            ["code"] = JsonSerializer.SerializeToElement(kept.Code.ToString()),
+                            ["membership"] = JsonSerializer.SerializeToElement(ended.Membership.ToString()),
+                        }),
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unalerted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<int>(unalerted);
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Success(0), Result.Failure<int>);
     }
 
     // D-240: a membership with no end set has nothing to bring forward, and one whose end

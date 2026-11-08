@@ -361,6 +361,13 @@ public static class AuditActions
     public static AuditAction GrantRevoked { get; } = AuditAction.Parse("authz.grant.revoked");
 
     /// <summary>
+    /// The host's check refused a grant's revocation, a membership's end or a group
+    /// member's removal; the change itself was not written.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-005, D-281.</remarks>
+    public static AuditAction AccessRemovalRefused { get; } = AuditAction.Parse("authz.access.removalrefused");
+
+    /// <summary>
     /// A group was created.
     /// </summary>
     /// <remarks>Implements AUTHZ-GROUP-001.</remarks>

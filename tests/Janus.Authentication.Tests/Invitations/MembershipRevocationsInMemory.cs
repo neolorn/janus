@@ -81,6 +81,21 @@ internal sealed class MembershipRevocationsInMemory(
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// No host check is registered here, so every end may go ahead (AUTHZ-GRANT-005,
+    /// D-281); the check itself is tested over the stores.
+    /// </remarks>
+    public ValueTask<Error?> CheckedAsync(
+        AccessContext context,
+        SubjectId member,
+        OrganizationId organization,
+        bool administrative,
+        string reason,
+        AccessRemovalPath? path,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<Error?>(null);
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<DomainEvent>> RevokeAsync(
         SubjectId member,
         OrganizationId organization,

@@ -130,4 +130,11 @@ public enum AlertCondition
     /// <summary>A memory check failed, so the staff search's index is not built.</summary>
     [JsonStringEnumMemberName("search-unsafe")]
     SearchUnsafe = 27,
+
+    /// <summary>
+    /// The host's check refused the end of a membership the job <c>membership-ends</c> was
+    /// carrying out, so the membership stays.
+    /// </summary>
+    [JsonStringEnumMemberName("access-removal-refused")]
+    AccessRemovalRefused = 28,
 }

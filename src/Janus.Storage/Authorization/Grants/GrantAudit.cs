@@ -132,6 +132,57 @@ internal sealed class GrantAudit(IAuditStore records, TimeProvider time) : IGran
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentException">The removal names neither a person nor a principal acting.</exception>
+    public async ValueTask RemovalRefusedAsync(
+        AccessRemoval removal,
+        ErrorCode code,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(removal);
+
+        // Chapter 10 section 5.24 (D-281): filed under the change's organization, about
+        // the account it would have taken access from, with the kind, the host's code
+        // and the path.
+        SubjectId? subject = removal.Subject.Type == SubjectType.User
+            ? new SubjectId(removal.Subject.Value)
+            : null;
+        Dictionary<string, JsonElement> details = new(capacity: 4, StringComparer.Ordinal)
+        {
+            ["kind"] = JsonSerializer.SerializeToElement(VocabularyConverter<AccessRemovalKind>.Write(removal.Kind)),
+            ["code"] = JsonSerializer.SerializeToElement(code.ToString()),
+            ["path"] = JsonSerializer.SerializeToElement(VocabularyConverter<AccessRemovalPath>.Write(removal.Path)),
+            ["outcome"] = JsonSerializer.SerializeToElement("refused"),
+        };
+
+        AuditRecord record = removal.Context switch
+        {
+            { Acting: SubjectId acting } => AuditRecord.Of(
+                AuditRecordId.New(time),
+                AuditCategory.Security,
+                AuditActions.AccessRemovalRefused,
+                at,
+                acting,
+                subject,
+                removal.Context.BreakGlassReason,
+                removal.Organization,
+                details),
+            { Principal: SystemPrincipal principal } => AuditRecord.Of(
+                AuditRecordId.New(time),
+                AuditCategory.Security,
+                AuditActions.AccessRemovalRefused,
+                at,
+                principal,
+                subject,
+                removal.Organization,
+                details),
+            _ => throw new ArgumentException("A refused removal was asked for by someone.", nameof(removal)),
+        };
+
+        await records.AppendAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
     // Chapter 10 section 5.24 (D-206): a group is no data subject, so a grant it holds
     // concerns no account.
     private static SubjectId? Holder(Grant grant) =>

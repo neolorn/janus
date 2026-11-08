@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authorization.Grants;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,10 +18,10 @@ namespace Janus.Hosting.Bff;
 /// </summary>
 /// <remarks>
 /// Implements API-CONV-002, API-CONV-003, API-CONV-004, BFF-CSRF-001, BFF-ERR-001,
-/// BFF-ERR-002, BFF-ERR-003, BFF-LOG-001 and CONV-LOG-002. One writer answers every
-/// refusal, so a body is the same shape whichever stage produced it and a concealed
-/// denial is the same bytes as a genuine absence. A fault answers as a fault and
-/// carries nothing but the correlation identifier, whatever the code behind it was.
+/// BFF-ERR-002, BFF-ERR-003, BFF-LOG-001, CONV-LOG-002 and AUTHZ-GRANT-005. One writer
+/// answers every refusal, so a body is the same shape whichever stage produced it and a
+/// concealed denial is the same bytes as a genuine absence. A fault answers as a fault
+/// and carries nothing but the correlation identifier, whatever the code behind it was.
 /// Every refusal it writes is logged under that identifier, and a fault with what the
 /// answer withheld.
 /// </remarks>
@@ -64,7 +65,11 @@ internal static class Refusal
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(error);
 
-        int status = ApiStatus.Of(error);
+        // AUTHZ-GRANT-005 (D-281): the host's check refused with a code of its own, which
+        // the library hands back as a conflict.
+        int status = context.RequestServices.GetService<RemovalRefusals>()?.Holds(error.Code) is true
+            ? StatusCodes.Status409Conflict
+            : ApiStatus.Of(error);
         bool fault = status is StatusCodes.Status500InternalServerError;
 
         Logged(context, error, fault);

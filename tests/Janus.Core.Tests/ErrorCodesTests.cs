@@ -81,6 +81,7 @@ public sealed class ErrorCodesTests
         "authz.group.cycle",
         "authz.group.inuse",
         "authz.policy.unregistered",
+        "authz.removal.uncheckable",
         "authz.resource.inuse",
         "authz.resource.notfound",
         "authz.restricted",

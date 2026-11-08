@@ -283,6 +283,55 @@ public sealed class RoleInclusionEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-006, chapter 09 <c>GET /admin/roles</c> (D-282): a holder of
+    /// <c>grant:manage</c> in a branch alone reads every role with its inclusions and what
+    /// it carries through them, read-only: a change to a role or an inclusion by them is
+    /// refused 403, and without the permission the read is refused too.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_006_AGiverOfRolesInABranchReadsThemReadOnlyAsync()
+    {
+        Browser giver = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        await _deployment.Roles.Inclusions.CreateAsync(Manager, new RoleInclusion(Editor, Enabled: true, [], []), CancellationToken.None);
+
+        // The grant through which the gate admits grant:manage in the branch.
+        _deployment.Gate.Grant(subject, Branch, Permissions.GrantManage);
+        await HeldAsync(subject, Reader, Branch, deny: false);
+
+        Answer read = await giver.SendAsync("GET", "/admin/roles");
+        Answer included = await IncludedAsync(giver, "editor", "reader");
+        Answer defined = await giver.SendAsync(
+            "POST",
+            "/admin/roles",
+            ("name", "auditor"),
+            ("permissions", Reading),
+            ("reason", "Reads articles."));
+
+        _deployment.Gate.Revoke(subject, Branch, Permissions.GrantManage);
+
+        Answer refused = await giver.SendAsync("GET", "/admin/roles");
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+
+        JsonElement manager = read.Json().EnumerateArray().Single(role => role.GetProperty("name").GetString() == "manager");
+
+        Assert.Equal(["editor"], manager.GetProperty("includes").EnumerateArray().Select(inclusion => Text(inclusion.GetProperty("role"))));
+        Assert.Equal(
+            [("article:edit", "editor")],
+            manager.GetProperty("effective").GetProperty("permissions").EnumerateArray()
+                .Select(entry => (Text(entry.GetProperty("name")), string.Join('/', entry.GetProperty("from").EnumerateArray().Select(Text)))));
+
+        foreach (Answer change in new[] { included, defined, refused })
+        {
+            Assert.Equal(StatusCodes.Status403Forbidden, change.Status);
+            Assert.Equal(ErrorCodes.Denied.ToString(), change.Text("code"));
+        }
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-006, chapter 09 <c>GET /account/roles</c> (D-280): a person with no
     /// permission reads the roles their own account holds through its live allow grants in
     /// the organization, each with what it carries through its inclusions and its sources,

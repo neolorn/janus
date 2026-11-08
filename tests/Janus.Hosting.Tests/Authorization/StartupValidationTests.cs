@@ -671,6 +671,45 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-005 (D-281): a removal of access is asked of one check, so a deployment
+    /// registering two stops as it starts with <c>model.startup.declarationinvalid</c>,
+    /// naming <c>accessRemovalCheck</c>; one registered starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_TwoAccessRemovalChecksAreRefusedAtStartupAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IAccessRemovalCheck>(new ArmedRemovalCheck(host.ConnectionString));
+                services.AddSingleton<IAccessRemovalCheck>(new ArmedRemovalCheck(host.ConnectionString));
+                Declared(services);
+            })
+            .Build())
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal("accessRemovalCheck", refused.Failure?.Details["key"].GetString());
+        }
+
+        using IHost started = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IAccessRemovalCheck>(new ArmedRemovalCheck(host.ConnectionString));
+                Declared(services);
+            })
+            .Build();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a AC7, D-203: a purpose handler's confirmation is recorded under its
     /// name as a subscriber's is, so one registered under a subscriber's name stops the
     /// deployment as it starts, naming it.

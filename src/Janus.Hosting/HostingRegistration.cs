@@ -15,6 +15,7 @@ using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization;
 using Janus.Authorization.Gate;
+using Janus.Authorization.Grants;
 using Janus.Authorization.Model;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -136,6 +137,11 @@ public static class HostingRegistration
         services.AddAuthenticationArea();
         services.AddAuthorizationArea(declaration);
         services.AddPrivacyArea();
+
+        // AUTHZ-GRANT-005 (D-281): a removal of access says which way it came, read from
+        // the endpoint the request reached, over the library's own default.
+        services.AddScoped<IRemovalPaths, RequestRemovalPaths>();
+        services.AddScoped<IRemovalCheck, HostRemovalCheck>();
 
         // AUTH-STEP-002: the library's own session is judged where it carries the
         // request.
@@ -312,6 +318,7 @@ public static class HostingRegistration
             provider.GetServices<ISubjectEventSubscriber>(),
             provider.GetServices<IPurposeHandler>(),
             provider.GetServices<IExportContributor>(),
+            provider.GetServices<IAccessRemovalCheck>(),
             provider.GetRequiredService<IOidcClientStore>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider));

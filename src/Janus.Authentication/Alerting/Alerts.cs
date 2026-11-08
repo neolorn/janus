@@ -42,6 +42,7 @@ internal static class Alerts
             AlertCondition.PrivacyDeadlineReached => AlertSeverity.High,
             AlertCondition.NoEmergencyCredential => AlertSeverity.High,
             AlertCondition.SearchUnsafe => AlertSeverity.High,
+            AlertCondition.AccessRemovalRefused => AlertSeverity.High,
             _ => AlertSeverity.Normal,
         };
 

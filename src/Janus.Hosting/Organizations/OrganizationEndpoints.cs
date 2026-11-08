@@ -200,7 +200,7 @@ internal static class OrganizationEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired, ErrorCodes.MembershipNotFound,
-                    ErrorCodes.RoleNotAssignable)
+                    ErrorCodes.RoleNotAssignable, ErrorCodes.RemovalUncheckable)
                 .Binding<OrganizationId>("id")
                 .Binding<SubjectId>("subject"))
             .Accepts<OrganizationReasonBody>(MediaTypeNames.Application.Json)
@@ -212,7 +212,7 @@ internal static class OrganizationEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.RequestInvalid, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired, ErrorCodes.MembershipNotFound,
-                    ErrorCodes.RoleNotAssignable)
+                    ErrorCodes.RoleNotAssignable, ErrorCodes.RemovalUncheckable)
                 .Binding<OrganizationId>("id")
                 .Binding<SubjectId>("subject"))
             .Accepts<MembershipEndBody>(MediaTypeNames.Application.Json)

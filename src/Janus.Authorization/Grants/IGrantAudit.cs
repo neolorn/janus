@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -66,5 +67,23 @@ internal interface IGrantAudit
         Grant revoked,
         SystemPrincipal principal,
         SubjectId endSetBy,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records a removal of access the host's check refused, as
+    /// <c>authz.access.removalrefused</c> under the change's organization, naming who
+    /// acted, the subject where it is an account, the kind, the code and the path, with the
+    /// outcome <c>refused</c> (AUTHZ-GRANT-005, D-281). Unlike the other records it is
+    /// written in a unit of work of its own, since the change it refuses writes nothing.
+    /// </summary>
+    /// <param name="removal">What was refused.</param>
+    /// <param name="code">The code it was refused with.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask RemovalRefusedAsync(
+        AccessRemoval removal,
+        ErrorCode code,
+        DateTimeOffset at,
         CancellationToken cancellationToken);
 }

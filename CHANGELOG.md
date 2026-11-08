@@ -8,6 +8,29 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.11] - 2026-11-08
+
+### Added
+
+- A host may register one `IAccessRemovalCheck`, which the library asks before it
+  revokes an allow grant, ends a membership (now, when an end is set in advance, when a
+  member brings their own end forward and when the job `membership-ends` carries an end
+  out) or takes a member out of a group that reaches a grant, by any route or library
+  call, inside the change's transaction and after its locks. It is told an
+  `AccessRemoval` naming the kind, the organization, the subject, the grant and role or
+  the group, the grants and groups a membership's end reaches, the caller, the reason and
+  the path it came by. Removals in one organization are judged one at a time. A refusal
+  under the host's own code answers 409 with that code, writes nothing and is recorded as
+  `authz.access.removalrefused`; a check that throws refuses with 503
+  `authz.removal.uncheckable`; a code under a library prefix is a fault. A refused
+  scheduled end keeps the membership and its end, raises the High alert
+  `access-removal-refused` naming the code and the membership, and the next pass asks
+  again. A grant's expiry, an erasure, a deny's revocation and a derivation's writes are
+  not checked, and registering two checks fails startup naming `accessRemovalCheck`.
+- `GET /admin/roles` and `IRoles.AllAsync` also answer a caller holding `grant:manage`
+  in any organization, read-only, so whoever gives roles can see what each role
+  includes and carries.
+
 ## [1.0.0-rc.10] - 2026-11-08
 
 ### Added

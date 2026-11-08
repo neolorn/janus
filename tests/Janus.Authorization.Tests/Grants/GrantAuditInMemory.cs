@@ -18,11 +18,17 @@ namespace Janus.Authorization.Tests.Grants;
 internal sealed class GrantAuditInMemory : IGrantAudit
 {
     private readonly List<GrantChange> _changes = [];
+    private readonly List<(AccessRemoval Removal, ErrorCode Code)> _refusals = [];
 
     /// <summary>
     /// Every grant recorded, oldest first.
     /// </summary>
     public IReadOnlyList<GrantChange> Changes => _changes;
+
+    /// <summary>
+    /// Every removal the host's check refused, with its code, oldest first.
+    /// </summary>
+    public IReadOnlyList<(AccessRemoval Removal, ErrorCode Code)> Refusals => _refusals;
 
     /// <inheritdoc/>
     public ValueTask CreatedAsync(
@@ -93,6 +99,20 @@ internal sealed class GrantAuditInMemory : IGrantAudit
             Principal = principal.Name,
             EndSetBy = endSetBy,
         });
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask RemovalRefusedAsync(
+        AccessRemoval removal,
+        ErrorCode code,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(removal);
+
+        _refusals.Add((removal, code));
 
         return ValueTask.CompletedTask;
     }

@@ -70,7 +70,7 @@ internal static class GroupEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid,
-                    ErrorCodes.RoleNotAssignable, ErrorCodes.GrantSelf)
+                    ErrorCodes.RoleNotAssignable, ErrorCodes.GrantSelf, ErrorCodes.RemovalUncheckable)
                 .Binding<GroupId>("id"))
             .Accepts<MemberBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);

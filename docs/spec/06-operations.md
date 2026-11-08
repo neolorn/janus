@@ -738,6 +738,7 @@ protected keys (OPS-CFG-005).
 | **Domain removed from a lock**: new sign-ins with addresses in it stop | Normal | REG-DOM-001, D-146 |
 | **`legal.governinglanguage` changed**, raised beside `protected-setting-changed` | Normal | PRIV-CONS-005, OPS-CFG-004, D-146 |
 | **Governing-language text missing**: a document version cannot publish, or a document that must be shown has no governing-language text | Normal | PRIV-CONS-006, D-146 |
+| **Access removal refused at a scheduled end** (`access-removal-refused`): the host's `IAccessRemovalCheck` refused the end the job `membership-ends` was carrying out, so the membership stays; names the code | High | AUTHZ-GRANT-005, D-281 |
 | **Staff search over capacity**: the subjects to index pass `search.maxsubjects`, so the index is not built and the search answers `identity.search.unavailable` (`capacity`) | Normal | IDN-SRCH-003, D-256 |
 | **Staff search unsafe**: a memory check failed under `search.memorychecks` `enforce`, so the index is not built and the search answers `identity.search.unavailable` (`unsafe`); the alert names the check in `details.check`, never a value | High | IDN-SRCH-003, D-256 |
 

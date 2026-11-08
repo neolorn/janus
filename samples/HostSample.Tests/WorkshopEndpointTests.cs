@@ -176,6 +176,33 @@ public sealed class WorkshopEndpointTests(WorkshopHost host) : IClassFixture<Wor
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-005 (D-281): the workshop keeps an organization's last manager, so
+    /// revoking the only manager's grant over the library's own route is refused 409 with
+    /// the workshop's code, and the grant stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_TheWorkshopKeepsAnOrganizationsLastManagerAsync()
+    {
+        Answered revoked = await Exchanges.SteppedAsync(
+            host.Administrator,
+            HttpMethod.Delete,
+            "admin/grants/" + host.FirstGrant,
+            new { reason = "Steps down as manager." },
+            Cancellation);
+        Answered grants = await Exchanges.SteppedAsync(
+            host.Administrator,
+            HttpMethod.Get,
+            "admin/grants?organization=" + host.Organization.Value + "&subjectType=user&subjectId=" + host.Administrator.Subject.Value,
+            null,
+            Cancellation);
+
+        Assert.Equal(HttpStatusCode.Conflict, revoked.Status);
+        Assert.Equal("workshop.lastmanager", revoked.Code);
+        Assert.Equal(host.FirstGrant, Assert.Single(grants.Body!.Value.EnumerateArray()).GetProperty("id").GetString());
+    }
+
+    /// <summary>
     /// LIB-TEST-004: a workshop's list is filtered by the gate in the workshop's own
     /// query, so a customer sees their own repair and not another's, and each entry
     /// carries the capabilities its reader holds, with what each still requires.
