@@ -425,8 +425,9 @@ AC2, AUTHZ-CACHE-001).
   409 `authz.role.inclusionmustend`, and so is turning a role's `grantsMustEnd` on while a
   role whose grants need not end includes it, or off while it includes a role whose grants
   must end. Reach is judged as though `authz.roleinclusion.enabled` were on, whatever it
-  reads, for a change to an inclusion and for the role a grant gives, when the grant is
-  made and in the roles offered as assignable; what the giver may hand out is read as the
+  reads, for a change to an inclusion and for the role every hand-out of AUTHZ-GRANT-005
+  gives (a grant, the roles offered as assignable, a group's member, an invitation's roles,
+  a membership's end, a recovery's approval); what the giver may hand out is read as the
   key reads. The records of processing report each role's effective permissions.
 - **Administration.** A change to an inclusion is under `roleinclusion:manage` in the
   administrative organization, carries a `reason` (API-CONV-002), is the `grant:manage`

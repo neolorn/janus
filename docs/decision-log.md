@@ -21635,10 +21635,11 @@ must include another", is met; separation of duties stays deferred.
   later would otherwise hand out what nobody was judged able to give (reading A, as
   built). The records of processing report each role's effective permissions
   (`IRegisterRoles.AllowedAsync`), since that is what a holder may do (reading A).
-- **Amended 2026-11-08 (round H20, lead's review).** The same holds for a grant: the role
-  given is judged for reach on what it carries as though `authz.roleinclusion.enabled` were
-  on, whatever it reads, both when a grant is made (`grant:manage`) and in the list of
-  roles a caller may assign. With the key off, a grant judged on the role's own permissions
+- **Amended 2026-11-08 (round H20, lead's review; Q8).** The same holds for every hand-out
+  of AUTHZ-GRANT-005: the role given is judged for reach on what it carries as though
+  `authz.roleinclusion.enabled` were on, whatever it reads: a grant made (`grant:manage`)
+  or revoked, the list of roles a caller may assign, a group's member added or removed, an
+  invitation's roles, a membership ended, and a recovery approved. With the key off, a grant judged on the role's own permissions
   alone would carry, once the key is switched on, what its giver was never judged able to
   give. What the giver may hand out is read as the key reads (its effective `handsOut` with
   the key off is its own), so both sides are the stricter reading. Criteria: with the key
