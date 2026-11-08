@@ -232,6 +232,19 @@ ef7f7f2a**
   admitted with the key off and the test fails.
 - `CHANGELOG.md`: the inclusion line names every hand-out.
 
+**The release commit, c48c02c0 `chore: release 1.0.0-rc.10`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.10] - 2026-11-08`, holding the round's
+  lines under `Added`, and Unreleased is left empty.
+- The public surface: `Janus.Core`'s 100 unshipped lines move into its shipped file, each
+  beside its neighbours; no other project holds an unshipped line.
+- The two lists are not drawn again (CONV-VCS-005, D-262). The leaked-password list
+  (`# 2026-11-04`) and the Public Suffix List at version 2026-10-31_14-17-28_UTC were
+  both drawn within 90 days before the release commit.
+- No migration note: a release candidate opens no major version.
+- Criterion verified otherwise: the release gate over `origin/main..HEAD` says the notes
+  of 1.0.0-rc.10, 3941 characters, are the release's body.
+
 ## 2. Items not implemented
 
 None.
