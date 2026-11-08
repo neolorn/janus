@@ -313,12 +313,13 @@ a role, or their own list, beyond their own reach.
 an end is set in advance, and when the job `membership-ends` carries it out) or takes a
 member out of a group that reaches a grant, on every path, inside the change's transaction
 after its locks and after the admission, the step-up and the reach above. A refusal
-answers 409 with the code the host names, never under a library prefix, writes nothing and
-is recorded as `authz.access.removalrefused`; a check that throws or does not answer
-refuses with 503 `authz.removal.uncheckable`. A grant's expiry, an erasure
-(PRIV-RIGHT-005, IDN-ORG-003), a deny's revocation and a derivation's writes are not
-checked. A refusal at a scheduled end keeps the membership, leaves the end set and raises
-`access.removal.refused` (`06` OPS-ALERT-001).
+answers 409 with the code the host names, never under a library prefix (a first segment
+the catalogue of `10` section 3 uses, or `session.`), serialised per organization by the
+library's own lock, writes nothing and is recorded as `authz.access.removalrefused`; a
+check that throws or does not answer refuses with 503 `authz.removal.uncheckable`. A
+grant's expiry, an erasure (PRIV-RIGHT-005, IDN-ORG-003), a deny's revocation and a
+derivation's writes are not checked. A refusal at a scheduled end keeps the membership,
+leaves the end set and raises `access.removal.refused` (`06` OPS-ALERT-001).
 
 Nobody gives themselves access, whatever they may hand out. These SHALL be refused with
 403 `authz.grant.self`, save to an actor holding `system:administer` in the

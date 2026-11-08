@@ -21834,6 +21834,31 @@ Janus's admin routes reach the same grants and memberships without its rules.
 - **Order of refusals.** After the admission (AUTHZ-SCOPE-001), the step-up and
   AUTHZ-GRANT-005's reach, so a caller who may not make the change learns nothing of the
   host's rules.
+- **Amended 2026-11-08 (round H21, Q1 to Q7).**
+  - Q1: a host's code follows CONV-NAME-003 like every code (`company.lastowner`).
+  - Q2: the library prefixes are every first segment the catalogue of `10` section 3 uses,
+    read from it, plus `session.`; none is listed by hand.
+  - Q3: the admin routes pass the path through an internal overload; a host's own call is
+    `library`; the public interfaces do not change.
+  - Q4: no timeout: a check that throws refuses with 503; the request's cancellation, or
+    the job pass's, abandons the change.
+  - Q5: a member bringing their own end forward (D-240) is checked; a record's removal
+    through `IResources.RemoveAsync` and a group member's removal that reaches only deny
+    grants are not.
+  - Q6: the library, not the host, serialises removals: before calling the check it takes a
+    transaction-scoped advisory lock per organization the change touches, in the ordinal
+    order of their identifiers, so the check reads committed state and two concurrent
+    removals of the last two holders admit exactly one. The "its own advisory lock"
+    sentence above is withdrawn.
+  - Q7: the shape as read: `IAccessRemovalCheck.CheckAsync(AccessRemoval, CancellationToken)`
+    answering `Result`; `AccessRemoval(Kind, Organization, Subject, Grant, Role, Group,
+    Context, Reason, Path, Grants, Groups)` with `AccessRemovalKind`, `AccessRemovalPath`
+    and `RemovedGrant(Grant, Role, Organization)`; for the job the context is its principal
+    and the reason the one given when the end was set. At most one check is registered,
+    an optional host registration as `IMailServer` is (none: nothing checked); two fail
+    startup with `model.startup.declarationinvalid`, `details.key` `accessRemovalCheck`.
+    "`IMemberships`" above means `IInvitations.EndMembershipAsync`,
+    `SetMembershipEndAsync` and `CancelMembershipEndAsync`.
 - **Criteria.** On PostgreSQL, with a sample check refusing the last holder of a named
   role: its revocation through `DELETE /admin/grants/{id}` and through `IGrants`, and the
   membership end through the admin route and through `IMemberships`, are refused with the
