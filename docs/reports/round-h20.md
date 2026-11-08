@@ -213,6 +213,25 @@ review), a9febbaf**
   judged as the key reads.
 - `CHANGELOG.md`: the inclusion line names it.
 
+**`03` AUTHZ-GRANT-006, AUTHZ-GRANT-005 (D-278 as amended 2026-11-08, question 8),
+ef7f7f2a**
+
+- The other hand-outs judge the role they give on the following graph, as a grant does:
+  a group's member added or removed (`GroupService`), an invitation's roles
+  (`RoleCatalogue`), a membership's end (`MembershipRevocations`) and a recovery's
+  approval (`ApproverReach`). The giver's side stays as the key reads.
+- `IRoleStore.EffectiveAsync` stays for its two remaining callers, neither of which reads
+  a role being given: what a live derivation confers at the check (`Derivations`), and
+  the records of processing (`RegisterRoles`), both what a holder may do as the key
+  reads.
+- Tests: on PostgreSQL,
+  `HandOutTests.AUTHZ_GRANT_006_EveryHandOutIsJudgedAsThoughInclusionsWereOnAsync` (with
+  the key off and on, a giver holding an including role's own permission but not the
+  included role's is refused each of the four; a role carrying only what the giver holds
+  is admitted by each). With the four reads put back as the key reads, every one is
+  admitted with the key off and the test fails.
+- `CHANGELOG.md`: the inclusion line names every hand-out.
+
 ## 2. Items not implemented
 
 None.
@@ -307,7 +326,7 @@ None.
    list (D-152), and `session.hint.domain` was on section 4.8 but not in `06`'s list.
    Answered by D-279's amendment for Q7 (9f5cb286): reading (a), and the key joins `06`'s
    list. Built.
-8. **D-278 as amended 2026-11-08, the other hand-outs (Tier 2; nothing changed).** The
+8. **D-278 as amended 2026-11-08, the other hand-outs (Tier 2).** The
    amendment judges the role a grant gives, and the assignable list, as though
    inclusions were on. AUTHZ-GRANT-005 names other hand-outs that judge a role the same
    way and still read it as the key reads (`IRoleStore.EffectiveAsync`, the views): adding
@@ -317,6 +336,8 @@ None.
    would carry past the actor's reach. Readings: (a) judge each as a grant now is (one
    following read per change, or an `IRoleStore` read that ignores the key); (b) leave
    them as the key reads, the amendment binding a grant and the assignable list alone.
+   Answered by D-278's amendment (3fe59b6d, 29bc6554): reading (a), every hand-out of
+   AUTHZ-GRANT-005. Built.
 
 ## 5. Gate result
 
@@ -326,7 +347,8 @@ None.
   full-history secret scan: green. On PostgreSQL, run here for the round's criteria:
   `RoleInclusionTests`, the truth table, the two seeding tests,
   `PreAuthenticationStoreTests`, `ComplianceStoreTests`, every test of
-  `StartupValidationTests`, `HandOutTests`, `RoleInclusionTests`: green.
+  `StartupValidationTests`, `HandOutTests`, `RoleInclusionTests`, `RecoveryFlowTests`,
+  `InvitationServiceTests`: green.
 - The pipeline's pull-request run on 84749860 failed the schema contract
   (`LIB_API_001_AC2`) and two sample-host tests
   (`LIB_TEST_003_AC1_ACustomerTheFirstAdministratorAndAStaffMemberEachCallTheWorkshopsOwnEndpointsAsync`,
