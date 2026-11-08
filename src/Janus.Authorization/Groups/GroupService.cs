@@ -23,6 +23,7 @@ namespace Janus.Authorization.Groups;
 /// <param name="accounts">Whether an account bears the subject a member names.</param>
 /// <param name="grants">What a group holds, and whether any grant was given to it.</param>
 /// <param name="roles">Where the roles a group holds are read.</param>
+/// <param name="graphs">What each role a change of members hands out carries, as though inclusions were on.</param>
 /// <param name="emergency">Which account joins no group.</param>
 /// <param name="handOut">Whether the caller may hand out the roles a change of members reaches.</param>
 /// <param name="audit">Where every change is written down.</param>
@@ -45,6 +46,7 @@ internal sealed class GroupService(
     IAccountSubjects accounts,
     IGrantStore grants,
     IRoleStore roles,
+    RoleGraphs graphs,
     IEmergencyAccount emergency,
     IHandOutAdmission handOut,
     IGroupAudit audit,
@@ -606,7 +608,8 @@ internal sealed class GroupService(
 
     // AUTHZ-GRANT-005 (D-212, D-278): a change of members hands out every role the group
     // reaches, each at the scope of the grant reaching it and judged on what it carries
-    // through its inclusions. Adding the actor, or a group holding it, widens the
+    // through its inclusions as though they were on, whatever authz.roleinclusion.enabled
+    // reads (AUTHZ-GRANT-006). Adding the actor, or a group holding it, widens the
     // actor's own access whatever the group reaches, and so does removing either from a
     // group that reaches a deny. A role nobody can read hands out what it is named.
     private async ValueTask<Error?> HandOutRefusedAsync(
@@ -618,6 +621,7 @@ internal sealed class GroupService(
     {
         IReadOnlyList<Grant> reached = await ReachedAsync(group, cancellationToken).ConfigureAwait(false);
         IReadOnlyList<GrantSubject> widened = adding || reached.Any(grant => grant.Deny) ? [member] : [];
+        RoleGraph graph = await graphs.ReadFollowingAsync(cancellationToken).ConfigureAwait(false);
 
         List<HandOut> changes = [];
 
@@ -630,9 +634,7 @@ internal sealed class GroupService(
                 .Distinct()
                 .OrderBy(name => name.ToString(), StringComparer.Ordinal))
             {
-                Role read = await roles.EffectiveAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
-
-                handed.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut], read.GrantsMustEnd));
+                handed.Add(graph.Judged(graph.Find(name) ?? Role.Of(name, [])));
             }
 
             changes.Add(new HandOut(Permissions.GroupManage, group.Organization, scoped.Key, handed, widened));

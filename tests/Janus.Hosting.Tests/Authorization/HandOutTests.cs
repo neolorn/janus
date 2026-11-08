@@ -229,6 +229,63 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-006 (D-278, amended 2026-11-08, Q8): every other hand-out judges the role
+    /// it gives as a grant does, as though inclusions were on: with the key off and with it
+    /// on, a giver whose grants admit an including role's own permissions but not the
+    /// included role's is refused adding a member to a group holding it, naming it among an
+    /// invitation's roles, ending the membership of an account holding it and approving that
+    /// account's recovery; each is admitted for a role carrying only what the giver holds.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_006_EveryHandOutIsJudgedAsThoughInclusionsWereOnAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case held = await CaseAsync();
+        Deployment deployment = held.Deployment;
+        RoleName included = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        RoleName including = await deployment.RoleAsync([HostPermissions.Edit], cancellationToken);
+        RoleName editing = await deployment.RoleAsync([HostPermissions.Edit], cancellationToken);
+        RoleName holding = await deployment.RoleAsync([HostPermissions.Edit], cancellationToken);
+        GroupId wide = await deployment.GroupAsync(cancellationToken);
+        GroupId narrow = await deployment.GroupAsync(cancellationToken);
+        SubjectId holdsWide = await deployment.AccountAsync(cancellationToken);
+        SubjectId holdsNarrow = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.IncludesAsync(including, included, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(held.Actor), holding, null, false, null, null, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(wide), including, null, false, null, null, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(narrow), editing, null, false, null, null, cancellationToken);
+        await deployment.MemberAsync(holdsWide, deployment.Organization, cancellationToken);
+        await deployment.MemberAsync(holdsNarrow, deployment.Organization, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(holdsWide), including, null, false, null, null, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(holdsNarrow), editing, null, false, null, null, cancellationToken);
+        await ByHoldingAsync(true);
+
+        try
+        {
+            await InclusionsOnAsync(false);
+
+            IReadOnlyList<ErrorCode?> off = await EveryHandOutAsync(held, wide, including, holdsWide);
+            IReadOnlyList<ErrorCode?> admitted = await EveryHandOutAsync(held, narrow, editing, holdsNarrow);
+
+            await InclusionsOnAsync(true);
+
+            IReadOnlyList<ErrorCode?> on = await EveryHandOutAsync(held, wide, including, holdsWide);
+
+            Assert.Equal(Enumerable.Repeat<ErrorCode?>(ErrorCodes.RoleNotAssignable, 4), off);
+            Assert.Equal(Enumerable.Repeat<ErrorCode?>(ErrorCodes.RoleNotAssignable, 4), on);
+            Assert.Equal(Enumerable.Repeat<ErrorCode?>(null, 4), admitted);
+            Assert.Equal(0, await MembersAsync(wide));
+        }
+        finally
+        {
+            await InclusionsOnAsync(true);
+            await ByHoldingAsync(false);
+        }
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-005 AC3: an allow grant to oneself, one to a group one belongs to
     /// through nesting and the revocation of a deny on oneself are each refused
     /// <c>authz.grant.self</c>, though the actor may hand the role out; revoking one's own
@@ -753,6 +810,36 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
                 : "INSERT INTO identity.settings (key, value) VALUES (@key, @value) ON CONFLICT (key) DO UPDATE SET value = excluded.value;",
             new { key = Settings.AuthzRoleInclusionEnabled.Key.ToString(), value = Settings.AuthzRoleInclusionEnabled.Write(false) },
             cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // AUTHZ-GRANT-005 (D-212): what each hand-out other than a grant answers the case's
+    // actor: adding a new account to a group holding the role, naming the role among an
+    // invitation's roles as the invitation judges them, ending the membership of an account
+    // holding it, and approving that account's recovery.
+    private async Task<IReadOnlyList<ErrorCode?>> EveryHandOutAsync(
+        Case held,
+        GroupId group,
+        RoleName role,
+        SubjectId holder)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId joining = await held.Deployment.AccountAsync(cancellationToken);
+        ErrorCode? joined = Code(await MemberChangedAsync(held, group, GrantSubject.Of(joining), adding: true));
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IServiceProvider services = scope.ServiceProvider;
+        var context = AccessContext.Of(held.Actor);
+        DefinedRole named = await services.GetRequiredService<Janus.Authentication.Invitations.IRoleCatalogue>()
+                .FindAsync(role, cancellationToken)
+            ?? throw new InvalidOperationException("The role is not held.");
+        ErrorCode? invited = (await services.GetRequiredService<Janus.Authentication.Invitations.IRoleHandOut>()
+                .RefusedAsync(context, Permissions.GrantManage, held.Deployment.Organization, [named], [], cancellationToken))
+            ?.Code;
+        ErrorCode? ended = (await services.GetRequiredService<Janus.Authentication.Invitations.IMembershipRevocations>()
+                .RefusedAsync(context, holder, held.Deployment.Organization, administrative: false, cancellationToken))
+            ?.Code;
+
+        return [joined, invited, ended, await ReachedAsync(held.Actor, holder)];
     }
 
     // AUTHZ-GRANT-005 (D-247): the roles the case's actor is offered as assignable.

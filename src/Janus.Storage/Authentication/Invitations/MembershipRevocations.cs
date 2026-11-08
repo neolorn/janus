@@ -20,7 +20,7 @@ namespace Janus.Storage.Authentication.Invitations;
 /// <param name="memberships">Which organizations the account still belongs to.</param>
 /// <param name="grants">The grants the account holds, and those its groups hold.</param>
 /// <param name="groups">The groups naming the account, and those above them.</param>
-/// <param name="roles">What each role reached carries.</param>
+/// <param name="graphs">What each role reached carries, as though inclusions were on.</param>
 /// <param name="admission">The gate's judgment of a change that hands out roles.</param>
 /// <param name="grantAudit">Where each revocation is written down.</param>
 /// <param name="groupAudit">Where each removal is written down.</param>
@@ -38,7 +38,7 @@ internal sealed class MembershipRevocations(
     IMembershipStore memberships,
     IGrantStore grants,
     IGroupStore groups,
-    IRoleStore roles,
+    RoleGraphs graphs,
     IHandOutAdmission admission,
     IGrantAudit grantAudit,
     IGroupAudit groupAudit,
@@ -64,6 +64,10 @@ internal sealed class MembershipRevocations(
             handed.AddRange(await HeldThroughAsync(group, now, cancellationToken).ConfigureAwait(false));
         }
 
+        // AUTHZ-GRANT-006 (D-278): each role is judged on what it carries through its
+        // inclusions as though they were on, whatever authz.roleinclusion.enabled reads.
+        RoleGraph graph = await graphs.ReadFollowingAsync(cancellationToken).ConfigureAwait(false);
+
         foreach (IGrouping<(OrganizationId Organization, ResourceReference? Resource), Grant> scoped in handed
             .GroupBy(grant => (grant.Organization, Scope(grant))))
         {
@@ -74,9 +78,7 @@ internal sealed class MembershipRevocations(
                 .Distinct()
                 .OrderBy(name => name.ToString(), StringComparer.Ordinal))
             {
-                Role read = await roles.EffectiveAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
-
-                touched.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut], read.GrantsMustEnd));
+                touched.Add(graph.Judged(graph.Find(name) ?? Role.Of(name, [])));
             }
 
             var change = new HandOut(
