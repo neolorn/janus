@@ -426,6 +426,8 @@ Janus.Core.AuthorizationDeclaration.Jobs.get -> System.Collections.Generic.IRead
 Janus.Core.AuthorizationDeclaration.Jobs.init -> void
 Janus.Core.AuthorizationDeclaration.LawfulBases.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>!
 Janus.Core.AuthorizationDeclaration.LawfulBases.init -> void
+Janus.Core.AuthorizationDeclaration.NotInherited.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
+Janus.Core.AuthorizationDeclaration.NotInherited.init -> void
 Janus.Core.AuthorizationDeclaration.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
 Janus.Core.AuthorizationDeclaration.Permissions.init -> void
 Janus.Core.AuthorizationDeclaration.ReadingActions.get -> System.Collections.Generic.IReadOnlyList<string!>!
@@ -450,6 +452,7 @@ Janus.Core.AuthorizationDeclarationBuilder.AuthorizationDeclarationBuilder() -> 
 Janus.Core.AuthorizationDeclarationBuilder.Build() -> Janus.Core.AuthorizationDeclaration!
 Janus.Core.AuthorizationDeclarationBuilder.Job(string! name, params System.Collections.Generic.IReadOnlyList<string!>! permissions) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.LawfulBasis(Janus.Core.LawfulBasisDeclaration! basis) -> Janus.Core.AuthorizationDeclarationBuilder!
+Janus.Core.AuthorizationDeclarationBuilder.NotInherited() -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Permission(string! permission) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Permission(string! permission, bool reading) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Recipient(Janus.Core.RecipientDeclaration! recipient) -> Janus.Core.AuthorizationDeclarationBuilder!
@@ -463,6 +466,7 @@ Janus.Core.AuthorizationDeclarationBuilder.SensitiveCategory(string! category) -
 Janus.Core.AuthorizationDeclarationBuilder.ServesPurpose(string! permission, string! purpose) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.StepUpGate(string! permission, string! gate) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.GrantsMustEnd() -> Janus.Core.AuthorizationDeclarationBuilder!
+Janus.Core.AuthorizationDeclarationBuilder.Includes(string! role, System.Collections.Generic.IReadOnlyList<string!>? leftOutPermissions = null, System.Collections.Generic.IReadOnlyList<string!>? leftOutHandsOut = null) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.BackupChoice
 Janus.Core.BackupChoice.AllVerified = 0 -> Janus.Core.BackupChoice
 Janus.Core.BackupChoice.Named = 2 -> Janus.Core.BackupChoice
@@ -877,8 +881,12 @@ Janus.Core.DefinedRole
 Janus.Core.DefinedRole.<Clone>$() -> Janus.Core.DefinedRole!
 Janus.Core.DefinedRole.Deconstruct(out Janus.Core.RoleName Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! HandsOut, out bool GrantsMustEnd) -> void
 Janus.Core.DefinedRole.DefinedRole(Janus.Core.RoleName Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! HandsOut, bool GrantsMustEnd = false) -> void
+Janus.Core.DefinedRole.Effective.get -> Janus.Core.EffectiveRole?
+Janus.Core.DefinedRole.Effective.init -> void
 Janus.Core.DefinedRole.HandsOut.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
 Janus.Core.DefinedRole.HandsOut.init -> void
+Janus.Core.DefinedRole.Includes.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleInclusion!>!
+Janus.Core.DefinedRole.Includes.init -> void
 Janus.Core.DefinedRole.Equals(Janus.Core.DefinedRole? other) -> bool
 Janus.Core.DefinedRole.Name.get -> Janus.Core.RoleName
 Janus.Core.DefinedRole.Name.init -> void
@@ -1015,6 +1023,15 @@ Janus.Core.DomainEvent.RaisedAt.get -> System.DateTimeOffset
 Janus.Core.DomainEvent.RaisedAt.init -> void
 Janus.Core.DomainEvent.Subject.get -> Janus.Core.SubjectId?
 Janus.Core.DomainEvent.Subject.init -> void
+Janus.Core.EffectiveEntry<T>
+Janus.Core.EffectiveEntry<T>.<Clone>$() -> Janus.Core.EffectiveEntry<T>!
+Janus.Core.EffectiveEntry<T>.Deconstruct(out T Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! From) -> void
+Janus.Core.EffectiveEntry<T>.EffectiveEntry(T Name, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! From) -> void
+Janus.Core.EffectiveEntry<T>.Equals(Janus.Core.EffectiveEntry<T>? other) -> bool
+Janus.Core.EffectiveEntry<T>.From.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
+Janus.Core.EffectiveEntry<T>.From.init -> void
+Janus.Core.EffectiveEntry<T>.Name.get -> T
+Janus.Core.EffectiveEntry<T>.Name.init -> void
 Janus.Core.EffectiveGrant
 Janus.Core.EffectiveGrant.<Clone>$() -> Janus.Core.EffectiveGrant!
 Janus.Core.EffectiveGrant.Deconstruct(out System.Guid GrantId, out string! SubjectType, out System.Guid SubjectId, out string! Role, out string! Permission, out string? ResourceType, out string? ResourceId, out bool Deny, out string! Kind, out System.Guid Organization, out System.DateTimeOffset? ExpiresAt, out System.DateTimeOffset? RevokedAt) -> void
@@ -1044,6 +1061,15 @@ Janus.Core.EffectiveGrant.SubjectId.get -> System.Guid
 Janus.Core.EffectiveGrant.SubjectId.init -> void
 Janus.Core.EffectiveGrant.SubjectType.get -> string!
 Janus.Core.EffectiveGrant.SubjectType.init -> void
+Janus.Core.EffectiveRole
+Janus.Core.EffectiveRole.<Clone>$() -> Janus.Core.EffectiveRole!
+Janus.Core.EffectiveRole.Deconstruct(out System.Collections.Generic.IReadOnlyList<Janus.Core.EffectiveEntry<Janus.Core.Permission>!>! Permissions, out System.Collections.Generic.IReadOnlyList<Janus.Core.EffectiveEntry<Janus.Core.RoleName>!>! HandsOut) -> void
+Janus.Core.EffectiveRole.EffectiveRole(System.Collections.Generic.IReadOnlyList<Janus.Core.EffectiveEntry<Janus.Core.Permission>!>! Permissions, System.Collections.Generic.IReadOnlyList<Janus.Core.EffectiveEntry<Janus.Core.RoleName>!>! HandsOut) -> void
+Janus.Core.EffectiveRole.Equals(Janus.Core.EffectiveRole? other) -> bool
+Janus.Core.EffectiveRole.HandsOut.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.EffectiveEntry<Janus.Core.RoleName>!>!
+Janus.Core.EffectiveRole.HandsOut.init -> void
+Janus.Core.EffectiveRole.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.EffectiveEntry<Janus.Core.Permission>!>!
+Janus.Core.EffectiveRole.Permissions.init -> void
 Janus.Core.EmailAddress
 Janus.Core.EmailAddress.EmailAddress() -> void
 Janus.Core.EmailAddress.Equals(Janus.Core.EmailAddress other) -> bool
@@ -1181,6 +1207,8 @@ Janus.Core.ExplainedGrant.Equals(Janus.Core.ExplainedGrant? other) -> bool
 Janus.Core.ExplainedGrant.ExplainedGrant(Janus.Core.GrantId? Id, Janus.Core.GrantKind Kind, Janus.Core.SubjectType SubjectType, System.Guid SubjectId, Janus.Core.RoleName Role, bool Deny, Janus.Core.ResourceReference? InheritedFrom) -> void
 Janus.Core.ExplainedGrant.Id.get -> Janus.Core.GrantId?
 Janus.Core.ExplainedGrant.Id.init -> void
+Janus.Core.ExplainedGrant.IncludedThrough.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
+Janus.Core.ExplainedGrant.IncludedThrough.init -> void
 Janus.Core.ExplainedGrant.InheritedFrom.get -> Janus.Core.ResourceReference?
 Janus.Core.ExplainedGrant.InheritedFrom.init -> void
 Janus.Core.ExplainedGrant.Kind.get -> Janus.Core.GrantKind
@@ -1379,6 +1407,17 @@ Janus.Core.HeldGrant.Role.get -> Janus.Core.RoleName
 Janus.Core.HeldGrant.Role.init -> void
 Janus.Core.HeldGrant.Subject.get -> Janus.Core.GrantSubject
 Janus.Core.HeldGrant.Subject.init -> void
+Janus.Core.HeldRole
+Janus.Core.HeldRole.<Clone>$() -> Janus.Core.HeldRole!
+Janus.Core.HeldRole.Deconstruct(out Janus.Core.RoleName Name, out Janus.Core.EffectiveRole! Effective, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! GivenBy) -> void
+Janus.Core.HeldRole.Effective.get -> Janus.Core.EffectiveRole!
+Janus.Core.HeldRole.Effective.init -> void
+Janus.Core.HeldRole.Equals(Janus.Core.HeldRole? other) -> bool
+Janus.Core.HeldRole.GivenBy.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
+Janus.Core.HeldRole.GivenBy.init -> void
+Janus.Core.HeldRole.HeldRole(Janus.Core.RoleName Name, Janus.Core.EffectiveRole! Effective, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! GivenBy) -> void
+Janus.Core.HeldRole.Name.get -> Janus.Core.RoleName
+Janus.Core.HeldRole.Name.init -> void
 Janus.Core.HostedMailbox
 Janus.Core.HostedMailbox.<Clone>$() -> Janus.Core.HostedMailbox!
 Janus.Core.HostedMailbox.Address.get -> Janus.Core.EmailAddress?
@@ -1642,7 +1681,10 @@ Janus.Core.IRestrictionSet.ReadAsync(Janus.Core.AccessContext! context, Janus.Co
 Janus.Core.IRoles
 Janus.Core.IRoles.AllAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.DefinedRole!>!>>
 Janus.Core.IRoles.DefineAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.DefinedRole! role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<bool>>
+Janus.Core.IRoles.IncludeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RoleName role, Janus.Core.RoleInclusion! inclusion, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<bool>>
+Janus.Core.IRoles.OwnAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.HeldRole!>!>>
 Janus.Core.IRoles.RemoveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RoleName role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRoles.RemoveInclusionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RoleName role, Janus.Core.RoleName included, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISecretSource
 Janus.Core.ISecretSource.ReadFingerprintKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.FingerprintKeys!>>
 Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.KeyEncryptionKeys!>>
@@ -2969,12 +3011,38 @@ Janus.Core.RoleDeclaration.<Clone>$() -> Janus.Core.RoleDeclaration!
 Janus.Core.RoleDeclaration.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<string!>! HandsOut, out bool GrantsMustEnd) -> void
 Janus.Core.RoleDeclaration.HandsOut.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.RoleDeclaration.HandsOut.init -> void
+Janus.Core.RoleDeclaration.Includes.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleInclusionDeclaration!>!
+Janus.Core.RoleDeclaration.Includes.init -> void
 Janus.Core.RoleDeclaration.Equals(Janus.Core.RoleDeclaration? other) -> bool
 Janus.Core.RoleDeclaration.Name.get -> string!
 Janus.Core.RoleDeclaration.Name.init -> void
 Janus.Core.RoleDeclaration.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
 Janus.Core.RoleDeclaration.Permissions.init -> void
 Janus.Core.RoleDeclaration.RoleDeclaration(string! Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<string!>! HandsOut, bool GrantsMustEnd = false) -> void
+Janus.Core.RoleInclusion
+Janus.Core.RoleInclusion.<Clone>$() -> Janus.Core.RoleInclusion!
+Janus.Core.RoleInclusion.Deconstruct(out Janus.Core.RoleName Included, out bool Enabled, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! LeftOutPermissions, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! LeftOutHandsOut) -> void
+Janus.Core.RoleInclusion.Enabled.get -> bool
+Janus.Core.RoleInclusion.Enabled.init -> void
+Janus.Core.RoleInclusion.Equals(Janus.Core.RoleInclusion? other) -> bool
+Janus.Core.RoleInclusion.Included.get -> Janus.Core.RoleName
+Janus.Core.RoleInclusion.Included.init -> void
+Janus.Core.RoleInclusion.LeftOutHandsOut.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
+Janus.Core.RoleInclusion.LeftOutHandsOut.init -> void
+Janus.Core.RoleInclusion.LeftOutPermissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
+Janus.Core.RoleInclusion.LeftOutPermissions.init -> void
+Janus.Core.RoleInclusion.RoleInclusion(Janus.Core.RoleName Included, bool Enabled, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! LeftOutPermissions, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! LeftOutHandsOut) -> void
+Janus.Core.RoleInclusionDeclaration
+Janus.Core.RoleInclusionDeclaration.<Clone>$() -> Janus.Core.RoleInclusionDeclaration!
+Janus.Core.RoleInclusionDeclaration.Deconstruct(out string! Role, out System.Collections.Generic.IReadOnlyList<string!>! LeftOutPermissions, out System.Collections.Generic.IReadOnlyList<string!>! LeftOutHandsOut) -> void
+Janus.Core.RoleInclusionDeclaration.Equals(Janus.Core.RoleInclusionDeclaration? other) -> bool
+Janus.Core.RoleInclusionDeclaration.LeftOutHandsOut.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.RoleInclusionDeclaration.LeftOutHandsOut.init -> void
+Janus.Core.RoleInclusionDeclaration.LeftOutPermissions.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.RoleInclusionDeclaration.LeftOutPermissions.init -> void
+Janus.Core.RoleInclusionDeclaration.Role.get -> string!
+Janus.Core.RoleInclusionDeclaration.Role.init -> void
+Janus.Core.RoleInclusionDeclaration.RoleInclusionDeclaration(string! Role, System.Collections.Generic.IReadOnlyList<string!>! LeftOutPermissions, System.Collections.Generic.IReadOnlyList<string!>! LeftOutHandsOut) -> void
 Janus.Core.RoleName
 Janus.Core.RoleName.Equals(Janus.Core.RoleName other) -> bool
 Janus.Core.RoleName.RoleName() -> void
@@ -3753,9 +3821,15 @@ override Janus.Core.DocumentVersion.ToString() -> string!
 override Janus.Core.DomainEvent.Equals(object? obj) -> bool
 override Janus.Core.DomainEvent.GetHashCode() -> int
 override Janus.Core.DomainEvent.ToString() -> string!
+override Janus.Core.EffectiveEntry<T>.Equals(object? obj) -> bool
+override Janus.Core.EffectiveEntry<T>.GetHashCode() -> int
+override Janus.Core.EffectiveEntry<T>.ToString() -> string!
 override Janus.Core.EffectiveGrant.Equals(object? obj) -> bool
 override Janus.Core.EffectiveGrant.GetHashCode() -> int
 override Janus.Core.EffectiveGrant.ToString() -> string!
+override Janus.Core.EffectiveRole.Equals(object? obj) -> bool
+override Janus.Core.EffectiveRole.GetHashCode() -> int
+override Janus.Core.EffectiveRole.ToString() -> string!
 override Janus.Core.EmailAddress.GetHashCode() -> int
 override Janus.Core.EmailAddress.ToString() -> string!
 override Janus.Core.EncryptedFieldDeclaration.Equals(object? obj) -> bool
@@ -3840,6 +3914,9 @@ override Janus.Core.GroupMembershipChanged.ToString() -> string!
 override Janus.Core.HeldGrant.Equals(object? obj) -> bool
 override Janus.Core.HeldGrant.GetHashCode() -> int
 override Janus.Core.HeldGrant.ToString() -> string!
+override Janus.Core.HeldRole.Equals(object? obj) -> bool
+override Janus.Core.HeldRole.GetHashCode() -> int
+override Janus.Core.HeldRole.ToString() -> string!
 override Janus.Core.HostedMailbox.Equals(object? obj) -> bool
 override Janus.Core.HostedMailbox.GetHashCode() -> int
 override Janus.Core.HostedMailbox.ToString() -> string!
@@ -4114,6 +4191,12 @@ override Janus.Core.RoleChanged.ToString() -> string!
 override Janus.Core.RoleDeclaration.Equals(object? obj) -> bool
 override Janus.Core.RoleDeclaration.GetHashCode() -> int
 override Janus.Core.RoleDeclaration.ToString() -> string!
+override Janus.Core.RoleInclusion.Equals(object? obj) -> bool
+override Janus.Core.RoleInclusion.GetHashCode() -> int
+override Janus.Core.RoleInclusion.ToString() -> string!
+override Janus.Core.RoleInclusionDeclaration.Equals(object? obj) -> bool
+override Janus.Core.RoleInclusionDeclaration.GetHashCode() -> int
+override Janus.Core.RoleInclusionDeclaration.ToString() -> string!
 override Janus.Core.RoleName.GetHashCode() -> int
 override Janus.Core.RoleName.ToString() -> string!
 override Janus.Core.SendContext.Equals(object? obj) -> bool
@@ -4398,6 +4481,8 @@ static Janus.Core.AuditActions.RestrictionEdited.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RestrictionGranted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RestrictionLifted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RoleDefined.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RoleIncluded.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RoleInclusionRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RoleRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.SecondStepPreferred.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.SessionPresented.get -> Janus.Core.AuditAction
@@ -4490,6 +4575,7 @@ static Janus.Core.Configuration.Settings.All.get -> System.Collections.Generic.I
 static Janus.Core.Configuration.Settings.Argon2StrengthClasses.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Configuration.Argon2StrengthClass!>!
 static Janus.Core.Configuration.Settings.AuthzHandoutByHolding.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.AuthzReverseLookupBudget.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.AuthzRoleInclusionEnabled.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.BreakGlassSessionLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.CodeSigninAttempts.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.CodeSigninLifetime.get -> Janus.Core.Configuration.DurationSetting!
@@ -4586,6 +4672,7 @@ static Janus.Core.Configuration.Settings.SessionAal2Absolute.get -> Janus.Core.C
 static Janus.Core.Configuration.Settings.SessionAal2Inactivity.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.SessionDefaultAbsolute.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.SessionDefaultInactivity.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.SessionSignedInDomain.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.SessionStepUpRecency.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.SweepInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.TakedownGrace.get -> Janus.Core.Configuration.DurationSetting!
@@ -4664,8 +4751,12 @@ static Janus.Core.DocumentVersion.operator !=(Janus.Core.DocumentVersion? left, 
 static Janus.Core.DocumentVersion.operator ==(Janus.Core.DocumentVersion? left, Janus.Core.DocumentVersion? right) -> bool
 static Janus.Core.DomainEvent.operator !=(Janus.Core.DomainEvent? left, Janus.Core.DomainEvent? right) -> bool
 static Janus.Core.DomainEvent.operator ==(Janus.Core.DomainEvent? left, Janus.Core.DomainEvent? right) -> bool
+static Janus.Core.EffectiveEntry<T>.operator !=(Janus.Core.EffectiveEntry<T>? left, Janus.Core.EffectiveEntry<T>? right) -> bool
+static Janus.Core.EffectiveEntry<T>.operator ==(Janus.Core.EffectiveEntry<T>? left, Janus.Core.EffectiveEntry<T>? right) -> bool
 static Janus.Core.EffectiveGrant.operator !=(Janus.Core.EffectiveGrant? left, Janus.Core.EffectiveGrant? right) -> bool
 static Janus.Core.EffectiveGrant.operator ==(Janus.Core.EffectiveGrant? left, Janus.Core.EffectiveGrant? right) -> bool
+static Janus.Core.EffectiveRole.operator !=(Janus.Core.EffectiveRole? left, Janus.Core.EffectiveRole? right) -> bool
+static Janus.Core.EffectiveRole.operator ==(Janus.Core.EffectiveRole? left, Janus.Core.EffectiveRole? right) -> bool
 static Janus.Core.EmailAddress.TryParse(string! entered, out Janus.Core.EmailAddress address) -> bool
 static Janus.Core.EmailAddress.operator !=(Janus.Core.EmailAddress left, Janus.Core.EmailAddress right) -> bool
 static Janus.Core.EmailAddress.operator ==(Janus.Core.EmailAddress left, Janus.Core.EmailAddress right) -> bool
@@ -4823,6 +4914,8 @@ static Janus.Core.ErrorCodes.GrantSelf.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RoleInUse.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RoleInclusionLoop.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RoleInclusionMustEnd.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RoleNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RotationNotReady.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ScreeningUnavailable.get -> Janus.Core.ErrorCode
@@ -4910,6 +5003,8 @@ static Janus.Core.GroupMembershipChanged.operator !=(Janus.Core.GroupMembershipC
 static Janus.Core.GroupMembershipChanged.operator ==(Janus.Core.GroupMembershipChanged? left, Janus.Core.GroupMembershipChanged? right) -> bool
 static Janus.Core.HeldGrant.operator !=(Janus.Core.HeldGrant? left, Janus.Core.HeldGrant? right) -> bool
 static Janus.Core.HeldGrant.operator ==(Janus.Core.HeldGrant? left, Janus.Core.HeldGrant? right) -> bool
+static Janus.Core.HeldRole.operator !=(Janus.Core.HeldRole? left, Janus.Core.HeldRole? right) -> bool
+static Janus.Core.HeldRole.operator ==(Janus.Core.HeldRole? left, Janus.Core.HeldRole? right) -> bool
 static Janus.Core.HostedMailbox.operator !=(Janus.Core.HostedMailbox? left, Janus.Core.HostedMailbox? right) -> bool
 static Janus.Core.HostedMailbox.operator ==(Janus.Core.HostedMailbox? left, Janus.Core.HostedMailbox? right) -> bool
 static Janus.Core.IdentifierAdded.operator !=(Janus.Core.IdentifierAdded? left, Janus.Core.IdentifierAdded? right) -> bool
@@ -5043,6 +5138,7 @@ static Janus.Core.Permissions.RecordsOfProcessingRead.get -> Janus.Core.Permissi
 static Janus.Core.Permissions.RecoveryApprove.get -> Janus.Core.Permission
 static Janus.Core.Permissions.RestrictionEdit.get -> Janus.Core.Permission
 static Janus.Core.Permissions.RestrictionGrant.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RoleInclusionManage.get -> Janus.Core.Permission
 static Janus.Core.Permissions.RoleManage.get -> Janus.Core.Permission
 static Janus.Core.Permissions.SessionRevoke.get -> Janus.Core.Permission
 static Janus.Core.Permissions.SessionRevokeAccount.get -> Janus.Core.Permission
@@ -5174,6 +5270,10 @@ static Janus.Core.RoleChanged.operator !=(Janus.Core.RoleChanged? left, Janus.Co
 static Janus.Core.RoleChanged.operator ==(Janus.Core.RoleChanged? left, Janus.Core.RoleChanged? right) -> bool
 static Janus.Core.RoleDeclaration.operator !=(Janus.Core.RoleDeclaration? left, Janus.Core.RoleDeclaration? right) -> bool
 static Janus.Core.RoleDeclaration.operator ==(Janus.Core.RoleDeclaration? left, Janus.Core.RoleDeclaration? right) -> bool
+static Janus.Core.RoleInclusion.operator !=(Janus.Core.RoleInclusion? left, Janus.Core.RoleInclusion? right) -> bool
+static Janus.Core.RoleInclusion.operator ==(Janus.Core.RoleInclusion? left, Janus.Core.RoleInclusion? right) -> bool
+static Janus.Core.RoleInclusionDeclaration.operator !=(Janus.Core.RoleInclusionDeclaration? left, Janus.Core.RoleInclusionDeclaration? right) -> bool
+static Janus.Core.RoleInclusionDeclaration.operator ==(Janus.Core.RoleInclusionDeclaration? left, Janus.Core.RoleInclusionDeclaration? right) -> bool
 static Janus.Core.RoleName.Parse(string! value) -> Janus.Core.RoleName
 static Janus.Core.RoleName.TryParse(string? value, out Janus.Core.RoleName name) -> bool
 static Janus.Core.RoleName.operator !=(Janus.Core.RoleName left, Janus.Core.RoleName right) -> bool

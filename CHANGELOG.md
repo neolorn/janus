@@ -8,6 +8,8 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.10] - 2026-11-08
+
 ### Added
 
 - A role may include other roles. A grant of the including role admits what the
