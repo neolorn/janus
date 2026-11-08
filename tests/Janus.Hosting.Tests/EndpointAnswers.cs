@@ -9,6 +9,7 @@ using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests;
@@ -124,8 +125,11 @@ internal static class EndpointAnswers
             return;
         }
 
+        // AUTHZ-GRANT-005 (D-281): the host's check refuses a removal with a code of its
+        // own, which no route can declare.
         if (Code(body) is string code
-            && !declared.Codes.Concat(Mounting(endpoint)).Concat(Pipeline).Any(known => known.ToString() == code))
+            && !declared.Codes.Concat(Mounting(endpoint)).Concat(Pipeline).Any(known => known.ToString() == code)
+            && context.RequestServices?.GetService<Janus.Authorization.Grants.RemovalRefusals>()?.Holds(ErrorCode.Parse(code)) is not true)
         {
             Assert.Fail($"{route} answered {context.Response.StatusCode} {code}, which it does not declare.");
         }

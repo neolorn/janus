@@ -322,6 +322,7 @@ internal static class StorageRegistration
         services.AddScoped<ISeededRoles, SeededRoles>();
         services.AddScoped<IGrantStore, GrantStore>();
         services.AddScoped<IGrantAudit, GrantAudit>();
+        services.AddScoped<IRemovalLocks, RemovalLocks>();
         services.AddScoped<IGroupStore, GroupStore>();
         services.AddScoped<IGroupAudit, GroupAudit>();
         services.AddScoped<IOrganizationDirectory, OrganizationDirectory>();

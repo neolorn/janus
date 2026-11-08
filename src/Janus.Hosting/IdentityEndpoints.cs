@@ -46,10 +46,11 @@ public static class IdentityEndpoints
         // BFF-LOG-002, CONV-LOG-003: every body the library answers carries a
         // credential or a person's data, so none of them is logged. BFF-HOST-002: the
         // library's endpoints keep their own marks, so one answers anyone unless it is
-        // marked as needing a session where it is mounted.
-        RouteGroupBuilder library = SessionRequired.Off(endpoints
+        // marked as needing a session where it is mounted. AUTHZ-GRANT-005 (D-281): a
+        // removal of access through one of them came by the administration.
+        RouteGroupBuilder library = RequestRemovalPaths.Mark(SessionRequired.Off(endpoints
             .MapGroup(string.Empty)
-            .WithMetadata(new SensitiveBodyAttribute()));
+            .WithMetadata(new SensitiveBodyAttribute())));
 
         _ = library.MapRegistration();
         _ = library.MapCollection();

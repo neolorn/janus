@@ -76,6 +76,7 @@ public sealed class PublicSurfaceTests
     // service contract and is held to the rule.
     private static readonly Type[] NotServiceContracts =
     [
+        typeof(IAccessRemovalCheck), // LIB-HOST-001, optional: the check of a removal of access (AUTHZ-GRANT-005).
         typeof(IAlertHandler), // LIB-EXT-001 and LIB-HOST-001: alert handling (OPS-ALERT-003).
         typeof(IAssuranceProvider), // LIB-HOST-004: assurance where authentication is not the library's.
         typeof(IDatacenterRangeSource), // LIB-HOST-001, optional: an environment seam (AUTH-ABUSE-008).

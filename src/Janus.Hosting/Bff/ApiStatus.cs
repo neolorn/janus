@@ -228,6 +228,10 @@ internal static class ApiStatus
         // The process does not serve the staff search, which another process may
         // (IDN-SRCH-003).
         [ErrorCodes.SearchUnavailable] = StatusCodes.Status503ServiceUnavailable,
+
+        // The host's check of a removal of access threw or did not answer, so the
+        // removal is refused and nothing written (AUTHZ-GRANT-005, D-281).
+        [ErrorCodes.RemovalUncheckable] = StatusCodes.Status503ServiceUnavailable,
     }.ToFrozenDictionary();
 
     /// <summary>

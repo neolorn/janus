@@ -225,7 +225,7 @@ internal static class AccountEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Denied, ErrorCodes.OrganizationNotFound, ErrorCodes.MembershipNotFound,
-                    ErrorCodes.MembershipNoEnd)
+                    ErrorCodes.MembershipNoEnd, ErrorCodes.RemovalUncheckable)
                 .Binding<OrganizationId>("organization"))
             .Produces(StatusCodes.Status204NoContent);
 

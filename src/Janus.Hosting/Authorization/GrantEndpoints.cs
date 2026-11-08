@@ -67,7 +67,7 @@ internal static class GrantEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.GrantNotFound, ErrorCodes.GrantReasonRequired,
-                    ErrorCodes.RoleNotAssignable, ErrorCodes.GrantSelf)
+                    ErrorCodes.RoleNotAssignable, ErrorCodes.GrantSelf, ErrorCodes.RemovalUncheckable)
                 .Binding<GrantId>("id"))
             .Accepts<GrantRevocationBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);

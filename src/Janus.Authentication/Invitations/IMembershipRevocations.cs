@@ -40,6 +40,37 @@ internal interface IMembershipRevocations
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Asks the host's check about the end, inside the transaction it runs in and after its
+    /// locks, naming the grants it revokes and the groups it leaves, with every
+    /// organization it touches held first (AUTHZ-GRANT-005, D-281).
+    /// </summary>
+    /// <param name="context">Who ends the membership: a person, or the job's principal.</param>
+    /// <param name="member">Whose membership.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="administrative">Whether the organization administers the deployment.</param>
+    /// <param name="reason">Why, as the end records it.</param>
+    /// <param name="path">
+    /// The way the end came where the caller knows it, the job's scheduled end; nothing for
+    /// the way the request it is made in came.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the end.</param>
+    /// <returns>
+    /// Nothing where the end may go ahead, or the host's refusal, recorded; a check that
+    /// throws refuses with <c>authz.removal.uncheckable</c>.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// No transaction is open, or the check refused under a code of the library's.
+    /// </exception>
+    ValueTask<Error?> CheckedAsync(
+        AccessContext context,
+        SubjectId member,
+        OrganizationId organization,
+        bool administrative,
+        string reason,
+        AccessRemovalPath? path,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Revokes the grants the end reaches and takes the account out of the groups it
     /// reaches, inside the transaction the end runs in, recording each with the end's
     /// reason and actor.

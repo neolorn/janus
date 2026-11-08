@@ -22,6 +22,7 @@ namespace Janus.Storage.Authentication.Invitations;
 /// <param name="groups">The groups naming the account, and those above them.</param>
 /// <param name="graphs">What each role reached carries, as though inclusions were on.</param>
 /// <param name="admission">The gate's judgment of a change that hands out roles.</param>
+/// <param name="removals">What asks the host's check before the end is made.</param>
 /// <param name="grantAudit">Where each revocation is written down.</param>
 /// <param name="groupAudit">Where each removal is written down.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -40,6 +41,7 @@ internal sealed class MembershipRevocations(
     IGroupStore groups,
     RoleGraphs graphs,
     IHandOutAdmission admission,
+    AccessRemovalGuard removals,
     IGrantAudit grantAudit,
     IGroupAudit groupAudit,
     TimeProvider time) : IMembershipRevocations
@@ -96,6 +98,46 @@ internal sealed class MembershipRevocations(
         }
 
         return null;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Error?> CheckedAsync(
+        AccessContext context,
+        SubjectId member,
+        OrganizationId organization,
+        bool administrative,
+        string reason,
+        AccessRemovalPath? path,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(reason);
+
+        // AUTHZ-GRANT-005 (D-281): one call naming the membership, listing the allow grants
+        // the end revokes and the groups it leaves, every organization they are in held.
+        Reach reach = await ReachedAsync(member, organization, administrative, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return await removals
+            .RefusedAsync(
+                new AccessRemoval(
+                    AccessRemovalKind.MembershipEnded,
+                    organization,
+                    GrantSubject.Of(member),
+                    Grant: null,
+                    Role: null,
+                    Group: null,
+                    context,
+                    reason,
+                    path ?? removals.Path,
+                    [.. reach.Grants.Select(grant => new RemovedGrant(grant.Id, grant.Role, grant.Organization))],
+                    [.. reach.Groups.Select(group => group.Id)]),
+                [
+                    .. reach.Grants.Select(grant => grant.Organization),
+                    .. reach.Groups.Select(group => group.Organization),
+                ],
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

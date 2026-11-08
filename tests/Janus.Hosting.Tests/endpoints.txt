@@ -379,6 +379,7 @@ POST /account/memberships/{organization}/end
   403 auth.session.csrfinvalid authz.denied
   404 identity.membership.notfound identity.organization.notfound
   409 identity.membership.noend
+  503 authz.removal.uncheckable
 POST /account/password
   request application/json
     password: string
@@ -1099,6 +1100,7 @@ DELETE /admin/grants/{id}
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.grant.self authz.restricted authz.role.notassignable
   404 authz.grant.notfound
   422 authz.grant.reasonrequired
+  503 authz.removal.uncheckable
 GET /admin/groups
   200
     application/json
@@ -1139,6 +1141,7 @@ DELETE /admin/groups/{id}/members
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.grant.self authz.restricted authz.role.notassignable
   409 authz.group.cycle
   422 api.request.invalid
+  503 authz.removal.uncheckable
 POST /admin/groups/{id}/members
   request application/json
     subjectType: SubjectType?
@@ -1373,6 +1376,7 @@ DELETE /admin/organizations/{id}/memberships/{subject}
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
   404 identity.membership.notfound identity.organization.notfound
+  503 authz.removal.uncheckable
 DELETE /admin/organizations/{id}/memberships/{subject}/end
   request application/json
     reason: string
@@ -1391,6 +1395,7 @@ PUT /admin/organizations/{id}/memberships/{subject}/end
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted authz.role.notassignable
   404 identity.membership.notfound identity.organization.notfound
   422 api.request.invalid
+  503 authz.removal.uncheckable
 GET /admin/organizations/{id}/policy
   200
     application/json

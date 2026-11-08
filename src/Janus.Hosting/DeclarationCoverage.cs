@@ -47,6 +47,7 @@ namespace Janus.Hosting;
 /// <param name="subscribers">The subject-event subscribers the host registered.</param>
 /// <param name="handlers">The purpose handlers the host registered.</param>
 /// <param name="contributors">The export contributors the host registered.</param>
+/// <param name="removalChecks">The checks of a removal of access the host registered.</param>
 /// <param name="clients">The clients registered with the provider.</param>
 /// <param name="configuration">
 /// Where the stored policies that show photos, and the domains each lists, are read.
@@ -55,7 +56,7 @@ namespace Janus.Hosting;
 /// <remarks>
 /// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
 /// INT-MAIL-010, IDN-LIFE-012a, REG-DOM-001, INT-SMS-003, API-LAND-001, AUTHZ-DERIVE-005,
-/// AUTHZ-DERIVE-007, PRIV-CONS-006a, IDN-PRIN-001 and PRIV-RIGHT-003.
+/// AUTHZ-DERIVE-007, PRIV-CONS-006a, IDN-PRIN-001, PRIV-RIGHT-003 and AUTHZ-GRANT-005.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
@@ -100,6 +101,7 @@ internal sealed class DeclarationCoverage(
     IEnumerable<ISubjectEventSubscriber> subscribers,
     IEnumerable<IPurposeHandler> handlers,
     IEnumerable<IExportContributor> contributors,
+    IEnumerable<IAccessRemovalCheck> removalChecks,
     IOidcClientStore clients,
     IConfigurationStore configuration,
     IServiceProvider scope)
@@ -127,6 +129,8 @@ internal sealed class DeclarationCoverage(
     private const string Job = "job";
 
     private const string Contributor = "contributor";
+
+    private const string RemovalCheck = "accessRemovalCheck";
 
     // RFC 2616 section 2.2: the characters a token never holds, space and tab aside,
     // which fall outside the visible range.
@@ -200,6 +204,16 @@ internal sealed class DeclarationCoverage(
         if (Uncookied() is (string cookie, string at))
         {
             return Invalid(cookie, at);
+        }
+
+        // AUTHZ-GRANT-005 (D-281): a removal is asked of one check, so two leave which one
+        // the deployment keeps unsaid.
+        if (removalChecks.Skip(1).Any())
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.StartupDeclarationInvalid,
+                "key",
+                JsonSerializer.SerializeToElement(RemovalCheck)));
         }
 
         if (Sourced().Match<Error?>(() => null, error => error) is Error unsourced)

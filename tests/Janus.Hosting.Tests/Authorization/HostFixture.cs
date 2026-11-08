@@ -58,6 +58,11 @@ public sealed class HostFixture : IAsyncLifetime
         ?? throw new InvalidOperationException("The fixture has not started.");
 
     /// <summary>
+    /// The host's check of a removal of access, which a case arms for its organization.
+    /// </summary>
+    internal ArmedRemovalCheck Removals => Services.GetRequiredService<ArmedRemovalCheck>();
+
+    /// <summary>
     /// Opens a connection to the database for a hand-written statement.
     /// </summary>
     /// <returns>The open connection.</returns>
@@ -181,6 +186,11 @@ public sealed class HostFixture : IAsyncLifetime
         // PRIV-RIGHT-001a: and its recommendations rest on consent, so it registers what
         // does the host-side work of a consent change for them.
         services.AddSingleton<IPurposeHandler>(new HostPurposes());
+
+        // AUTHZ-GRANT-005 (D-281): and it checks every removal of access, answering
+        // nothing where a case did not arm the organization.
+        services.AddSingleton(new ArmedRemovalCheck(ConnectionString));
+        services.AddSingleton<IAccessRemovalCheck>(provider => provider.GetRequiredService<ArmedRemovalCheck>());
 
         _services = Started(services.BuildServiceProvider());
     }

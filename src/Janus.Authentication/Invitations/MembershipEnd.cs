@@ -211,6 +211,18 @@ internal sealed class MembershipEnd(
             return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
         }
 
+        // AUTHZ-GRANT-005 (D-281): the host's check is asked under the membership's lock,
+        // before anything the end reaches is revoked.
+        if (await revocations
+                .CheckedAsync(context, member, organization, standing.IsAdministrative, stated, path: null, cancellationToken)
+                .ConfigureAwait(false)
+            is Error kept)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(kept);
+        }
+
         // IDN-MEM-001 (D-213): in the transaction that ends the membership, recorded with
         // the end's reason and actor, and announced with it.
         IReadOnlyList<DomainEvent> revoked = await revocations
@@ -353,6 +365,18 @@ internal sealed class MembershipEnd(
                 ?? Error.From(ErrorCodes.MembershipNotFound));
         }
 
+        // AUTHZ-GRANT-005 (D-281): an end brought forward is a removal the host's check is
+        // asked about, as an end now is.
+        if (await revocations
+                .CheckedAsync(context, member, organization, standing.IsAdministrative, BroughtForward, path: null, cancellationToken)
+                .ConfigureAwait(false)
+            is Error kept)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(kept);
+        }
+
         // AUTHZ-GRANT-005 (D-240): the scheduler's hand-out lists were judged when the end
         // was set, so the revocations are the job's, unjudged, in the member's name.
         IReadOnlyList<DomainEvent> revoked = await revocations
@@ -443,7 +467,7 @@ internal sealed class MembershipEnd(
 
         foreach (MembershipEndDue due in await memberships.DueAsync(now, cancellationToken).ConfigureAwait(false))
         {
-            Result<int> done = await EndedAsync(principal, due, reserved, now, cancellationToken)
+            Result<int> done = await EndedAsync(context, principal, due, reserved, now, cancellationToken)
                 .ConfigureAwait(false);
 
             if (done.Match<Error?>(_ => null, error => error) is Error refusal)
@@ -630,6 +654,20 @@ internal sealed class MembershipEnd(
             return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
         }
 
+        // AUTHZ-GRANT-005 (D-281): an end set in advance is judged by the host's check
+        // when it is set, and again when the job carries it out; a cancellation removes
+        // nothing.
+        if (endsAt is not null
+            && await revocations
+                .CheckedAsync(context, member, organization, standing.IsAdministrative, stated, path: null, cancellationToken)
+                .ConfigureAwait(false)
+            is Error kept)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(kept);
+        }
+
         await audit
             .MembershipEndSetAsync(
                 organization,
@@ -662,6 +700,7 @@ internal sealed class MembershipEnd(
                 nameof(context));
 
     private async ValueTask<Result<int>> EndedAsync(
+        AccessContext context,
         SystemPrincipal principal,
         MembershipEndDue due,
         SubjectId? reserved,
@@ -691,6 +730,26 @@ internal sealed class MembershipEnd(
         // is followed as it now stands, and nothing is written.
         if (await memberships.EndDueAsync(due.Member, due.Organization, now, cancellationToken).ConfigureAwait(false)
             is not MembershipEndDue ended)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success(0);
+        }
+
+        // AUTHZ-GRANT-005 (D-281): the host's check is asked again when the end is carried
+        // out; a refusal keeps the membership and leaves the end set, so the next pass
+        // asks again.
+        if (await revocations
+                .CheckedAsync(
+                    context,
+                    ended.Member,
+                    ended.Organization,
+                    standing.IsAdministrative,
+                    ended.Reason,
+                    AccessRemovalPath.ScheduledEnd,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            is not null)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 

@@ -1105,6 +1105,14 @@ public static class ErrorCodes
     public static ErrorCode GrantSelf { get; } = ErrorCode.Parse("authz.grant.self");
 
     /// <summary>
+    /// The host's check of a removal of access could not answer, so the revocation, the
+    /// membership's end or the group member's removal was refused and nothing written.
+    /// Try again once the host's check answers.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-005, D-281.</remarks>
+    public static ErrorCode RemovalUncheckable { get; } = ErrorCode.Parse("authz.removal.uncheckable");
+
+    /// <summary>
     /// A grant or a derivation still names the role, so removing it would take away
     /// what they record. Change the permissions it carries instead.
     /// </summary>

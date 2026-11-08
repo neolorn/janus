@@ -29,6 +29,7 @@ namespace Janus.Authorization.Grants;
 /// <param name="accounts">Whether an account bears the subject a grant is given to.</param>
 /// <param name="resources">Where the record a grant is on, and its organization, are read.</param>
 /// <param name="emergency">Which account is granted nothing further.</param>
+/// <param name="removals">What asks the host's check before an allow grant is revoked.</param>
 /// <param name="audit">Where each grant written or revoked is written down.</param>
 /// <param name="events">Where each grant written or revoked is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -54,6 +55,7 @@ internal sealed class GrantService(
     IResourceStore resources,
     IAccountSubjects accounts,
     IEmergencyAccount emergency,
+    AccessRemovalGuard removals,
     IGrantAudit audit,
     IEvents events,
     IUnitOfWork work,
@@ -270,6 +272,13 @@ internal sealed class GrantService(
             return Result.Failure(since);
         }
 
+        // AUTHZ-GRANT-005 (D-281): the organization's removals are held before the rows
+        // below, as every removal takes them, so two never wait on each other.
+        if (!held.Deny)
+        {
+            await removals.HoldAsync([held.Organization], cancellationToken).ConfigureAwait(false);
+        }
+
         // D-166 X3: the role and then the grant are read under their rows' locks, in the
         // order a grant's writing takes them, so a second revocation finds the first and
         // OPS-CFG-007 is judged on what the role allows as committed.
@@ -281,6 +290,7 @@ internal sealed class GrantService(
             ? Error.From(ErrorCodes.GrantNotFound)
             : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
                 ?? await RevocationHandOutRefusedAsync(context, standing, role, cancellationToken).ConfigureAwait(false)
+                ?? await RemovalRefusedAsync(context, standing, reason, cancellationToken).ConfigureAwait(false)
                 ?? standing.Revoke(acting, time.GetUtcNow(), reason).Match<Error?>(() => null, error => error);
 
         if (moved is not null)
@@ -561,6 +571,34 @@ internal sealed class GrantService(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error);
     }
+
+    // AUTHZ-GRANT-005 (D-281): the host's check of an allow grant's revocation, asked under
+    // the locks, after the admission, the step-up and the reach. Revoking a deny widens
+    // access, which the reach alone judges, so the host is not asked.
+    private async ValueTask<Error?> RemovalRefusedAsync(
+        AccessContext context,
+        Grant revoked,
+        string reason,
+        CancellationToken cancellationToken) =>
+        revoked.Deny
+            ? null
+            : await removals
+                .RefusedAsync(
+                    new AccessRemoval(
+                        AccessRemovalKind.GrantRevoked,
+                        revoked.Organization,
+                        revoked.Subject,
+                        revoked.Id,
+                        revoked.Role,
+                        Group: null,
+                        context,
+                        reason,
+                        removals.Path,
+                        Grants: [],
+                        Groups: []),
+                    [],
+                    cancellationToken)
+                .ConfigureAwait(false);
 
     // AUTHZ-GRANT-005 AC5: a revocation is judged as a grant is, and revoking a deny
     // widens its holder's access; revoking an allow takes access away. A role nobody
