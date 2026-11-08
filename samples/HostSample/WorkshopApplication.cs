@@ -131,9 +131,8 @@ public static class WorkshopApplication
 
         // AUTHZ-GRANT-005: the workshop keeps every organization's last manager, whichever
         // way the access would be taken away.
-        _ = services.AddSingleton<IAccessRemovalCheck>(provider => new LastManager(
-            provider.GetRequiredService<IServiceScopeFactory>(),
-            provider.GetRequiredService<TimeProvider>()));
+        _ = services.AddSingleton<IAccessRemovalCheck>(provider =>
+            new LastManager(provider.GetRequiredService<IServiceScopeFactory>()));
 
         // IDN-PRIN-001: the workshop's jobs, which whoever starts the application runs in
         // the background.
