@@ -24,6 +24,9 @@ against the public contract of LIB-API-001.
   scheduled end keeps the membership and its end, and the next pass asks again. A grant's
   expiry, an erasure, a deny's revocation and a derivation's writes are not checked, and
   registering two checks fails startup naming `accessRemovalCheck`.
+- `GET /admin/roles` and `IRoles.AllAsync` also answer a caller holding `grant:manage`
+  in any organization, read-only, so whoever gives roles can see what each role
+  includes and carries.
 
 ## [1.0.0-rc.10] - 2026-11-08
 

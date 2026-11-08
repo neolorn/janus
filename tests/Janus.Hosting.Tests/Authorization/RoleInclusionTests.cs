@@ -200,6 +200,56 @@ public sealed class RoleInclusionTests(HostFixture host) : IClassFixture<HostFix
             read.Effective.Permissions.Select(entry => (entry.Name.ToString(), string.Join('/', entry.From))));
     }
 
+    /// <summary>
+    /// AUTHZ-GRANT-006 (D-282): a holder of <c>grant:manage</c> in an organization other
+    /// than the administrative one, and of nothing else, reads every role with its
+    /// inclusions, its effective permissions and their sources; a change to an inclusion
+    /// by them is refused, and a caller holding none of the three permissions is refused
+    /// the read.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_006_AGiverOfRolesInAnyOrganizationReadsThemReadOnlyAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+        RoleName lowest = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        RoleName top = await deployment.RoleAsync([HostPermissions.Publish], cancellationToken);
+        RoleName giving = await deployment.RoleAsync([Permissions.GrantManage], cancellationToken);
+        SubjectId giver = await deployment.AccountAsync(cancellationToken);
+        SubjectId outsider = await deployment.AccountAsync(cancellationToken);
+
+        _ = await deployment.AdministrativeAsync(cancellationToken);
+        await deployment.MemberAsync(giver, deployment.Organization, cancellationToken);
+        await deployment.MemberAsync(outsider, deployment.Organization, cancellationToken);
+        _ = await deployment.GrantAsync(GrantSubject.Of(giver), giving, null, false, null, null, cancellationToken);
+        await deployment.IncludesAsync(top, lowest, cancellationToken);
+
+        Result<IReadOnlyList<DefinedRole>> read;
+        Result<IReadOnlyList<DefinedRole>> refused;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            IRoles roles = scope.ServiceProvider.GetRequiredService<IRoles>();
+
+            read = await roles.AllAsync(AccessContext.Of(giver), cancellationToken);
+            refused = await roles.AllAsync(AccessContext.Of(outsider), cancellationToken);
+        }
+
+        DefinedRole topRead = read.Match(
+            all => all.Single(role => role.Name == top),
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal([lowest], topRead.Includes!.Select(inclusion => inclusion.Included));
+        Assert.Equal(
+            [("document:publish", string.Empty), ("document:read", lowest.ToString())],
+            topRead.Effective!.Permissions.Select(entry => (entry.Name.ToString(), string.Join('/', entry.From))));
+        Assert.Equal(ErrorCodes.Denied, refused.Match<ErrorCode?>(_ => null, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.Denied,
+            (await IncludedAsync(giver, giving, lowest)).Match<ErrorCode?>(_ => null, error => error.Code));
+    }
+
     // A member of the administrative organization managing inclusions there, holding
     // system administration so every change stays within its reach (AUTHZ-GRANT-005).
     private static async Task<SubjectId> AdministratorAsync(Deployment deployment)

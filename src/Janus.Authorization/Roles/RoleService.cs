@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
+using Janus.Authorization.Groups;
 using Janus.Authorization.Model;
 using Janus.Core;
 
@@ -21,7 +22,8 @@ namespace Janus.Authorization.Roles;
 /// <param name="roles">Where roles are read and written.</param>
 /// <param name="inclusions">Where roles' inclusions of one another are read and written.</param>
 /// <param name="graphs">What each role carries and hands out through its inclusions.</param>
-/// <param name="grants">Which grants the reserved account holds.</param>
+/// <param name="grants">Which grants the reserved account holds, and where a caller holds grants.</param>
+/// <param name="groups">Which groups a caller belongs to.</param>
 /// <param name="references">Whether any grant, standing invitation or other role names a role.</param>
 /// <param name="administrative">Which organization administers the deployment.</param>
 /// <param name="emergency">Which account the break-glass session belongs to.</param>
@@ -46,6 +48,7 @@ internal sealed class RoleService(
     IRoleInclusionStore inclusions,
     RoleGraphs graphs,
     IGrantStore grants,
+    IGroupStore groups,
     IRoleReferences references,
     IAdministrativeOrganization administrative,
     IEmergencyAccount emergency,
@@ -58,10 +61,11 @@ internal sealed class RoleService(
 {
     /// <inheritdoc/>
     /// <remarks>
-    /// Implements AUTHZ-GRANT-004 and AUTHZ-GRANT-006 (D-278): open to <c>role:manage</c>
-    /// and to <c>roleinclusion:manage</c> in the administrative organization, as one
-    /// admission, each role answered with its inclusions and what it carries and hands out
-    /// through them.
+    /// Implements AUTHZ-GRANT-004 and AUTHZ-GRANT-006 (D-278, D-282): open to
+    /// <c>role:manage</c> and to <c>roleinclusion:manage</c> in the administrative
+    /// organization, and to <c>grant:manage</c> in any organization, as one admission,
+    /// each role answered with its inclusions and what it carries and hands out through
+    /// them.
     /// </remarks>
     public async ValueTask<Result<IReadOnlyList<DefinedRole>>> AllAsync(
         AccessContext context,
@@ -76,8 +80,14 @@ internal sealed class RoleService(
             return Result.Failure<IReadOnlyList<DefinedRole>>(Error.From(ErrorCodes.Denied));
         }
 
+        // AUTHZ-GRANT-006 (D-282): whoever gives roles reads what they carry, read-only,
+        // as one admission with the administration's, its refusal recorded once.
         if (await scope
-                .RefusedAsync(context, [Permissions.RoleManage, Permissions.RoleInclusionManage], cancellationToken)
+                .RefusedAsync(
+                    context,
+                    [Permissions.RoleManage, Permissions.RoleInclusionManage],
+                    (Permissions.GrantManage, cancellation => GrantsHeldAsync(context, cancellation)),
+                    cancellationToken)
                 .ConfigureAwait(false)
             is Error refused)
         {
@@ -596,6 +606,31 @@ internal sealed class RoleService(
                             .Select(giving => giving.Name),
                     ])),
         ]);
+    }
+
+    // AUTHZ-GRANT-006 (D-282): the organizations the caller holds a live allow grant in,
+    // its own or a group's, where grant:manage may be held.
+    private async ValueTask<IReadOnlyList<OrganizationId>> GrantsHeldAsync(
+        AccessContext context,
+        CancellationToken cancellationToken)
+    {
+        if (context.Effective is not SubjectId caller)
+        {
+            return [];
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+        IReadOnlyList<Grant> named = await grants.NamingAsync(caller, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<Group> holding = await groups.HoldingAsync(caller, cancellationToken).ConfigureAwait(false);
+
+        return
+        [
+            .. named
+                .Where(grant => !grant.Deny && grant.IsLive(now))
+                .Select(grant => grant.Organization)
+                .Concat(holding.Select(group => group.Organization))
+                .Distinct(),
+        ];
     }
 
     // Chapter 10 section 5b (D-218): the event is written in the transaction that makes

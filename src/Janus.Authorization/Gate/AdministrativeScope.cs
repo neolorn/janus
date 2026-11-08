@@ -63,9 +63,38 @@ internal sealed class AdministrativeScope(IAccessGate gate, IAdministrativeOrgan
     /// (BFF-CAP-002); a permission held with nothing outstanding admits the read, and
     /// where none is, the first is asked of the single check, which records its refusal.
     /// </remarks>
+    public ValueTask<Error?> RefusedAsync(
+        AccessContext context,
+        IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken) =>
+        RefusedAsync(context, permissions, elsewhere: null, cancellationToken);
+
+    /// <summary>
+    /// The refusal, or nothing where the caller holds any of the permissions in the
+    /// administrative organization, or the permission given in any organization the
+    /// caller holds a grant in: a read open to each of them, admitted as one admission.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permissions">
+    /// The permissions any of which admits the read in the administrative organization, at
+    /// least one.
+    /// </param>
+    /// <param name="elsewhere">
+    /// The permission that admits the read wherever it is held, and what reads the
+    /// organizations the caller holds a live allow grant in, once the gate has been asked;
+    /// or nothing.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The refusal of the first permission, recorded once, or nothing.</returns>
+    /// <remarks>
+    /// AUTHZ-GRANT-006 (D-282): each is asked as a question that records nothing
+    /// (BFF-CAP-002), and only where none admits the read is the first asked of the
+    /// single check, which records its refusal.
+    /// </remarks>
     public async ValueTask<Error?> RefusedAsync(
         AccessContext context,
         IReadOnlyList<Permission> permissions,
+        (Permission Permission, Func<CancellationToken, ValueTask<IReadOnlyList<OrganizationId>>> Held)? elsewhere,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(permissions);
@@ -73,7 +102,9 @@ internal sealed class AdministrativeScope(IAccessGate gate, IAdministrativeOrgan
         if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false)
             is not OrganizationId organization)
         {
-            return Error.From(ErrorCodes.Denied);
+            return await HeldElsewhereAsync(context, elsewhere, cancellationToken).ConfigureAwait(false)
+                ? null
+                : Error.From(ErrorCodes.Denied);
         }
 
         if ((await gate
@@ -92,9 +123,50 @@ internal sealed class AdministrativeScope(IAccessGate gate, IAdministrativeOrgan
             return null;
         }
 
+        if (await HeldElsewhereAsync(context, elsewhere, cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
         return (await gate
                 .RequireAsync(context, permissions[0], organization, cancellationToken)
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error);
+    }
+
+    // Whether the caller holds the permission across any of the organizations it holds a
+    // grant in, with nothing outstanding, asked as a question that records nothing
+    // (BFF-CAP-002).
+    private async ValueTask<bool> HeldElsewhereAsync(
+        AccessContext context,
+        (Permission Permission, Func<CancellationToken, ValueTask<IReadOnlyList<OrganizationId>>> Held)? elsewhere,
+        CancellationToken cancellationToken)
+    {
+        if (elsewhere is not (Permission permission, Func<CancellationToken, ValueTask<IReadOnlyList<OrganizationId>>> held))
+        {
+            return false;
+        }
+
+        foreach (OrganizationId organization in await held(cancellationToken).ConfigureAwait(false))
+        {
+            if ((await gate
+                    .CapabilitiesAsync(
+                        context,
+                        OrganizationWide,
+                        [ResourceId.Parse(organization.ToString())],
+                        [permission],
+                        cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(
+                    capabilities => capabilities is [Capability capability]
+                        && capability.Can.Contains(permission)
+                        && !capability.Requires.ContainsKey(permission),
+                    _ => false))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
