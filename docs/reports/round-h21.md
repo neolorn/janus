@@ -49,8 +49,7 @@
   revocations), `IResources.RemoveAsync`, a derivation's writes, a group removal reaching
   only deny grants (question 5).
 - A refused scheduled end rolls its transaction back: the membership stays current with
-  its end set, the pass goes on with the next, and the next pass asks again. The alert is
-  parked (section 2).
+  its end set, the pass goes on with the next, and the next pass asks again.
 - The path: the library marks its own route group (`RequestRemovalPaths.Mark`), so a
   removal through one of its routes is `administration` and anything else, a host's own
   endpoint or a direct call, is `library` (question 3).
@@ -88,6 +87,20 @@
   organization no case armed, so every case there runs with the locks taken.
 - `CHANGELOG.md`: one line under Unreleased, `Added`.
 
+**`06` OPS-ALERT-001, `10` section 5.23 (D-281 as amended by 7a092f0d, question 8),
+ef6e9872**
+
+- `AlertCondition.AccessRemovalRefused` (`access-removal-refused`), High. A scheduled end
+  the host's check refused, its transaction rolled back, raises it in a unit of work of
+  its own, under the membership (the deduplication key's name), `details.code` the code
+  the end was refused with and `details.membership` the membership; each pass that is
+  refused again raises it again, the window's deduplication applying.
+- Tests: on PostgreSQL,
+  `AccessRemovalCheckTests.AUTHZ_GRANT_005_AScheduledEndTheCheckRefusesKeepsTheMembershipAsync`
+  now reads the raised alert naming `company.lastowner` and the membership; the alert
+  condition and severity contracts (`AlertsTests`, `VocabularyContractTests`) name it.
+- `CHANGELOG.md`: the D-281 line names the alert.
+
 **`07` LIB-TEST-004: the sample host (D-281), 6df18d8f, 1291dc55**
 
 - `LastManager` keeps every organization's last `workshop-manager`: a revocation or a
@@ -119,11 +132,22 @@
   with what it includes and carries) and by a caller managing none (denied).
 - `CHANGELOG.md`: one line under Unreleased, `Added`.
 
+**The release commit, fbd7b336 `chore: release 1.0.0-rc.11`**
+
+- `CHANGELOG.md`: Unreleased becomes `## [1.0.0-rc.11] - 2026-11-08`, holding the round's
+  lines under `Added`, and Unreleased is left empty.
+- The public surface: `Janus.Core`'s 61 unshipped lines move into its shipped file, each
+  beside its neighbours; no other project holds an unshipped line.
+- The two lists are not drawn again (CONV-VCS-005, D-262). The leaked-password list
+  (`# 2026-11-04`) and the Public Suffix List at version 2026-10-31_14-17-28_UTC were
+  both drawn within 90 days before the release commit.
+- No migration note: a release candidate opens no major version.
+- Criterion verified otherwise: the release gate over `origin/main..HEAD` says the notes
+  of 1.0.0-rc.11, 1464 characters, are the release's body.
+
 ## 2. Items not implemented
 
-1. The alert `access.removal.refused` at a refused scheduled end (D-281, `06`
-   OPS-ALERT-001): parked on question 8 below. The refusal itself, the membership kept
-   and its end left set, is built and tested.
+None.
 
 ## 3. Resolved by rule
 
@@ -158,18 +182,12 @@
    `IResources.RemoveAsync` and a group removal reaching only deny grants not; 6 (a) the
    library's advisory lock per organization in ordinal order; 7 the shape as read, at
    most one check.
-8. **Open, parks the alert (Tier 2).** `06` OPS-ALERT-001 gives `access.removal.refused`
-   the severity Urgent; `AlertSeverity` holds `normal` and `high` and no other, and `10`
-   section 5.23 names no `access.removal.refused` among its identifiers, all of which are
-   hyphenated (`search-unsafe`). The code needs a severity and an identifier. Readings:
-   (a) High and `access-removal-refused`, added to section 5.23, no public type changed;
-   (b) a third member `AlertSeverity.Urgent` (`urgent`), a public surface addition, with
-   the identifier as (a); (c) the identifier as `06` spells it. Smallest fix: (a).
+8. The alert's severity (Urgent, which `AlertSeverity` does not hold) and identifier
+   (`access.removal.refused`, absent from `10` section 5.23): answered (a) in 7a092f0d,
+   `access-removal-refused`, High. It parked the alert, built in ef6e9872.
 
-Defects in the documents, for the lead: `09` `DELETE /admin/groups/{id}/members` and
-`POST /account/memberships/{organization}/end` do not list the 409 with the host's code
-or the 503 `authz.removal.uncheckable`, which the check answers on both (question 5); the
-routes declare the 503.
+The two defects reported in `09` (the group members route and a member's own end not
+listing the check's 409 and 503) are fixed in 7a092f0d.
 
 ## 5. Gate result
 
