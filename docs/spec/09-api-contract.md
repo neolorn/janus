@@ -2358,7 +2358,9 @@ end forward only takes access away (IDN-ACCT-007).
 `{organization}` the administrative organization, as the job keeps it (OPS-BOOT-002) ·
 **404** `identity.membership.notfound` where the caller holds no current membership of
 the organization, or its end is already past · **409** `identity.membership.noend` where
-the membership has no end set
+the membership has no end set, or with the host's own code where its `IAccessRemovalCheck`
+refuses the end, nothing written · **503** `authz.removal.uncheckable` where the check
+throws (D-281)
 
 Recorded as `identity.membership.ended` with the member acting, `details.reason`
 `broughtforward` and `details.endsAt` the end it replaced, as `identity.membership.endset`
@@ -3240,7 +3242,7 @@ configuration change's missing reason excepted, below). **404**
 | `GET /admin/groups?organization={id}` | The organization's groups, each with the members it holds directly: **200** `[ { id, name, members: [ { subjectType, subjectId } ] } ]`. Membership is transitive (AUTHZ-GROUP-001) |
 | `POST /admin/groups` | `{ organization, name, reason }`: creates a group in the organization. **201** `{ id }` |
 | `DELETE /admin/groups/{id}` | `{ reason }` in the body: removes a group nothing names. **204**. **409** `authz.group.inuse` where the group holds a member, belongs to a group, or was given a grant, live, expired or revoked |
-| `POST /admin/groups/{id}/members` · `DELETE /admin/groups/{id}/members` | `{ subjectType, subjectId, reason }`: adds or removes an account or a group of the group's own organization. **204**, also where the member is already held or already absent, which changes and records nothing. **409** `authz.group.cycle`. Requires step-up (`grant:manage`); where the group, or a group holding it, holds a live grant (allow or deny) of a role carrying `system:administer` or of a role that cannot be read, also requires `system:administer` in the administrative organization (OPS-CFG-007); every role the group reaches is held to AUTHZ-GRANT-005: **403** `authz.role.notassignable`, `authz.grant.self` |
+| `POST /admin/groups/{id}/members` · `DELETE /admin/groups/{id}/members` | `{ subjectType, subjectId, reason }`: adds or removes an account or a group of the group's own organization. **204**, also where the member is already held or already absent, which changes and records nothing. **409** `authz.group.cycle`. Requires step-up (`grant:manage`); where the group, or a group holding it, holds a live grant (allow or deny) of a role carrying `system:administer` or of a role that cannot be read, also requires `system:administer` in the administrative organization (OPS-CFG-007); every role the group reaches is held to AUTHZ-GRANT-005: **403** `authz.role.notassignable`, `authz.grant.self`; a removal that reaches an allow grant is put to the host's check: **409** with the host's own code, nothing written, **503** `authz.removal.uncheckable` where the check throws (D-281) |
 
 `group:manage` is asked in the organization the group belongs to, read from the group's
 row, or for `GET` and `POST` in the organization the request names (AUTHZ-SCOPE-001). An

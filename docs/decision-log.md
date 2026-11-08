@@ -21859,6 +21859,9 @@ Janus's admin routes reach the same grants and memberships without its rules.
     startup with `model.startup.declarationinvalid`, `details.key` `accessRemovalCheck`.
     "`IMemberships`" above means `IInvitations.EndMembershipAsync`,
     `SetMembershipEndAsync` and `CancelMembershipEndAsync`.
+- **Amended 2026-11-08 (round H21, Q8).** The alert is `access-removal-refused`, High, as
+  `10` section 5.23 spells and grades alerts; `AlertSeverity` gains nothing. `09` lists the
+  check's 409 and 503 on the group members route and on a member's own end too.
 - **Criteria.** On PostgreSQL, with a sample check refusing the last holder of a named
   role: its revocation through `DELETE /admin/grants/{id}` and through `IGrants`, and the
   membership end through the admin route and through `IMemberships`, are refused with the

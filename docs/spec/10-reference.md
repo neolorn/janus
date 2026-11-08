@@ -1016,10 +1016,12 @@ actor: `auth-failures-sustained` · `recovery-clustering` · `approver-volume` �
 · `expiry-approaching` · `holiday-list-exhausted` · `no-emergency-credential` ·
 `restriction-loosened` · `restriction-granted` · `domain-reverification-failed` ·
 `domain-removed` · `governing-language-changed` · `governing-text-missing` ·
-`search-capacity` · `search-unsafe`.
+`search-capacity` · `search-unsafe` · `access-removal-refused`.
 
 `search-unsafe` (High) names the memory check that failed in `details.check` (section
 5.53) and never a value; `search-capacity` is Normal (`01` IDN-SRCH-003, D-256).
+`access-removal-refused` (High) names the host's code in `details.code` and the membership
+(AUTHZ-GRANT-005, D-281).
 
 `breakglass-used` and `breakglass-generated` (a first issue or a replacement) are High,
 and reach the owner as well as the operator when the host delivers them (OPS-BOOT-002,
