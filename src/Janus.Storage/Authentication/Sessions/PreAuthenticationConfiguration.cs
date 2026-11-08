@@ -78,6 +78,7 @@ internal sealed class PreAuthenticationConfiguration
 
         builder.Property(contact => contact.SignOnVerifier).HasColumnName("signon_verifier");
         builder.Property(contact => contact.SignOnReturn).HasColumnName("signon_return");
+        builder.Property(contact => contact.SignOnCheck).HasColumnName("signon_check").HasDefaultValue(false);
 
         builder.HasIndex(contact => contact.ExpiresAt)
             .HasDatabaseName("ix_preauthentication_sessions_expires_at");

@@ -215,7 +215,8 @@ take a library-owned permission out of a role the reserved `emergency` account h
 and the `emergency` account's grant of `system-administrator` SHALL NOT be revoked
 (OPS-BOOT-002). A role that a grant (live, expired or revoked), a declared derivation or
 a standing invitation (neither acknowledged nor revoked, expired or not) or another
-role's `handsOut` names SHALL NOT be removed (`authz.role.inuse`).
+role's `handsOut` or an inclusion (AUTHZ-GRANT-006) names SHALL NOT be removed
+(`authz.role.inuse`).
 
 **Declared roles (D-204, D-212).** A host may declare the roles its deployment starts
 with (`AuthorizationDeclarationBuilder.Role(name, permissions, handsOut)`, LIB-HOST-001,
@@ -342,7 +343,11 @@ keeps roles a person's. The read records nothing: it is a read of the deployment
 roles, not of a person. A refused read is recorded as any refused request is
 (AUTHZ-CONCEAL-004), and nothing more.
 
-*Source: D-212, D-213, D-216, D-217, D-240, D-247, D-251*
+**Values (D-278).** What a role carries and what it hands out are judged on its
+effective permissions and `handsOut`, through its inclusions (AUTHZ-GRANT-006); the rule
+that nobody gives themselves access is unchanged.
+
+*Source: D-212, D-213, D-216, D-217, D-240, D-247, D-251, D-278*
 
 Without it, anyone who may manage grants holds every role one step removed, which is
 OPS-CFG-007's reasoning applied to every role. The lists are Kubernetes' `bind` on named
@@ -386,6 +391,97 @@ the record of who gave what, when and why is the control.
     the grant through which the account holds it, is refused the recovery's approval
     with `authz.role.notassignable`, counting toward `alerting.denials.threshold`
     (D-251).
+
+---
+
+**AUTHZ-GRANT-006** — A role MAY include other roles. A grant of the including role
+SHALL admit as grants of the included roles would, save the actions not inherited and
+what the inclusion leaves out, worked out at admission and never copied into the role.
+
+**Values (D-278).** An inclusion names the including role, the included role, whether it
+is on (`enabled`), and what it leaves out: permissions, and roles of the `handsOut`. A
+role's effective permissions are its own and, through each inclusion that is on, the
+included role's effective permissions, save those not inherited and those left out; its
+effective `handsOut` likewise, giving being an ability. Both follow inclusions at any
+depth. A grant of a role, allow or deny, stored or derived, acts on the role's effective
+permissions, and what a holder may hand out is judged on the effective `handsOut`
+(AUTHZ-GRANT-005). An inclusion creates no grant: a change to an included role or to an
+inclusion reaches every holder of a role above it at the next request (AUTHZ-GRANT-004
+AC2, AUTHZ-CACHE-001).
+
+- **Not inherited.** A host action declared `.NotInherited()` (`07` LIB-HOST-001) never
+  passes through an inclusion: it is a duty, work routed to whoever holds it, such as
+  being asked to approve. A grant of a role that names it directly still admits it.
+  Library-owned permissions pass, save `system:administer`, which a role carries only by
+  naming it (OPS-CFG-007).
+- **Off and on.** The runtime key `authz.roleinclusion.enabled` (`10` section 4.5a)
+  switches every inclusion: off, each role admits its own permissions and hands out its
+  own `handsOut` alone. An inclusion's `enabled` switches it alone. Inclusions are stored
+  apart from a role's permissions and `handsOut`, so neither switch changes them, and
+  switching back restores what an inclusion gave.
+- **Refused.** An inclusion that would make a role include itself, at any depth, is
+  refused with 409 `authz.role.inclusionloop`. A role whose grants must end
+  (`grantsMustEnd`, D-237) included by a role whose grants need not end is refused with
+  409 `authz.role.inclusionmustend`, and so is turning a role's `grantsMustEnd` on while a
+  role whose grants need not end includes it, or off while it includes a role whose grants
+  must end. Reach is judged as though `authz.roleinclusion.enabled` were on, whatever it
+  reads, for a change to an inclusion and for the role every hand-out of AUTHZ-GRANT-005
+  gives (a grant, the roles offered as assignable, a group's member, an invitation's roles,
+  a membership's end, a recovery's approval); what the giver may hand out is read as the
+  key reads. The records of processing report each role's effective permissions.
+- **Administration.** A change to an inclusion is under `roleinclusion:manage` in the
+  administrative organization, carries a `reason` (API-CONV-002), is the `grant:manage`
+  step-up action (`10` section 5a), stays within the actor's reach (what it adds or takes
+  away, judged on the including role's effective permissions and `handsOut` before and
+  after, is what the actor may give or hand out, AUTHZ-GRANT-005), and is recorded
+  `authz.role.included` or `authz.role.inclusionremoved` with the inclusion before and
+  after, the reason and the actor. A role an inclusion names, on either side, is not
+  removed (`authz.role.inuse`).
+- **Reading.** A role's read shows its inclusions with their states and what they leave
+  out, and its effective permissions and `handsOut`, each with its source: `own`, or the
+  path of inclusions it came through, nearest first (`09` `/admin/roles`). Each permission
+  and each role of the `handsOut` is listed once: `own` where the role carries it itself,
+  otherwise the shortest path, and among paths of one length the first by the ordinal
+  order of the role names along it. A change to an inclusion raises `RoleChanged`
+  (`changed`) for the including role. A person reads the roles they hold themselves the
+  same way, with the roles that may give each, under no permission (`09` `GET
+  /account/roles`, D-280).
+- **Declared inclusions.** A declared role MAY name its inclusions (`.Includes(role, leftOutPermissions,
+  leftOutHandsOut)`, LIB-HOST-001). Each pair the deployment has not yet seeded is seeded at a
+  start, under the start step and principal that seed declared roles (AUTHZ-GRANT-004),
+  and a later change or removal by an administrator stands. A declared inclusion naming a
+  role neither declared nor of `10` section 3, making a loop, or breaking the rule on
+  grants that must end fails startup with `model.startup.declarationinvalid`,
+  `details.declaration` `role.<name>`.
+- **The gate.** The explanation (AUTHZ-GATE-004) names the inclusion path a permission
+  came through. Which accounts may exercise a permission (AUTHZ-GATE-007) is answered
+  through inclusions, and never through an action not inherited.
+
+*Source: D-278*
+
+**Acceptance criteria**
+1. A holder of a grant of a role that includes another, which includes a third, exercises
+   the third's permissions and hands out the roles its `handsOut` names.
+2. An action declared `.NotInherited()` is not admitted through an inclusion; a grant of a
+   role naming it directly admits it.
+3. A permission and a role an inclusion leaves out are not admitted or handed out through
+   it.
+4. A change to an included role's permissions reaches the including role's holders at
+   the next request, and nothing is written to the including role.
+5. The key off admits each role's own permissions alone and on admits the inclusions
+   again; an inclusion's `enabled` acts alone the same way; neither changes a role's
+   stored permissions, `handsOut` or inclusions.
+6. A loop at any depth is refused with `authz.role.inclusionloop`; a must-end role
+   included by an open-ended one, and turning `grantsMustEnd` on for a role an open-ended
+   one includes, are refused with `authz.role.inclusionmustend`; each writes nothing.
+7. A change without `roleinclusion:manage`, without a reason, beyond the actor's reach or
+   without the step-up is refused and writes nothing; a change made is recorded with the
+   inclusion before and after.
+8. `system:administer` is never admitted through an inclusion.
+9. A role's read shows its effective permissions with their sources; AUTHZ-GATE-007
+   answers through inclusions, and not through an action not inherited.
+10. A declared inclusion is seeded at the first start, is not seeded again after an
+    administrator removes it, and a declared loop fails startup.
 
 ---
 

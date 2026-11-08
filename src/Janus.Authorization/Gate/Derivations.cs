@@ -17,12 +17,13 @@ namespace Janus.Authorization.Gate;
 /// <param name="roles">Where what a role allows is read.</param>
 /// <param name="suspensions">Where whether the organization is suspended is read.</param>
 /// <remarks>
-/// Implements AUTHZ-DERIVE-001, AUTHZ-DERIVE-002, AUTHZ-DERIVE-005 and IDN-ORG-003. What
-/// the conferred role allows is read where the derivation is evaluated, so editing the
-/// role decides the next request (AUTHZ-CACHE-001). A materialised derivation is not
-/// evaluated here: its rows are grants, and the grants are read as grants. In a
-/// suspended organization no derivation confers anything, as none of its grants does,
-/// so materialising one changes no answer (AUTHZ-TEST-001 AC3, entry 266).
+/// Implements AUTHZ-DERIVE-001, AUTHZ-DERIVE-002, AUTHZ-DERIVE-005, AUTHZ-GRANT-006 and
+/// IDN-ORG-003. What the conferred role allows, through its inclusions, is read where the
+/// derivation is evaluated, so editing the role, or a role it includes, decides the next
+/// request (AUTHZ-CACHE-001). A materialised derivation is not evaluated here: its rows
+/// are grants, and the grants are read as grants. In a suspended organization no
+/// derivation confers anything, as none of its grants does, so materialising one changes
+/// no answer (AUTHZ-TEST-001 AC3, entry 266).
 /// </remarks>
 internal sealed class Derivations(
     AuthorizationModel model,
@@ -60,7 +61,7 @@ internal sealed class Derivations(
                 continue;
             }
 
-            Role? role = await roles.FindAsync(each.Derivation.Role, cancellationToken)
+            Role? role = await roles.EffectiveAsync(each.Derivation.Role, cancellationToken)
                 .ConfigureAwait(false);
 
             conferring.Add(new ConferredDerivation(
@@ -128,7 +129,7 @@ internal sealed class Derivations(
                 continue;
             }
 
-            Role? role = await roles.FindAsync(each.Derivation.Role, cancellationToken)
+            Role? role = await roles.EffectiveAsync(each.Derivation.Role, cancellationToken)
                 .ConfigureAwait(false);
 
             if (role is not null && permissions.Any(role.Permissions.Contains))

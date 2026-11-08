@@ -20,4 +20,18 @@ public sealed record DefinedRole(
     RoleName Name,
     IReadOnlyList<Permission> Permissions,
     IReadOnlyList<RoleName> HandsOut,
-    bool GrantsMustEnd = false);
+    bool GrantsMustEnd = false)
+{
+    /// <summary>
+    /// The role's inclusions of other roles, by the included role's name, none where empty.
+    /// A definition leaves them as they stand (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public IReadOnlyList<RoleInclusion> Includes { get; init; } = [];
+
+    /// <summary>
+    /// What the role carries and hands out once its inclusions are followed, or nothing
+    /// where the role was not read from the deployment. A definition ignores it
+    /// (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public EffectiveRole? Effective { get; init; }
+}

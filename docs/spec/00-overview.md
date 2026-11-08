@@ -317,7 +317,7 @@ Nothing is deferred silently.
 | Profile photos enabled for customers (D-060) | When a feature makes a customer photo meaningful |
 | Object storage for uploads (D-060) | Customer photos, or any genuinely large artifact |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
-| Full role-based access: roles composed of roles, static and dynamic separation of duties (D-267) | A host rule that a role must include another, or that one person may not hold or exercise two duties together |
+| Full role-based access: static and dynamic separation of duties (D-267; roles composed of roles taken up by D-278) | A host rule that one person may not hold or exercise two duties together |
 | Full attribute-based access: conditions over the subject's, the resource's, the action's and the environment's attributes, in a closed vocabulary the library owns, rendered for both the single check and the list filter (D-267; its boundary, D-272) | A host rule that depends on a value: an amount limit, a record's status, a time, a network or the sign-in's strength |
 | Authorization for a host's GraphQL API: field and type permissions, many decisions in one pass, each record judged in its own organization (D-267) | A host serving a GraphQL API |
 

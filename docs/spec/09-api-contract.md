@@ -1092,7 +1092,12 @@ The browser profile's sign-on (BFF-SESS-006): both halves are the library's.
 `GET /auth/signon?returnTo=` pushes the authorization request to `POST /oidc/par` and
 answers **302** to the provider's `/oidc/authorize` carrying `client_id` and
 `request_uri` only; a browser already holding a per-app session is sent to `returnTo`,
-which is followed only as a path of this application (API-REDIR-001, D-198).
+which is followed only as a path of this application (API-REDIR-001, D-198). With
+`check=true` the sign-on only checks (BFF-SESS-006, D-279): at the return `login_required`
+answers **302** to the stored return address with no session set, and a start that finds
+`session.hint.domain` set and no `identity-signed-in` cookie answers **302** to `returnTo` at
+once, as a guest. `check` is `true` or absent; any other value is **400**
+`api.request.malformed` naming `check`.
 `GET /auth/signon/return` answers **302** to the stored return address with the session
 cookies set. A start from a browser with no pre-authentication session issues one
 (BFF-CSRF-005a). The sign-on is a navigation route (BFF-ERR-001): a refusal other than
@@ -2384,6 +2389,26 @@ organization's identifier
 
 ---
 
+### `GET /account/roles?organization={id}`
+
+The roles the caller's own account holds in its own name in the organization, through the
+live allow grants `GET /account/grants` lists, each once, oldest grant first (`03`
+AUTHZ-GRANT-006, D-280). It needs the caller's live session and no permission; the account
+is the one the session is effective for. A role reaching the account through a group is
+the group's and is not listed. A restricted account is admitted (IDN-ACCT-007). Its
+library call is `IRoles.OwnAsync`. Nothing is recorded.
+
+**200**: `[ { name, effective: { permissions: [ { name, from } ], handsOut: [ { name, from } ] }, givenBy: [ "..." ] } ]`,
+`effective` as `GET /admin/roles` gives it, `givenBy` the roles whose effective
+`handsOut` names the role; none where the account holds none there, an organization the
+deployment does not hold included
+**400**: `api.request.malformed` naming `organization` where it is absent or not an
+organization's identifier
+
+*Source: AUTHZ-GRANT-006, D-274, D-280*
+
+---
+
 ## 7. Privacy
 
 ### `GET /privacy/consents`
@@ -2832,7 +2857,10 @@ account holds is refused (OPS-BOOT-002). A change stays within the actor's reach
 permissions the role carries before and after, and every role its `handsOut` names
 after, are ones the actor may give or hand out (AUTHZ-GRANT-005).
 
-`GET /admin/roles`: **200** `[ { name, permissions, handsOut, grantsMustEnd } ]`.
+`GET /admin/roles`: **200**
+`[ { name, permissions, handsOut, grantsMustEnd, includes: [ { role, enabled, leftOut: { permissions, handsOut } } ], effective: { permissions: [ { name, from } ], handsOut: [ { name, from } ] } } ]`,
+`from` an array of the roles an entry came through, nearest first, empty for the role's
+own, each entry listed once (AUTHZ-GRANT-006); also open to `roleinclusion:manage` (D-278).
 `POST /admin/roles`
 `{ "name": "...", "permissions": [ "..." ], "handsOut": [ "..." ], "grantsMustEnd": false, "reason": "..." }`,
 `handsOut` optional and none where absent, `grantsMustEnd` optional and `false` where
@@ -2859,11 +2887,43 @@ a role that carries it, or for a change taking a library-owned permission out of
 reserved account holds; `auth.stepup.required` (`grant:manage`)
 **404**: `authz.role.notfound` where `DELETE` names a role the deployment does not hold
 **409**: `authz.role.inuse` for a `DELETE` of a role a grant (live, expired or revoked),
-a declared derivation, a standing invitation or another role's `handsOut` names
+a declared derivation, a standing invitation, another role's `handsOut` or an inclusion
+names; `authz.role.inclusionmustend` where `grantsMustEnd` turns on for a role that a role
+whose grants need not end includes, or off for a role that includes a role whose grants
+must end (D-278)
 **422**: `authz.grant.unresolved` (`details.member` `handsOut`) where `handsOut` names a
 role the deployment does not hold
 
 *Source: AUTHZ-GRANT-004, AUTHZ-GRANT-005, OPS-CFG-007, OPS-BOOT-002, D-166, D-212, D-237*
+
+---
+
+### `PUT|DELETE /admin/roles/{name}/inclusions/{included}`
+
+A role's inclusion of another (AUTHZ-GRANT-006, D-278), under `roleinclusion:manage` in
+the administrative organization. Every change carries `reason`, recorded, is the
+`grant:manage` step-up action, and stays within the actor's reach, judged on the role's
+effective permissions and `handsOut` before and after (AUTHZ-GRANT-005).
+
+`PUT`
+`{ "enabled": true, "leftOut": { "permissions": [ "..." ], "handsOut": [ "..." ] }, "reason": "..." }`,
+`enabled` optional and `true` where absent, `leftOut` optional and empty where absent:
+**201** creates the inclusion; **204** sets the one that exists to what is stated.
+`DELETE` `{ "reason": "..." }`: **204**.
+
+**400**: `api.request.malformed` naming `name` or `included` where it is not a role name,
+`enabled` where it is not a boolean, `leftOut` where a member is neither a permission the
+library or the host declares nor a role name, `reason` as `/admin/roles` takes it
+**403**: `authz.role.notassignable` where the change reaches beyond the actor
+(AUTHZ-GRANT-005); `authz.denied` without `roleinclusion:manage`;
+`auth.stepup.required` (`grant:manage`)
+**404**: `authz.role.notfound` where `name` or `included` names a role the deployment does
+not hold, or `DELETE` names an inclusion that does not exist
+**409**: `authz.role.inclusionloop` where the inclusion would make a role include itself;
+`authz.role.inclusionmustend` where a role whose grants must end would be included by one
+whose grants need not end
+
+*Source: AUTHZ-GRANT-006, AUTHZ-GRANT-005, D-278*
 
 ---
 

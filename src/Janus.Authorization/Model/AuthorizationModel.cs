@@ -94,6 +94,7 @@ internal sealed class AuthorizationModel
     private readonly IReadOnlyList<DefinedRole> _declaredRoles;
     private readonly Dictionary<string, HashSet<Permission>> _jobs;
     private readonly Dictionary<Permission, IReadOnlyList<Permission>> _admitting;
+    private readonly HashSet<Permission> _uninherited;
 
     private AuthorizationModel(
         Dictionary<ResourceType, ResourceTypeDeclaration> types,
@@ -108,7 +109,8 @@ internal sealed class AuthorizationModel
         DeclaredProcessing processing,
         IReadOnlyList<DefinedRole> declaredRoles,
         Dictionary<string, HashSet<Permission>> jobs,
-        Dictionary<Permission, IReadOnlyList<Permission>> admitting)
+        Dictionary<Permission, IReadOnlyList<Permission>> admitting,
+        HashSet<Permission> uninherited)
     {
         _types = types;
         _entities = entities;
@@ -129,6 +131,7 @@ internal sealed class AuthorizationModel
         _declaredRoles = declaredRoles;
         _jobs = jobs;
         _admitting = admitting;
+        _uninherited = uninherited;
     }
 
     /// <summary>
@@ -151,6 +154,12 @@ internal sealed class AuthorizationModel
     /// a start (AUTHZ-GRANT-004, D-204).
     /// </summary>
     public IReadOnlyList<DefinedRole> DeclaredRoles => _declaredRoles;
+
+    /// <summary>
+    /// The host's actions declared not inherited: duties no inclusion of one role in
+    /// another passes on (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public IReadOnlySet<Permission> NotInherited => _uninherited;
 
     /// <summary>
     /// Builds the model from what the host declared, refusing a declaration that
@@ -216,12 +225,13 @@ internal sealed class AuthorizationModel
             bases,
             declaration.SensitiveCategories,
             processing,
-            Roles(declaration, permissions),
+            Included(Roles(declaration, permissions), declaration, permissions),
             declaration.Jobs.ToDictionary(
                 job => job.Name,
                 job => new HashSet<Permission>(job.Permissions),
                 StringComparer.Ordinal),
-            admitting);
+            admitting,
+            [.. declaration.NotInherited.Where(declaration.Permissions.Contains)]);
     }
 
     /// <summary>
@@ -1070,6 +1080,118 @@ internal sealed class AuthorizationModel
         }
 
         return declared;
+    }
+
+    // AUTHZ-GRANT-006, LIB-HOST-001 (D-278): a declared role includes a role the
+    // deployment will hold, one the host declares or one bootstrap seeds, leaving out
+    // permissions the model declares and role names; no pair is declared twice, no
+    // inclusion closes a loop, and no role whose grants must end is included by one whose
+    // grants need not end, since an open-ended grant would carry what was meant to end.
+    private static List<DefinedRole> Included(
+        List<DefinedRole> declared,
+        AuthorizationDeclaration declaration,
+        HashSet<Permission> permissions)
+    {
+        var mustEnd = declared.ToDictionary(role => role.Name, role => role.GrantsMustEnd);
+
+        foreach (string seeded in Administrative)
+        {
+            mustEnd[RoleName.Parse(seeded)] = false;
+        }
+
+        var included = new List<DefinedRole>(declared.Count);
+
+        for (int index = 0; index < declared.Count; index++)
+        {
+            DefinedRole role = declared[index];
+            string at = "role." + role.Name;
+            var inclusions = new List<RoleInclusion>();
+
+            foreach (RoleInclusionDeclaration inclusion in declaration.Roles[index].Includes)
+            {
+                if (!RoleName.TryParse(inclusion.Role, out RoleName name) || !mustEnd.TryGetValue(name, out bool ends))
+                {
+                    throw Invalid(
+                        at,
+                        "includes",
+                        "the declared role " + role.Name + " includes " + inclusion.Role
+                        + ", which is neither declared nor a role bootstrap seeds");
+                }
+
+                if (inclusions.Exists(held => held.Included == name))
+                {
+                    throw Invalid(at, "includes", "the declared role " + role.Name + " includes " + name + " twice");
+                }
+
+                if (ends && !role.GrantsMustEnd)
+                {
+                    throw Invalid(
+                        at,
+                        "includes",
+                        "the declared role " + role.Name + ", whose grants need not end, includes " + name
+                        + ", whose grants must end");
+                }
+
+                var leftOut = new List<Permission>(inclusion.LeftOutPermissions.Count);
+
+                foreach (string permission in inclusion.LeftOutPermissions)
+                {
+                    if (!Permission.TryParse(permission, out Permission parsed) || !permissions.Contains(parsed))
+                    {
+                        throw Invalid(
+                            at,
+                            "includes",
+                            "the declared role " + role.Name + " leaves " + permission
+                            + " out of " + name + ", which is not a declared permission");
+                    }
+
+                    leftOut.Add(parsed);
+                }
+
+                var leftOutHandsOut = new List<RoleName>(inclusion.LeftOutHandsOut.Count);
+
+                foreach (string handed in inclusion.LeftOutHandsOut)
+                {
+                    if (!RoleName.TryParse(handed, out RoleName parsed))
+                    {
+                        throw Invalid(
+                            at,
+                            "includes",
+                            "the declared role " + role.Name + " leaves " + handed + " out of " + name
+                            + ", which is not a role name");
+                    }
+
+                    leftOutHandsOut.Add(parsed);
+                }
+
+                inclusions.Add(new RoleInclusion(name, Enabled: true, [.. leftOut.Distinct()], [.. leftOutHandsOut.Distinct()]));
+            }
+
+            included.Add(role with { Includes = inclusions });
+        }
+
+        foreach (DefinedRole role in included)
+        {
+            if (Reaches(included, role.Name, role.Name, []))
+            {
+                throw Invalid("role." + role.Name, "includes", "the declared role " + role.Name + " includes itself");
+            }
+        }
+
+        return included;
+    }
+
+    // Whether the role reaches the one sought through the declared inclusions, at any
+    // depth; a role already followed is not followed again.
+    private static bool Reaches(List<DefinedRole> declared, RoleName from, RoleName sought, HashSet<RoleName> followed)
+    {
+        if (!followed.Add(from) || declared.Find(role => role.Name == from) is not DefinedRole role)
+        {
+            return false;
+        }
+
+        return role.Includes.Any(inclusion =>
+            inclusion.Included == sought || Reaches(declared, inclusion.Included, sought, followed));
     }
 
     // AUTHZ-GATE-005, AUTHZ-MODEL-004 (D-209): a host binds only its own actions. The

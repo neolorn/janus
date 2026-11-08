@@ -9,7 +9,9 @@ public static class WorkshopRoles
 {
     /// <summary>
     /// A manager of the organization that runs a workshop, who invites its staff, reads
-    /// who they are, grants them their roles and reads who can reach its records.
+    /// who they are, grants them their roles and reads who can reach its records, and who
+    /// includes the technician's role to open workshops, leaving out reading repairs and
+    /// their fittings; releasing a kite is the technician's own and is never passed on.
     /// </summary>
     public const string Manager = "workshop-manager";
 

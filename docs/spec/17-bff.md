@@ -288,7 +288,10 @@ opaque identifier in a cookie and nothing else.
 `__Host-identity-preauth` (BFF-CSRF-005a), `__Host-identity-csrf` (BFF-CSRF-006),
 `__Host-identity-device` (the trusted device, AUTH-FACT-015) and
 `__Host-identity-browser` (the new-device check, AUTH-FACT-016), one set per application
-origin; the `__Host-` prefix already scopes them. The library sets no other cookie. The
+origin; the `__Host-` prefix already scopes them. Where `session.hint.domain` names a
+domain it also sets `identity-signed-in` on that domain (BFF-SESS-006, D-279), one per
+deployment and without the prefix, since it carries a `Domain`. The library sets no other
+cookie. The
 pre-authentication cookie ends with the browser's session. The session cookie, and the
 CSRF cookie beside it, last until the session's absolute expiry where the session's
 policy requires `aal1`, so a customer stays signed in across a browser's restart as
@@ -299,7 +302,8 @@ again at a rotation follows the policy then in force. The trusted-device cookie 
 `factor.trusteddevice.lifetime` and the remembered-browser cookie
 `device.verification.lifetime`; no third party can read any of them. The privacy notice
 lists them so, the session and CSRF cookies at `session.default.absolute`, the longest
-they last (PRIV-CONS-006a, D-203). Whatever a cookie carries, the session record's own
+they last (PRIV-CONS-006a, D-203), and the hint only while the key names a domain, at
+the longest an auth session lasts. Whatever a cookie carries, the session record's own
 lifetimes decide whether it is honoured (AUTH-SESS-005).
 
 *Source: AUTH-SESS-003, D-053, D-166, D-203*
@@ -344,6 +348,22 @@ retain no token afterwards.
 *Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193, D-194,
 D-195, D-196, D-198, D-199, D-229, D-259*
 
+**A sign-on that only checks (D-279).** `GET /auth/signon?returnTo=<path>&check=true`
+starts the same flow, with `prompt=none`, and at the return an `error` `login_required`
+does not push again: the browser goes to the stored return address with no per-app
+session and nothing added to its address, and is not refused. A public page uses it to
+recognise a person signed in at another application without sending a guest to sign in;
+a route that needs a session keeps the sign-on below. Where the protected key
+`session.hint.domain` (`10` section 4.1, read at the start, so a change takes effect at
+the next start) names a domain, the authentication application
+keeps the cookie `identity-signed-in` on it while an auth session lives: value `1`, `Domain`
+the key's value, `Secure`, `HttpOnly`, `SameSite=Lax`, no `Max-Age` beyond the auth
+session's absolute lifetime, written when an auth session is created and removed when it
+ends by sign-out. A check-only start that finds the key set and no hint sends the browser
+to `returnTo` at once, as a guest, with no push; a check that finds no auth session
+removes a hint left behind. Without the key no hint is written and every check asks the
+authentication application. The hint carries no identifier and grants nothing.
+
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
 pushes the authorization request to `POST /oidc/par` at the provider address the host
@@ -362,7 +382,8 @@ the `returnTo` its start judged and kept, followed only as a path of this applic
 logged by the start alone (API-REDIR-001, D-199). The per-app session takes the record's
 instants and last downgrade, never the instant of derivation (AUTH-SESS-012, D-192), and
 carries its break-glass reason where it has one (OPS-BOOT-002, D-171). On
-`login_required` it pushes again without `prompt=none`, so the person signs in at the
+`login_required` it pushes again without `prompt=none`, save a sign-on that only checks
+(below), so the person signs in at the
 authentication application and the flow repeats. The sign-on is a navigation route
 (BFF-ERR-001): a `state` that is absent, unbound or not the one the browser was sent out
 with is refused with `auth.session.csrfinvalid`, and the browser returned with 302 to

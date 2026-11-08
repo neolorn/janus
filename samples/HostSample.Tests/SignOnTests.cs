@@ -108,6 +108,32 @@ public sealed class SignOnTests(WorkshopHost host) : IClassFixture<WorkshopHost>
         Assert.Equal(customer.Subject.Value, session.Body!.Value.GetProperty("subject").GetGuid());
     }
 
+    /// <summary>
+    /// LIB-TEST-004 AC2, BFF-SESS-006 (D-279): a guest's browser starting the second
+    /// application's sign-on that only checks, as a public page does once a visit, finds no
+    /// session at the first and is returned to the route it began for, as a guest, with no
+    /// sign-in asked for and no session at the second.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_004_AC2_AGuestsCheckOnlySignOnReturnsThemAsAGuestAsync()
+    {
+        await using SecondApplication shop = await host.SecondApplicationAsync(SecondOrigin, SecondClient, Cancellation);
+
+        using TestVisitor arriving = shop.Visitor();
+        using TestVisitor first = host.Guest();
+
+        Uri started = await NavigatedAsync(
+            arriving,
+            new Uri(arriving.BaseAddress!, "auth/signon?check=true&returnTo=" + Uri.EscapeDataString(Route)));
+        Uri silent = await NavigatedAsync(first, started);
+        Uri shown = await NavigatedAsync(arriving, silent);
+        Answered session = await Exchanges.SendAsync(arriving, HttpMethod.Get, "auth/session", null, Cancellation);
+
+        Assert.Equal(new Uri(SecondOrigin, Route), shown);
+        Assert.Equal(HttpStatusCode.Unauthorized, session.Status);
+    }
+
     // A member of an answer's body, or a failure naming what the answer was.
     private static string Text(Answered answered, string member) =>
         answered.Body is { ValueKind: JsonValueKind.Object } body && body.TryGetProperty(member, out JsonElement value)

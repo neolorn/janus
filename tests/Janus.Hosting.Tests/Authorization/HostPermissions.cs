@@ -51,4 +51,10 @@ internal static class HostPermissions
     /// them (AUTHZ-GATE-007, D-276).
     /// </summary>
     public static Permission Report { get; } = Permission.Parse("document:report");
+
+    /// <summary>
+    /// Approving one of the host's records, a duty the host declares no inclusion of one
+    /// role in another passes on (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public static Permission Approve { get; } = Permission.Parse("document:approve");
 }

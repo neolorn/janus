@@ -583,6 +583,99 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-006 and LIB-HOST-001 (D-278): a declared role keeps the inclusions it
+    /// names, with what each leaves out, and an action declared not inherited is kept as
+    /// one; <c>Includes</c> and <c>NotInherited</c> with nothing before them are refused as
+    /// the declaration is built.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GRANT_006_ADeclaredRoleKeepsItsInclusionsAndTheActionsNotInherited()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared()
+            .Role("writer", "article:read", "article:edit")
+            .Role("lead", "article:read")
+            .Includes("writer", ["article:edit"], ["auditor"])
+            .Includes("support")
+            .Build());
+
+        DefinedRole lead = model.DeclaredRoles.Single(role => role.Name == RoleName.Parse("lead"));
+
+        Assert.Equal(
+            [
+                new RoleInclusion(RoleName.Parse("writer"), Enabled: true, [Permission.Parse("article:edit")], [RoleName.Parse("auditor")]),
+                new RoleInclusion(RoleName.Parse("support"), Enabled: true, [], []),
+            ],
+            lead.Includes,
+            (one, other) => one.Included == other.Included
+                && one.LeftOutPermissions.SequenceEqual(other.LeftOutPermissions)
+                && one.LeftOutHandsOut.SequenceEqual(other.LeftOutHandsOut));
+        Assert.Throws<InvalidOperationException>(() => new AuthorizationDeclarationBuilder().Includes("writer"));
+        Assert.Throws<InvalidOperationException>(() => new AuthorizationDeclarationBuilder().NotInherited());
+        Assert.Equal(
+            [Permission.Parse("article:approve")],
+            AuthorizationModel.Of(HostDomain.Declared().Permission("article:approve").NotInherited().Build()).NotInherited);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-006 AC10 (D-278): a declared inclusion that names a role neither
+    /// declared nor seeded at bootstrap, includes a role whose grants must end in one whose
+    /// grants need not end, is declared twice, or leaves out a permission the model does
+    /// not declare stops the deployment with <c>model.startup.declarationinvalid</c>, naming
+    /// <c>role.&lt;name&gt;</c> and <c>includes</c>.
+    /// </summary>
+    /// <param name="refused">Which declaration is refused.</param>
+    [Theory]
+    [InlineData("undeclared")]
+    [InlineData("mustend")]
+    [InlineData("twice")]
+    [InlineData("leftout")]
+    public void AUTHZ_GRANT_006_AC10_ADeclaredInclusionThatCannotStandFailsStartup(string refused)
+    {
+        AuthorizationDeclarationBuilder declared = HostDomain.Declared()
+            .Role("writer", "article:read")
+            .Role("contractor", "article:read")
+            .GrantsMustEnd()
+            .Role("lead", "article:read");
+
+        _ = refused switch
+        {
+            "undeclared" => declared.Includes("accountant"),
+            "mustend" => declared.Includes("contractor"),
+            "twice" => declared.Includes("writer").Includes("writer"),
+            _ => declared.Includes("writer", ["ledger:close"]),
+        };
+
+        StartupException stopped = Assert.Throws<StartupException>(() => AuthorizationModel.Of(declared.Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, stopped.Failure?.Code);
+        Assert.Equal("role.lead", stopped.Failure?.Details["declaration"].GetString());
+        Assert.Equal("includes", stopped.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-006 AC10 (D-278): declared inclusions that make a loop, three roles
+    /// deep, stop the deployment naming a role of the loop and <c>includes</c>.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GRANT_006_AC10_ADeclaredLoopFailsStartup()
+    {
+        AuthorizationDeclaration looped = HostDomain.Declared()
+            .Role("writer", "article:read")
+            .Includes("lead")
+            .Role("lead", "article:read")
+            .Includes("editor")
+            .Role("editor", "article:read")
+            .Includes("writer")
+            .Build();
+
+        StartupException stopped = Assert.Throws<StartupException>(() => AuthorizationModel.Of(looped));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, stopped.Failure?.Code);
+        Assert.Equal("role.writer", stopped.Failure?.Details["declaration"].GetString());
+        Assert.Equal("includes", stopped.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
     /// IDN-PRIN-001 AC7, IDN-READ-004 AC3, OPS-ALERT-006 (D-202, D-218, D-221): a job
     /// declared with a permission the model does not declare, a library-owned one other
     /// than the four reads of IDN-READ-004, <c>record:read</c> and <c>record:erase</c>, one

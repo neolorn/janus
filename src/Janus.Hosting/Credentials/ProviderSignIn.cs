@@ -37,6 +37,7 @@ namespace Janus.Hosting.Credentials;
 /// <param name="credentials">What links an identity to the account signed in.</param>
 /// <param name="contacts">Where the pre-authentication session is ended.</param>
 /// <param name="cookies">Where a session begun here is written.</param>
+/// <param name="hint">The signed-in hint written beside a session begun here.</param>
 /// <param name="browser">What the request arrived carrying.</param>
 /// <param name="channel">Where the back-channel request is made from.</param>
 /// <param name="ring">Where each provider's credential is borrowed from at the exchange.</param>
@@ -68,6 +69,7 @@ internal sealed class ProviderSignIn(
     CredentialService credentials,
     PreAuthenticationService contacts,
     BrowserSessionCookies cookies,
+    SignedInHint hint,
     RequestSession browser,
     IHttpClientFactory channel,
     IKeyRing ring,
@@ -753,6 +755,10 @@ internal sealed class ProviderSignIn(
         {
             cookies.Write(context.Response, issued);
             cookies.ClearFirstContact(context.Response);
+
+            // BFF-SESS-006 (D-279): the signed-in hint stands beside the auth session
+            // just created.
+            hint.Write(context.Response, issued);
 
             // AUTH-SESS-012 (D-226): the authorization the browser had waiting goes to
             // the record, where GET /auth/session finds it for the page landed on.

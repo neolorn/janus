@@ -32,6 +32,12 @@ public static class Permissions
     public static Permission RoleManage { get; } = Permission.Parse("role:manage");
 
     /// <summary>
+    /// Making, changing, switching and removing a role's inclusions of other roles, and
+    /// reading roles (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public static Permission RoleInclusionManage { get; } = Permission.Parse("roleinclusion:manage");
+
+    /// <summary>
     /// Creating groups, nesting them, and changing their members.
     /// </summary>
     public static Permission GroupManage { get; } = Permission.Parse("group:manage");
@@ -218,6 +224,7 @@ public static class Permissions
         RestrictionEdit,
         RestrictionGrant,
         RoleManage,
+        RoleInclusionManage,
         RecordsOfProcessingRead,
         SessionRevoke,
         SessionRevokeAccount,

@@ -487,7 +487,8 @@ about what was shown as authoritative.
 name, purpose, lifetime, and whether any third party can read it — and SHALL state
 that none requires consent but those that name a consent-based purpose, each other being
 strictly necessary for the service. The library sets only strictly necessary cookies (session, pre-authentication, CSRF, trusted device,
-remembered browser). A host that adds any
+remembered browser, and the signed-in hint where `session.hint.domain` names a domain,
+BFF-SESS-006). A host that adds any
 cookie that is not strictly necessary SHALL declare a consent-based purpose for it,
 at which point a consent prompt becomes necessary; no cookie banner exists otherwise.
 

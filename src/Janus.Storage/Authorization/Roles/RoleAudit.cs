@@ -28,6 +28,10 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
 
     private static readonly AuditAction Removed = AuditActions.RoleRemoved;
 
+    private static readonly AuditAction Included = AuditActions.RoleIncluded;
+
+    private static readonly AuditAction InclusionRemoved = AuditActions.RoleInclusionRemoved;
+
     /// <inheritdoc/>
     public async ValueTask DefinedAsync(
         DefinedRole? before,
@@ -83,6 +87,130 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
         await AppendAsync(Removed, before.Name, before, after: null, reason, actor, breakGlassReason, at, cancellationToken)
             .ConfigureAwait(false);
     }
+
+    /// <inheritdoc/>
+    public async ValueTask IncludedAsync(
+        RoleName role,
+        RoleInclusion? before,
+        RoleInclusion after,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(after);
+
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    Included,
+                    at,
+                    actor,
+                    actor,
+                    breakGlassReason,
+                    organization: null,
+                    InclusionDetails(role, after.Included, before, after, reason)),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask IncludedAsync(
+        RoleName role,
+        RoleInclusion after,
+        SystemPrincipal principal,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(after);
+        ArgumentNullException.ThrowIfNull(principal);
+
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    Included,
+                    at,
+                    principal,
+                    subject: null,
+                    organization: null,
+                    InclusionDetails(role, after.Included, before: null, after, principal.Reason)),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask InclusionRemovedAsync(
+        RoleName role,
+        RoleInclusion before,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    InclusionRemoved,
+                    at,
+                    actor,
+                    actor,
+                    breakGlassReason,
+                    organization: null,
+                    InclusionDetails(role, before.Included, before, after: null, reason)),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // 10 section 5.24 (D-278): each side is whether the inclusion is on and what it
+    // leaves out, in the shape the role's reading answers it.
+    private static JsonElement Written(RoleInclusion? inclusion) =>
+        inclusion is null
+            ? JsonSerializer.SerializeToElement<object?>(null)
+            : JsonSerializer.SerializeToElement(new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+            {
+                ["enabled"] = JsonSerializer.SerializeToElement(inclusion.Enabled),
+                ["leftOut"] = JsonSerializer.SerializeToElement(
+                    new Dictionary<string, string[]>(capacity: 2, StringComparer.Ordinal)
+                    {
+                        ["permissions"] =
+                        [
+                            .. inclusion.LeftOutPermissions
+                                .Select(permission => permission.ToString())
+                                .Order(StringComparer.Ordinal),
+                        ],
+                        ["handsOut"] =
+                        [
+                            .. inclusion.LeftOutHandsOut
+                                .Select(handed => handed.ToString())
+                                .Order(StringComparer.Ordinal),
+                        ],
+                    }),
+            });
+
+    private static Dictionary<string, JsonElement> InclusionDetails(
+        RoleName role,
+        RoleName included,
+        RoleInclusion? before,
+        RoleInclusion? after,
+        string reason) =>
+        new(capacity: 5, StringComparer.Ordinal)
+        {
+            ["role"] = JsonSerializer.SerializeToElement(role.ToString()),
+            ["included"] = JsonSerializer.SerializeToElement(included.ToString()),
+            ["before"] = Written(before),
+            ["after"] = Written(after),
+            ["reason"] = JsonSerializer.SerializeToElement(reason),
+        };
 
     // 10 section 5.24 (D-212, D-237): each side is the role's permissions, the roles it
     // hands out, written in the order the role's reading answers them, and whether its

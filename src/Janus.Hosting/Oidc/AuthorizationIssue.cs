@@ -31,6 +31,7 @@ namespace Janus.Hosting.Oidc;
 /// <param name="configuration">Where the code's lifetime comes from.</param>
 /// <param name="pushed">What spends the pushed request a forwarded browser carried.</param>
 /// <param name="pending">Where a forwarded browser's request waits for its sign-in.</param>
+/// <param name="hint">What a silent request finding no session removes, where one is left behind.</param>
 /// <remarks>
 /// Implements AUTH-SESS-012, AUTH-OIDC-002, AUTH-OIDC-004, AUTH-OIDC-006 and
 /// API-LAND-001. The endpoint forwards a browser and never renders a page, so a person
@@ -44,7 +45,8 @@ internal sealed class AuthorizationIssue(
     AuthenticationAddresses addresses,
     IConfigurationStore configuration,
     PushedRequestSpent pushed,
-    PendingAuthorizations pending)
+    PendingAuthorizations pending,
+    SignedInHint hint)
     : IOpenIddictServerHandler<OpenIddictServerEvents.HandleAuthorizationRequestContext>
 {
     // The parameters a kept request leaves behind: the reference it was read from and
@@ -174,6 +176,13 @@ internal sealed class AuthorizationIssue(
             context.HandleRequest();
 
             return;
+        }
+
+        // BFF-SESS-006 (D-279): a check that finds no auth session removes a hint left
+        // behind, so the next check from this browser answers at once.
+        if (silent && context.Transaction.GetHttpRequest() is HttpRequest asked)
+        {
+            hint.Clear(asked.HttpContext.Response);
         }
 
         // `login_required` answers a silent request and nothing else: it is what

@@ -57,6 +57,8 @@ authz.policy.unregistered 500
 authz.resource.inuse 409
 authz.resource.notfound 404
 authz.restricted 403
+authz.role.inclusionloop 409
+authz.role.inclusionmustend 409
 authz.role.inuse 409
 authz.role.notassignable 403
 authz.role.notfound 404

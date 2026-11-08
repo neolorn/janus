@@ -75,4 +75,69 @@ internal interface IRoleAudit
         string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records an inclusion made, or one switched or changed in what it leaves out
+    /// (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    /// <param name="role">The including role.</param>
+    /// <param name="before">The inclusion as it stood, or nothing where it is new.</param>
+    /// <param name="after">The inclusion as it stands now.</param>
+    /// <param name="reason">Why.</param>
+    /// <param name="actor">Who made it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask IncludedAsync(
+        RoleName role,
+        RoleInclusion? before,
+        RoleInclusion after,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records a declared inclusion the start step seeded (AUTHZ-GRANT-006, IDN-PRIN-001).
+    /// </summary>
+    /// <param name="role">The including role.</param>
+    /// <param name="after">The inclusion as it was made.</param>
+    /// <param name="principal">The principal that made it, with its stated reason.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask IncludedAsync(
+        RoleName role,
+        RoleInclusion after,
+        SystemPrincipal principal,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records an inclusion removed (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    /// <param name="role">The including role.</param>
+    /// <param name="before">The inclusion as it stood.</param>
+    /// <param name="reason">Why.</param>
+    /// <param name="actor">Who removed it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask InclusionRemovedAsync(
+        RoleName role,
+        RoleInclusion before,
+        string reason,
+        SubjectId actor,
+        string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
 }

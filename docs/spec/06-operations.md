@@ -522,6 +522,9 @@ declaration is absent with `model.startup.declarationmissing` naming the declara
   CONV-DESIGN-007), the mail server's accounts the deployment keeps for itself
   (`integration.mailserver.ownaccounts`, read at the start, D-254) and the default
   client (`redirect.defaultclient`)
+- The parent domain of the signed-in hint (`session.hint.domain`, read at the start, so a
+  change takes effect at the next start, whose notice comparison raises a cookie the
+  notice does not list; `17` BFF-SESS-006, D-279)
 - What keeps the staff search's index off disk and bounded: its memory checks
   (`search.memorychecks`) and its capacity (`search.maxsubjects`) (`01` IDN-SRCH-003,
   D-256)

@@ -78,4 +78,11 @@ public sealed record AuthorizationDeclaration(
     /// </remarks>
     public IReadOnlyDictionary<Permission, IReadOnlyList<Permission>> AdmitsWhoMay { get; init; } =
         new Dictionary<Permission, IReadOnlyList<Permission>>();
+
+    /// <summary>
+    /// The host's actions no inclusion of one role in another passes on: duties, work
+    /// routed to whoever holds them, such as being asked to approve. A role naming one
+    /// directly still admits it (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public IReadOnlyList<Permission> NotInherited { get; init; } = [];
 }

@@ -59,12 +59,14 @@ internal static class BreakGlassEndpoints
     private static async Task<IResult> PresentAsync(
         BreakGlassService breakGlass,
         BrowserSessionCookies cookies,
+        SignedInHint hint,
         PreAuthenticationService contacts,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(breakGlass);
         ArgumentNullException.ThrowIfNull(cookies);
+        ArgumentNullException.ThrowIfNull(hint);
         ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(context);
 
@@ -106,6 +108,9 @@ internal static class BreakGlassEndpoints
 
         cookies.Write(context.Response, issued);
         cookies.ClearFirstContact(context.Response);
+
+        // BFF-SESS-006 (D-279): the signed-in hint stands beside the session opened.
+        hint.Write(context.Response, issued);
 
         return TypedResults.Json(
             new BreakGlassOpenedView(

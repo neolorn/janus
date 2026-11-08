@@ -8,6 +8,60 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.10] - 2026-11-08
+
+### Added
+
+- A role may include other roles. A grant of the including role admits what the
+  included roles carry, at any depth, worked out at each request and never copied into
+  the role, so a change to an included role reaches every holder above it at once. An
+  inclusion may leave out permissions and roles of the `handsOut`, may be switched off on
+  its own, and every inclusion is switched off together by the runtime key
+  `authz.roleinclusion.enabled`; `system:administer` never passes through one. What a
+  role carries and hands out is judged through its inclusions wherever it is granted,
+  handed out or explained, and `ExplainedGrant.IncludedThrough` names the inclusions a
+  permission came through. Every hand-out (a grant made or revoked, the roles offered as
+  assignable, a group's member added or removed, an invitation's roles, a membership's
+  end and a recovery's approval) judges the role given as though its inclusions were on
+  whatever the key reads, so switching the key on never hands a holder what its giver
+  could not give.
+- `AuthorizationDeclarationBuilder.Includes(role, leftOutPermissions, leftOutHandsOut)`
+  declares a role's inclusions, each seeded once at a start, and `.NotInherited()` marks
+  the host action declared before it as a duty no inclusion passes on. A declared
+  inclusion that makes a loop, names a role that will not exist or includes a role whose
+  grants must end in one whose grants need not end stops the deployment.
+- `PUT|DELETE /admin/roles/{name}/inclusions/{included}` and
+  `IRoles.IncludeAsync`/`IRoles.RemoveInclusionAsync` make, set and remove an inclusion
+  under the new permission `roleinclusion:manage`, with a reason, the `grant:manage`
+  step-up, the caller's reach and an audit record (`authz.role.included`,
+  `authz.role.inclusionremoved`); a loop is refused with `authz.role.inclusionloop`, and
+  a role whose grants must end included by one whose grants need not end, by an inclusion,
+  by turning `grantsMustEnd` on for an included role or off for one that includes a role
+  whose grants must end, with `authz.role.inclusionmustend`.
+- The records of processing report each role with the permissions a holder of it
+  carries through its inclusions.
+- `GET /admin/roles` answers each role's inclusions and what it carries and hands out
+  through them, each entry with the roles it came through, and is also open to
+  `roleinclusion:manage`. The bootstrap `system-administrator` role, an existing
+  deployment's included, gains `roleinclusion:manage`.
+- `GET /account/roles?organization={id}` and `IRoles.OwnAsync` answer, with no
+  permission and recording nothing, the roles a person's own account holds through its
+  live allow grants in the organization, each with what it carries and hands out through
+  its inclusions and the roles that may give it (`HeldRole`).
+- `GET /auth/signon?check=true` starts a sign-on that only checks: where the person holds
+  no session at the authentication application, the browser is returned where it was
+  going as a guest instead of being sent to sign in. A public page uses it to recognise a
+  person signed in at another application. `check` is `true` or absent; any other value
+  is refused 400 `api.request.malformed`. Where the protected key `session.hint.domain`
+  names a parent domain, the authentication application keeps the cookie
+  `identity-signed-in` on it while an auth session lives, written at sign-in and removed
+  at sign-out or when a check finds no auth session, and a check from a browser
+  carrying no such cookie returns at once as a guest, with no round trip. While the key
+  names a domain, the privacy notice's cookie list carries `identity-signed-in` at
+  `session.default.absolute`, and a host may not declare a cookie of that name. The key
+  is read at the start, so a change through `configure` takes effect at the next start,
+  which raises a privacy notice that does not list the hint.
+
 ## [1.0.0-rc.9] - 2026-11-06
 
 ### Fixed

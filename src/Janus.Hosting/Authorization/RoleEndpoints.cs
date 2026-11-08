@@ -14,11 +14,11 @@ namespace Janus.Hosting.Authorization;
 
 /// <summary>
 /// The runtime role management of chapter 09 section 8: reading the roles, defining
-/// one and removing one.
+/// one, removing one, and making, setting and removing one's inclusion of another.
 /// </summary>
 /// <remarks>
-/// Implements AUTHZ-GRANT-004, OPS-CFG-007, LIB-API-005, CONV-CODE-006 and
-/// CONV-DESIGN-006. Each is one line to <see cref="IRoles"/>, which judges the
+/// Implements AUTHZ-GRANT-004, AUTHZ-GRANT-006, OPS-CFG-007, LIB-API-005, CONV-CODE-006
+/// and CONV-DESIGN-006. Each is one line to <see cref="IRoles"/>, which judges the
 /// permission, the step-up and what the reason says; a body missing a member it
 /// requires is refused before it is called.
 /// </remarks>
@@ -45,7 +45,8 @@ internal static class RoleEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired, ErrorCodes.GrantUnresolved, ErrorCodes.RoleNotAssignable))
+                    ErrorCodes.StepUpRequired, ErrorCodes.GrantUnresolved, ErrorCodes.RoleNotAssignable,
+                    ErrorCodes.RoleInclusionMustEnd))
             .Accepts<RoleBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status204NoContent);
@@ -56,6 +57,26 @@ internal static class RoleEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.RoleNotFound, ErrorCodes.RoleInUse,
                     ErrorCodes.RoleNotAssignable)
                 .Binding<RoleName>("name"))
+            .Accepts<RoleRemovalBody>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapPut("/admin/roles/{name}/inclusions/{included}", IncludeAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.RoleNotFound, ErrorCodes.RoleNotAssignable,
+                    ErrorCodes.RoleInclusionLoop, ErrorCodes.RoleInclusionMustEnd)
+                .Binding<RoleName>("name")
+                .Binding<RoleName>("included"))
+            .Accepts<RoleInclusionBody>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapDelete("/admin/roles/{name}/inclusions/{included}", RemoveInclusionAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.RoleNotFound, ErrorCodes.RoleNotAssignable)
+                .Binding<RoleName>("name")
+                .Binding<RoleName>("included"))
             .Accepts<RoleRemovalBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
@@ -153,6 +174,86 @@ internal static class RoleEndpoints
                     browser.Asking,
                     browser.Required.Id,
                     name,
+                    reason,
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    // An inclusion that is new is answered as created, and a change to one that stood is
+    // answered with nothing.
+    private static async Task<IResult> IncludeAsync(
+        IRoles roles,
+        RequestSession browser,
+        RoleName name,
+        RoleName included,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(roles);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        RoleInclusionBody body = await JsonBody
+            .ReadAsync<RoleInclusionBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (body.Read(included) is not RoleInclusion inclusion)
+        {
+            return Answers.Malformed("leftOut");
+        }
+
+        // API-CONV-002, X4: the reason is free text, 1 to 1024 characters after
+        // trimming, refused before the service is called (CONV-CODE-006 AC2).
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await roles
+                .IncludeAsync(
+                    browser.Asking,
+                    browser.Required.Id,
+                    name,
+                    inclusion,
+                    reason,
+                    cancellationToken)
+                .ConfigureAwait(false),
+            created => created ? Made : Nothing);
+    }
+
+    // A removal carries its reason, which is free text and goes in the body rather
+    // than in an address a log keeps.
+    private static async Task<IResult> RemoveInclusionAsync(
+        IRoles roles,
+        RequestSession browser,
+        RoleName name,
+        RoleName included,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(roles);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        RoleRemovalBody body = await JsonBody
+            .ReadAsync<RoleRemovalBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        // API-CONV-002, X4: as for the removal of a role.
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await roles
+                .RemoveInclusionAsync(
+                    browser.Asking,
+                    browser.Required.Id,
+                    name,
+                    included,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),

@@ -92,6 +92,45 @@ public sealed class ComplianceStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// PRIV-ROPA-001 (D-278, amended): a role including another is reported with what a
+    /// holder of it may do, its own permissions and those the inclusion passes on, save
+    /// one the inclusion leaves out.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_001_ARoleIsReportedWithItsEffectivePermissionsAsync()
+    {
+        RoleName included = await CreatedAsync([Permissions.AuditRead, Permissions.GrantManage]);
+        RoleName including = await CreatedAsync([Permissions.RoleManage]);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            await new RoleInclusionStore(writing).CreateAsync(
+                including,
+                new RoleInclusion(included, Enabled: true, [Permissions.GrantManage], []),
+                TestContext.Current.CancellationToken);
+
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyDictionary<string, IReadOnlyList<Permission>> allowed =
+            await new RegisterRoles(new RoleStore(reading))
+                .AllowedAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [Permissions.AuditRead, Permissions.RoleManage],
+            allowed[including.ToString()]);
+        Assert.Equal(
+            [Permissions.AuditRead, Permissions.GrantManage],
+            allowed[included.ToString()]);
+    }
+
+    /// <summary>
     /// PRIV-ROPA-001 (D-187): the column is renamed, so the measures a deployment stated
     /// while it was spelled the other way are read back as they were stated.
     /// </summary>

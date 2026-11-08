@@ -24,6 +24,7 @@ namespace Janus.Authorization.Grants;
 /// <param name="stepUp">What granting and revoking ask of the caller's session.</param>
 /// <param name="grants">Where grants are read and written.</param>
 /// <param name="roles">Where the role a grant names is read.</param>
+/// <param name="graphs">What each role carries and hands out through its inclusions.</param>
 /// <param name="groups">Where a group a grant is given to is read.</param>
 /// <param name="accounts">Whether an account bears the subject a grant is given to.</param>
 /// <param name="resources">Where the record a grant is on, and its organization, are read.</param>
@@ -48,6 +49,7 @@ internal sealed class GrantService(
     IStepUpGate stepUp,
     IGrantStore grants,
     IRoleStore roles,
+    RoleGraphs graphs,
     IGroupStore groups,
     IResourceStore resources,
     IAccountSubjects accounts,
@@ -390,9 +392,13 @@ internal sealed class GrantService(
             return Result.Failure<IReadOnlyList<AssignableRole>>(denied);
         }
 
-        IReadOnlyList<Role> defined = await roles.AllAsync(cancellationToken).ConfigureAwait(false);
+        // AUTHZ-GRANT-006 (D-278): each role is judged on what it carries through its
+        // inclusions as though they were on, as a grant of it is, so none is offered that
+        // switching the key on would carry past the caller's reach.
+        RoleGraph graph = await graphs.ReadFollowingAsync(cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<Role> defined = [.. graph.Roles];
         IReadOnlyList<DefinedRole> assignable = await handOut
-            .AssignableAsync(context, organization, [.. defined.Select(Defined)], cancellationToken)
+            .AssignableAsync(context, organization, [.. defined.Select(graph.Judged)], cancellationToken)
             .ConfigureAwait(false);
         var mustEnd = defined.Where(role => role.GrantsMustEnd).Select(role => role.Name).ToHashSet();
 
@@ -525,8 +531,11 @@ internal sealed class GrantService(
                 .RefusedAsync(context, Permissions.SystemAdminister, cancellationToken)
                 .ConfigureAwait(false);
 
-    // AUTHZ-GRANT-005 (D-212): a grant, allow or deny, hands its role out at its scope,
-    // and an allow widens its holder's access.
+    // AUTHZ-GRANT-005 (D-212, D-278): a grant, allow or deny, hands its role out at its
+    // scope, judged on what the role carries through its inclusions as though they were
+    // on, whatever authz.roleinclusion.enabled reads, so switching the key on later hands
+    // its holder nothing its giver was not judged able to give; an allow widens its
+    // holder's access. What the giver may hand out is read as the key reads.
     private async ValueTask<Error?> HandOutRefusedAsync(
         AccessContext context,
         OrganizationId organization,
@@ -534,14 +543,24 @@ internal sealed class GrantService(
         Role role,
         GrantSubject holder,
         bool widens,
-        CancellationToken cancellationToken) =>
-        (await handOut
-            .AdmitAsync(
-                context,
-                new HandOut(Permissions.GrantManage, organization, on, [Defined(role)], widens ? [holder] : []),
-                cancellationToken)
-            .ConfigureAwait(false))
+        CancellationToken cancellationToken)
+    {
+        RoleGraph graph = await graphs.ReadFollowingAsync(cancellationToken).ConfigureAwait(false);
+        DefinedRole judged = graph.Judged(graph.Find(role.Name) ?? role);
+
+        return (await handOut
+                .AdmitAsync(
+                    context,
+                    new HandOut(
+                        Permissions.GrantManage,
+                        organization,
+                        on,
+                        [new DefinedRole(judged.Name, judged.Permissions, judged.HandsOut)],
+                        widens ? [holder] : []),
+                    cancellationToken)
+                .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error);
+    }
 
     // AUTHZ-GRANT-005 AC5: a revocation is judged as a grant is, and revoking a deny
     // widens its holder's access; revoking an allow takes access away. A role nobody
@@ -565,9 +584,6 @@ internal sealed class GrantService(
         grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
             ? new ResourceReference(type, id)
             : null;
-
-    private static DefinedRole Defined(Role role) =>
-        new(role.Name, [.. role.Permissions], [.. role.HandsOut]);
 
     private async ValueTask<Result<GrantId>> WrittenAsync(
         AccessContext context,

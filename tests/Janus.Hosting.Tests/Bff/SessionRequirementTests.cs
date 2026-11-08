@@ -42,12 +42,14 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "DELETE /admin/records/{subject}/objections/{purpose}",
         "DELETE /admin/restrictions/{name}",
         "DELETE /admin/roles/{name}",
+        "DELETE /admin/roles/{name}/inclusions/{included}",
         "DELETE /privacy/objections/{purpose}",
         "GET /account/",
         "GET /account/credentials",
         "GET /account/devices/",
         "GET /account/explanations/{correlationId}",
         "GET /account/grants",
+        "GET /account/roles",
         "GET /account/invitation",
         "GET /account/mail/apppasswords/",
         "GET /account/photo",
@@ -179,6 +181,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "PUT /admin/organizations/{id}/policy",
         "PUT /admin/records/{subject}",
         "PUT /admin/restrictions/{name}",
+        "PUT /admin/roles/{name}/inclusions/{included}",
         "PUT /admin/documents/{document}/versions/{version}/translations/{language}",
     ];
 

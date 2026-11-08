@@ -947,6 +947,7 @@ table preauthentication_sessions
   column signon_verifier bytea
   column collection uuid
   column record_access uuid
+  column signon_check boolean not null default false
   constraint ck_preauthentication_sessions_expires_at CHECK ((expires_at > created_at))
   constraint ck_preauthentication_sessions_fingerprint CHECK (((octet_length(fingerprint) = 32) AND (octet_length(csrf_fingerprint) = 32)))
   constraint ck_preauthentication_sessions_signon CHECK ((num_nulls(signon_state, signon_verifier, signon_return) = ANY (ARRAY[0, 3])))
@@ -1159,6 +1160,22 @@ table resources
   constraint pk_resources PRIMARY KEY (resource_type, resource_id)
   index ix_resources_contained_in using btree (contained_in_type, contained_in_id)
   index ix_resources_organization using btree (organization)
+view role_effective_hands_out
+  column role text
+  column name text
+view role_effective_permissions
+  column role text
+  column permission text
+table role_inclusions
+  column role text not null
+  column included text not null
+  column enabled boolean not null
+  column left_out_permissions text[] not null default '{}'::text[]
+  column left_out_hands_out text[] not null default '{}'::text[]
+  constraint fk_role_inclusions_included FOREIGN KEY (included) REFERENCES identity.roles(name) ON DELETE RESTRICT
+  constraint fk_role_inclusions_role FOREIGN KEY (role) REFERENCES identity.roles(name) ON DELETE RESTRICT
+  constraint pk_role_inclusions PRIMARY KEY (role, included)
+  index ix_role_inclusions_included using btree (included)
 table role_permissions
   column role text not null
   column permission text not null
@@ -1175,6 +1192,10 @@ table search_windows
   column count integer not null
   constraint ck_search_windows_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint pk_search_windows PRIMARY KEY (subject, window_start)
+table seeded_role_inclusions
+  column role text not null
+  column included text not null
+  constraint pk_seeded_role_inclusions PRIMARY KEY (role, included)
 table seeded_roles
   column name text not null
   constraint pk_seeded_roles PRIMARY KEY (name)
@@ -1351,6 +1372,9 @@ table throttle_counters
   column fingerprint_version integer not null
   constraint ck_throttle_counters_scope CHECK ((scope = ANY (ARRAY['account'::text, 'identifier'::text, 'source'::text])))
   constraint pk_throttle_counters PRIMARY KEY (scope, key)
+table uninherited_permissions
+  column permission text not null
+  constraint pk_uninherited_permissions PRIMARY KEY (permission)
 table username_holds
   column fingerprint bytea not null
   column held_from timestamp with time zone not null

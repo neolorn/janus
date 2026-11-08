@@ -54,6 +54,8 @@ public sealed class AuditActionsTests
         "authz.group.memberremoved",
         "authz.group.removed",
         "authz.role.defined",
+        "authz.role.included",
+        "authz.role.inclusionremoved",
         "authz.role.removed",
         "identity.account.deactivated",
         "identity.account.reactivated",

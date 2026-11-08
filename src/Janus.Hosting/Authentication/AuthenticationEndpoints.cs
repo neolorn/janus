@@ -566,12 +566,14 @@ internal static class AuthenticationEndpoints
         ISessions sessions,
         RequestSession browser,
         BrowserSessionCookies cookies,
+        SignedInHint hint,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(cookies);
+        ArgumentNullException.ThrowIfNull(hint);
         ArgumentNullException.ThrowIfNull(context);
 
         AccessContext holder = Asking(browser);
@@ -587,6 +589,9 @@ internal static class AuthenticationEndpoints
         }
 
         cookies.Clear(context.Response);
+
+        // BFF-SESS-006 (D-279): the auth session ended by sign-out takes its hint with it.
+        hint.Clear(context.Response);
 
         return Nothing;
     }
@@ -762,6 +767,10 @@ internal static class AuthenticationEndpoints
 
             cookies.Write(context.Response, issued);
             cookies.ClearFirstContact(context.Response);
+
+            // BFF-SESS-006 (D-279): the signed-in hint stands beside the auth session
+            // just created, on the parent domain the deployment names.
+            context.RequestServices.GetRequiredService<SignedInHint>().Write(context.Response, issued);
         }
 
         DateTimeOffset now = time.GetUtcNow();

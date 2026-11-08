@@ -239,6 +239,21 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<SeededRoleRecord> SeededRoles => Set<SeededRoleRecord>();
 
     /// <summary>
+    /// Each role's inclusions of other roles (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public DbSet<RoleInclusionRecord> RoleInclusions => Set<RoleInclusionRecord>();
+
+    /// <summary>
+    /// The declared inclusions a start has seeded (D-278).
+    /// </summary>
+    public DbSet<SeededRoleInclusionRecord> SeededRoleInclusions => Set<SeededRoleInclusionRecord>();
+
+    /// <summary>
+    /// The host's actions declared not inherited, as the last start wrote them (D-278).
+    /// </summary>
+    public DbSet<UninheritedPermissionRecord> UninheritedPermissions => Set<UninheritedPermissionRecord>();
+
+    /// <summary>
     /// The grants: subject, role, resource or organization.
     /// </summary>
     public DbSet<GrantRecord> Grants => Set<GrantRecord>();
@@ -597,6 +612,9 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new RoleConfiguration());
         modelBuilder.ApplyConfiguration(new RolePermissionConfiguration());
         modelBuilder.ApplyConfiguration(new SeededRoleConfiguration());
+        modelBuilder.ApplyConfiguration(new RoleInclusionConfiguration());
+        modelBuilder.ApplyConfiguration(new SeededRoleInclusionConfiguration());
+        modelBuilder.ApplyConfiguration(new UninheritedPermissionConfiguration());
         modelBuilder.ApplyConfiguration(new GrantConfiguration());
         modelBuilder.ApplyConfiguration(new GrantVersionConfiguration());
         modelBuilder.ApplyConfiguration(new GroupConfiguration());

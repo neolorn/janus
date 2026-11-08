@@ -90,7 +90,8 @@ internal static class WorkshopModel
     public static Permission ReadRepair { get; } = Permission.Parse("repair:read");
 
     /// <summary>
-    /// Releasing a repaired kite, which is bound to a step-up gate.
+    /// Releasing a repaired kite, which is bound to a step-up gate and is the technician's
+    /// own sign-off, so no inclusion passes it on.
     /// </summary>
     public static Permission ReleaseRepair { get; } = Permission.Parse("repair:release");
 
@@ -134,6 +135,7 @@ internal static class WorkshopModel
             .Permission(OpenWorkshop.ToString())
             .Permission(ReadRepair.ToString())
             .Permission(ReleaseRepair.ToString())
+            .NotInherited()
             .Permission(CancelRepair.ToString())
             .Permission(AddFitting.ToString())
             .Permission(ReadFitting.ToString())
@@ -146,6 +148,7 @@ internal static class WorkshopModel
                 Permissions.MembershipRead.ToString(),
                 Permissions.GrantManage.ToString(),
                 Permissions.GrantRead.ToString())
+            .Includes(WorkshopRoles.Technician, [ReadRepair.ToString(), ReadFitting.ToString()])
             .Role(
                 WorkshopRoles.Technician,
                 OpenWorkshop.ToString(),

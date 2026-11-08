@@ -97,6 +97,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant that was revoked", Decided.Denied),
         ("a grant in another organization", Decided.Denied),
         ("a grant whose role does not allow the permission", Decided.Denied),
+
+        // AUTHZ-GRANT-006 (D-278): a grant acts on its role's effective permissions, its
+        // inclusions followed at any depth, save a duty not inherited and what an
+        // inclusion leaves out.
+        ("a grant of a role including the role that allows the permission, two levels down", Decided.Allowed),
+        ("a grant of a role including the role that allows it through an inclusion switched off", Decided.Denied),
+        ("a grant of a role including the role that allows it, the inclusion leaving the permission out", Decided.Denied),
+        ("a grant of a role including the role that allows a duty not inherited", Decided.Denied),
+        ("a grant of the role that names a duty not inherited itself", Decided.Allowed),
+        ("a grant of a role including the role that allows it, and a deny of the included role", Decided.Denied),
+        ("a grant of the role that allows it, and a deny of a role including it", Decided.Denied),
         ("a fact in the host's data conferring a role", Decided.Allowed),
         ("a deny over a fact in the host's data", Decided.Denied),
         ("a fact in the host's data on a container above", Decided.Allowed),
@@ -2038,9 +2049,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         var deployment = new Deployment(host);
 
         RoleName role = await deployment.BeginAsync(
-            scenario == "a grant whose role does not allow the permission"
-                ? [HostPermissions.Edit]
-                : [HostPermissions.Read],
+            scenario switch
+            {
+                "a grant whose role does not allow the permission" => [HostPermissions.Edit],
+                _ when Duty(scenario) => [HostPermissions.Approve],
+                _ => [HostPermissions.Read],
+            },
             cancellationToken);
 
         SubjectId account = await deployment.AccountAsync(cancellationToken);
@@ -2097,10 +2111,16 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         // the whole organization's grant would otherwise admit.
         Permission asked = scenario == "a permission the model does not declare"
             ? Permission.Parse("document:share")
-            : HostPermissions.Read;
+            : Duty(scenario) ? HostPermissions.Approve : HostPermissions.Read;
 
         return new Case(host, deployment, account, record, sibling, inner, outer, asked);
     }
+
+    // AUTHZ-GRANT-006 AC2 (D-278): the cases that ask the host's duty no inclusion passes
+    // on, of a role that names it.
+    private static bool Duty(string scenario) =>
+        scenario is "a grant of a role including the role that allows a duty not inherited"
+            or "a grant of the role that names a duty not inherited itself";
 
     // AUTHZ-INHERIT-002: the record is moved by the library, whose rewrite of the
     // ancestry is what the case decides by, after its grants are written by hand as
@@ -4814,6 +4834,58 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     holder, role, sibling, false, null, null, cancellationToken);
                 break;
 
+
+            // AUTHZ-GRANT-006 (D-278): the case's role allows the permission and is
+            // included by the role granted, or names it and is granted itself.
+            case "a grant of a role including the role that allows the permission, two levels down":
+            {
+                RoleName middle = await deployment.RoleAsync([], cancellationToken);
+                RoleName top = await deployment.RoleAsync([], cancellationToken);
+
+                await deployment.IncludesAsync(top, middle, cancellationToken);
+                await deployment.IncludesAsync(middle, role, cancellationToken);
+                await deployment.GrantAsync(holder, top, record, false, null, null, cancellationToken);
+                break;
+            }
+
+            case "a grant of a role including the role that allows it through an inclusion switched off":
+            case "a grant of a role including the role that allows it, the inclusion leaving the permission out":
+            case "a grant of a role including the role that allows a duty not inherited":
+            case "a grant of a role including the role that allows it, and a deny of the included role":
+            {
+                RoleName top = await deployment.RoleAsync([], cancellationToken);
+
+                await deployment.IncludesAsync(
+                    top,
+                    role,
+                    cancellationToken,
+                    enabled: scenario != "a grant of a role including the role that allows it through an inclusion switched off",
+                    leftOut: scenario == "a grant of a role including the role that allows it, the inclusion leaving the permission out"
+                        ? [HostPermissions.Read]
+                        : null);
+                await deployment.GrantAsync(holder, top, record, false, null, null, cancellationToken);
+
+                if (scenario == "a grant of a role including the role that allows it, and a deny of the included role")
+                {
+                    await deployment.GrantAsync(holder, role, record, true, null, null, cancellationToken);
+                }
+
+                break;
+            }
+
+            case "a grant of the role that names a duty not inherited itself":
+                await deployment.GrantAsync(holder, role, record, false, null, null, cancellationToken);
+                break;
+
+            case "a grant of the role that allows it, and a deny of a role including it":
+            {
+                RoleName top = await deployment.RoleAsync([], cancellationToken);
+
+                await deployment.IncludesAsync(top, role, cancellationToken);
+                await deployment.GrantAsync(holder, role, record, false, null, null, cancellationToken);
+                await deployment.GrantAsync(holder, top, record, true, null, null, cancellationToken);
+                break;
+            }
             case "no grant at all":
                 break;
 

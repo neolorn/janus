@@ -21542,6 +21542,254 @@ good.
 
 ---
 
+## D-278 — A role may include other roles: abilities pass up, duties stay
+
+**Date:** 2026-11-07 · **Status:** accepted · **Amends:** AUTHZ-GRANT-004, AUTHZ-GRANT-005, LIB-HOST-001, `09` `/admin/roles`, `10` sections 1.3, 2.1, 4.5a and 5.24 · **Takes up:** D-267's roles composed of roles
+
+**TL;DR.** A role may include other roles. A grant of the including role admits its
+holder to what the included roles carry and lets them hand out what those roles hand
+out, at any depth, worked out at admission and never copied in; save the actions the
+host declares not inherited (duties: work routed to whoever holds them, such as being
+asked to approve) and what an inclusion leaves out. Found by the first host: its Owner
+and General Manager carry copied "everything" lists, which miss what the roles below
+them gain later, and "the General Manager may do what the HR Manager does" could only be
+said by copying. D-267's trigger for roles composed of roles, "a host rule that a role
+must include another", is met; separation of duties stays deferred.
+
+- **The rule.** An inclusion names the including role, the included role, whether it is
+  on, and what it leaves out (permissions, and roles of the `handsOut`). A role's
+  effective permissions are its own and, through each inclusion that is on, the included
+  role's effective permissions, save those not inherited and those left out; its
+  effective `handsOut` likewise, giving being an ability. A grant, allow or deny, stored
+  or derived, acts on the role's effective permissions. Nothing is copied: a change to an
+  included role or an inclusion reaches every holder above at the next request.
+- **Abilities and duties.** A host action declared `.NotInherited()` never passes through
+  an inclusion; a holder of a role that names it directly keeps it. Library-owned
+  permissions pass, save `system:administer`, which a role carries only by naming it
+  (OPS-CFG-007).
+- **Off and on.** The runtime key `authz.roleinclusion.enabled` switches every inclusion,
+  and each inclusion has its own `enabled`. Inclusions are stored apart from a role's
+  permissions and `handsOut`, so switching changes neither and switching back restores
+  what an inclusion gave.
+- **Refused.** A loop at any depth (`authz.role.inclusionloop`). A role whose grants must
+  end included by one whose grants need not end, and turning `grantsMustEnd` on for a
+  role such a one includes (`authz.role.inclusionmustend`): an open-ended grant would
+  otherwise carry what was meant to end (D-237).
+- **Administration.** `roleinclusion:manage`, apart from `role:manage`, so a deployment
+  can give deciding what a role includes to fewer people than changing a role. A change
+  carries a reason, is the `grant:manage` step-up action, stays within the actor's
+  reach judged on the effective sets before and after (AUTHZ-GRANT-005), and is recorded
+  with the inclusion before and after. A role an inclusion names is not removed.
+- **Reading.** A role's read shows its inclusions and its effective permissions and
+  `handsOut`, each with its source: `own`, or the path of inclusions it came through.
+- **Declared inclusions.** `.Includes(role, leftOut)` on a declared role, each pair seeded
+  once at a start as declared roles are; a later change or removal by an administrator
+  stands.
+- **The gate.** The explanation names the inclusion path; who may exercise a permission
+  (AUTHZ-GATE-007) is answered through inclusions and never through an action not
+  inherited, so a request for approval reaches duty holders only.
+- **What stays.** AUTHZ-GRANT-005's self rule as written; `authz.handout.byholding`,
+  judged on effective permissions.
+- **Amended 2026-11-07 (round H20, Q1): the public surface.** Readings as the round
+  proposed, save two names.
+  - Declaration: `AuthorizationDeclarationBuilder.Includes(string role,
+    IReadOnlyList<string>? leftOutPermissions = null, IReadOnlyList<string>? leftOutHandsOut =
+    null)` adds an inclusion to the role declared last, as `.GrantsMustEnd()` does, and
+    throws `InvalidOperationException` with no role before it. Two named lists, not one
+    list told apart by a colon, so a host reads what it leaves out. Carried on
+    `RoleDeclaration` as the init property `Includes`, of the new record
+    `RoleInclusionDeclaration(string Role, IReadOnlyList<string> LeftOutPermissions,
+    IReadOnlyList<string> LeftOutHandsOut)`, kept as written so a bad name fails startup
+    naming `role.<name>`. `.NotInherited()` marks the permission declared last with
+    `.Permission(...)` and throws with none before it; carried as
+    `AuthorizationDeclaration.NotInherited`, an init property of `IReadOnlyList<Permission>`.
+  - Administration: `IRoles.IncludeAsync(AccessContext, SessionId, RoleName role,
+    RoleInclusion inclusion, string reason, CancellationToken)` returning `Result<bool>`,
+    true where it created the inclusion (201) and false where it set one (204), and
+    `IRoles.RemoveInclusionAsync(AccessContext, SessionId, RoleName role, RoleName included,
+    string reason, CancellationToken)` returning `Result`; not "Exclude", which would read
+    as what an inclusion leaves out. The new record `RoleInclusion(RoleName Included, bool
+    Enabled, IReadOnlyList<Permission> LeftOutPermissions, IReadOnlyList<RoleName>
+    LeftOutHandsOut)`.
+  - The read: `DefinedRole` gains the init properties `Includes`
+    (`IReadOnlyList<RoleInclusion>`) and `Effective` (the new record
+    `EffectiveRole(IReadOnlyList<EffectiveEntry<Permission>> Permissions,
+    IReadOnlyList<EffectiveEntry<RoleName>> HandsOut)`), which `DefineAsync` ignores on
+    input; the new record `EffectiveEntry<T>(T Name, IReadOnlyList<RoleName> From)`, `From`
+    empty for the role's own. Over HTTP `from` is that list: an array of role names, nearest
+    first, empty for the role's own.
+  - The explanation: `ExplainedGrant` gains the init property `IncludedThrough`
+    (`IReadOnlyList<RoleName>`), empty for a role's own permission. It has no HTTP form.
+  - Events: an inclusion made, changed or removed raises `RoleChanged` with `change`
+    `changed` for the including role, since what that role carries changed; a host that
+    caches what roles carry learns of it as of any role change.
+- **Amended 2026-11-07 (round H20, Q2): one entry per permission.** An effective entry is
+  listed once. Its source is `own` where the role carries it itself; otherwise the shortest
+  path of inclusions it comes through, and among paths of one length the first by the
+  ordinal order of the role names along it. Reading A of the round's question.
+- **Amended 2026-11-07 (round H20, Q3 to Q5).** Turning `grantsMustEnd` off on a role that
+  includes a role whose grants must end is refused with `authz.role.inclusionmustend`, as
+  turning it on for an included one is: either would leave an open-ended grant carrying
+  what was meant to end. A change to an inclusion is judged for reach as though
+  `authz.roleinclusion.enabled` were on, whatever it reads, since switching the key on
+  later would otherwise hand out what nobody was judged able to give (reading A, as
+  built). The records of processing report each role's effective permissions
+  (`IRegisterRoles.AllowedAsync`), since that is what a holder may do (reading A).
+- **Amended 2026-11-08 (round H20, lead's review; Q8).** The same holds for every hand-out
+  of AUTHZ-GRANT-005: the role given is judged for reach on what it carries as though
+  `authz.roleinclusion.enabled` were on, whatever it reads: a grant made (`grant:manage`)
+  or revoked, the list of roles a caller may assign, a group's member added or removed, an
+  invitation's roles, a membership ended, and a recovery approved. With the key off, a
+  grant judged on the role's own permissions alone would carry, once the key is switched
+  on, what its giver was never judged able to give. What the giver may hand out is read as
+  the key reads (its effective `handsOut` with the key off is its own), so both sides are
+  the stricter reading. Criteria: with the key off, a giver able to give an including
+  role's own permissions but not an included one's is refused the grant and is not offered
+  the role; with the key on, the same.
+- **Round H20's criteria.** On PostgreSQL, a holder of a role including another, two
+  levels deep, is admitted to what the lower roles carry save an action not inherited and
+  what an inclusion leaves out; a change to the lowest role reaches them at the next
+  request; the key off admits own permissions alone and on restores the rest; loops and
+  must-end breaches are refused.
+
+*Rejected:*
+- **Copying the included role's permissions in when the inclusion is made:** misses later
+  changes, the defect found.
+- **Inheriting duties too:** every request for approval would reach everyone above the
+  duty's holder, and asking for approval would mean nothing to one who may give directly.
+- **One parent per role (a tree):** the host needs a role to include several (General
+  Manager includes every other position) and to be included by several; a graph with
+  loops refused does both.
+- **Groups:** a group gathers holders, not roles; it cannot say what a role carries.
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-004 (a role an inclusion names stays), AUTHZ-GRANT-005 (judged on
+  effective sets), AUTHZ-GRANT-006 (new);
+- `07` LIB-HOST-001 (the Roles row: `.Includes`, `.NotInherited()`);
+- `09` `GET|POST|DELETE /admin/roles` (the read, `inclusionmustend`, `inuse`) and
+  `PUT|DELETE /admin/roles/{name}/inclusions/{included}` (new);
+- `10` section 1.3 (`authz.role.inclusionloop`, `authz.role.inclusionmustend`), section 2.1
+  (`roleinclusion:manage`), section 4.5a (`authz.roleinclusion.enabled`), section 5.24
+  (`authz.role.included`, `authz.role.inclusionremoved`);
+- `00` and this log's deferred tables (roles composed of roles taken up);
+- `implementation-plan.md` (round H20, release 1.0.0-rc.10).
+
+---
+
+## D-279 — A sign-on that only checks, and a hint that someone is signed in
+
+**Date:** 2026-11-07 · **Status:** accepted · **Amends:** AUTH-SESS-012, BFF-SESS-006, `09` `GET /auth/signon`, `10` section 4.1
+
+**TL;DR.** A BFF's sign-on can be started to check only: `GET /auth/signon?check=true`
+asks the authentication application with `prompt=none` as today, and where it answers
+`login_required` the browser goes back as a guest instead of to the sign-in page. Found by
+the first host: its public store must recognise a person signed in at another of its
+applications, and the sign-on's only behaviour (ask silently, then ask the person) would
+send every guest to a sign-in page, so the store never started it and a person signed in
+elsewhere stayed a guest there. A protected key, `session.hint.domain`, lets the
+authentication application keep a cookie on the deployment's parent domain saying only
+that someone on this browser is signed in, so a check from a browser without it answers at
+once and guests pay no round trip.
+
+- **The check.** With `check=true`, the start pushes with `prompt=none` as every start
+  does, and at the return `login_required` sends the browser to the stored return address
+  with no per-app session and nothing added to its address: no refusal, no second push.
+  Every other answer is as today.
+- **The hint.** Where `session.hint.domain` names a domain, the authentication application
+  writes `janus-signed-in` (value `1`, `Domain` the key's value, `Secure`, `HttpOnly`,
+  `SameSite=Lax`, no `Max-Age` beyond the auth session's absolute lifetime) when an auth
+  session is created, and removes it when the auth session ends by sign-out. A check-only
+  start that finds the key set and no hint sends the browser to `returnTo` at once, as a
+  guest. A check that finds no auth session removes a hint left behind. Without the key, no
+  hint is written and every check asks.
+- **Why the hint is safe.** It carries no identifier and grants nothing; it tells another
+  subdomain only that someone on this browser holds an auth session. The session cookie
+  stays on the authentication application's own host.
+- **What the host does.** Starts a check-only sign-on once per browser session on a public
+  page, and never on a route that needs a session, which keeps today's sign-on.
+- **Amended 2026-11-07 (round H20, Q1 and Q2).** The hint cookie is `identity-signed-in`, not
+  `janus-signed-in`: `08` CONV-NAME-001 (D-163) keeps the product's name out of cookies and
+  names `identity` as their prefix. `session.hint.domain` is protected, so it is on `10`
+  section 4.8's list as well as in section 4.1.
+- **Amended 2026-11-08 (round H20, Q6).** The hint is the library's sixth cookie, set only
+  where `session.hint.domain` names a domain. `17` BFF-SESS-002's list and `04`
+  PRIV-CONS-006a name it. The deployment's cookie list (`IDeploymentCookies`) carries it
+  while the key names a domain, read when the list is read as the lifetimes are, so the
+  privacy notice lists it exactly when it is set: strictly necessary (it serves the sign-in
+  the person asked for and carries no identifier), unreadable by any third party, at the
+  longest an auth session lasts. A change of `session.hint.domain` is compared with the
+  current notice as a change of a cookie's lifetime key is (D-203), so a notice that no
+  longer lists what is set is raised with the change. A host declaring a cookie named
+  `identity-signed-in` fails startup as for the library's other names, whether or not the
+  key is set. Criteria: the list carries the hint with the key set and not without it;
+  setting the key over a notice without the hint raises the degradation; a host cookie of
+  that name fails startup.
+- **Amended 2026-11-08 (round H20, Q7).** `session.hint.domain` is read once, at the
+  start, as `integration.mailserver.endpoint` is: it is protected, so it changes only
+  through `configure`, which cannot read the host's declared cookies to compare the notice.
+  A change therefore takes effect at the next start, and that start's notice comparison
+  raises the hint where the notice does not list it, so no window exists in which the
+  hint is set and the difference not raised. The hint and the deployment's cookie list
+  both use the value read at the start. It joins `06` OPS-CFG-004's list, as `10` section
+  4.8 already has it (D-152). Criteria: a `configure` of the key changes neither the hint
+  nor the cookie list before a restart; after it, both follow the new value and the
+  comparison raises a notice without the hint.
+- **Round H20's criteria (added).** A check-only sign-on with no auth session returns the
+  browser as a guest with no session; with one, it returns it signed in; with the key set
+  and no hint it answers at once without a push.
+
+*Rejected:*
+- **A hidden frame asking with `prompt=none`:** the auth-session cookie is `SameSite=Lax`,
+  sent on a top-level navigation only, and third-party frames are increasingly cut off.
+- **Sharing the session cookie on the parent domain:** every subdomain, mail included,
+  could read it.
+- **The host sending every guest through the full sign-on:** guests would land on a
+  sign-in page.
+
+**Propagated to:**
+- `02` AUTH-SESS-012 (the check's exception to "pushes again");
+- `17` BFF-SESS-006 (the check and the hint);
+- `09` `GET /auth/signon` (`check`);
+- `10` section 4.1 (`session.hint.domain`);
+- `implementation-plan.md` (round H20).
+
+---
+
+## D-280 — A person reads what their own roles carry and who may change them
+
+**Date:** 2026-11-07 · **Status:** accepted · **Amends:** AUTHZ-GRANT-006, `09` (new `GET /account/roles`)
+
+**TL;DR.** `GET /account/roles?organization={id}` answers, with no permission, the roles the
+caller's own account holds through its live allow grants in the organization, each with
+its effective permissions and `handsOut` and their sources, as `/admin/roles` reads
+them, and `givenBy`: the roles whose effective `handsOut` names it. Found by the first
+host: every member of staff is to see their own position and roles, what each includes
+and who may change them, read-only; `GET /account/grants` (D-274) names the roles but not
+what they carry, and a role's definition is read only under `role:manage`.
+
+- **What is listed.** The roles of the grants `GET /account/grants` lists (in the account's
+  own name, allow, live), each once; a role reached through a group is the group's and is
+  not listed, as D-274 rules. `givenBy` names each role whose effective `handsOut` names
+  the held role, through inclusions too (AUTHZ-GRANT-006); it does not name
+  `system:administer`, which reaches every role by OPS-CFG-007.
+- **Its form.** The library call `IRoles.OwnAsync(AccessContext, OrganizationId,
+  CancellationToken)` returns `IReadOnlyList<HeldRole>`, the new record
+  `HeldRole(RoleName Name, EffectiveRole Effective, IReadOnlyList<RoleName> GivenBy)`, with
+  `EffectiveRole` as D-278's amendment gives it. Nothing is recorded; a restricted account
+  is admitted (IDN-ACCT-007), as for `GET /account/grants`.
+- **Why it is safe.** It shows a person only what their own roles let them do and which
+  roles may change them; nothing about another person.
+- **Round H20's criteria (added).** A member reads their own roles with effective
+  permissions, sources and `givenBy`, a role held through an inclusion's parent included
+  in its effective permissions, and nothing of a role held only through a group.
+
+**Propagated to:**
+- `03` AUTHZ-GRANT-006 (Reading);
+- `09` `GET /account/roles` (new);
+- `implementation-plan.md` (round H20).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -21829,6 +22077,9 @@ good.
 | Whether a person still has access is their membership's, kept from its event | D-275 |
 | A host permission may admit the question of who holds another | D-276 |
 | A key the deployment names reads and writes before it is first set | D-277 |
+| A role may include other roles: abilities pass up, duties stay | D-278 |
+| A sign-on that only checks, and a hint that someone is signed in | D-279 |
+| A person reads what their own roles carry and who may change them | D-280 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
@@ -21877,6 +22128,6 @@ Per P-003 — nothing deferred silently.
 | Paid geocoding provider (D-061) | If customers demonstrably struggle with the address form |
 | A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
 | Round R: a report feed of people data and a bulk import (D-258) | A report that names people or reads their contacts in bulk, a live feed to a spreadsheet or business-intelligence tool, or a bulk import of accounts, members or person records |
-| Full role-based access: roles composed of roles, static and dynamic separation of duties (D-267) | A host rule that a role must include another, or that one person may not hold or exercise two duties together |
+| Full role-based access: static and dynamic separation of duties (D-267; roles composed of roles taken up by D-278) | A host rule that one person may not hold or exercise two duties together |
 | Full attribute-based access: conditions over the subject's, the resource's, the action's and the environment's attributes, in a closed vocabulary the library owns, rendered for both the single check and the list filter (D-267; its boundary, D-272) | A host rule that depends on a value: an amount limit, a record's status, a time, a network or the sign-in's strength |
 | Authorization for a host's GraphQL API: field and type permissions, many decisions in one pass, each record judged in its own organization (D-267) | A host serving a GraphQL API |

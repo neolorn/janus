@@ -18,7 +18,7 @@ namespace Janus.Storage.Authentication.Recovery;
 /// </summary>
 /// <param name="grants">The grants the account holds, and those its groups hold.</param>
 /// <param name="groups">The groups naming the account, and those above them.</param>
-/// <param name="roles">What each role reached carries.</param>
+/// <param name="graphs">What each role reached carries, as though inclusions were on.</param>
 /// <param name="admission">The gate's judgment of a change that hands out roles.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -31,7 +31,7 @@ namespace Janus.Storage.Authentication.Recovery;
 internal sealed class ApproverReach(
     IGrantStore grants,
     IGroupStore groups,
-    IRoleStore roles,
+    RoleGraphs graphs,
     IHandOutAdmission admission,
     TimeProvider time) : IApproverReach
 {
@@ -56,6 +56,10 @@ internal sealed class ApproverReach(
                 .Where(grant => !grant.Deny));
         }
 
+        // AUTHZ-GRANT-006 (D-278): each role is judged on what it carries through its
+        // inclusions as though they were on, whatever authz.roleinclusion.enabled reads.
+        RoleGraph graph = await graphs.ReadFollowingAsync(cancellationToken).ConfigureAwait(false);
+
         foreach (IGrouping<(OrganizationId Organization, ResourceReference? Resource), Grant> scoped in held
             .GroupBy(grant => (grant.Organization, Scope(grant)))
             .OrderBy(scoped => scoped.Key.Organization.Value))
@@ -67,9 +71,7 @@ internal sealed class ApproverReach(
                 .Distinct()
                 .OrderBy(name => name.ToString(), StringComparer.Ordinal))
             {
-                Role read = await roles.FindAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
-
-                handed.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut], read.GrantsMustEnd));
+                handed.Add(graph.Judged(graph.Find(name) ?? Role.Of(name, [])));
             }
 
             var change = new HandOut(

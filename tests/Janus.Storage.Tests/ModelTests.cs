@@ -733,6 +733,7 @@ public sealed class ModelTests
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.record_access",
             "preauthentication_sessions.registration",
+            "preauthentication_sessions.signon_check",
             "preauthentication_sessions.signon_return",
             "preauthentication_sessions.signon_state",
             "preauthentication_sessions.signon_verifier",
@@ -900,8 +901,14 @@ public sealed class ModelTests
             "resources.subject",
 
             // Authorization: what a role allows (AUTHZ-GRANT-004), the roles its holders
-            // hand out (AUTHZ-GRANT-005) and whether its grants must end (D-237), read
-            // live so that editing it takes effect at once.
+            // hand out (AUTHZ-GRANT-005), whether its grants must end (D-237) and the roles
+            // it includes (AUTHZ-GRANT-006, D-278), read live so that editing it takes
+            // effect at once.
+            "role_inclusions.enabled",
+            "role_inclusions.included",
+            "role_inclusions.left_out_hands_out",
+            "role_inclusions.left_out_permissions",
+            "role_inclusions.role",
             "role_permissions.permission",
             "role_permissions.role",
             "roles.grants_must_end",
@@ -914,8 +921,11 @@ public sealed class ModelTests
             "search_windows.subject",
             "search_windows.window_start",
 
-            // Not an account field: the names of the declared roles a start has seeded,
-            // so none is seeded again (AUTHZ-GRANT-004, D-204).
+            // Not an account field: the names of the declared roles a start has seeded, and
+            // the pairs of the declared inclusions, so none is seeded again
+            // (AUTHZ-GRANT-004, AUTHZ-GRANT-006, D-204, D-278).
+            "seeded_role_inclusions.included",
+            "seeded_role_inclusions.role",
             "seeded_roles.name",
 
             // Not an account field: the sending counters of AUTH-ABUSE-004, an HMAC of the
@@ -1069,6 +1079,10 @@ public sealed class ModelTests
             "throttle_counters.fingerprint_version",
             "throttle_counters.key",
             "throttle_counters.scope",
+
+            // Not an account field: the host's actions declared not inherited, which no
+            // inclusion passes on (AUTHZ-GRANT-006, D-278).
+            "uninherited_permissions.permission",
 
             // Not an account field: the username an erasure left held for as long as
             // `retention.consent` asks, so that nobody takes it in the meantime

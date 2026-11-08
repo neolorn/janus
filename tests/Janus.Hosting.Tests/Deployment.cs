@@ -401,6 +401,12 @@ internal sealed class Deployment : IAsyncDisposable
     public ConfigurationInMemory Configuration { get; } = new();
 
     /// <summary>
+    /// The domain of the signed-in hint as a start read it, which a test reads again as a
+    /// restart would (BFF-SESS-006, D-279).
+    /// </summary>
+    public SignedInHintDomain HintDomain { get; } = new();
+
+    /// <summary>
     /// Which organizations a principal belongs to.
     /// </summary>
     public MembershipLookupInMemory Memberships { get; } = new();
@@ -1317,7 +1323,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         _ = services.AddScoped<IDeploymentCookies>(_ => new DeploymentCookies(
             Configuration,
-            Janus.Authorization.Tests.HostDomain.Declared().Build()));
+            Janus.Authorization.Tests.HostDomain.Declared().Build(),
+            HintDomain));
         _ = services.AddScoped<NoticeCookieCheck>();
         _ = services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
         _ = services.AddScoped<ILegalDocuments, LegalDocumentService>();
@@ -1396,6 +1403,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleReferences>(
             new Janus.Hosting.Tests.Authorization.RoleReferencesInMemory(AccessGrants, Invitations, Roles));
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleStore>(Roles);
+        _ = services.AddSingleton<Janus.Authorization.Roles.IRoleInclusionStore>(Roles.Inclusions);
+        _ = services.AddScoped<Janus.Authorization.Roles.RoleGraphs>();
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupStore>(Groups);
         _ = services.AddSingleton<Janus.Authorization.Resources.IResourceStore>(Resources);
         _ = services.AddSingleton(Janus.Authorization.Model.AuthorizationModel.Of(
@@ -1492,6 +1501,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IAppPasswords, Janus.Authentication.Mailboxes.AppPasswords>();
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
+        _ = services.AddSingleton(HintDomain);
+        _ = services.AddSingleton<SignedInHint>();
         _ = services.AddScoped<SynchronizerTokens>();
         _ = services.AddScoped<ConcealedRefusals>();
         _ = services.AddScoped<Concealment>();

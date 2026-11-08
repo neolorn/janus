@@ -92,6 +92,14 @@ public static class Settings
     public static DurationSetting SessionStepUpRecency { get; } =
         new("session.stepup.recency", SettingScope.Runtime, "PT15M");
 
+    /// <summary>
+    /// The parent domain the authentication application keeps the signed-in hint on while
+    /// an auth session lives; empty, no hint is written and every check-only sign-on asks
+    /// the authentication application (BFF-SESS-006, D-279).
+    /// </summary>
+    public static TextSetting SessionSignedInDomain { get; } =
+        new("session.hint.domain", SettingScope.Protected, string.Empty);
+
     /// <summary>The system policy, for principals with no membership.</summary>
     public static PolicySetting PolicyDefault { get; } =
         new("policy.default", SettingScope.Runtime, Policies.SystemDefault);
@@ -548,6 +556,13 @@ public static class Settings
         new("authz.handout.byholding", SettingScope.Runtime, false);
 
     /// <summary>
+    /// Whether roles' inclusions of other roles admit at all; off, each role admits its
+    /// own permissions and hands out its own roles alone (AUTHZ-GRANT-006, D-278).
+    /// </summary>
+    public static FlagSetting AuthzRoleInclusionEnabled { get; } =
+        new("authz.roleinclusion.enabled", SettingScope.Runtime, true);
+
+    /// <summary>
     /// How often every materialised derivation is re-evaluated against the host's own
     /// relation, a difference corrected and the degradation condition raised.
     /// </summary>
@@ -976,6 +991,7 @@ public static class Settings
         SessionDefaultInactivity,
         SessionDefaultAbsolute,
         SessionStepUpRecency,
+        SessionSignedInDomain,
         PolicyDefault,
         PrivacyExportRateLimit,
         PolicyEnforcementGrace,
@@ -1055,6 +1071,7 @@ public static class Settings
         MaintenanceExpiryWarningLead,
         AuthzReverseLookupBudget,
         AuthzHandoutByHolding,
+        AuthzRoleInclusionEnabled,
         DerivationMaterialisedDriftCheck,
         OrganizationDeletionGrace,
         TakedownGrace,
