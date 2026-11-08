@@ -48,6 +48,41 @@ Janus.Core.AccessExplanation.Principal.init -> void
 Janus.Core.AccessOutcome
 Janus.Core.AccessOutcome.Allowed = 1 -> Janus.Core.AccessOutcome
 Janus.Core.AccessOutcome.Denied = 0 -> Janus.Core.AccessOutcome
+Janus.Core.AccessRemoval
+Janus.Core.AccessRemoval.<Clone>$() -> Janus.Core.AccessRemoval!
+Janus.Core.AccessRemoval.AccessRemoval(Janus.Core.AccessRemovalKind Kind, Janus.Core.OrganizationId Organization, Janus.Core.GrantSubject Subject, Janus.Core.GrantId? Grant, Janus.Core.RoleName? Role, Janus.Core.GroupId? Group, Janus.Core.AccessContext! Context, string! Reason, Janus.Core.AccessRemovalPath Path, System.Collections.Generic.IReadOnlyList<Janus.Core.RemovedGrant!>! Grants, System.Collections.Generic.IReadOnlyList<Janus.Core.GroupId>! Groups) -> void
+Janus.Core.AccessRemoval.Context.get -> Janus.Core.AccessContext!
+Janus.Core.AccessRemoval.Context.init -> void
+Janus.Core.AccessRemoval.Deconstruct(out Janus.Core.AccessRemovalKind Kind, out Janus.Core.OrganizationId Organization, out Janus.Core.GrantSubject Subject, out Janus.Core.GrantId? Grant, out Janus.Core.RoleName? Role, out Janus.Core.GroupId? Group, out Janus.Core.AccessContext! Context, out string! Reason, out Janus.Core.AccessRemovalPath Path, out System.Collections.Generic.IReadOnlyList<Janus.Core.RemovedGrant!>! Grants, out System.Collections.Generic.IReadOnlyList<Janus.Core.GroupId>! Groups) -> void
+Janus.Core.AccessRemoval.Equals(Janus.Core.AccessRemoval? other) -> bool
+Janus.Core.AccessRemoval.Grant.get -> Janus.Core.GrantId?
+Janus.Core.AccessRemoval.Grant.init -> void
+Janus.Core.AccessRemoval.Grants.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RemovedGrant!>!
+Janus.Core.AccessRemoval.Grants.init -> void
+Janus.Core.AccessRemoval.Group.get -> Janus.Core.GroupId?
+Janus.Core.AccessRemoval.Group.init -> void
+Janus.Core.AccessRemoval.Groups.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.GroupId>!
+Janus.Core.AccessRemoval.Groups.init -> void
+Janus.Core.AccessRemoval.Kind.get -> Janus.Core.AccessRemovalKind
+Janus.Core.AccessRemoval.Kind.init -> void
+Janus.Core.AccessRemoval.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.AccessRemoval.Organization.init -> void
+Janus.Core.AccessRemoval.Path.get -> Janus.Core.AccessRemovalPath
+Janus.Core.AccessRemoval.Path.init -> void
+Janus.Core.AccessRemoval.Reason.get -> string!
+Janus.Core.AccessRemoval.Reason.init -> void
+Janus.Core.AccessRemoval.Role.get -> Janus.Core.RoleName?
+Janus.Core.AccessRemoval.Role.init -> void
+Janus.Core.AccessRemoval.Subject.get -> Janus.Core.GrantSubject
+Janus.Core.AccessRemoval.Subject.init -> void
+Janus.Core.AccessRemovalKind
+Janus.Core.AccessRemovalKind.GrantRevoked = 0 -> Janus.Core.AccessRemovalKind
+Janus.Core.AccessRemovalKind.GroupMemberRemoved = 2 -> Janus.Core.AccessRemovalKind
+Janus.Core.AccessRemovalKind.MembershipEnded = 1 -> Janus.Core.AccessRemovalKind
+Janus.Core.AccessRemovalPath
+Janus.Core.AccessRemovalPath.Administration = 0 -> Janus.Core.AccessRemovalPath
+Janus.Core.AccessRemovalPath.Library = 1 -> Janus.Core.AccessRemovalPath
+Janus.Core.AccessRemovalPath.ScheduledEnd = 2 -> Janus.Core.AccessRemovalPath
 Janus.Core.AccountDeletionCancelled
 Janus.Core.AccountDeletionCancelled.AccountDeletionCancelled(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
 Janus.Core.AccountDeletionCancelled.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
@@ -177,6 +212,7 @@ Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Adult = 1 -> Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Minor = 0 -> Janus.Core.AgeGroup
 Janus.Core.AlertCondition
+Janus.Core.AlertCondition.AccessRemovalRefused = 28 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.ApproverVolume = 2 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.AuthFailuresSustained = 0 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.BackgroundJobFailed = 10 -> Janus.Core.AlertCondition
@@ -1443,6 +1479,8 @@ Janus.Core.IAccessGate.ResolveAsync(Janus.Core.AccessContext! context, Janus.Cor
 Janus.Core.IAccessGate.ResolveOwnAsync(Janus.Core.AccessContext! context, Janus.Core.AuditRecordId correlation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccessExplanation!>>
 Janus.Core.IAccessGate.WhoCanAccessAsync(Janus.Core.AccessContext! context, Janus.Core.ResourceReference resource, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ResourceAccess!>>
 Janus.Core.IAccessGate.WhoCanAccessAsync<TResource>(Janus.Core.AccessContext! context, Janus.Core.ResourceReference resource, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ResourceAccess!>>
+Janus.Core.IAccessRemovalCheck
+Janus.Core.IAccessRemovalCheck.CheckAsync(Janus.Core.AccessRemoval! removal, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount
 Janus.Core.IAccount.CancelDeletionAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.DeactivateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2831,6 +2869,17 @@ Janus.Core.RelationshipRows
 Janus.Core.RelationshipRows.Any(System.Linq.Expressions.LambdaExpression! predicate) -> System.Linq.Expressions.Expression!
 Janus.Core.RelationshipRows.HeldBy(System.Linq.Expressions.LambdaExpression! predicate, System.Linq.Expressions.LambdaExpression! holder) -> System.Collections.Generic.IAsyncEnumerable<Janus.Core.SubjectId>!
 Janus.Core.RelationshipSource
+Janus.Core.RemovedGrant
+Janus.Core.RemovedGrant.<Clone>$() -> Janus.Core.RemovedGrant!
+Janus.Core.RemovedGrant.Deconstruct(out Janus.Core.GrantId Grant, out Janus.Core.RoleName Role, out Janus.Core.OrganizationId Organization) -> void
+Janus.Core.RemovedGrant.Equals(Janus.Core.RemovedGrant? other) -> bool
+Janus.Core.RemovedGrant.Grant.get -> Janus.Core.GrantId
+Janus.Core.RemovedGrant.Grant.init -> void
+Janus.Core.RemovedGrant.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.RemovedGrant.Organization.init -> void
+Janus.Core.RemovedGrant.RemovedGrant(Janus.Core.GrantId Grant, Janus.Core.RoleName Role, Janus.Core.OrganizationId Organization) -> void
+Janus.Core.RemovedGrant.Role.get -> Janus.Core.RoleName
+Janus.Core.RemovedGrant.Role.init -> void
 Janus.Core.RequestAccess
 Janus.Core.RequestAccess.<Clone>$() -> Janus.Core.RequestAccess!
 Janus.Core.RequestAccess.Context.get -> Janus.Core.AccessContext!
@@ -3608,6 +3657,9 @@ const Janus.Core.Username.MinimumLength = 3 -> int
 override Janus.Core.AccessExplanation.Equals(object? obj) -> bool
 override Janus.Core.AccessExplanation.GetHashCode() -> int
 override Janus.Core.AccessExplanation.ToString() -> string!
+override Janus.Core.AccessRemoval.Equals(object? obj) -> bool
+override Janus.Core.AccessRemoval.GetHashCode() -> int
+override Janus.Core.AccessRemoval.ToString() -> string!
 override Janus.Core.AccountDeletionCancelled.<Clone>$() -> Janus.Core.AccountDeletionCancelled!
 override Janus.Core.AccountDeletionCancelled.Equals(object? obj) -> bool
 override Janus.Core.AccountDeletionCancelled.GetHashCode() -> int
@@ -4150,6 +4202,9 @@ override Janus.Core.RegistrationState.ToString() -> string!
 override Janus.Core.RelationshipDeclaration.Equals(object? obj) -> bool
 override Janus.Core.RelationshipDeclaration.GetHashCode() -> int
 override Janus.Core.RelationshipDeclaration.ToString() -> string!
+override Janus.Core.RemovedGrant.Equals(object? obj) -> bool
+override Janus.Core.RemovedGrant.GetHashCode() -> int
+override Janus.Core.RemovedGrant.ToString() -> string!
 override Janus.Core.RequestAccess.Equals(object? obj) -> bool
 override Janus.Core.RequestAccess.GetHashCode() -> int
 override Janus.Core.RequestAccess.ToString() -> string!
@@ -4355,6 +4410,8 @@ static Janus.Core.AccessContext.Of(Janus.Core.SubjectId subject) -> Janus.Core.A
 static Janus.Core.AccessContext.Of(Janus.Core.SystemPrincipal! principal) -> Janus.Core.AccessContext!
 static Janus.Core.AccessExplanation.operator !=(Janus.Core.AccessExplanation? left, Janus.Core.AccessExplanation? right) -> bool
 static Janus.Core.AccessExplanation.operator ==(Janus.Core.AccessExplanation? left, Janus.Core.AccessExplanation? right) -> bool
+static Janus.Core.AccessRemoval.operator !=(Janus.Core.AccessRemoval? left, Janus.Core.AccessRemoval? right) -> bool
+static Janus.Core.AccessRemoval.operator ==(Janus.Core.AccessRemoval? left, Janus.Core.AccessRemoval? right) -> bool
 static Janus.Core.AccountDeletionCancelled.operator !=(Janus.Core.AccountDeletionCancelled? left, Janus.Core.AccountDeletionCancelled? right) -> bool
 static Janus.Core.AccountDeletionCancelled.operator ==(Janus.Core.AccountDeletionCancelled? left, Janus.Core.AccountDeletionCancelled? right) -> bool
 static Janus.Core.AccountDeletionRequested.operator !=(Janus.Core.AccountDeletionRequested? left, Janus.Core.AccountDeletionRequested? right) -> bool
@@ -4402,6 +4459,7 @@ static Janus.Core.AuditAction.operator !=(Janus.Core.AuditAction left, Janus.Cor
 static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
 static Janus.Core.AuditActions.AccessDenied.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccessExported.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.AccessRemovalRefused.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountDeactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountReactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountSuspended.get -> Janus.Core.AuditAction
@@ -4899,6 +4957,7 @@ static Janus.Core.ErrorCodes.RecoveryTokenExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryTokenInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RegistrationIncomplete.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RegistrationSignedIn.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RemovalUncheckable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestDecided.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestDuplicate.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestInvalid.get -> Janus.Core.ErrorCode
@@ -5225,6 +5284,8 @@ static Janus.Core.RegistrationState.operator ==(Janus.Core.RegistrationState? le
 static Janus.Core.RelationshipDeclaration.operator !=(Janus.Core.RelationshipDeclaration? left, Janus.Core.RelationshipDeclaration? right) -> bool
 static Janus.Core.RelationshipDeclaration.operator ==(Janus.Core.RelationshipDeclaration? left, Janus.Core.RelationshipDeclaration? right) -> bool
 static Janus.Core.RelationshipSource.Of<TContext, TRow>(string! relationship, System.Func<TContext!, System.Linq.IQueryable<TRow>!>! rows) -> Janus.Core.RelationshipSource!
+static Janus.Core.RemovedGrant.operator !=(Janus.Core.RemovedGrant? left, Janus.Core.RemovedGrant? right) -> bool
+static Janus.Core.RemovedGrant.operator ==(Janus.Core.RemovedGrant? left, Janus.Core.RemovedGrant? right) -> bool
 static Janus.Core.RequestedLink.operator !=(Janus.Core.RequestedLink? left, Janus.Core.RequestedLink? right) -> bool
 static Janus.Core.RequestedLink.operator ==(Janus.Core.RequestedLink? left, Janus.Core.RequestedLink? right) -> bool
 static Janus.Core.ReservedUsernames.Default.get -> Janus.Core.ReservedUsernames!

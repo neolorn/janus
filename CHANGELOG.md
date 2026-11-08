@@ -8,6 +8,8 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+## [1.0.0-rc.11] - 2026-11-08
+
 ### Added
 
 - A host may register one `IAccessRemovalCheck`, which the library asks before it
