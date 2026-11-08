@@ -21639,12 +21639,13 @@ must include another", is met; separation of duties stays deferred.
   of AUTHZ-GRANT-005: the role given is judged for reach on what it carries as though
   `authz.roleinclusion.enabled` were on, whatever it reads: a grant made (`grant:manage`)
   or revoked, the list of roles a caller may assign, a group's member added or removed, an
-  invitation's roles, a membership ended, and a recovery approved. With the key off, a grant judged on the role's own permissions
-  alone would carry, once the key is switched on, what its giver was never judged able to
-  give. What the giver may hand out is read as the key reads (its effective `handsOut` with
-  the key off is its own), so both sides are the stricter reading. Criteria: with the key
-  off, a giver able to give an including role's own permissions but not an included one's
-  is refused the grant and is not offered the role; with the key on, the same.
+  invitation's roles, a membership ended, and a recovery approved. With the key off, a
+  grant judged on the role's own permissions alone would carry, once the key is switched
+  on, what its giver was never judged able to give. What the giver may hand out is read as
+  the key reads (its effective `handsOut` with the key off is its own), so both sides are
+  the stricter reading. Criteria: with the key off, a giver able to give an including
+  role's own permissions but not an included one's is refused the grant and is not offered
+  the role; with the key on, the same.
 - **Round H20's criteria.** On PostgreSQL, a holder of a role including another, two
   levels deep, is admitted to what the lower roles carry save an action not inherited and
   what an inclusion leaves out; a change to the lowest role reaches them at the next
