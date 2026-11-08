@@ -50,6 +50,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
     private static readonly ResourceType Undeclared = ResourceType.Parse("ledger");
 
+    // AUTHZ-GRANT-005 (D-281): the code the host's check keeps a role's last holder with.
+    private static readonly ErrorCode KeptByTheHost = ErrorCode.Parse("host.lastholder");
+
     private static readonly Dictionary<ErrorCode, Decided> Refusals = new()
     {
         [ErrorCodes.Denied] = Decided.Denied,
@@ -61,6 +64,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         [ErrorCodes.StepUpUnavailable] = Decided.StepUpUnavailable,
         [ErrorCodes.RoleNotAssignable] = Decided.NotAssignable,
         [ErrorCodes.GrantSelf] = Decided.WidensOwnAccess,
+        [KeptByTheHost] = Decided.KeptByHost,
     };
 
     // The gate a report is judged against: the account is a member of the case's
@@ -197,6 +201,16 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "the roles the caller may hand out read, the role its role lists among them and no other, by a caller managing grants",
             Decided.Allowed),
         ("the roles the caller may hand out read, by a caller managing no grants", Decided.Denied),
+        (
+            "a revocation of the last holder's grant of a role the caller hands out, the host keeping a holder, by a caller managing grants",
+            Decided.KeptByHost),
+        (
+            "a revocation of a grant of a role the caller hands out, another holder left, the host keeping a holder, by a caller managing grants",
+            Decided.Allowed),
+        (
+            "the roles read with what each includes, by a caller managing grants outside the administrative organization",
+            Decided.Allowed),
+        ("the roles read with what each includes, by a caller managing no grants", Decided.Denied),
         (
             "a grant of a role carrying system administration that a role of the caller lists, by a caller managing grants",
             Decided.Denied),
@@ -2360,6 +2374,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "the roles the caller may hand out read, by a caller managing no grants":
                 return await AssignableReadAsync(deployment, role, caller, scenario);
 
+            // AUTHZ-GRANT-005 (D-281): the host's check keeps a role's last holder, and a
+            // revocation leaving another goes ahead.
+            case "a revocation of the last holder's grant of a role the caller hands out, the host keeping a holder, by a caller managing grants":
+            case "a revocation of a grant of a role the caller hands out, another holder left, the host keeping a holder, by a caller managing grants":
+                return await KeptByHostAsync(deployment, role, caller, scenario);
+
+            // AUTHZ-GRANT-006 (D-282): whoever gives roles reads what they carry, wherever
+            // they give them.
+            case "the roles read with what each includes, by a caller managing grants outside the administrative organization":
+            case "the roles read with what each includes, by a caller managing no grants":
+                return await RolesReadAsync(deployment, caller, scenario);
+
             // AUTHZ-GRANT-005 (D-212, D-213): an end hands out every role its revocations
             // reach, and a role carrying system administration is handed out by no list.
             case "an end of a membership reaching a role carrying system administration that a role of the caller lists, by a caller managing memberships":
@@ -3639,6 +3665,59 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     "The reason the grant was asked for."),
                 cancellationToken))
             .Match(_ => Decided.Allowed, Refused);
+    }
+
+    // AUTHZ-GRANT-005 (D-281): the case's role held by one account, or two, and the host
+    // keeping one holder of it in the organization; the first account's grant revoked.
+    private async Task<Decided> KeptByHostAsync(
+        Deployment deployment,
+        RoleName role,
+        SubjectId caller,
+        string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        GrantId held = await deployment.GrantAsync(
+            GrantSubject.Of(await deployment.AccountAsync(cancellationToken)), role, null, false, null, null, cancellationToken);
+
+        if (scenario.Contains("another holder left", StringComparison.Ordinal))
+        {
+            _ = await deployment.GrantAsync(
+                GrantSubject.Of(await deployment.AccountAsync(cancellationToken)), role, null, false, null, null, cancellationToken);
+        }
+
+        host.Removals.KeepLast(deployment.Organization, role, KeptByTheHost);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        SessionId session = await SteppedUpAsync(scope.ServiceProvider, caller);
+
+        return (await scope.ServiceProvider.GetRequiredService<IGrants>()
+                .RevokeAsync(AccessContext.Of(caller), session, held, "No longer needed.", cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+    }
+
+    // AUTHZ-GRANT-006 (D-282): the read of every role, by the caller, who manages grants
+    // in the case's organization and administers no role, or by an account of it holding
+    // nothing.
+    private async Task<Decided> RolesReadAsync(Deployment deployment, SubjectId caller, string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        _ = await deployment.AdministrativeAsync(cancellationToken);
+
+        SubjectId asking = scenario.EndsWith("by a caller managing no grants", StringComparison.Ordinal)
+            ? await deployment.AccountAsync(cancellationToken)
+            : caller;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IRoles>()
+                .AllAsync(AccessContext.Of(asking), cancellationToken))
+            .Match(
+                roles => roles.All(read => read.Effective is not null && read.Includes is not null)
+                    ? Decided.Allowed
+                    : throw new InvalidOperationException("A role is read without what it includes and carries."),
+                Refused);
     }
 
     // AUTHZ-GRANT-005 (D-247): the read answers the case's role, which the caller's

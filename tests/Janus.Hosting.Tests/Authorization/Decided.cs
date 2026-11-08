@@ -69,6 +69,12 @@ public enum Decided
     WidensOwnAccess,
 
     /// <summary>
+    /// The removal of access is refused by the host's check, under the host's own code
+    /// (AUTHZ-GRANT-005, D-281).
+    /// </summary>
+    KeptByHost,
+
+    /// <summary>
     /// The question is the calling code's fault, raised before anything is read.
     /// </summary>
     Raised,
