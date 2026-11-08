@@ -170,9 +170,10 @@ public sealed class AccessRemovalCheckTests(HostFixture host) : IClassFixture<Ho
     }
 
     /// <summary>
-    /// AUTHZ-GRANT-005 (D-281): the job <c>membership-ends</c> asks the check again when it
-    /// carries an end out; refused, the membership stays and its end stays set, and the
-    /// next pass, once the check admits it, ends it.
+    /// AUTHZ-GRANT-005, OPS-ALERT-001 (D-281): the job <c>membership-ends</c> asks the check
+    /// again when it carries an end out; refused, the membership stays and its end stays
+    /// set, <c>access-removal-refused</c> is raised naming the code and the membership, and
+    /// the next pass, once the check admits it, ends it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -199,6 +200,7 @@ public sealed class AccessRemovalCheckTests(HostFixture host) : IClassFixture<Ho
         Assert.Equal(1, await StandingAsync(grant));
         Assert.Equal(AccessRemovalPath.ScheduledEnd, host.Removals.AskedIn(organization)[^1].Path);
         Assert.Equal(1, await RefusalsRecordedAsync(held, "membershipEnded", LastOwner, "scheduledEnd"));
+        Assert.Equal(1, await KeptAlertsAsync(member, organization));
 
         host.Removals.Arm(organization, (_, _) => ValueTask.FromResult(Result.Success()));
 
@@ -486,6 +488,25 @@ public sealed class AccessRemovalCheckTests(HostFixture host) : IClassFixture<Ho
             WHERE subject = @account AND organization = @organization
             """,
             new { account = account.Value, organization = organization.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // OPS-ALERT-001 (D-281): the alerts raised for the account's membership of the
+    // organization, High, naming the host's code and the membership.
+    private async Task<int> KeptAlertsAsync(SubjectId account, OrganizationId organization)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.raised_alerts AS raised
+            JOIN identity.memberships AS held
+              ON raised.details ->> 'membership' = CAST(held.id AS text)
+            WHERE raised.condition = 'access-removal-refused'
+              AND raised.details ->> 'code' = @code
+              AND held.subject = @account AND held.organization = @organization
+            """,
+            new { code = LastOwner.ToString(), account = account.Value, organization = organization.Value },
             cancellationToken: TestContext.Current.CancellationToken));
     }
 

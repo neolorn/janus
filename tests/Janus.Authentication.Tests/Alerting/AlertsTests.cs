@@ -49,6 +49,7 @@ public sealed class AlertsTests
         "governing-text-missing",
         "search-capacity",
         "search-unsafe",
+        "access-removal-refused",
     ];
 
     private static readonly AlertCondition[] High =
@@ -66,6 +67,7 @@ public sealed class AlertsTests
         AlertCondition.PrivacyDeadlineReached,
         AlertCondition.NoEmergencyCredential,
         AlertCondition.SearchUnsafe,
+        AlertCondition.AccessRemovalRefused,
     ];
 
     /// <summary>

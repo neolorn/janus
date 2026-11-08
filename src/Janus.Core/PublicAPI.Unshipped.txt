@@ -34,6 +34,7 @@ Janus.Core.AccessRemovalPath
 Janus.Core.AccessRemovalPath.Administration = 0 -> Janus.Core.AccessRemovalPath
 Janus.Core.AccessRemovalPath.Library = 1 -> Janus.Core.AccessRemovalPath
 Janus.Core.AccessRemovalPath.ScheduledEnd = 2 -> Janus.Core.AccessRemovalPath
+Janus.Core.AlertCondition.AccessRemovalRefused = 28 -> Janus.Core.AlertCondition
 Janus.Core.IAccessRemovalCheck
 Janus.Core.IAccessRemovalCheck.CheckAsync(Janus.Core.AccessRemoval! removal, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.RemovedGrant

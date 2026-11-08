@@ -3093,6 +3093,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             _events,
             _configuration,
             _audit,
+            _events,
             _work,
             _clock);
 
