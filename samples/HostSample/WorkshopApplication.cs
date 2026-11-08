@@ -129,6 +129,12 @@ public static class WorkshopApplication
         _ = services.AddSingleton<IExportContributor>(provider =>
             new WorkshopExport(provider.GetRequiredService<IServiceScopeFactory>()));
 
+        // AUTHZ-GRANT-005: the workshop keeps every organization's last manager, whichever
+        // way the access would be taken away.
+        _ = services.AddSingleton<IAccessRemovalCheck>(provider => new LastManager(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<TimeProvider>()));
+
         // IDN-PRIN-001: the workshop's jobs, which whoever starts the application runs in
         // the background.
         _ = services.AddSingleton(provider => new FollowUpCalls(provider.GetRequiredService<IServiceScopeFactory>()));
